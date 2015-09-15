@@ -151,7 +151,7 @@ START_TEST(test_sparse_to_dense)
 	 * to the dense representation when we add enough elements
 	 */
 	HyperLogLog *hll = HLLCreate();
-	int elems = 1000;
+	int elems = 7000;
 	uint64 size;
 
 	hll = add_elements(hll, 0, elems);
@@ -188,36 +188,54 @@ START_TEST(test_card_caching)
 
 	hll = add_elements(hll, 0, 1000);
 
-	ck_assert_int_eq(hll->encoding, HLL_SPARSE_DIRTY);
+	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_DIRTY);
 
 	size = HLLCardinality(hll);
 	ck_assert_uint_eq(size, 999);
 	ck_assert_int_eq(size, hll->card);
 
-	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
+	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
 
 	/* nothing was added, so cached cardinality should remain clean */
 	size = HLLCardinality(hll);
-	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
+	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
 
 	/* add the same values again, cardinality shouldn't change so it should remain clean */
 	hll = add_elements(hll, 0, 1000);
-	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
+	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
 
 	/* now add new elements */
 	hll = add_elements(hll, 1000, 1010);
 
 	/* cardinality changed, cached value should have been invalidated */
+	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_DIRTY);
+
+	/* verify that it works with the sparse representation as well */
+	hll = add_elements(hll, 1010, 7000);
+
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_DIRTY);
 
-	/* verify that it works with the dense representation as well */
-	hll = add_elements(hll, 1010, 100000);
+	size = HLLCardinality(hll);
+	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
+
+	hll = add_elements(hll, 0, 7000);
+	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
+
+	ck_assert_int_eq(size, 7000);
+	ck_assert_int_eq(size, hll->card);
+
+	/* verify that it works with dense encoding */
+	hll = add_elements(hll, 7000, 50000);
 
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_DIRTY);
 
 	size = HLLCardinality(hll);
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
-	ck_assert_int_eq(size, 98511);
+
+	hll = add_elements(hll, 0, 50000);
+	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
+
+	ck_assert_int_eq(size, 49556);
 	ck_assert_int_eq(size, hll->card);
 }
 END_TEST
@@ -271,6 +289,35 @@ START_TEST(test_union)
 }
 END_TEST
 
+START_TEST(test_union_explicit_and_dense)
+{
+	/*
+	 * Verify that the union of a sparse and dense HLL is correct
+	 */
+	HyperLogLog *dense = HLLCreate();
+	HyperLogLog *explicit = HLLCreate();
+	HyperLogLog *result;
+	uint64 size;
+
+	dense = add_elements(dense, 0, 100000);
+	ck_assert(dense->encoding == HLL_DENSE_DIRTY);
+
+	size = HLLCardinality(dense);
+	ck_assert_int_eq(size, 98511);
+
+	explicit = add_elements(explicit, 100000, 101000);
+	ck_assert(explicit->encoding == HLL_EXPLICIT_DIRTY);
+
+	size = HLLCardinality(explicit);
+	ck_assert_int_eq(size, 998);
+
+	result = HLLUnion(dense, explicit);
+	size = HLLCardinality(result);
+
+	ck_assert_int_eq(size, 99340);
+}
+END_TEST
+
 START_TEST(test_union_sparse_and_dense)
 {
 	/*
@@ -282,21 +329,21 @@ START_TEST(test_union_sparse_and_dense)
 	uint64 size;
 
 	dense = add_elements(dense, 0, 100000);
-	ck_assert(dense->encoding = HLL_DENSE_DIRTY);
+	ck_assert(dense->encoding == HLL_DENSE_DIRTY);
 
 	size = HLLCardinality(dense);
 	ck_assert_int_eq(size, 98511);
 
-	sparse = add_elements(sparse, 100000, 101000);
-	ck_assert(sparse->encoding = HLL_SPARSE_DIRTY);
+	sparse = add_elements(sparse, 100000, 107000);
+	ck_assert(sparse->encoding == HLL_SPARSE_DIRTY);
 
 	size = HLLCardinality(sparse);
-	ck_assert_int_eq(size, 998);
+	ck_assert_int_eq(size, 6928);
 
 	result = HLLUnion(dense, sparse);
 	size = HLLCardinality(result);
 
-	ck_assert_int_eq(size, 99340);
+	ck_assert_int_eq(size, 105265);
 }
 END_TEST
 
@@ -322,12 +369,23 @@ START_TEST(test_copy)
 	hll = add_elements(hll, 0, 10);
 	ck_assert_int_eq(10, HLLCardinality(hll));
 
+	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
+
+	copy = HLLCopy(hll);
+
+	ck_assert_int_eq(copy->encoding, HLL_EXPLICIT_CLEAN);
+	ck_assert_int_eq(10, HLLCardinality(copy));
+
+	hll = HLLCreate();
+	hll = add_elements(hll, 0, 7000);
+	ck_assert_int_eq(7000, HLLCardinality(hll));
+
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
 
 	copy = HLLCopy(hll);
 
 	ck_assert_int_eq(copy->encoding, HLL_SPARSE_CLEAN);
-	ck_assert_int_eq(10, HLLCardinality(copy));
+	ck_assert_int_eq(7000, HLLCardinality(copy));
 }
 END_TEST
 
@@ -335,18 +393,47 @@ START_TEST(test_explicit)
 {
 	HyperLogLog *hll = HLLCreate();
 
-//	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
-//	ck_assert(HLL_IS_EXPLICIT(hll));
+	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
+	ck_assert(HLL_IS_EXPLICIT(hll));
 
-	hll = add_elements(hll, 1, 10);
-//	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_DIRTY);
-//	ck_assert(HLL_IS_EXPLICIT(hll));
+	hll = add_elements(hll, 1, 1000);
+	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_DIRTY);
+	ck_assert(HLL_IS_EXPLICIT(hll));
 
-	/* there should be one repeated register */
-//	ck_assert_int_eq(998, HLL_EXPLICIT_GET_NUM_REGISTERS(hll));
-	ck_assert_int_eq(9, HLLCardinality(hll));
+	ck_assert_int_eq(969, HLL_EXPLICIT_GET_NUM_REGISTERS(hll));
+	ck_assert_int_eq(998, HLLCardinality(hll));
 
-//	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
+	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
+}
+END_TEST
+
+START_TEST(test_explicit_to_sparse)
+{
+	HyperLogLog *hll = HLLCreate();
+	int elems = 1000;
+	uint64 size;
+
+	hll = add_elements(hll, 0, elems);
+
+	ck_assert(hll->encoding == HLL_EXPLICIT_DIRTY);
+
+	/* keep adding elements until we pass the sparse size threshold */
+	for (;;)
+	{
+		int start = elems;
+		int end = elems + 1;
+
+		hll = add_elements(hll, start, end);
+		if (HLL_EXPLICIT_GET_NUM_REGISTERS(hll) > HLL_MAX_EXPLICIT_REGISTERS)
+			break;
+
+		elems = end;
+	}
+
+	ck_assert(hll->encoding == HLL_SPARSE_DIRTY);
+
+	size = HLLCardinality(hll);
+	ck_assert_int_eq(size, 6112);
 }
 END_TEST
 
@@ -359,16 +446,18 @@ test_hll_suite(void)
 	s = suite_create("test_hll");
 	tc = tcase_create("test_hll");
 	tcase_set_timeout(tc, 30);
-//	tcase_add_test(tc, test_murmurhash64a);
-//	tcase_add_test(tc, test_murmurhash64a_varlen);
-//	tcase_add_test(tc, test_sparse);
-//	tcase_add_test(tc, test_sparse_to_dense);
-//	tcase_add_test(tc, test_dense);
-//	tcase_add_test(tc, test_union);
-//	tcase_add_test(tc, test_union_sparse_and_dense);
-//	tcase_add_test(tc, test_card_caching);
-//	tcase_add_test(tc, test_copy);
+	tcase_add_test(tc, test_murmurhash64a);
+	tcase_add_test(tc, test_murmurhash64a_varlen);
+	tcase_add_test(tc, test_sparse);
+	tcase_add_test(tc, test_sparse_to_dense);
+	tcase_add_test(tc, test_dense);
+	tcase_add_test(tc, test_union);
+	tcase_add_test(tc, test_union_explicit_and_dense);
+	tcase_add_test(tc, test_union_sparse_and_dense);
+	tcase_add_test(tc, test_card_caching);
+	tcase_add_test(tc, test_copy);
 	tcase_add_test(tc, test_explicit);
+	tcase_add_test(tc, test_explicit_to_sparse);
 	suite_add_tcase(s, tc);
 
 	return s;

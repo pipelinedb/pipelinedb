@@ -315,7 +315,7 @@
 	*(uint32 *) (p) = (*(uint32 *) (p) & 0xffffff00) | ((val) & 0x000000ff); \
 } while(0)
 #define HLL_EXPLICIT_SET_REGISTER(p, reg) do { \
-	*((uint32 *) (p)) = (*(uint32 *) (p) & 0xffffff00) | (((reg) << 8) & 0xffffff00); \
+	*((uint32 *) (p)) |= ((reg) << 8) & 0xffffff00; \
 } while(0)
 
 #define HLL_IS_DENSE(hll) ((hll)->encoding == HLL_DENSE_DIRTY || (hll)->encoding == HLL_DENSE_CLEAN)
@@ -825,6 +825,7 @@ hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
 	uint8 *pos = hll->M;
 	uint8 *end = hll->M + hll->mlen;
 	bool found = false;
+	int skipped = 0;
 
 	Assert(hll->mlen % 4 == 0);
 
@@ -833,8 +834,6 @@ hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		hll = hll_explicit_to_sparse(hll);
 		return hll_sparse_add_internal(hll, reg, leading, result, true);
 	}
-
-//	elog(LOG, "leading %d, reg %d", leading, reg);
 
 	/*
 	 * We store explicit registers in sorted order, so use an insertion sort like procedure to find the
@@ -847,12 +846,13 @@ hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		if (curr_reg < reg)
 		{
 			pos += 4;
+			skipped++;
 			continue;
 		}
 
 		if (curr_reg == reg)
 		{
-			if (leading < HLL_EXPLICIT_GET_REGISTER(pos))
+			if (leading <= HLL_EXPLICIT_GET_NUM_LEADING(pos))
 			{
 				*result = 0;
 				return hll;
@@ -865,6 +865,8 @@ hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
 
 		/* Register needs to be added. */
 		hll = repalloc(hll, HLLSize(hll) + 4);
+		pos = hll->M + (4 * skipped);
+		end = hll->M + hll->mlen;
 		memmove(pos + 4, pos, end - pos);
 		*(uint32 *) pos = 0;
 		HLL_EXPLICIT_SET_REGISTER(pos, reg);
@@ -878,7 +880,7 @@ hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
 	if (!found)
 	{
 		hll = repalloc(hll, HLLSize(hll) + 4);
-
+		end = hll->M + hll->mlen;
 		*(uint32 *) end = 0;
 		HLL_EXPLICIT_SET_REGISTER(end, reg);
 		HLL_EXPLICIT_SET_NUM_LEADING(end, leading);
@@ -904,10 +906,8 @@ hll_explicit_sum(HyperLogLog *hll, double *PE, int *ezp)
 	{
 		E += PE[HLL_EXPLICIT_GET_NUM_LEADING(pos)];
 		pos += 4;
-
-		elog(LOG, "REG %d %d", HLL_EXPLICIT_GET_REGISTER(pos), HLL_EXPLICIT_GET_NUM_LEADING(pos));
 	}
-	elog(LOG, "FUCK %f %d", E, ez);
+
 	E += ez;
 	*ezp = ez;
 
@@ -949,13 +949,10 @@ hll_sparse_sum(HyperLogLog *hll, double *PE, int *ezp)
 			regval = HLL_SPARSE_VAL_VALUE(pos);
 			idx += runlen;
 			E += PE[regval] * runlen;
-
-			elog(LOG, "REG %d %d", idx - runlen, regval);
-
 			pos++;
 		}
   }
-  elog(LOG, "FUCK %f %d", E, ez);
+
   E += ez;
   *ezp = ez;
 
