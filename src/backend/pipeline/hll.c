@@ -818,10 +818,8 @@ hll_explicit_to_sparse(HyperLogLog *hll)
 }
 
 static HyperLogLog *
-hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
+hll_explicit_add_internal(HyperLogLog *hll, int reg, uint8 leading, int *result)
 {
-	int reg;
-	uint8 leading = num_leading_zeroes(hll, elem, size, &reg);
 	uint8 *pos = hll->M;
 	uint8 *end = hll->M + hll->mlen;
 	bool found = false;
@@ -896,6 +894,14 @@ hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
 	*result = 1;
 
 	return hll;
+}
+
+static HyperLogLog *
+hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
+{
+	int m;
+	uint8 leading = num_leading_zeroes(hll, elem, size, &m);
+	return hll_explicit_add_internal(hll, m, leading, result);
 }
 
 static double
@@ -1226,24 +1232,13 @@ HLLCardinality(HyperLogLog *hll)
   return hll->card;
 }
 
-/*
- * HLLUnion
- *
- * Returns the lossless union of multiple HyperLogLogs
- */
-HyperLogLog *
-HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
+static HyperLogLog *
+hll_dense_union(HyperLogLog *result, HyperLogLog *incoming)
 {
-  int reg;
-  int m = (1 << result->p);
+	int reg;
+	int m = (1 << result->p);
 
-  /* convert explicit result to sparse representation */
-  if (HLL_IS_EXPLICIT(result))
-	  result = hll_explicit_to_sparse(result);
-
-  /* results always use the dense representation */
-  if (HLL_IS_SPARSE(result))
-		result = hll_sparse_to_dense(result);
+	Assert(HLL_IS_DENSE(result));
 
 	if (HLL_IS_DENSE(incoming))
 	{
@@ -1258,7 +1253,7 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 			HLL_DENSE_SET_REGISTER(result->M, reg, Max(r0, r1));
 		}
 	}
-  else if (HLL_IS_SPARSE(incoming))
+	else if (HLL_IS_SPARSE(incoming))
 	{
 		/* run-length encoded, read every non-zero register value */
 		uint8 *pos = incoming->M;
@@ -1297,25 +1292,104 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 			}
 		}
 	}
-  else
-  {
+	else
+	{
 		uint8 *pos = incoming->M;
 		uint8 *end = incoming->M + incoming->mlen;
 
 		while (pos < end)
 		{
 			int reg = HLL_EXPLICIT_GET_REGISTER(pos);
-			int r0 = HLL_EXPLICIT_GET_NUM_LEADING(pos);
-			int r1;
+			uint8 r0 = HLL_EXPLICIT_GET_NUM_LEADING(pos);
+			uint8 r1;
 
 			HLL_DENSE_GET_REGISTER(r1, result->M, reg);
 			HLL_DENSE_SET_REGISTER(result->M, reg, Max(r0, r1));
 
 			pos += 4;
 		}
-  }
+	}
 
-  result->encoding = HLL_DENSE_DIRTY;
+	result->encoding = HLL_DENSE_DIRTY;
 
-  return result;
+	return result;
+}
+
+static HyperLogLog *
+hll_explicit_union(HyperLogLog *result, HyperLogLog *incoming)
+{
+	uint8 *pos = incoming->M;
+	uint8 *end = incoming->M + incoming->mlen;
+	int r;
+
+	Assert(HLL_IS_EXPLICIT(result) && HLL_IS_EXPLICIT(incoming));
+
+	while (pos < end)
+	{
+		int reg = HLL_EXPLICIT_GET_REGISTER(pos);
+		uint8 leading = HLL_EXPLICIT_GET_NUM_LEADING(pos);
+
+		/* the result HLL can upgrade during these additions so we need all these cases */
+		if (HLL_IS_EXPLICIT(result))
+			result = hll_explicit_add_internal(result, reg, leading, &r);
+		else if (HLL_IS_SPARSE(result))
+			result = hll_sparse_add_internal(result, reg, leading, &r, true);
+		else
+			result = hll_dense_add_internal(result, reg, leading, &r);
+
+		pos += 4;
+	}
+
+	return result;
+}
+
+static HyperLogLog *
+hll_sparse_union(HyperLogLog *result, HyperLogLog *incoming)
+{
+	uint8 *pos = incoming->M;
+	uint8 *end = incoming->M + incoming->mlen;
+	int r;
+
+	Assert(HLL_IS_SPARSE(result) && HLL_IS_EXPLICIT(incoming));
+
+	while (pos < end)
+	{
+		int reg = HLL_EXPLICIT_GET_REGISTER(pos);
+		uint8 leading = HLL_EXPLICIT_GET_NUM_LEADING(pos);
+
+		/* the result HLL can upgrade during these additions so we need all these cases */
+		if (HLL_IS_SPARSE(result))
+			result = hll_sparse_add_internal(result, reg, leading, &r, true);
+		else
+			result = hll_dense_add_internal(result, reg, leading, &r);
+
+		pos += 4;
+	}
+
+	return result;
+}
+
+/*
+ * HLLUnion
+ *
+ * Returns the lossless union of multiple HyperLogLogs
+ */
+HyperLogLog *
+HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
+{
+	/* EXPLICIT || EXPLICIT */
+	if (HLL_IS_EXPLICIT(result) && HLL_IS_EXPLICIT(incoming))
+		return hll_explicit_union(result, incoming);
+
+	/* SPARSE || EXPLICIT */
+	/* TODO(usmanm): Add SPARSE || SPARSE support */
+	if (HLL_IS_SPARSE(result) && HLL_IS_EXPLICIT(incoming))
+		return hll_sparse_union(result, incoming);
+
+	/* DENSE || (DENSE | SPARSE | EXPLICIT) */
+	if (HLL_IS_EXPLICIT(result))
+		result = hll_explicit_to_sparse(result);
+	if (HLL_IS_SPARSE(result))
+		result = hll_sparse_to_dense(result);
+	return hll_dense_union(result, incoming);
 }
