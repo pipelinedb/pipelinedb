@@ -173,7 +173,7 @@ START_TEST(test_sparse_to_dense)
 	ck_assert(hll->encoding == HLL_DENSE_DIRTY);
 
 	size = HLLCardinality(hll);
-	ck_assert_int_eq(size, 9055);
+	ck_assert_int_eq(size, 10813);
 }
 END_TEST
 
@@ -307,15 +307,15 @@ START_TEST(test_copy)
 	HyperLogLog *hll = HLLCreate();
 	HyperLogLog *copy;
 
-	hll = add_elements(hll, 1, 10002);
-	ck_assert_int_eq(9956, HLLCardinality(hll));
+	hll = add_elements(hll, 1, 11000);
+	ck_assert_int_eq(10957, HLLCardinality(hll));
 
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
 
 	copy = HLLCopy(hll);
 
 	ck_assert_int_eq(copy->encoding, HLL_DENSE_CLEAN);
-	ck_assert_int_eq(9956, HLLCardinality(copy));
+	ck_assert_int_eq(10957, HLLCardinality(copy));
 
 	hll = HLLCreate();
 	hll = add_elements(hll, 0, 10);

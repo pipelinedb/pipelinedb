@@ -20,8 +20,10 @@
 #include "lib/stringinfo.h"
 #include "utils/datum.h"
 
+#define HLL_USE_EXPLICIT 0
+
 #define HLL_MAX_SPARSE_BYTES 11000
-#define HLL_MAX_EXPLICIT_ITEMS 1024 /* 2048 * 4 = 8192 bytes */
+#define HLL_MAX_EXPLICIT_REGISTERS 2048 /* 2048 * 4 = 8192 bytes */
 
 #define HLL_SPARSE_DIRTY 's'
 #define HLL_SPARSE_CLEAN 'S'
