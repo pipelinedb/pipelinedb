@@ -3194,8 +3194,6 @@ push_down_sw_predicate(Var *dummy, Query *upper, Query *lower)
 {
 	List *vars = NIL;
 	Var *real;
-	RangeTblEntry *rte;
-	Value *colname;
 
 	pull_vars(lower->jointree->quals, &vars);
 
@@ -3207,11 +3205,6 @@ push_down_sw_predicate(Var *dummy, Query *upper, Query *lower)
 		elog(ERROR, "column \"arrival_timestamp\" does not exist");
 
 	real = (Var *) linitial(vars);
-	rte = list_nth(lower->rtable, real->varno - 1);
-	colname = list_nth(rte->eref->colnames, real->varattno - 1);
-
-	if (pg_strcasecmp(ARRIVAL_TIMESTAMP, strVal(colname)) != 0)
-		elog(ERROR, "column \"arrival_timestamp\" does not exist");
 
 	memcpy(dummy, real, sizeof(Var));
 	lower->jointree->quals = upper->jointree->quals;
