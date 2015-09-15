@@ -18,6 +18,7 @@
 #include "postgres.h"
 #include "pipeline/tdigest.h"
 #include "utils/elog.h"
+#include "utils/memutils.h"
 #include "utils/palloc.h"
 
 #define DEFAULT_COMPRESSION 200
@@ -213,9 +214,14 @@ TDigestCompress(TDigest *t)
 
 	if (t->num_centroids > num_centroids)
 	{
-		TDigest *new = (TDigest *) palloc(TDigestSize(t));
-		memcpy(new, t, sizeof(TDigest));
-		t = new;
+		if (MemoryContextContains(CurrentMemoryContext, t))
+			t = repalloc(t, TDigestSize(t));
+		else
+		{
+			TDigest *new = (TDigest *) palloc(TDigestSize(t));
+			memcpy(new, t, sizeof(TDigest));
+			t = new;
+		}
 	}
 
 	Assert(t->num_centroids <= t->size);

@@ -839,7 +839,6 @@ hll_explicit_add_internal(HyperLogLog *hll, int reg, uint8 leading, int *result)
 	 */
 	while (pos < end)
 	{
-		HyperLogLog *new;
 		int curr_reg = HLL_EXPLICIT_GET_REGISTER(pos);
 
 		if (curr_reg < reg)
@@ -863,9 +862,14 @@ hll_explicit_add_internal(HyperLogLog *hll, int reg, uint8 leading, int *result)
 		}
 
 		/* Register needs to be added. */
-		new = palloc(HLLSize(hll) + 4);
-		memcpy(new, hll, HLLSize(hll));
-		hll = new;
+		if (MemoryContextContains(CurrentMemoryContext, hll))
+			hll = repalloc(hll, HLLSize(hll) + 4);
+		else
+		{
+			HyperLogLog *new = palloc(HLLSize(hll) + 4);
+			memcpy(new, hll, HLLSize(hll));
+			hll = new;
+		}
 		pos = hll->M + (4 * skipped);
 		end = hll->M + hll->mlen;
 		memmove(pos + 4, pos, end - pos);
@@ -880,9 +884,14 @@ hll_explicit_add_internal(HyperLogLog *hll, int reg, uint8 leading, int *result)
 	/* Didn't find a place to put the register? Stick it at the end. */
 	if (!found)
 	{
-		HyperLogLog *new = palloc(HLLSize(hll) + 4);
-		memcpy(new, hll, HLLSize(hll));
-		hll = new;
+		if (MemoryContextContains(CurrentMemoryContext, hll))
+			hll = repalloc(hll, HLLSize(hll) + 4);
+		else
+		{
+			HyperLogLog *new = palloc(HLLSize(hll) + 4);
+			memcpy(new, hll, HLLSize(hll));
+			hll = new;
+		}
 		end = hll->M + hll->mlen;
 		*(uint32 *) end = 0;
 		HLL_EXPLICIT_SET_REGISTER(end, reg);
