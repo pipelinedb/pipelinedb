@@ -20,8 +20,6 @@
 #include "lib/stringinfo.h"
 #include "utils/datum.h"
 
-#define HLL_USE_EXPLICIT 0
-
 #define HLL_MAX_SPARSE_BYTES 11000
 #define HLL_MAX_EXPLICIT_REGISTERS 2048 /* 2048 * 4 = 8192 bytes */
 
@@ -33,6 +31,7 @@
 #define HLL_EXPLICIT_CLEAN 'E'
 #define HLL_IS_SPARSE(hll) ((hll)->encoding == HLL_SPARSE_DIRTY || (hll)->encoding == HLL_SPARSE_CLEAN)
 #define HLL_IS_EXPLICIT(hll) ((hll)->encoding == HLL_EXPLICIT_DIRTY || (hll)->encoding == HLL_EXPLICIT_CLEAN)
+#define HLL_EXPLICIT_GET_NUM_REGISTERS(hll) ((hll)->mlen / 4)
 #define HLLSize(hll) (sizeof(HyperLogLog) + (hll)->mlen)
 
 typedef struct HyperLogLog

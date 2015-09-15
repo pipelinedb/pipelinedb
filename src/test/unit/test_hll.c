@@ -16,6 +16,7 @@ add_elements(HyperLogLog *hll, long start, long end)
 		char buf[10];
 
 		sprintf(buf, "%010d", i);
+
 		hll = HLLAdd(hll, buf, 10, &result);
 	}
 
@@ -330,6 +331,25 @@ START_TEST(test_copy)
 }
 END_TEST
 
+START_TEST(test_explicit)
+{
+	HyperLogLog *hll = HLLCreate();
+
+//	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
+//	ck_assert(HLL_IS_EXPLICIT(hll));
+
+	hll = add_elements(hll, 1, 10);
+//	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_DIRTY);
+//	ck_assert(HLL_IS_EXPLICIT(hll));
+
+	/* there should be one repeated register */
+//	ck_assert_int_eq(998, HLL_EXPLICIT_GET_NUM_REGISTERS(hll));
+	ck_assert_int_eq(9, HLLCardinality(hll));
+
+//	ck_assert_int_eq(hll->encoding, HLL_EXPLICIT_CLEAN);
+}
+END_TEST
+
 Suite *
 test_hll_suite(void)
 {
@@ -339,15 +359,16 @@ test_hll_suite(void)
 	s = suite_create("test_hll");
 	tc = tcase_create("test_hll");
 	tcase_set_timeout(tc, 30);
-	tcase_add_test(tc, test_murmurhash64a);
-	tcase_add_test(tc, test_murmurhash64a_varlen);
-	tcase_add_test(tc, test_sparse);
-	tcase_add_test(tc, test_sparse_to_dense);
-	tcase_add_test(tc, test_dense);
-	tcase_add_test(tc, test_union);
-	tcase_add_test(tc, test_union_sparse_and_dense);
-	tcase_add_test(tc, test_card_caching);
-	tcase_add_test(tc, test_copy);
+//	tcase_add_test(tc, test_murmurhash64a);
+//	tcase_add_test(tc, test_murmurhash64a_varlen);
+//	tcase_add_test(tc, test_sparse);
+//	tcase_add_test(tc, test_sparse_to_dense);
+//	tcase_add_test(tc, test_dense);
+//	tcase_add_test(tc, test_union);
+//	tcase_add_test(tc, test_union_sparse_and_dense);
+//	tcase_add_test(tc, test_card_caching);
+//	tcase_add_test(tc, test_copy);
+	tcase_add_test(tc, test_explicit);
 	suite_add_tcase(s, tc);
 
 	return s;
