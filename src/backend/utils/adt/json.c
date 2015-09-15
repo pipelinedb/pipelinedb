@@ -2038,6 +2038,9 @@ json_agg_combine(PG_FUNCTION_ARGS)
 	}
 
 	incoming = (StringInfo) PG_GETARG_POINTER(1);
+
+	/* skip the '[' in the beginning */
+	Assert(incoming->data[0] == '[');
 	appendBinaryStringInfo(state, incoming->data + 1, incoming->len - 1);
 
 	PG_RETURN_POINTER(state);
@@ -2081,7 +2084,10 @@ json_object_agg_combine(PG_FUNCTION_ARGS)
 	}
 
 	incoming = (StringInfo) PG_GETARG_POINTER(1);
-	appendBinaryStringInfo(state, incoming->data + 1, strlen(incoming->data) - 1);
+
+	/* skip the '{' in the beginning */
+	Assert(incoming->data[0] == '{');
+	appendBinaryStringInfo(state, incoming->data + 1, incoming->len - 1);
 
 	PG_RETURN_POINTER(state);
 }
