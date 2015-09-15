@@ -209,7 +209,6 @@ typedef struct CopyStateData
 	bool to_inferred_stream;
 	List *attnamelist;
 	MemoryContext to_stream_ctxt;
-
 } CopyStateData;
 
 /* DestReceiver for COPY (SELECT) TO */
@@ -582,6 +581,12 @@ CopyGetData(CopyState cstate, void *databuf, int minread, int maxread)
 	switch (cstate->copy_dest)
 	{
 		case COPY_FILE:
+			/* this hook lets us feed data into copy from an arbitrary source */
+			if (copy_iter_hook)
+			{
+				bytesread = copy_iter_hook(copy_iter_arg, databuf, minread, maxread);
+				break;
+			}
 			bytesread = fread(databuf, 1, maxread, cstate->copy_file);
 			if (ferror(cstate->copy_file))
 				ereport(ERROR,
