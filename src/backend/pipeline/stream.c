@@ -58,6 +58,9 @@ static bool *cont_queries_active = NULL;
 
 static InsertStmt *extended_stream_insert = NULL;
 
+int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;
+void *copy_iter_arg = NULL;
+
 /*
  * get_desc
  *

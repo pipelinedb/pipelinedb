@@ -21,6 +21,12 @@
 #include "utils/relcache.h"
 #include "utils/timestamp.h"
 
+/*
+ * Hooks that can feed raw data to COPY when we need more flexibility than a simple file descriptor.
+ */
+extern int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread);
+extern void *copy_iter_arg;
+
 #define QueryIsStreaming(query) ((query)->isContinuous)
 #define QueryIsCombine(query) ((query)->isCombine)
 #define PlanIsStreaming(stmt) ((stmt)->is_continuous)
