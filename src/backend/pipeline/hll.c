@@ -789,7 +789,10 @@ hll_explicit_to_sparse(HyperLogLog *hll)
 	int m = 1 << hll->p;
 	int result;
 	int mlen = Max(2, 2 * m / HLL_SPARSE_XZERO_MAX_LEN);
-	/* In worst case we'll need 1 XZERO and 1 VAL opcode for each register which is 3 bytes per register plus a terminal XZERO */
+	/*
+	 * In worst case we'll need 1 XZERO and 1 VAL opcodes for each register and a terminal XZERO
+	 * for each register we're going to insert.
+	 */
 	HyperLogLog *sparse = palloc(sizeof(HyperLogLog) + (3 * HLL_EXPLICIT_GET_NUM_REGISTERS(hll) + 2));
 
 	/* Initialize an *empty* sparse HLL */
@@ -813,8 +816,12 @@ hll_explicit_to_sparse(HyperLogLog *hll)
 
 	while (pos < end)
 	{
-		/* pass the realloc flag as false, so we don't needlessly keep on reallocating for each add */
-		sparse = hll_sparse_add_internal(sparse, HLL_EXPLICIT_GET_REGISTER(pos), HLL_EXPLICIT_GET_NUM_LEADING(pos), &result, false);
+		/*
+		 * Pass the realloc flag as false, so we don't needlessly keep on reallocating
+		 * on each addition
+		 */
+		sparse = hll_sparse_add_internal(sparse, HLL_EXPLICIT_GET_REGISTER(pos),
+				HLL_EXPLICIT_GET_NUM_LEADING(pos), &result, false);
 		pos += HLL_EXPLICIT_ENTRY_SIZE;
 	}
 

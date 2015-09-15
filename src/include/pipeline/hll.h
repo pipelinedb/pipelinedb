@@ -29,9 +29,12 @@
 #define HLL_DENSE_CLEAN 'D'
 #define HLL_EXPLICIT_DIRTY 'e'
 #define HLL_EXPLICIT_CLEAN 'E'
+
 #define HLL_IS_SPARSE(hll) ((hll)->encoding == HLL_SPARSE_DIRTY || (hll)->encoding == HLL_SPARSE_CLEAN)
 #define HLL_IS_EXPLICIT(hll) ((hll)->encoding == HLL_EXPLICIT_DIRTY || (hll)->encoding == HLL_EXPLICIT_CLEAN)
+
 #define HLL_EXPLICIT_GET_NUM_REGISTERS(hll) ((hll)->mlen / 4)
+
 #define HLLSize(hll) (sizeof(HyperLogLog) + (hll)->mlen)
 
 typedef struct HyperLogLog
