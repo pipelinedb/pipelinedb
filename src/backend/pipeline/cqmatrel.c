@@ -21,6 +21,7 @@
 #include "pipeline/miscutils.h"
 #include "utils/rel.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #include "utils/palloc.h"
 #include "utils/syscache.h"
 
@@ -222,38 +223,39 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 
 /*
  * matrel_heap_delete
- *
- * Like simple_heap_delete except that it ignores the error in case the tuple was concurrently
- * updated. This is used by the auto-vacuumer so it doesn't choke in case the combiner updated
- * the expired tuple while the auto-vacuumer tried to delete it.
  */
 void
 matrel_heap_delete(Relation relation, ItemPointer tid)
 {
-	HTSU_Result result;
-	HeapUpdateFailureData hufd;
+	MemoryContext ccxt = CurrentMemoryContext;
 
-	result = heap_delete(relation, tid,
-						 GetCurrentCommandId(true), InvalidSnapshot,
-						 true /* wait for commit */ ,
-						 &hufd);
-	switch (result)
+	PG_TRY();
 	{
-		case HeapTupleSelfUpdated:
-			/* Tuple was already updated in current command? */
-			elog(ERROR, "tuple already updated by self");
-			break;
-
-		case HeapTupleMayBeUpdated:
-			/* done successfully */
-			break;
-
-		case HeapTupleUpdated:
-			/* Tuple was concurrently updated? Ignore. */
-			break;
-
-		default:
-			elog(ERROR, "unrecognized heap_delete status: %u", result);
-			break;
+		simple_heap_delete(relation, tid);
 	}
+	PG_CATCH();
+	{
+		ErrorData *errdata;
+		MemoryContext ecxt;
+
+		ecxt = MemoryContextSwitchTo(ccxt);
+		errdata = CopyErrorData();
+
+		/*
+		 * Ignore any errors where the tuple was concurrently updated. This can happen in case the combiner
+		 * updated the tuple we'e trying to delete. We want to ignore this error so that the VACUUM task runs
+		 * till completion, otherwise we could fall in the hole where every auto-vacuum run keeps on getting aborted.
+		 */
+		if (errdata->message && pg_strcasecmp(errdata->message, "tuple concurrently updated") == 0)
+		{
+			FreeErrorData(errdata);
+			FlushErrorState();
+		}
+		else
+		{
+			MemoryContextSwitchTo(ecxt);
+			PG_RE_THROW();
+		}
+	}
+	PG_END_TRY();
 }
