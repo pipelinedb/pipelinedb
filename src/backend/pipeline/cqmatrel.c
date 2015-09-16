@@ -227,7 +227,7 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 void
 matrel_heap_delete(Relation relation, ItemPointer tid)
 {
-	MemoryContext old = CurrentMemoryContext;
+	MemoryContext ccxt = CurrentMemoryContext;
 
 	PG_TRY();
 	{
@@ -235,28 +235,27 @@ matrel_heap_delete(Relation relation, ItemPointer tid)
 	}
 	PG_CATCH();
 	{
-		ErrorData *err;
+		ErrorData *errdata;
+		MemoryContext ecxt;
 
-		Assert(CurrentMemoryContext == ErrorContext);
-
-		MemoryContextSwitchTo(old);
-		err = CopyErrorData();
-		MemoryContextSwitchTo(ErrorContext);
-
-		EmitErrorReport();
+		ecxt = MemoryContextSwitchTo(ccxt);
+		errdata = CopyErrorData();
 
 		/*
 		 * Ignore any errors where the tuple was concurrently updated. This can happen in case the combiner
 		 * updated the tuple we'e trying to delete. We want to ignore this error so that the VACUUM task runs
 		 * till completion, otherwise we could fall in the hole where every auto-vacuum run keeps on getting aborted.
 		 */
-		if (!err->message || pg_strcasecmp(err->message, "tuple concurrently updated") != 0)
+		if (errdata->message && pg_strcasecmp(errdata->message, "tuple concurrently updated") == 0)
+		{
+			FreeErrorData(errdata);
+			FlushErrorState();
+		}
+		else
+		{
+			MemoryContextSwitchTo(ecxt);
 			PG_RE_THROW();
-
-		elog(LOG, "skipped");
-
-		FreeErrorData(err);
-		FlushErrorState();
+		}
 	}
 	PG_END_TRY();
 }
