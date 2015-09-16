@@ -181,7 +181,7 @@ test: cont_limit
 test: cont_alter
 test: stream_targets
 test: hash_group
-test: date_floor
+test: date_round_down
 test: stream_insert_subselect
 test: stream_exprs
 test: stream_targets

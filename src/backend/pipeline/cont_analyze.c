@@ -53,7 +53,7 @@
 #include "utils/typcache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
-#define DATE_FLOOR "date_floor"
+#define DATE_ROUND_DOWN "date_round_down"
 #define DATE_TRUNC "date_trunc"
 #define DATE_TRUNC_YEAR "year"
 #define DATE_TRUNC_MONTH "month"
@@ -541,7 +541,7 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 			FuncCall *fc = (FuncCall *) col;
 			char *name = NameListToString(fc->funcname);
 
-			if (!(pg_strcasecmp(name, DATE_FLOOR) == 0 ||
+			if (!(pg_strcasecmp(name, DATE_ROUND_DOWN) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
@@ -1980,7 +1980,7 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 		FuncCall *fc = lfirst(lc);
 		char *name = NameListToString(fc->funcname);
 
-		if (pg_strcasecmp(name, DATE_FLOOR) == 0 ||
+		if (pg_strcasecmp(name, DATE_ROUND_DOWN) == 0 ||
 				pg_strcasecmp(name, DATE_TRUNC) ||
 				pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 				pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
