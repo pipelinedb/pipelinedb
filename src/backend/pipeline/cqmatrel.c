@@ -21,6 +21,7 @@
 #include "pipeline/miscutils.h"
 #include "utils/rel.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #include "utils/palloc.h"
 #include "utils/syscache.h"
 
@@ -222,24 +223,37 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 
 /*
  * matrel_heap_delete
- *
- * Like simple_heap_delete except that it ignores the error in case the tuple was concurrently
- * updated. This is used by the auto-vacuumer so it doesn't choke in case the combiner updated
- * the expired tuple while the auto-vacuumer tried to delete it.
  */
 void
 matrel_heap_delete(Relation relation, ItemPointer tid)
 {
+	MemoryContext old = CurrentMemoryContext;
+
 	PG_TRY();
 	{
 		simple_heap_delete(relation, tid);
 	}
 	PG_CATCH();
 	{
-		ErrorData *err = CopyErrorData();
+		ErrorData *err;
 
+		Assert(CurrentMemoryContext == ErrorContext);
+
+		MemoryContextSwitchTo(old);
+		err = CopyErrorData();
+		MemoryContextSwitchTo(ErrorContext);
+
+		EmitErrorReport();
+
+		/*
+		 * Ignore any errors where the tuple was concurrently updated. This can happen in case the combiner
+		 * updated the tuple we'e trying to delete. We want to ignore this error so that the VACUUM task runs
+		 * till completion, otherwise we could fall in the hole where every auto-vacuum run keeps on getting aborted.
+		 */
 		if (!err->message || pg_strcasecmp(err->message, "tuple concurrently updated") != 0)
 			PG_RE_THROW();
+
+		elog(LOG, "skipped");
 
 		FreeErrorData(err);
 		FlushErrorState();
