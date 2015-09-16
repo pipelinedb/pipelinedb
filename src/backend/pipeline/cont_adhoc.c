@@ -64,6 +64,7 @@ typedef struct {
 
 	bool is_agg;
 
+
 } AdhocCombinerState;
 
 static TupleHashTable
@@ -402,10 +403,12 @@ init_adhoc_combiner(ContinuousViewData data,
 		state->is_agg = true;
 		state->existing = create_agg_hash(agg->numCols, agg->grpOperators,
 										  agg->grpColIdx);
+
 	}
 
 	return state;
 }
+
 
 static void
 exec_adhoc_worker(AdhocWorkerState* state)
@@ -544,8 +547,7 @@ adhoc_sync_combine(AdhocCombinerState* state, struct AdhocSender *sender)
 			if (!isnew)
 			{
 				elog(LOG, "update existing in adhoc_sync_combine");
-				print_slot(state->slot);
-				fflush(stdout);
+				sender_update(sender, state->slot);
 
 				heap_freetuple(entry->tuple);
 				entry->tuple = ExecCopySlotTuple(state->slot);
@@ -553,8 +555,8 @@ adhoc_sync_combine(AdhocCombinerState* state, struct AdhocSender *sender)
 			else
 			{
 				elog(LOG, "insert new in adhoc_sync_combine");
-				print_slot(state->slot);
-				fflush(stdout);
+				sender_insert(sender, state->slot);
+
 				entry->tuple = ExecCopySlotTuple(state->slot);
 			}
 		}
@@ -584,7 +586,9 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	worker_state = init_adhoc_worker(data, worker_receiver);
 	combiner_state = init_adhoc_combiner(data, batch);
 
-	sender_startup(sender, combiner_state->tup_desc);
+	sender_startup(sender, combiner_state->tup_desc,
+				   combiner_state->existing->keyColIdx,
+				   combiner_state->existing->numCols);
 
 	while (true)
 	{
