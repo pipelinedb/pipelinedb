@@ -1,0 +1,87 @@
+-- nulls
+SELECT date_round(NULL, NULL);
+ date_round 
+------------
+ 
+(1 row)
+
+SELECT date_round(NULL, INTERVAL '5 minute');
+ date_round 
+------------
+ 
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', NULL);
+          date_round          
+------------------------------
+ Fri Feb 16 20:38:40 2001 PST
+(1 row)
+
+-- valid floors
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '15 second');
+          date_round          
+------------------------------
+ Fri Feb 16 20:38:30 2001 PST
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '10 minute');
+          date_round          
+------------------------------
+ Fri Feb 16 20:30:00 2001 PST
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '3 hour');
+          date_round          
+------------------------------
+ Fri Feb 16 19:00:00 2001 PST
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-18 20:38:40', INTERVAL '5 day');
+          date_round          
+------------------------------
+ Sun Feb 18 16:00:00 2001 PST
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '2 month');
+          date_round          
+------------------------------
+ Mon Dec 25 16:00:00 2000 PST
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '7 year');
+          date_round          
+------------------------------
+ Fri Dec 31 16:00:00 1999 PST
+(1 row)
+
+-- invalid floors
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '150 second');
+          date_round          
+------------------------------
+ Fri Feb 16 20:37:30 2001 PST
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '65 minute');
+          date_round          
+------------------------------
+ Fri Feb 16 19:45:00 2001 PST
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '48 hour');
+          date_round          
+------------------------------
+ Thu Feb 15 16:00:00 2001 PST
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '36 day');
+          date_round          
+------------------------------
+ Tue Jan 30 16:00:00 2001 PST
+(1 row)
+
+SELECT date_round(TIMESTAMP '2001-02-16 20:38:40', INTERVAL '18 month');
+          date_round          
+------------------------------
+ Fri Dec 31 16:00:00 1999 PST
+(1 row)
+

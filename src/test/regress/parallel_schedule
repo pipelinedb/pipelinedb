@@ -148,7 +148,7 @@ test: cont_hs_agg cont_sw_hs_agg cont_distinct cont_hll_agg cont_os_agg cont_sw_
 # ----------
 # Another group of parallel tests
 # ----------
-test: stream_table_join user_combine cont_limit cont_alter stream_targets hash_group date_floor stream_insert_subselect
+test: stream_table_join user_combine cont_limit cont_alter stream_targets hash_group date_round stream_insert_subselect
 
 # ----------
 # Another group of parallel tests

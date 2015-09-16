@@ -5414,8 +5414,8 @@ DATA(insert OID = 4394 ( cmsketch_total	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0
 DESCR("count-min sketch total");
 
 /* date_floor */
-DATA(insert OID = 4395 (  date_floor	   PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 1184 "1184 1186" _null_ _null_ _null_ _null_ timestamptz_floor _null_ _null_ _null_ ));
-DESCR("floor timestamp with time zone to specified interval");
+DATA(insert OID = 4395 (  date_round	   PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 1184 "1184 1186" _null_ _null_ _null_ _null_ timestamptz_round _null_ _null_ _null_ ));
+DESCR("round down timestamp with time zone to specified interval");
 
 /* filtered space saving */
 DATA(insert OID = 4396 ( fss_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5041 "2283 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
