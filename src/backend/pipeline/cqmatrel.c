@@ -12,7 +12,6 @@
  */
 #include "postgres.h"
 
-#include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/index.h"
@@ -231,7 +230,19 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 void
 matrel_heap_delete(Relation relation, ItemPointer tid)
 {
-	ignore_concurrent_update_failure = true;
-	simple_heap_delete(relation, tid);
-	ignore_concurrent_update_failure = false;
+	PG_TRY();
+	{
+		simple_heap_delete(relation, tid);
+	}
+	PG_CATCH();
+	{
+		ErrorData *err = CopyErrorData();
+
+		if (!err->message || pg_strcasecmp(err->message, "tuple concurrently updated") != 0)
+			PG_RE_THROW();
+
+		FreeErrorData(err);
+		FlushErrorState();
+	}
+	PG_END_TRY();
 }
