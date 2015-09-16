@@ -34,6 +34,10 @@
 #include "executor/tstoreReceiver.h"
 #include "nodes/print.h"
 
+#include "pipeline/cont_adhoc_sender.h"
+#include "libpq/libpq.h"
+#include "libpq/pqformat.h"
+
 typedef struct {
 	TupleBufferBatchReader  *reader;
 	Oid                     view_id;
@@ -366,19 +370,18 @@ init_adhoc_combiner(ContinuousViewData data,
 {
 	AdhocCombinerState *state = palloc0(sizeof(AdhocWorkerState));
 	PlannedStmt *pstmt = 0;
-	TupleDesc tup_desc;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 	pstmt = GetContPlan(data.view, Combiner);
 	PopActiveSnapshot();
 
-	tup_desc = prepare_combine_plan(data.view->matrel, pstmt, batch);
+	state->tup_desc = prepare_combine_plan(data.view->matrel, pstmt, batch);
 	 
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
 										InvalidSnapshot, state->dest,
 										NULL, 0);
 
-	state->slot = MakeSingleTupleTableSlot(tup_desc);
+	state->slot = MakeSingleTupleTableSlot(state->tup_desc);
 
 	state->batch = batch;
 
@@ -524,7 +527,7 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 }
 
 static void
-adhoc_sync_combine(AdhocCombinerState* state)
+adhoc_sync_combine(AdhocCombinerState* state, struct AdhocSender *sender)
 {
 	tuplestore_clear(state->batch);
 	tuplestore_rescan(state->result);
@@ -566,6 +569,7 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	AdhocWorkerState *worker_state = 0;
 	AdhocCombinerState *combiner_state = 0;
 	ContinuousViewData data = init_cont_view(stmt, s);
+	struct AdhocSender* sender = sender_create();
 
 	DestReceiver *worker_receiver = CreateDestReceiver(DestTuplestore);
 
@@ -580,10 +584,12 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	worker_state = init_adhoc_worker(data, worker_receiver);
 	combiner_state = init_adhoc_combiner(data, batch);
 
+	sender_startup(sender, combiner_state->tup_desc);
+
 	while (true)
 	{
 		exec_adhoc_worker(worker_state);
 		exec_adhoc_combiner(combiner_state);
-		adhoc_sync_combine(combiner_state);
+		adhoc_sync_combine(combiner_state, sender);
 	}
 }
