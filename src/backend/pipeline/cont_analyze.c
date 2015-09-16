@@ -38,6 +38,7 @@
 #include "parser/parse_collate.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_node.h"
+#include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/cont_analyze.h"
@@ -3229,7 +3230,7 @@ get_dummy_sw_predicate(Node *where)
 		return NULL;
 
 	var = (Var *) linitial(vars);
-	if (IS_ARRIVAL_TIMESTAMP_REF(var))
+	if (IS_SW_TIMESTAMP_REF(var))
 		return var;
 
 	return NULL;
@@ -3465,7 +3466,7 @@ GetWindowTimeColumn(RangeVar *cv)
 }
 
 /*
- * CreateOuterArrivalTimestampRef
+ * CreateOuterSWTimeColumnRef
  *
  * If arrival_timestamp isn't found in an RTE, this hook is invoked by the parser.
  * It ultimately allows us to try to push any references to arrival_timestamp down.
@@ -3474,21 +3475,83 @@ GetWindowTimeColumn(RangeVar *cv)
  * matrel SELECT.
  */
 Node *
-CreateOuterArrivalTimestampRef(ParseState *pstate, ColumnRef *cref, Node *var)
+CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var)
 {
-	char *name;
 	Var *result;
+	char *nspname = NULL;
+	char *relname = NULL;
+	char *colname = NULL;
+	RangeTblEntry *rte;
+	int	levels_up;
+	RangeVar *rv;
+	ColumnRef *sw_cref;
 
 	if (var != NULL)
 		return NULL;
 
-	name = FigureColname((Node *) cref);
+	/* Try to figure out the name of the sliding window timestamp column */
+	switch (list_length(cref->fields))
+	{
+		case 1:
+		{
+			Assert(list_length(pstate->p_rtable) == 1);
+			rte = linitial(pstate->p_rtable);
+			colname = FigureColname((Node *) cref);
+			break;
+		}
+		case 2:
+		{
+			relname = strVal(linitial(cref->fields));
+			colname = strVal(lsecond(cref->fields));
+			rte = refnameRangeTblEntry(pstate, nspname, relname,
+					cref->location,
+					&levels_up);
+			break;
+		}
+		case 3:
+		{
+			nspname = strVal(linitial(cref->fields));
+			relname = strVal(lsecond(cref->fields));
+			colname = strVal(lthird(cref->fields));
+			rte = refnameRangeTblEntry(pstate, nspname, relname,
+					cref->location,
+					&levels_up);
+			break;
+		}
+		case 4:
+		{
+			nspname = strVal(lsecond(cref->fields));
+			relname = strVal(lthird(cref->fields));
+			colname = strVal(lfourth(cref->fields));
+			rte = refnameRangeTblEntry(pstate, nspname, relname,
+					cref->location,
+					&levels_up);
+			break;
+		}
+	}
 
-	if (pg_strcasecmp(name, ARRIVAL_TIMESTAMP) != 0)
+	if (rte->relkind != RELKIND_CONTVIEW)
+		return NULL;
+
+	rv = makeRangeVar(
+			get_namespace_name(get_rel_namespace(rte->relid)), get_rel_name(rte->relid), -1);
+
+	if (!GetGCFlag(rv))
+		return NULL;
+
+	sw_cref = GetSWTimeColumn(rv);
+	Assert(sw_cref);
+
+	/*
+	 * TODO(usmanm): For now we always allow ARRIVAL_TIMESTAMP because max_age hard codes it.
+	 * Should fix it.
+	 */
+	if (pg_strcasecmp(colname, FigureColname((Node *) sw_cref)) != 0 &&
+			pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) != 0)
 		return NULL;
 
 	/* we only need to do something if the column couldn't be resolved at this level */
-	result = makeVar(ARRIVAL_TIMESTAMP_REF, 1, TIMESTAMPTZOID, -1, InvalidOid, 0);
+	result = makeVar(SW_TIMESTAMP_REF, 1, TIMESTAMPTZOID, -1, InvalidOid, 0);
 
 	return (Node *) result;
 }

@@ -73,14 +73,17 @@ DROP CONTINUOUS VIEW msw3 CASCADE;
 
 CREATE CONTINUOUS VIEW msw5 AS
 SELECT
-  minute(arrival_timestamp)
+  minute(arrival_timestamp) AS sw_time
 FROM stream
 WHERE minute(arrival_timestamp) > clock_timestamp() - INTERVAL '10 minute';
-
 \d+ msw5
 
 CREATE VIEW msw6 WITH (max_age = '1 minute') AS SELECT * FROM msw5;
-
 \d+ msw6
-
 SELECT * FROM msw6;
+
+CREATE VIEW msw7 AS SELECT * FROM msw5 WHERE sw_time > clock_timestamp() - INTERVAL '1 minute';
+\d+ msw7
+SELECT * FROM msw7;
+
+DROP CONTINUOUS VIEW msw5 CASCADE;

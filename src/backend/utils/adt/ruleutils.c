@@ -5646,10 +5646,10 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 
 		return NULL;
 	}
-	else if (IS_ARRIVAL_TIMESTAMP_REF(var))
+	else if (IS_SW_TIMESTAMP_REF(var))
 	{
+		/* TODO(usmanm): Fix deparsing to print out the name of the SW column */
 		appendStringInfoString(buf, ARRIVAL_TIMESTAMP);
-
 		return NULL;
 	}
 	else

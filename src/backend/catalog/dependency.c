@@ -1608,7 +1608,7 @@ find_expr_references_walker(Node *node,
 		List	   *rtable;
 		RangeTblEntry *rte;
 
-		if (IS_ARRIVAL_TIMESTAMP_REF(var))
+		if (IS_SW_TIMESTAMP_REF(var))
 			return false;
 
 		/* Find matching rtable entry, or complain if not found */
