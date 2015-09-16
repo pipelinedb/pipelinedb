@@ -43,8 +43,8 @@ typedef struct ContAnalyzeContext
 #define OPTION_FILLFACTOR "fillfactor"
 #define OPTION_MAX_AGE "max_age"
 
-#define ARRIVAL_TIMESTAMP_REF 65100
-#define IS_ARRIVAL_TIMESTAMP_REF(var) (IsA((var), Var) && ((Var *) (var))->varno >= ARRIVAL_TIMESTAMP_REF)
+#define SW_TIMESTAMP_REF 65100
+#define IS_SW_TIMESTAMP_REF(var) (IsA((var), Var) && ((Var *) (var))->varno >= SW_TIMESTAMP_REF)
 
 #define IsMatRelCombine(proname) (pg_strcasecmp(NameStr(proname), MATREL_COMBINE) == 0)
 #define IsMatRelFinalize(proname) (pg_strcasecmp(NameStr(proname), MATREL_FINALIZE) == 0)
@@ -76,7 +76,7 @@ extern Query *GetContCombinerQuery(RangeVar *rv);
 extern Node *GetSWExpr(RangeVar *rv);
 extern ColumnRef *GetSWTimeColumn(RangeVar *rv);
 extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
-extern Node *CreateOuterArrivalTimestampRef(ParseState *pstate, ColumnRef *cref, Node *var);
+extern Node *CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var);
 extern DefElem *GetContinuousViewOption(List *options, char *name);
 extern void ApplyMaxAge(SelectStmt *stmt, DefElem *max_age);
 
