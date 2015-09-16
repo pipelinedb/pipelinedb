@@ -72,6 +72,7 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
+bool ignore_concurrent_update_failure = false;
 
 /* GUC variable */
 bool		synchronize_seqscans = true;
@@ -3028,7 +3029,13 @@ simple_heap_delete(Relation relation, ItemPointer tid)
 			break;
 
 		case HeapTupleUpdated:
-			elog(ERROR, "tuple concurrently updated");
+			/*
+			 * This flag is set when we're trying to delete expired SW tuples during VACUUM.
+			 * It ensures that even if some tuple was concurrently updated, we let the VACUUM
+			 * run till completion. The erroneous tuple should get deleted in the next round.
+			 */
+			if (!ignore_concurrent_update_failure)
+				elog(ERROR, "tuple concurrently updated");
 			break;
 
 		default:

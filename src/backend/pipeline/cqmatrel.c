@@ -12,6 +12,7 @@
  */
 #include "postgres.h"
 
+#include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/index.h"
@@ -230,30 +231,7 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 void
 matrel_heap_delete(Relation relation, ItemPointer tid)
 {
-	HTSU_Result result;
-	HeapUpdateFailureData hufd;
-
-	result = heap_delete(relation, tid,
-						 GetCurrentCommandId(true), InvalidSnapshot,
-						 true /* wait for commit */ ,
-						 &hufd);
-	switch (result)
-	{
-		case HeapTupleSelfUpdated:
-			/* Tuple was already updated in current command? */
-			elog(ERROR, "tuple already updated by self");
-			break;
-
-		case HeapTupleMayBeUpdated:
-			/* done successfully */
-			break;
-
-		case HeapTupleUpdated:
-			/* Tuple was concurrently updated? Ignore. */
-			break;
-
-		default:
-			elog(ERROR, "unrecognized heap_delete status: %u", result);
-			break;
-	}
+	ignore_concurrent_update_failure = true;
+	simple_heap_delete(relation, tid);
+	ignore_concurrent_update_failure = false;
 }

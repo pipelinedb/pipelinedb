@@ -22,6 +22,9 @@
 #include "utils/relcache.h"
 #include "utils/snapshot.h"
 
+/* PipelineDB extension variables */
+extern bool ignore_concurrent_update_failure;
+
 
 /* "options" flag bits for heap_insert */
 #define HEAP_INSERT_SKIP_WAL	0x0001
