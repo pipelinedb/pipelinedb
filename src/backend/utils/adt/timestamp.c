@@ -4167,13 +4167,13 @@ timestamptz_second(PG_FUNCTION_ARGS)
 }
 
 Datum
-timestamptz_floor(PG_FUNCTION_ARGS)
+timestamptz_round_down(PG_FUNCTION_ARGS)
 {
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
 	TimestampTz interval_ts;
 
 #ifndef HAVE_INT64_TIMESTAMP
-	elog(ERROR, "date_floor is only available when PipelineDB is compiled with --enable-integer-datetimes");
+	elog(ERROR, "date_round_down is only available when PipelineDB is compiled with --enable-integer-datetimes");
 #endif
 
 	if (PG_ARGISNULL(0))

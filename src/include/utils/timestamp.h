@@ -200,7 +200,7 @@ extern Datum timestamptz_age(PG_FUNCTION_ARGS);
 extern Datum timestamptz_trunc(PG_FUNCTION_ARGS);
 extern Datum timestamptz_part(PG_FUNCTION_ARGS);
 
-extern Datum timestamptz_floor(PG_FUNCTION_ARGS);
+extern Datum timestamptz_round_down(PG_FUNCTION_ARGS);
 extern Datum timestamptz_year(PG_FUNCTION_ARGS);
 extern Datum timestamptz_month(PG_FUNCTION_ARGS);
 extern Datum timestamptz_day(PG_FUNCTION_ARGS);
