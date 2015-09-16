@@ -472,32 +472,52 @@ DROP CONTINUOUS VIEW msw3 CASCADE;
 NOTICE:  drop cascades to view msw4
 CREATE CONTINUOUS VIEW msw5 AS
 SELECT
-  minute(arrival_timestamp)
+  minute(arrival_timestamp) AS sw_time
 FROM stream
 WHERE minute(arrival_timestamp) > clock_timestamp() - INTERVAL '10 minute';
 \d+ msw5
                      Continuous view "public.msw5"
- Column |           Type           | Modifiers | Storage | Description 
---------+--------------------------+-----------+---------+-------------
- minute | timestamp with time zone |           | plain   | 
+ Column  |           Type           | Modifiers | Storage | Description 
+---------+--------------------------+-----------+---------+-------------
+ sw_time | timestamp with time zone |           | plain   | 
 View definition:
- SELECT minute(arrival_timestamp::timestamp with time zone) AS minute
+ SELECT minute(arrival_timestamp::timestamp with time zone) AS sw_time
    FROM ONLY stream
   WHERE minute(arrival_timestamp::timestamp with time zone) > (clock_timestamp() - '00:10:00'::interval);
 
 CREATE VIEW msw6 WITH (max_age = '1 minute') AS SELECT * FROM msw5;
 \d+ msw6
-                          View "public.msw6"
- Column |           Type           | Modifiers | Storage | Description 
---------+--------------------------+-----------+---------+-------------
- minute | timestamp with time zone |           | plain   | 
+                           View "public.msw6"
+ Column  |           Type           | Modifiers | Storage | Description 
+---------+--------------------------+-----------+---------+-------------
+ sw_time | timestamp with time zone |           | plain   | 
 View definition:
- SELECT msw5.minute
+ SELECT msw5.sw_time
    FROM msw5
   WHERE arrival_timestamp > (clock_timestamp() - '00:01:00'::interval);
 
 SELECT * FROM msw6;
- minute 
---------
+ sw_time 
+---------
 (0 rows)
 
+CREATE VIEW msw7 AS SELECT * FROM msw5 WHERE sw_time > clock_timestamp() - INTERVAL '1 minute';
+\d+ msw7
+                           View "public.msw7"
+ Column  |           Type           | Modifiers | Storage | Description 
+---------+--------------------------+-----------+---------+-------------
+ sw_time | timestamp with time zone |           | plain   | 
+View definition:
+ SELECT msw5.sw_time
+   FROM msw5
+  WHERE msw5.sw_time > (clock_timestamp() - '00:01:00'::interval);
+
+SELECT * FROM msw7;
+ sw_time 
+---------
+(0 rows)
+
+DROP CONTINUOUS VIEW msw5 CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view msw6
+drop cascades to view msw7
