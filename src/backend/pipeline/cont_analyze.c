@@ -223,7 +223,7 @@ MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType
 	 * Collect any column names being used, so we don't clobber them when generating
 	 * internal column names for the materialization table.
 	 */
-	collect_column_names((Node *) select, context);
+	collect_column_names((Node *) select->targetList, context);
 
 	context->combine = select->forCombiner;
 	context->is_sw = has_clock_timestamp(select->whereClause, NULL);
@@ -1715,6 +1715,26 @@ get_unique_colname(ContAnalyzeContext *context)
 {
 	StringInfoData colname;
 
+	/* If hoisted name isn't used already, return that */
+	if (context->hoisted_name)
+	{
+		ListCell *lc;
+		bool exists = false;
+
+		foreach(lc, context->colnames)
+		{
+			char *colname2 = lfirst(lc);
+			if (pg_strcasecmp(context->hoisted_name, colname2) == 0)
+			{
+				exists = true;
+				break;
+			}
+		}
+
+		if (!exists)
+			return context->hoisted_name;
+	}
+
 	initStringInfo(&colname);
 
 	while (true)
@@ -1865,8 +1885,6 @@ hoist_node(List **target_list, Node *node, ContAnalyzeContext *context)
 	if (rt == NULL)
 	{
 		rt = create_unique_res_target(node, context);
-		if (context->hoisted_name)
-			rt->name = context->hoisted_name;
 		*target_list = lappend(*target_list, rt);
 	}
 
@@ -2176,8 +2194,13 @@ proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContex
 		time = copyObject(time);
 	}
 
+	context->cols = NIL;
+	collect_types_and_cols(time, context);
+
+	Assert(list_length(context->cols) == 1);
+
 	/* Create and truncate projection and grouping on temporal expression */
-	context->hoisted_name = ARRIVAL_TIMESTAMP;
+	context->hoisted_name = FigureColname(linitial(context->cols));
 	if (context->view_combines)
 		cref = hoist_time_node(proc, time, sw_expr, context);
 	else
@@ -3599,7 +3622,7 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	ColumnRef *arrival_ts;
 
 	if (has_clock_timestamp(stmt->whereClause, NULL))
-	  elog(ERROR, "cannot specify both \"max_age\" and a sliding window expression in the WHERE clause");
+		elog(ERROR, "cannot specify both \"max_age\" and a sliding window expression in the WHERE clause");
 
 	if (!ContainsSlidingWindowContinuousView(stmt->fromClause) && stmt->forContinuousView == false)
 		elog(ERROR, "\"max_age\" can only be specified when reading from a stream or continuous view");
