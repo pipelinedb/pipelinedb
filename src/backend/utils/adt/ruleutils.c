@@ -435,10 +435,6 @@ deparse_query_def(Query *query)
 	deparse_namespace dpns;
 	char *sql;
 
-	/* Guard against excessively long or deeply-nested queries */
-	CHECK_FOR_INTERRUPTS();
-	check_stack_depth();
-
 	/*
 	 * Before we begin to examine the query, acquire locks on referenced
 	 * relations, and fix up deleted columns in JOIN RTEs.  This ensures
@@ -7804,6 +7800,7 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 	int			nargs;
 	char 		*funcname;
 	bool		use_variadic;
+	bool is_distinct = aggref->aggdistinct != NIL;
 
 	/* Extract the argument types as seen by the parser */
 	nargs = get_aggregate_argtypes(aggref, argtypes);
@@ -7819,9 +7816,11 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 				NIL, argtypes, aggref->aggvariadic, &use_variadic);
 	}
 
+	funcname = get_inv_streaming_agg(funcname, &is_distinct);
+
 	/* Print the aggregate name, schema-qualified if needed */
 	appendStringInfo(buf, "%s(%s", funcname,
-			(aggref->aggdistinct != NIL) ? "DISTINCT " : "");
+			is_distinct ? "DISTINCT " : "");
 
 	if (AGGKIND_IS_ORDERED_SET(aggref->aggkind))
 	{

@@ -82,5 +82,6 @@ extern void ApplyMaxAge(SelectStmt *stmt, DefElem *max_age);
 
 /* Deparsing */
 extern char *deparse_query_def(Query *query);
+extern char *get_inv_streaming_agg(char *name, bool *is_distinct);
 
 #endif

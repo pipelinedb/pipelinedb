@@ -210,8 +210,11 @@ CREATE CONTINUOUS VIEW cqregress1 AS SELECT id::integer + avg(id) FROM analyze_c
 CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM analyze_cont_stream;
 CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::integer FROM analyze_cont_stream;
 CREATE CONTINUOUS VIEW cqregress4 AS SELECT x::int FROM cqregress4;
+CREATE CONTINUOUS VIEW cqregress5 AS SELECT count(DISTINCT x::int), percentile_cont(0.1) WITHIN GROUP (ORDER BY x) FROM analyze_cont_stream;
+\d+ cqregress5
 
 DROP CONTINUOUS VIEW cqregress1;
 DROP CONTINUOUS VIEW cqregress2;
 DROP CONTINUOUS VIEW cqregress3;
 DROP CONTINUOUS VIEW cqregress4;
+DROP CONTINUOUS VIEW cqregress5;

@@ -149,6 +149,32 @@ get_streaming_agg(FuncCall *fn)
 	return NULL;
 }
 
+/*
+ * get_inv_streaming_agg
+ */
+char *
+get_inv_streaming_agg(char *name, bool *is_distinct)
+{
+	int i;
+	int len = sizeof(StreamingVariants) / sizeof(char *) / 2;
+
+	for (i = 0; i < len; i++)
+	{
+		char *k = StreamingVariants[i][0];
+		char *v = StreamingVariants[i][1];
+
+		if (pg_strcasecmp(v, name) == 0)
+		{
+			if (is_distinct && pg_strcasecmp(k, "hll_count_distinct") == 0)
+				*is_distinct = true;
+
+			return k;
+		}
+	}
+
+	return name;
+}
+
 static bool
 has_clock_timestamp(Node *node, void *context)
 {
