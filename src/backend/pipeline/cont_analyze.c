@@ -3481,7 +3481,7 @@ CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var)
 	char *nspname = NULL;
 	char *relname = NULL;
 	char *colname = NULL;
-	RangeTblEntry *rte;
+	RangeTblEntry *rte = NULL;
 	int	levels_up;
 	RangeVar *rv;
 	ColumnRef *sw_cref;
@@ -3528,6 +3528,8 @@ CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var)
 					&levels_up);
 			break;
 		}
+		default:
+			return NULL;
 	}
 
 	if (rte->relkind != RELKIND_CONTVIEW)
