@@ -20,5 +20,6 @@ extern Datum hll_cardinality(PG_FUNCTION_ARGS);
 extern Datum hll_empty(PG_FUNCTION_ARGS);
 extern Datum hll_emptyp(PG_FUNCTION_ARGS);
 extern Datum hll_add(PG_FUNCTION_ARGS);
+extern Datum hll_cache_cardinality(PG_FUNCTION_ARGS);
 
 #endif

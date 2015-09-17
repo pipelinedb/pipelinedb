@@ -178,11 +178,11 @@ DATA(insert (cq_cume_dist_final cq_hypothetical_set_transition_multi 0 0 cq_hypo
 DATA(insert (hll_dense_rank_final hll_hypothetical_set_transition_multi 0 0 hll_union_agg_trans 3998));
 
 /* HyperLogLog count distinct */
-DATA(insert (hll_count_distinct_final hll_count_distinct_transition 0 0 hll_union_agg_trans 3998));
+DATA(insert (hll_count_distinct_final hll_count_distinct_transition hll_cache_cardinality 0 hll_union_agg_trans 3998));
 
 /* hll_agg */
-DATA(insert (0 hll_agg_trans 0 0 hll_union_agg_trans 3998));
-DATA(insert (0 hll_agg_transp 0 0 hll_union_agg_trans 3998));
+DATA(insert (hll_cache_cardinality hll_agg_trans hll_cache_cardinality 0 hll_union_agg_trans 3998));
+DATA(insert (hll_cache_cardinality hll_agg_transp hll_cache_cardinality 0 hll_union_agg_trans 3998));
 
 /* bloom_agg */
 DATA(insert (0 bloom_agg_trans  0 0 bloom_union_agg_trans 5030));
