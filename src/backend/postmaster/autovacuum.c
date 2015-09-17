@@ -2783,7 +2783,10 @@ relation_needs_vacanalyze(Oid relid,
 	 */
 	if (PointerIsValid(tabentry) && AutoVacuumingActive())
 	{
-		uint64_t swvactuples = NumSWVacuumTuples(relid);
+		/*
+		 * All expired tuples in a SW continuous view should be considered as *dead*.
+		 */
+		uint64_t swvactuples = NumSWExpiredTuples(relid);
 		reltuples = classForm->reltuples;
 		vactuples = tabentry->n_dead_tuples + swvactuples;
 		anltuples = tabentry->changes_since_analyze + swvactuples;

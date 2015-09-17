@@ -762,7 +762,6 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 				tups_recently_dead = 0;
 	int			elevel = verbose ? INFO : DEBUG2;
 	PGRUsage	ru0;
-	SWVacuumContext *sw_vcontext;
 
 	pg_rusage_init(&ru0);
 
@@ -775,8 +774,6 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 		OldIndex = index_open(OIDOldIndex, AccessExclusiveLock);
 	else
 		OldIndex = NULL;
-
-	sw_vcontext = CreateSWVacuumContext(OldHeap);
 
 	/*
 	 * Their tuple descriptors should be exactly alike, but here we only need
@@ -1025,9 +1022,6 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
 
-		if (!isdead)
-			isdead = ShouldVacuumSWTuple(sw_vcontext, tuple);
-
 		if (isdead)
 		{
 			tups_vacuumed += 1;
@@ -1105,7 +1099,6 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 					   pg_rusage_show(&ru0))));
 
 	/* Clean up */
-	FreeSWVacuumContext(sw_vcontext);
 	pfree(values);
 	pfree(isnull);
 
