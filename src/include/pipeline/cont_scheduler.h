@@ -11,8 +11,8 @@
 #ifndef CONT_SCHEDULER_H
 #define CONT_SCHEDULER_H
 
-#include "storage/latch.h"
 #include "postmaster/bgworker.h"
+#include "storage/latch.h"
 #include "storage/spin.h"
 
 #define MAX_CQS 1024
@@ -64,6 +64,7 @@ extern int continuous_query_num_combiners;
 extern int continuous_query_num_workers;
 extern int continuous_query_batch_size;
 extern int continuous_query_max_wait;
+extern int continuous_query_error_throttle;
 extern int continuous_query_combiner_work_mem;
 extern int continuous_query_combiner_cache_mem;
 extern int continuous_query_combiner_synchronous_commit;
@@ -92,11 +93,16 @@ extern void ContQuerySchedulerMain(int argc, char *argv[]) __attribute__((noretu
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
 
-extern void sleep_if_deactivated(void);
+extern void SleepIfContQueriesDeactivated(void);
 extern bool ContQuerySetStateAndWait(bool state, int waitms);
 extern bool *ContQueryGetActiveFlag(void);
 
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
+
+extern void ThrottlerRecordError(Oid cq_id);
+extern void ThrottlerRecordSuccess(Oid cq_id);
+extern bool ThrottlerShouldSkip(Oid cq_id);
+extern void ThrottlerClear(Oid cq_id);
 
 #endif   /* CONT_SCHEDULER_H */

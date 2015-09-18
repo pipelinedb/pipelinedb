@@ -2628,6 +2628,18 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
+		{"continuous_query_error_throttle", PGC_SIGHUP, QUERY_TUNING,
+		 gettext_noop("Sets the maximum time to skip execution of a continuous query if a lot of errors are seen."),
+		 gettext_noop("A higher value here means that tuples will not be seen by a continuous query for longer even if there "
+					  "are no errors."),
+		 GUC_UNIT_MS
+		},
+		&continuous_query_error_throttle,
+		5000, 2, 60000,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"continuous_query_batch_size", PGC_SIGHUP, QUERY_TUNING,
 		 gettext_noop("Sets the maximum number of events to accumulate before executing a continuous query plan on them."),
 		 gettext_noop("A higher value usually yields less frequent continuous view updates.")

@@ -136,6 +136,7 @@ extern TupleBufferSlot *TupleBufferBatchReaderNext(TupleBufferBatchReader *reade
 extern void TupleBufferBatchReaderRewind(TupleBufferBatchReader *reader);
 extern void TupleBufferBatchReaderReset(TupleBufferBatchReader *reader);
 extern void TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_processed);
+extern void TupleBufferSkipBatch(TupleBufferBatchReader *reader);
 
 extern void TupleBufferDrain(TupleBuffer *buf, Oid db_oid);
 

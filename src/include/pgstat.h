@@ -1073,18 +1073,18 @@ extern CQStatEntry *MyCQStats;
 		} \
 	} while(0)
 
-#define IncrementCQExecutions(n) \
+#define IncrementCQExecutions() \
 	do { \
-		MyProcCQStats.executions += (n); \
+		MyProcCQStats.executions ++; \
 		if (MyCQStats) \
-			MyCQStats->executions += (n); \
+			MyCQStats->executions ++; \
 	} while(0)
 
-#define IncrementCQErrors(n) \
+#define IncrementCQErrors() \
 	do { \
-		MyProcCQStats.errors += (n); \
+		MyProcCQStats.errors ++; \
 		if (MyCQStats) \
-			MyCQStats->errors += (n); \
+			MyCQStats->errors ++; \
 	} while(0)
 
 #define cq_stat_get_global(cont_queries, ptype) (cq_stat_get_entry(cont_queries, 0, 0, ptype))

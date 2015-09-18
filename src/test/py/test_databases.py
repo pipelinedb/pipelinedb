@@ -4,7 +4,8 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 def test_multiple_databases(pipeline, clean_db):
-  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
+  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s'
+                          % (getpass.getuser(), pipeline.port))
   conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
 
   cur = conn.cursor()
@@ -19,23 +20,27 @@ def test_multiple_databases(pipeline, clean_db):
   result = pipeline.execute('SELECT * FROM test_multiple_databases')
   assert sorted(row['x'] for row in result) == range(0, 10, 2)
 
-  # Create same CV in the other database, make sure its created and write different data to it.
+  # Create same CV in the other database, make sure its created and write
+  # different data to it.
   tmp_conn = psycopg2.connect('dbname=tmp_pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
   cur = tmp_conn.cursor()
   cur.execute('CREATE CONTINUOUS VIEW test_multiple_databases AS %s' % q)
   tmp_conn.commit()
-  cur.execute('INSERT INTO stream (x) VALUES %s' % ', '.join(map(lambda x: '(%d)' % x, range(1, 11, 2))))
+  cur.execute('INSERT INTO stream (x) VALUES %s' %
+              ', '.join(map(lambda x: '(%d)' % x, range(1, 11, 2))))
   cur.execute('SELECT * FROM test_multiple_databases')
   tmp_conn.commit()
   assert sorted(row[0] for row in cur) == range(1, 11, 2)
 
-  # Ensure that the data written to the other database isn't seen by the first database.
+  # Ensure that the data written to the other database isn't seen by the
+  # first database.
   result = pipeline.execute('SELECT * FROM test_multiple_databases')
   assert sorted(row['x'] for row in result) == range(0, 10, 2)
 
   # Insert new data to both databases.
   pipeline.insert('stream', ['x'], map(lambda x: (x, ), range(10, 20, 2)))
-  cur.execute('INSERT INTO stream (x) VALUES %s' % ', '.join(map(lambda x: '(%d)' % x, range(11, 21, 2))))
+  cur.execute('INSERT INTO stream (x) VALUES %s'
+              % ', '.join(map(lambda x: '(%d)' % x, range(11, 21, 2))))
 
   # Ensure both databases still saw the data written out to them.
   result = pipeline.execute('SELECT * FROM test_multiple_databases')

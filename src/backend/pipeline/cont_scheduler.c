@@ -50,6 +50,16 @@
 #define MIN_WAIT_TERMINATE_MS 250
 #define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
+#define MIN_ERR_DELAY 2 /* 2ms */
+
+typedef struct Throttler
+{
+	TimestampTz last_run;
+	long err_delay;
+} Throttler;
+
+static Throttler throttlers[MAX_CQS];
+
 typedef struct
 {
 	Oid oid;
@@ -70,6 +80,7 @@ int continuous_query_num_combiners;
 int continuous_query_num_workers;
 int continuous_query_batch_size;
 int continuous_query_max_wait;
+int continuous_query_error_throttle;
 int continuous_query_combiner_work_mem;
 int continuous_query_combiner_cache_mem;
 int continuous_query_combiner_synchronous_commit;
@@ -381,6 +392,7 @@ cq_bgproc_main(Datum arg)
 	CHECK_FOR_INTERRUPTS();
 
 	MyContQueryProc->latch = &MyProc->procLatch;
+	MemSet(throttlers, 0, sizeof(throttlers));
 
 	ereport(LOG, (errmsg("continuous query process \"%s\" running with pid %d", GetContQueryProcName(MyContQueryProc), MyProcPid)));
 	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(MyContQueryProc));
@@ -775,9 +787,14 @@ ContQuerySchedulerMain(int argc, char *argv[])
  * sleep_if_cqs_deactivated
  */
 void
-sleep_if_deactivated(void)
+SleepIfContQueriesDeactivated(void)
 {
-	char *name = GetContQueryProcName(MyContQueryProc);
+	char *name;
+
+	if (MyContQueryProc->group->active)
+		return;
+
+	name = GetContQueryProcName(MyContQueryProc);
 	pgstat_report_activity(STATE_DISABLED, name);
 
 	while (!MyContQueryProc->group->active)
@@ -929,4 +946,62 @@ void
 SignalContQuerySchedulerRefresh(void)
 {
 	signal_cont_query_scheduler(SIGINT);
+}
+
+/*
+ * ThrottlerRecordError
+ */
+void
+ThrottlerRecordError(Oid cq_id)
+{
+	Throttler *t = &throttlers[cq_id];
+
+	if (t->err_delay == 0)
+		t->err_delay = MIN_ERR_DELAY;
+	else
+		t->err_delay = Min(continuous_query_error_throttle, t->err_delay * 2);
+
+	t->last_run = GetCurrentTimestamp();
+
+	IncrementCQErrors();
+}
+
+/*
+ * ThrottlerRecordSuccess
+ */
+void
+ThrottlerRecordSuccess(Oid cq_id)
+{
+	Throttler *t = &throttlers[cq_id];
+
+	t->err_delay = 0;
+	t->last_run = GetCurrentTimestamp();
+
+	IncrementCQExecutions();
+}
+
+/*
+ * ThrottlerShouldSkip
+ */
+bool
+ThrottlerShouldSkip(Oid cq_id)
+{
+	Throttler *t = &throttlers[cq_id];
+
+	if (t->err_delay == 0)
+		return false;
+
+	if (TimestampDifferenceExceeds(t->last_run, GetCurrentTimestamp(), t->err_delay))
+		return false;
+
+	return true;
+}
+
+/*
+ * ThrottlerClear
+ */
+void
+ThrottlerClear(Oid cq_id)
+{
+	MemSet(&throttlers[cq_id], 0, sizeof(Throttler));
 }

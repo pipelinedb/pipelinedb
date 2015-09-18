@@ -915,3 +915,21 @@ TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_
 		ResetLatch(reader->rdr->proc->latch);
 	}
 }
+
+/*
+ * TupleBufferSkipBatch
+ */
+void
+TupleBufferSkipBatch(TupleBufferBatchReader *reader)
+{
+	TupleBufferSlot *tbs;
+	Oid id = MyContQueryProc->group_id;
+
+	if (!OidIsValid(id))
+		id = IsContQueryWorkerProcess() ? continuous_query_num_workers : continuous_query_num_workers;
+
+	TupleBufferBatchReaderSetCQId(reader, MyContQueryProc->group_id + 1);
+
+	while ((tbs = TupleBufferBatchReaderNext(reader)) != NULL)
+		IncrementCQRead(1, tbs->size);
+}

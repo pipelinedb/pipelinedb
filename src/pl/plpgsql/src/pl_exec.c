@@ -6286,8 +6286,15 @@ plpgsql_xact_cb(XactEvent event, void *arg)
 	 */
 	if (event == XACT_EVENT_COMMIT || event == XACT_EVENT_PREPARE)
 	{
-		/* Shouldn't be any econtext stack entries left at commit */
-		Assert(simple_econtext_stack == NULL);
+		/*
+		 * If we're a continuous query background process, we could have seen an error
+		 * but we don't abort because there's one giant transaction for all queries.
+		 */
+		if (!IsContQueryProcess())
+		{
+			/* Shouldn't be any econtext stack entries left at commit */
+			Assert(simple_econtext_stack == NULL);
+		}
 
 		if (shared_simple_eval_estate)
 			FreeExecutorState(shared_simple_eval_estate);
