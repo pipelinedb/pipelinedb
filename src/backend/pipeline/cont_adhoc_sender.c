@@ -13,9 +13,9 @@ struct AdhocSender
 	StringInfo msg_buf;
 };
 
-static List * copy_get_attnums(TupleDesc tupDesc);
+static List * get_attnums(TupleDesc tupDesc);
 
-static void copy_one_row(StringInfo msgbuf,
+static void write_one_row(StringInfo msgbuf,
 						 FmgrInfo *out_funcs,
 						 List *attnumlist,
 						 Datum *values,
@@ -23,29 +23,29 @@ static void copy_one_row(StringInfo msgbuf,
 
 
 static List *
-copy_get_attnums(TupleDesc tupDesc);
+get_attnums(TupleDesc tupDesc);
 
 static void
-copy_send_string(StringInfo msgbuf, const char *str);
+write_string(StringInfo msgbuf, const char *str);
 
 static void
-copy_send_data(StringInfo msgbuf, const void *databuf, int datasize);
+write_data(StringInfo msgbuf, const void *databuf, int datasize);
 
 static void
-copy_send_char(StringInfo msgbuf, char c);
+write_char(StringInfo msgbuf, char c);
 
 static void
-copy_send_end_of_row(StringInfo msgbuf);
+write_end_of_row(StringInfo msgbuf);
 
 static void
-copy_attribute_out_text(StringInfo msgbuf, char delim, char *string);
+write_attribute_out_text(StringInfo msgbuf, char delim, char *string);
 
 static void
 sender_header(struct AdhocSender *sender, TupleDesc tup_desc);
 
 static void
-sender_keys(struct AdhocSender *sender, TupleDesc tup_desc, AttrNumber *keyColIdx,
-		int	numCols);
+sender_keys(struct AdhocSender *sender, TupleDesc tup_desc,
+			AttrNumber *keyColIdx, int	numCols);
 
 static void
 sender_send(struct AdhocSender *sender);
@@ -68,7 +68,7 @@ sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
 	Form_pg_attribute *attr;
 	ListCell   *cur;
 
-	sender->attnumlist = copy_get_attnums(tup_desc);
+	sender->attnumlist = get_attnums(tup_desc);
 	sender->out_funcs = 
 		(FmgrInfo *) palloc(tup_desc->natts * sizeof(FmgrInfo));
 
@@ -101,10 +101,10 @@ sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
 	pq_flush();
 }
 
-static void copy_msg_type(StringInfo buf, char type)
+static void write_msg_type(StringInfo buf, char type)
 {
-	copy_send_char(buf, type);
-	copy_send_char(buf, ' ');
+	write_char(buf, type);
+	write_char(buf, ' ');
 }
 
 void
@@ -116,7 +116,7 @@ sender_keys(struct AdhocSender *sender, TupleDesc tup_desc, AttrNumber *keyColId
 	int i = 0;
 
 	resetStringInfo(sender->msg_buf);
-	copy_msg_type(sender->msg_buf, 'k');
+	write_msg_type(sender->msg_buf, 'k');
 
 	for (i = 0; i < numCols; ++i)
 	{
@@ -124,14 +124,14 @@ sender_keys(struct AdhocSender *sender, TupleDesc tup_desc, AttrNumber *keyColId
 		char	   *colname;
 
 		if (hdr_delim)
-			copy_send_char(sender->msg_buf, ' ');
+			write_char(sender->msg_buf, ' ');
 
 		hdr_delim = true;
 		colname = NameStr(attr[attnum - 1]->attname);
-		copy_attribute_out_text(sender->msg_buf, ' ', colname);
+		write_attribute_out_text(sender->msg_buf, ' ', colname);
 	}
 
-	copy_send_end_of_row(sender->msg_buf);
+	write_end_of_row(sender->msg_buf);
 	sender_send(sender);
 }
 
@@ -143,7 +143,7 @@ sender_header(struct AdhocSender *sender, TupleDesc tup_desc)
 	Form_pg_attribute *attr = tup_desc->attrs;
 
 	resetStringInfo(sender->msg_buf);
-	copy_msg_type(sender->msg_buf, 'h');
+	write_msg_type(sender->msg_buf, 'h');
 
 	foreach(cur, sender->attnumlist)
 	{
@@ -151,33 +151,34 @@ sender_header(struct AdhocSender *sender, TupleDesc tup_desc)
 		char	   *colname;
 
 		if (hdr_delim)
-			copy_send_char(sender->msg_buf, ' ');
+			write_char(sender->msg_buf, ' ');
 
 		hdr_delim = true;
 		colname = NameStr(attr[attnum - 1]->attname);
-		copy_attribute_out_text(sender->msg_buf, ' ', colname);
+		write_attribute_out_text(sender->msg_buf, ' ', colname);
 	}
 
-	copy_send_end_of_row(sender->msg_buf);
+	write_end_of_row(sender->msg_buf);
 	sender_send(sender);
 }
 
 void
 sender_shutdown(struct AdhocSender *sender)
 {
-	pq_putemptymessage('c');		/* CopyDone */
+	pq_putemptymessage('c'); /* CopyDone */
 	pq_flush();
 }
 
 void
 sender_insert(struct AdhocSender *sender, TupleTableSlot *slot)
 {
+	elog(LOG, "got insert");
 	resetStringInfo(sender->msg_buf);
-	copy_msg_type(sender->msg_buf, 'i');
+	write_msg_type(sender->msg_buf, 'i');
 
 	slot_getallattrs(slot);
 
-	copy_one_row(sender->msg_buf,
+	write_one_row(sender->msg_buf,
 				 sender->out_funcs,
 				 sender->attnumlist,
 				 slot->tts_values,
@@ -190,11 +191,11 @@ void
 sender_update(struct AdhocSender *sender, TupleTableSlot *slot)
 {
 	resetStringInfo(sender->msg_buf);
-	copy_msg_type(sender->msg_buf, 'u');
+	write_msg_type(sender->msg_buf, 'u');
 
 	slot_getallattrs(slot);
 
-	copy_one_row(sender->msg_buf,
+	write_one_row(sender->msg_buf,
 				 sender->out_funcs,
 				 sender->attnumlist,
 				 slot->tts_values,
@@ -210,64 +211,7 @@ sender_send(struct AdhocSender *sender)
 	pq_flush();
 }
 
-//	StringInfoData buf;
-
-//	state->frontend = frontend;
-//	state->attnumlist = copy_get_attnums(tup_desc);
-//	state->out_funcs = 
-//		(FmgrInfo *) palloc(tup_desc->natts * sizeof(FmgrInfo));
-//
-//	attr = tup_desc->attrs;
-//	// out_functions
-//
-//	foreach(cur, state->attnumlist)
-//	{
-//		int			attnum = lfirst_int(cur);
-//		Oid			out_func_oid;
-//		bool		isvarlena;
-//
-//		getTypeOutputInfo(attr[attnum - 1]->atttypid,
-//					  &out_func_oid,
-//					  &isvarlena);
-//		fmgr_info(out_func_oid, &state->out_funcs[attnum - 1]);
-//	}
-//
-//	state->msgbuf = makeStringInfo();
-//
-//	// psql probably needs this.
-//
-//		pq_beginmessage(&buf, 'H');
-//		pq_sendbyte(&buf, 0);		/* overall format */
-//		pq_sendint(&buf, 0, 2);		/* natts */
-//		pq_endmessage(&buf);
-//
-//	}
-//}
-
-//	char buf[32];
-//	strcpy(buf, "insert");
-//	slot_getallattrs(state->slot);
-//
-//	copy_one_row(state->msgbuf,
-//				 state->out_funcs,
-//				 state->attnumlist,
-//				 state->slot->tts_values,
-//				 state->slot->tts_isnull);
-//
-//	pq_putmessage('d', buf, strlen(buf));
-//	pq_flush();
-//}
-
-//void sender_update()
-//{
-//	char buf[32];
-//	strcpy(buf, "update");
-
-//	pq_putmessage('d', buf, strlen(buf));
-//	pq_flush();
-//}
-
-static void copy_one_row(StringInfo msgbuf,
+static void write_one_row(StringInfo msgbuf,
 						 FmgrInfo *out_funcs,
 						 List *attnumlist,
 						 Datum *values,
@@ -278,8 +222,6 @@ static void copy_one_row(StringInfo msgbuf,
 
 	bool need_delim = false;
 
-	// CopyOneRowTo
-
 	foreach(cur, attnumlist)
 	{
 		int			attnum = lfirst_int(cur);
@@ -287,33 +229,28 @@ static void copy_one_row(StringInfo msgbuf,
 		bool		isnull = nulls[attnum - 1];
 
 		if (need_delim)
-			copy_send_char(msgbuf, ' ');
+			write_char(msgbuf, ' ');
 
 		need_delim = true;
 
 		if (isnull)
 		{
-			
-			// CopySendString
-
-			copy_send_string(msgbuf, "\\N");
+			write_string(msgbuf, "\\N");
 		}
 		else
 		{
 			string = OutputFunctionCall(&out_funcs[attnum - 1],
 										value);
 
-			// CopyAttributeOutText
-			copy_attribute_out_text(msgbuf,' ',string);
+			write_attribute_out_text(msgbuf,' ',string);
 		}
 	}
 
-	// CopySendEndOfRow
-	copy_send_end_of_row(msgbuf);
+	write_end_of_row(msgbuf);
 }
 	
 static List *
-copy_get_attnums(TupleDesc tupDesc)
+get_attnums(TupleDesc tupDesc)
 {
 	List *attnums = NIL;
 
@@ -332,38 +269,37 @@ copy_get_attnums(TupleDesc tupDesc)
 }
 
 static void
-copy_send_string(StringInfo msgbuf, const char *str)
+write_string(StringInfo msgbuf, const char *str)
 {
 	appendBinaryStringInfo(msgbuf, str, strlen(str));
 }
 
 static void
-copy_send_data(StringInfo msgbuf, const void *databuf, int datasize)
+write_data(StringInfo msgbuf, const void *databuf, int datasize)
 {
 	appendBinaryStringInfo(msgbuf, databuf, datasize);
 }
 
 static void
-copy_send_char(StringInfo msgbuf, char c)
+write_char(StringInfo msgbuf, char c)
 {
 	appendStringInfoCharMacro(msgbuf, c);
 }
 
 static void
-copy_send_end_of_row(StringInfo msgbuf)
+write_end_of_row(StringInfo msgbuf)
 {
-	copy_send_char(msgbuf, '\n');
+	write_char(msgbuf, '\n');
 }
 
-// CopySendData
 #define DUMPSOFAR() \
 	do { \
 		if (ptr > start) \
-			copy_send_data(msgbuf, start, ptr - start); \
+			write_data(msgbuf, start, ptr - start); \
 	} while (0)
 
 static void
-copy_attribute_out_text(StringInfo msgbuf, char delim, char *string)
+write_attribute_out_text(StringInfo msgbuf, char delim, char *string)
 {
 	char	   *ptr;
 	char	   *start;
@@ -414,14 +350,14 @@ copy_attribute_out_text(StringInfo msgbuf, char delim, char *string)
 			}
 			/* if we get here, we need to convert the control char */
 			DUMPSOFAR();
-			copy_send_char(msgbuf, '\\');
-			copy_send_char(msgbuf, c);
+			write_char(msgbuf, '\\');
+			write_char(msgbuf, c);
 			start = ++ptr;	/* do not include char in next run */
 		}
 		else if (c == '\\' || c == delimc)
 		{
 			DUMPSOFAR();
-			copy_send_char(msgbuf, '\\');
+			write_char(msgbuf, '\\');
 			start = ptr++;	/* we include char in next run */
 		}
 		else
