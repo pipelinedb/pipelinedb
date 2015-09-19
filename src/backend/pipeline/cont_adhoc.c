@@ -37,6 +37,8 @@
 #include "pipeline/cont_adhoc_sender.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
+#include "tcop/tcopprot.h"
+#include "pipeline/cont_analyze.h"
 
 void
 dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot);
@@ -72,6 +74,15 @@ typedef struct {
 
 
 } AdhocCombinerState;
+
+typedef struct {
+
+	Tuplestorestate *batch;
+	QueryDesc *query_desc;
+	DestReceiver *dest;
+	TupleTableSlot          *slot;
+
+} AdhocViewState;
 
 static TupleHashTable
 create_agg_hash(int num_cols, Oid *grp_ops, AttrNumber *group_atts)
@@ -135,6 +146,32 @@ set_reader(PlanState *planstate, TupleBufferBatchReader *reader)
 	set_reader(planstate->lefttree, reader);
 	set_reader(planstate->righttree, reader);
 }
+
+//static void
+//set_reader_on_view_plan(PlanState *planstate,
+//						TupleBufferBatchReader *reader)
+//{
+//	if (planstate == NULL)
+//		return;
+//
+//	// TransformSelectStmtForContProcess
+//	if (IsA(planstate, SeqScanState))
+//	{
+//		// StreamScanState
+//		// SeqScanState
+//		// S*scan = (StreamScanState *) planstate;
+//		// scan->reader = reader;
+//		return;
+//	}
+//	else if (IsA(planstate, SubqueryScanState))
+//	{
+//		set_reader(((SubqueryScanState *) planstate)->subplan, reader);
+//		return;
+//	}
+//
+//	set_reader(planstate->lefttree, reader);
+//	set_reader(planstate->righttree, reader);
+//}
 
 static EState *
 create_estate(QueryDesc *query_desc)
@@ -463,6 +500,7 @@ exec_adhoc_worker(AdhocWorkerState* state)
 	TupleBufferBatchReaderRewind(state->reader);
 	TupleBufferBatchReaderReset(state->reader);
 
+
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 }
 
@@ -472,7 +510,6 @@ static void
 exec_adhoc_combiner(AdhocCombinerState* state)
 {
 	ResourceOwner owner = CurrentResourceOwner;
-
 	struct Plan *plan = 0;
 	EState *estate = 0;
 
@@ -528,43 +565,139 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 	estate = state->query_desc->estate;
 
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
+	tuplestore_clear(state->batch);
 }
 
 static void
-adhoc_sync_combine(AdhocCombinerState* state, struct AdhocSender *sender)
+exec_adhoc_view(AdhocViewState* state)
 {
+//	elog(LOG, "exec_adhoc_view start");
+//	ResourceOwner owner = CurrentResourceOwner;
+//	struct Plan *plan = 0;
+//	EState *estate = 0;
+
+	tuplestore_rescan(state->batch);
+
+	dump_tuplestore(state->batch, state->slot);
+
+//	state->query_desc->estate = create_estate(state->query_desc);
+//	estate = state->query_desc->estate;
+//	set_snapshot(estate, owner);
+//
+//	plan = state->query_desc->plannedstmt->planTree;
+//
+//	// IsContQueryAdhocProcess
+//
+//	state->query_desc->planstate = 
+//		ExecInitNode(plan, state->query_desc->estate, 0);
+//
+//	ExecutePlan(estate, state->query_desc->planstate, 
+//				state->query_desc->operation,
+//				true, 0, 0, ForwardScanDirection, state->dest);
+//
+//	ExecEndNode(state->query_desc->planstate);
+//	state->query_desc->planstate = NULL;
+//
+//	unset_snapshot(estate, owner);
+//
+//	state->query_desc->estate = NULL;
+//	estate = state->query_desc->estate;
+
 	tuplestore_clear(state->batch);
-	tuplestore_rescan(state->result);
+//	elog(LOG, "exec_adhoc_view fin");
+}
 
-	foreach_tuple(state->slot, state->result)
-	{
-		if (state->is_agg)
-		{
-			bool isnew = false;
+//static void
+//adhoc_sync_combine(AdhocCombinerState* state, struct AdhocSender *sender)
+//{
+//	tuplestore_clear(state->batch);
+//	tuplestore_rescan(state->result);
+//
+//	// result needs to be scanned into the view stmt.
+//
+//	foreach_tuple(state->slot, state->result)
+//	{
+//		if (state->is_agg)
+//		{
+//			bool isnew = false;
+//
+//			HeapTupleEntry entry = (HeapTupleEntry) 
+//				LookupTupleHashEntry(state->existing, state->slot, &isnew);
+//
+//			if (!isnew)
+//			{
+//				sender_update(sender, state->slot);
+//
+//				heap_freetuple(entry->tuple);
+//				entry->tuple = ExecCopySlotTuple(state->slot);
+//			}
+//			else
+//			{
+//				sender_insert(sender, state->slot);
+//				entry->tuple = ExecCopySlotTuple(state->slot);
+//			}
+//		}
+//		else
+//		{
+//			sender_insert(sender, state->slot);
+//		}
+//	}
+//
+//	tuplestore_clear(state->result);
+//}
 
-			HeapTupleEntry entry = (HeapTupleEntry) 
-				LookupTupleHashEntry(state->existing, state->slot, &isnew);
+//extern PlannedStmt *GetContPlan(ContinuousView *view, ContQueryProcType type);
 
-			if (!isnew)
-			{
-				sender_update(sender, state->slot);
+AdhocViewState* init_adhoc_view(ContinuousViewData data,
+								Tuplestorestate *batch)
+{
+	elog(LOG, "init_adhoc_view");
+	AdhocViewState *state = palloc0(sizeof(AdhocViewState));
 
-				heap_freetuple(entry->tuple);
-				entry->tuple = ExecCopySlotTuple(state->slot);
-			}
-			else
-			{
-				sender_insert(sender, state->slot);
-				entry->tuple = ExecCopySlotTuple(state->slot);
-			}
-		}
-		else
-		{
-			sender_insert(sender, state->slot);
-		}
-	}
+	PushActiveSnapshot(GetTransactionSnapshot());
+	PlannedStmt* pstmt = get_view_plan(data.view);
+	PopActiveSnapshot();
 
-	tuplestore_clear(state->result);
+	elog(LOG, "wtf");
+
+	// DefineContinuousView
+	pprint(pstmt);
+
+	TupleDesc desc = prepare_combine_plan(data.view->matrel, pstmt, batch);
+
+	state->batch = batch;
+
+	state->dest = CreateDestReceiver(DestDebug);
+
+	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
+										InvalidSnapshot, state->dest,
+										NULL, 0);
+
+	return state;
+
+	// forContinuousView
+	// ExecCreateContViewStmt
+
+//	/* Deparse query so that analyzer always see the same canonicalized SelectStmt */
+//	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
+//	cont_select_sql = deparse_query_def(cont_query);
+//	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
+//	context = MakeContAnalyzeContext(NULL, cont_select, Worker);
+//
+//	/*
+//	 * Get the transformed SelectStmt used by CQ workers. We do this
+//	 * because the targetList of this SelectStmt contains all columns
+//	 * that need to be created in the underlying matrel.
+//	 */
+//	workerselect = TransformSelectStmtForContProcess(matrel, cont_select, &viewselect, Worker);
+//
+
+//	AdhocCombinerState *state = palloc0(sizeof(AdhocWorkerState));
+//	PlannedStmt *pstmt = 0;
+//
+//	PushActiveSnapshot(GetTransactionSnapshot());
+//	pstmt = GetContPlan(data.view, Combiner);
+//	PopActiveSnapshot();
 }
 
 void
@@ -576,6 +709,8 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 
 	AdhocWorkerState *worker_state = 0;
 	AdhocCombinerState *combiner_state = 0;
+	AdhocViewState *view_state = 0;
+
 	ContinuousViewData data = init_cont_view(stmt, s);
 	struct AdhocSender* sender = sender_create();
 
@@ -592,18 +727,31 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	worker_state = init_adhoc_worker(data, worker_receiver);
 	combiner_state = init_adhoc_combiner(data, batch);
 
+	SetAmContQueryAdhoc(false);
+	view_state = init_adhoc_view(data, combiner_state->result);
+	view_state->slot = combiner_state->slot;
+	SetAmContQueryAdhoc(true);
+
 	if (combiner_state->existing)
 	{
 		keyColIdx = combiner_state->existing->keyColIdx;
 		numCols = combiner_state->existing->numCols;
 	}
 
-	sender_startup(sender, combiner_state->tup_desc, keyColIdx, numCols);
+	// pprint
+	// annoying, probably need to 
+	// IsC
+
+//	sender_startup(sender, combiner_state->tup_desc, keyColIdx, numCols);
 
 	while (true)
 	{
 		exec_adhoc_worker(worker_state);
 		exec_adhoc_combiner(combiner_state);
-		adhoc_sync_combine(combiner_state, sender);
+
+//		SetAmContQueryAdhoc(false);
+//		exec_adhoc_view(view_state);
+//		SetAmContQueryAdhoc(true);
+//		adhoc_sync_combine(combiner_state, sender);
 	}
 }

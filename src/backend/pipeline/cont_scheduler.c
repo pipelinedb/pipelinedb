@@ -109,7 +109,7 @@ ContQuerySchedulerShmemSize(void)
 void
 SetAmContQueryAdhoc(bool s)
 {
-	am_cont_adhoc = true;
+	am_cont_adhoc = s;
 }
 
 static void

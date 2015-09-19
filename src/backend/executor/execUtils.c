@@ -531,6 +531,11 @@ ExecBuildProjectionInfo(List *targetList,
 	exprlist = NIL;
 	numSimpleVars = 0;
 	directMap = true;
+
+	elog(LOG, "tl");
+
+	pprint(targetList);
+
 	foreach(tl, targetList)
 	{
 		GenericExprState *gstate = (GenericExprState *) lfirst(tl);

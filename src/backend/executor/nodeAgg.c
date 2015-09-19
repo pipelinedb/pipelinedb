@@ -1817,6 +1817,8 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 		peraggstate->finalize = !(AGGKIND_IS_COMBINE(aggref->aggkind) || IsContQueryProcess() || IsContQueryAdhocProcess());
 
+		elog(LOG, "is adhoc %d finalize %d", IsContQueryAdhocProcess(), peraggstate->finalize);
+
 		/*
 		 * If it's a combine, we dynamically load the transition function
 		 * based on what's in pipeline_combine

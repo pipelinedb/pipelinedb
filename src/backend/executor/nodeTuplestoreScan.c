@@ -25,6 +25,46 @@
 static TupleTableSlot *TuplestoreNext(TuplestoreScanState * node);
 static bool TuplestoreRecheck(TuplestoreScanState * node, TupleTableSlot *slot);
 
+//extern TuplestoreScanState*
+//ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
+//{
+//	TuplestoreScanState *scanstate;
+//
+//	scanstate = makeNode(TuplestoreScanState);
+//	scanstate->ss.ps.plan = (Plan *) node;
+//	scanstate->ss.ps.state = estate;
+//
+//	ExecAssignExprContext(estate, &scanstate->ss.ps);
+//
+//	scanstate->ss.ps.targetlist = (List *)
+//		ExecInitExpr((Expr *) node->scan.plan.targetlist,
+//					 (PlanState *) scanstate);
+//	scanstate->ss.ps.qual = (List *)
+//		ExecInitExpr((Expr *) node->scan.plan.qual,
+//					 (PlanState *) scanstate);
+//
+//	{
+//		ScanState* n = (ScanState *) (scanstate);
+//		Scan	   *scan = (Scan *) n->ps.plan;
+//		scan->scanrelid = 1;
+//	}
+//
+//
+//	/*
+//	 * tuple table initialization
+//	 */
+//	ExecInitResultTupleSlot(estate, &scanstate->ss.ps);
+//	ExecInitScanTupleSlot(estate, (ScanState*) scanstate);
+//	ExecSetSlotDescriptor(((ScanState*) scanstate)->ss_ScanTupleSlot, node->desc);
+//
+////	scanstate->ss.ps_TupFromTlist = false;
+//
+//	ExecAssignResultTypeFromTL(&scanstate->ss.ps);
+//	ExecAssignScanProjectionInfo((ScanState*) scanstate);
+//
+//	return scanstate;
+//}
+
 extern TuplestoreScanState *
 ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 {
@@ -40,6 +80,22 @@ ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 	ExecSetSlotDescriptor(tss->ss.ps.ps_ResultTupleSlot, node->desc);
 
 	tss->ss.ps.targetlist = node->scan.plan.targetlist;
+
+//	tss->ss.ps.plan->scanrelid = 1;
+//ExecAssignScanProjectionInfo(ScanState *node)
+//    Scan *scan = (Scan*) tss->ss.ps.plan;
+//	scan->scanrelid = 1;
+//	Scan	   *scan = (Scan *) node->ps.plan;
+
+
+//	{
+//		ScanState* n = (ScanState *) (&tss->ss);
+//		Scan	   *scan = (Scan *) n->ps.plan;
+//		scan->scanrelid = 1;
+//	}
+
+//	ExecAssignResultTypeFromTL(&tss->ss.ps);
+//	ExecAssignScanProjectionInfo(&tss->ss);
 
 	tuplestore_rescan(node->store);
 
