@@ -5,6 +5,7 @@
 #include "fmgr.h"
 #include "utils/lsyscache.h"
 #include "nodes/print.h"
+#include <signal.h>
 
 struct AdhocSender
 {
@@ -44,7 +45,7 @@ static void
 sender_header(struct AdhocSender *sender, TupleDesc tup_desc);
 
 static void
-sender_keys(struct AdhocSender *sender, TupleDesc tup_desc,
+sender_keys(struct AdhocSender *sender, TupleDesc tup_desc, bool is_agg,
 			AttrNumber *keyColIdx, int	numCols);
 
 static void
@@ -61,6 +62,7 @@ sender_create()
 
 void
 sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
+		bool is_agg,
 		AttrNumber *keyColIdx,
 		int	numCols)
 {
@@ -98,7 +100,7 @@ sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
 	pq_endmessage(&buf);
 
 	sender_header(sender, tup_desc);
-	sender_keys(sender, tup_desc, keyColIdx, numCols);
+	sender_keys(sender, tup_desc, is_agg, keyColIdx, numCols);
 
 	pq_flush();
 }
@@ -110,7 +112,9 @@ static void write_msg_type(StringInfo buf, char type)
 }
 
 void
-sender_keys(struct AdhocSender *sender, TupleDesc tup_desc, AttrNumber *keyColIdx,
+sender_keys(struct AdhocSender *sender, TupleDesc tup_desc,
+		bool is_agg,
+		AttrNumber *keyColIdx,
 		int	numCols)
 {
 	bool hdr_delim = false;
@@ -120,17 +124,34 @@ sender_keys(struct AdhocSender *sender, TupleDesc tup_desc, AttrNumber *keyColId
 	resetStringInfo(sender->msg_buf);
 	write_msg_type(sender->msg_buf, 'k');
 
-	for (i = 0; i < numCols; ++i)
+	if (!is_agg)
 	{
-		int attnum = keyColIdx[i];
-		char	   *colname;
-
-		if (hdr_delim)
+		write_attribute_out_text(sender->msg_buf, ' ', "append");
+	}
+	else
+	{
+		if (numCols == 0)
+		{
+			write_attribute_out_text(sender->msg_buf, ' ', "single");
+		}
+		else
+		{
+			write_attribute_out_text(sender->msg_buf, ' ', "aggregate");
 			write_char(sender->msg_buf, ' ');
 
-		hdr_delim = true;
-		colname = NameStr(attr[attnum - 1]->attname);
-		write_attribute_out_text(sender->msg_buf, ' ', colname);
+			for (i = 0; i < numCols; ++i)
+			{
+				int attnum = keyColIdx[i];
+				char	   *colname;
+
+				if (hdr_delim)
+					write_char(sender->msg_buf, ' ');
+
+				hdr_delim = true;
+				colname = NameStr(attr[attnum - 1]->attname);
+				write_attribute_out_text(sender->msg_buf, ' ', colname);
+			}
+		}
 	}
 
 	write_end_of_row(sender->msg_buf);
@@ -211,6 +232,7 @@ sender_send(struct AdhocSender *sender)
 {
 	pq_putmessage('d', sender->msg_buf->data, sender->msg_buf->len);
 	pq_flush();
+
 }
 
 static void write_one_row(StringInfo msgbuf,

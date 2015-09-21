@@ -74,7 +74,6 @@ typedef struct {
 
 	bool is_agg;
 
-
 } AdhocCombinerState;
 
 typedef struct {
@@ -419,11 +418,23 @@ init_adhoc_combiner(ContinuousViewData data,
 	if (IsA(pstmt->planTree, Agg))
 	{
 		Agg *agg = (Agg *) pstmt->planTree;
-
 		state->is_agg = true;
+
+		elog(LOG, "num cols %d", agg->numCols);
+//		raise(SIGSTOP);
+
 		state->existing = create_agg_hash(agg->numCols, agg->grpOperators,
 										  agg->grpColIdx);
 	}
+
+	ExecutorStart(state->query_desc, 0);
+	state->query_desc->estate->es_lastoid = InvalidOid;
+
+	(*state->dest->rStartup) (state->dest, 
+			state->query_desc->operation, state->query_desc->tupDesc);
+
+	ExecEndNode(state->query_desc->planstate);
+	FreeExecutorState(state->query_desc->estate);
 
 	return state;
 }
@@ -486,12 +497,12 @@ exec_adhoc_worker(AdhocWorkerState* state)
 
 }
 
-static void
+static bool
 adhoc_sync_combine(AdhocCombinerState* state);
 
 // cq_bgproc_main
 
-static void
+static bool
 exec_adhoc_combiner(AdhocCombinerState* state)
 {
 	ResourceOwner owner = CurrentResourceOwner;
@@ -551,17 +562,21 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 
-	adhoc_sync_combine(state);
+	return adhoc_sync_combine(state);
 }
 
-static void
+static bool
 adhoc_sync_combine(AdhocCombinerState* state)
 {
+	bool new_rows = false;
+
 	tuplestore_clear(state->batch);
 	tuplestore_rescan(state->result);
 
 	foreach_tuple(state->slot, state->result)
 	{
+		new_rows = true;
+
 		if (state->is_agg)
 		{
 			bool isnew = false;
@@ -571,11 +586,18 @@ adhoc_sync_combine(AdhocCombinerState* state)
 
 			if (!isnew)
 			{
+				elog(LOG, "asc update");
+				print_slot(state->slot);
+				fflush(stdout);
+
 				heap_freetuple(entry->tuple);
 				entry->tuple = ExecCopySlotTuple(state->slot);
 			}
 			else
 			{
+				elog(LOG, "asc insert");
+				print_slot(state->slot);
+
 //				sender_insert(sender, state->slot);
 
 				entry->tuple = ExecCopySlotTuple(state->slot);
@@ -583,9 +605,13 @@ adhoc_sync_combine(AdhocCombinerState* state)
 		}
 		else
 		{
+			elog(LOG, "asc derp");
+			print_slot(state->slot);
 //			sender_insert(sender, state->slot);
 		}
 	}
+
+	return new_rows;
 
 //	tuplestore_clear(state->result);
 }
@@ -607,81 +633,112 @@ init_adhoc_view(ContinuousViewData data,
 	(void) desc;
 
 	state->batch = batch;
-
 	state->dest = receiver;
 
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
 										InvalidSnapshot, state->dest,
 										NULL, 0);
 
+	ExecutorStart(state->query_desc, 0);
+	state->query_desc->estate->es_lastoid = InvalidOid;
+
+	(*state->dest->rStartup) (state->dest, 
+			state->query_desc->operation, state->query_desc->tupDesc);
+
+	ExecEndNode(state->query_desc->planstate);
+	FreeExecutorState(state->query_desc->estate);
+
 	return state;
 }
 
 static void
-exec_adhoc_view(AdhocViewState* state)
+exec_adhoc_view(AdhocViewState* state, bool new_rows)
 {
 	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
 	EState *estate = 0;
 
-	tuplestore_rescan(state->batch);
+	if (new_rows)
+	{
+		tuplestore_rescan(state->batch);
 
-	state->query_desc->estate = create_estate(state->query_desc);
-	estate = state->query_desc->estate;
-	set_snapshot(estate, owner);
+		state->query_desc->estate = create_estate(state->query_desc);
+		estate = state->query_desc->estate;
+		set_snapshot(estate, owner);
 
-	plan = state->query_desc->plannedstmt->planTree;
+		plan = state->query_desc->plannedstmt->planTree;
 
-	state->query_desc->planstate = 
-		ExecInitNode(plan, state->query_desc->estate, 0);
+		state->query_desc->planstate = 
+			ExecInitNode(plan, state->query_desc->estate, 0);
 
-	ExecutePlan(estate, state->query_desc->planstate, 
-				state->query_desc->operation,
-				true, 0, 0, ForwardScanDirection, state->dest);
+		ExecutePlan(estate, state->query_desc->planstate, 
+					state->query_desc->operation,
+					true, 0, 0, ForwardScanDirection, state->dest);
 
-	ExecEndNode(state->query_desc->planstate);
-	state->query_desc->planstate = NULL;
+		ExecEndNode(state->query_desc->planstate);
+		state->query_desc->planstate = NULL;
 
-	unset_snapshot(estate, owner);
+		unset_snapshot(estate, owner);
 
-	state->query_desc->estate = NULL;
-	estate = state->query_desc->estate;
+		state->query_desc->estate = NULL;
+		estate = state->query_desc->estate;
+	}
 
 	tuplestore_clear(state->batch);
 }
 
+typedef struct AdaptReceiver
+{
+	DestReceiver pub;
+	struct AdhocSender* sender; 
+
+	bool is_agg;
+	AttrNumber *keyColIdx;
+	int numCols;
+
+} AdaptReceiver;
+
 static void view_receiveSlot(TupleTableSlot *slot, DestReceiver *self)
 {
-	elog(LOG, "view receive");
-	print_slot(slot);
-	fflush(stdout);
+	AdaptReceiver* receiver = (AdaptReceiver*)(self);
+	sender_insert(receiver->sender, slot);
 }
 
 static void view_rStartup(DestReceiver *self, int operation,
 						  TupleDesc typeinfo)
 {
-	elog(LOG, "view startup");
-	print_tupledesc(typeinfo);
-	fflush(stdout);
+	struct AdaptReceiver *r = (AdaptReceiver*)(self);
+
+	elog(LOG, "wtf %d", r->numCols);
+//sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
+//		AttrNumber *keyColIdx,
+//		int	numCols)
+//{
+
+//	raise(SIGSTOP);
+	sender_startup(r->sender, typeinfo, r->is_agg, r->keyColIdx, r->numCols);
 }
 
 static void view_rShutdown(DestReceiver *self)
 {
+
 }
 
 static void view_rDestroy(DestReceiver *self)
 {
+
 }
 
-static DestReceiver*
+static AdaptReceiver*
 create_view_receiver()
 {
-	DestReceiver *self = (DestReceiver*) palloc0(sizeof(DestReceiver));
+	AdaptReceiver *self = (AdaptReceiver*) palloc0(sizeof(AdaptReceiver));
 
-	self->receiveSlot = view_receiveSlot;
-	self->rStartup = view_rStartup;
-	self->rShutdown = view_rShutdown;
-	self->rDestroy = view_rDestroy;
+	self->pub.receiveSlot = view_receiveSlot;
+	self->pub.rStartup = view_rStartup;
+	self->pub.rShutdown = view_rShutdown;
+	self->pub.rDestroy = view_rDestroy;
+	self->sender = sender_create();
 
 	return self;
 }
@@ -697,16 +754,16 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	AdhocCombinerState *combiner_state = 0;
 	AdhocViewState *view_state = 0;
 
+	bool new_rows = false;
+
 	ContinuousViewData data = init_cont_view(stmt, s);
-	DestReceiver *view_receiver = 0;
-//	struct AdhocSender* sender = sender_create();
+	AdaptReceiver *view_receiver = 0;
 
 	DestReceiver *worker_receiver = CreateDestReceiver(DestTuplestore);
 
 	Tuplestorestate *batch = tuplestore_begin_heap(true, true,
 			continuous_query_combiner_work_mem);
 
-//	(void) (sender);
 	(void) (keyColIdx);
 	(void) (exec_adhoc_view);
 	(void) (numCols);
@@ -719,16 +776,19 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	worker_state = init_adhoc_worker(data, worker_receiver);
 	combiner_state = init_adhoc_combiner(data, batch);
 
-	view_receiver = create_view_receiver();
-
-	view_state = init_adhoc_view(data, combiner_state->result, view_receiver);
-	view_state->slot = combiner_state->slot;
-
 	if (combiner_state->existing)
 	{
 		keyColIdx = combiner_state->existing->keyColIdx;
 		numCols = combiner_state->existing->numCols;
 	}
+
+	view_receiver = create_view_receiver();
+	view_receiver->is_agg = combiner_state->is_agg;
+	view_receiver->keyColIdx = keyColIdx;
+	view_receiver->numCols = numCols;
+
+	view_state = init_adhoc_view(data, combiner_state->result, (DestReceiver*) view_receiver);
+	view_state->slot = combiner_state->slot;
 
 	// pprint
 	// annoying, probably need to 
@@ -737,7 +797,8 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	while (true)
 	{
 		exec_adhoc_worker(worker_state);
-		exec_adhoc_combiner(combiner_state);
-		exec_adhoc_view(view_state);
+		new_rows = exec_adhoc_combiner(combiner_state);
+
+		exec_adhoc_view(view_state, new_rows);
 	}
 }
