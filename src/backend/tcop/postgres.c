@@ -862,9 +862,6 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 		else
 		{
 			stmt = (Node *) pg_plan_query(query, cursorOptions, boundParams);
-
-			elog(LOG, "planned");
-			pprint(stmt);
 		}
 
 		stmt_list = lappend(stmt_list, stmt);
@@ -1142,9 +1139,6 @@ exec_simple_query(const char *query_string)
 
 
 		plantree_list = pg_plan_queries(querytree_list, 0, NULL);
-
-		elog(LOG, "planned");
-		pprint(plantree_list);
 
 		/* Done with the snapshot used for parsing/planning */
 		if (snapshot_set)

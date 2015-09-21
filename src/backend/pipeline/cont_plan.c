@@ -119,45 +119,6 @@ get_worker_plan(ContinuousView *view)
 	return get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, selectstmt->forCombiner);
 }
 
-//PlannedStmt*
-//get_view_plan(ContinuousView *view)
-//{
-//	List		*parsetree_list;
-//	SelectStmt	*selectstmt;
-//	SelectStmt	*viewstmt;
-//	Query *query;
-//	PlannedStmt	*plan;
-//	Node* node;
-//
-//	parsetree_list = pg_parse_query(view->query);
-//	Assert(list_length(parsetree_list) == 1);
-//
-//	selectstmt = (SelectStmt *) linitial(parsetree_list);
-//	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, &viewstmt, Worker);
-//
-//	join_search_hook = get_combiner_join_rel;
-//
-//	PG_TRY();
-//	{
-//		result = get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, true);
-//		join_search_hook = NULL;
-//		post_parse_analyze_hook = NULL;
-//	}
-//	PG_CATCH();
-//	{
-//		/*
-//		 * These hooks won't be reset if there's an error, so we need to make
-//		 * sure that they're not set for whatever query is run next in this xact.
-//		 */
-//		join_search_hook = NULL;
-//		post_parse_analyze_hook = NULL;
-//		PG_RE_THROW();
-//	}
-//	PG_END_TRY();
-//
-//	return result;
-//}
-
 PlannedStmt*
 get_view_plan(ContinuousView *view)
 {
@@ -173,9 +134,6 @@ get_view_plan(ContinuousView *view)
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, &viewstmt, Combiner);
 
 	selectstmt = viewstmt;
-
-	elog(LOG, "wtf1");
-	pprint(viewstmt);
 	join_search_hook = get_combiner_join_rel;
 
 	PG_TRY();
@@ -213,9 +171,6 @@ get_combiner_plan(ContinuousView *view)
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Combiner);
 	join_search_hook = get_combiner_join_rel;
-
-	elog(LOG, "combiner plan");
-	pprint(selectstmt);
 
 	PG_TRY();
 	{
