@@ -553,6 +553,8 @@ debugtup(TupleTableSlot *slot, DestReceiver *self)
 		printatt((unsigned) i + 1, typeinfo->attrs[i], value);
 	}
 	printf("\t----\n");
+
+	fflush(stdout);
 }
 
 /* ----------------

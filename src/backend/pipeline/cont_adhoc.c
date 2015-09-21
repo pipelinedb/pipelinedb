@@ -40,6 +40,8 @@
 #include "tcop/tcopprot.h"
 #include "pipeline/cont_analyze.h"
 
+// CreateDestReceiver
+
 void
 dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot);
 
@@ -637,45 +639,34 @@ init_adhoc_view(ContinuousViewData data,
 static void
 exec_adhoc_view(AdhocViewState* state)
 {
+	ResourceOwner owner = CurrentResourceOwner;
+	struct Plan *plan = 0;
+	EState *estate = 0;
+
 	tuplestore_rescan(state->batch);
 
-	foreach_tuple(state->slot, state->batch)
-	{
-		elog(LOG, "adhoc view got");
-		print_slot(state->slot);
-		fflush(stdout);
-	}
-	
-	tuplestore_clear(state->batch);
+	state->query_desc->estate = create_estate(state->query_desc);
+	estate = state->query_desc->estate;
+	set_snapshot(estate, owner);
 
-//	ResourceOwner owner = CurrentResourceOwner;
-//	struct Plan *plan = 0;
-//	EState *estate = 0;
-//
-//	tuplestore_rescan(state->batch);
-//
-//	dump_tuplestore(state->batch, state->slot);
-//
-//	state->query_desc->estate = create_estate(state->query_desc);
-//	estate = state->query_desc->estate;
-//	set_snapshot(estate, owner);
-//
-//	plan = state->query_desc->plannedstmt->planTree;
-//
-//	state->query_desc->planstate = 
-//		ExecInitNode(plan, state->query_desc->estate, 0);
-//
-//	ExecutePlan(estate, state->query_desc->planstate, 
-//				state->query_desc->operation,
-//				true, 0, 0, ForwardScanDirection, state->dest);
-//
-//	ExecEndNode(state->query_desc->planstate);
-//	state->query_desc->planstate = NULL;
-//
-//	unset_snapshot(estate, owner);
-//
-//	state->query_desc->estate = NULL;
-//	estate = state->query_desc->estate;
+	plan = state->query_desc->plannedstmt->planTree;
+
+	state->query_desc->planstate = 
+		ExecInitNode(plan, state->query_desc->estate, 0);
+
+	ExecutePlan(estate, state->query_desc->planstate, 
+				state->query_desc->operation,
+				true, 0, 0, ForwardScanDirection, state->dest);
+
+	ExecEndNode(state->query_desc->planstate);
+	state->query_desc->planstate = NULL;
+
+	unset_snapshot(estate, owner);
+
+	state->query_desc->estate = NULL;
+	estate = state->query_desc->estate;
+
+	tuplestore_clear(state->batch);
 }
 
 void
@@ -721,7 +712,6 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 
 	// pprint
 	// annoying, probably need to 
-	// IsC
 	// sender_startup(sender, combiner_state->tup_desc, keyColIdx, numCols);
 
 	while (true)
