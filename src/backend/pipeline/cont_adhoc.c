@@ -320,8 +320,6 @@ dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot)
 static AdhocWorkerState*
 init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 {
-	// there is a state cxt and a tmp cxt., 
-
 	ResourceOwner owner = CurrentResourceOwner;
 	PlannedStmt *pstmt = 0;
 	AdhocWorkerState *state = palloc0(sizeof(AdhocWorkerState));
@@ -344,27 +342,10 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	pstmt = GetContPlan(state->view, Worker);
 	PopActiveSnapshot();
 
-	// combine
-
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
 										InvalidSnapshot, state->dest, NULL, 0);
 
-	/* TODO - handle snapshots correctly */
-
-//	state->query_desc->snapshot = GetTransactionSnapshot();
-//	state->query_desc->snapshot->copied = true;
-//	RegisterSnapshotOnOwner(state->query_desc->snapshot, owner);
-
 	ExecutorStart(state->query_desc, 0);
-
-	/* not really used by the worker, but this is a convenient place to 
-	   create them. */
-
-//	state->query_desc->snapshot->active_count++;
-//	UnregisterSnapshotFromOwner(state->query_desc->snapshot, owner);
-//	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, owner);
-//	state->query_desc->snapshot = NULL;
-
 	set_reader(state->query_desc->planstate, state->reader);
 
 	state->query_desc->estate->es_lastoid = InvalidOid;
@@ -417,6 +398,7 @@ init_adhoc_combiner(ContinuousViewData data,
 	PopActiveSnapshot();
 
 	state->tup_desc = prepare_combine_plan(data.view->matrel, pstmt, batch);
+	state->dest = CreateDestReceiver(DestTuplestore);
 	 
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
 										InvalidSnapshot, state->dest,
@@ -428,8 +410,6 @@ init_adhoc_combiner(ContinuousViewData data,
 
 	state->result = tuplestore_begin_heap(true, true,
 							continuous_query_combiner_work_mem);
-
-	state->dest = CreateDestReceiver(DestTuplestore);
 
 	SetTuplestoreDestReceiverParams(state->dest, state->result,
 									CurrentMemoryContext, true);
@@ -612,7 +592,8 @@ adhoc_sync_combine(AdhocCombinerState* state)
 
 static AdhocViewState*
 init_adhoc_view(ContinuousViewData data,
-				Tuplestorestate *batch)
+				Tuplestorestate *batch,
+				DestReceiver *receiver)
 {
 	AdhocViewState *state = palloc0(sizeof(AdhocViewState));
 	PlannedStmt *pstmt = 0;
@@ -627,7 +608,7 @@ init_adhoc_view(ContinuousViewData data,
 
 	state->batch = batch;
 
-	state->dest = CreateDestReceiver(DestDebug);
+	state->dest = receiver;
 
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
 										InvalidSnapshot, state->dest,
@@ -669,6 +650,42 @@ exec_adhoc_view(AdhocViewState* state)
 	tuplestore_clear(state->batch);
 }
 
+static void view_receiveSlot(TupleTableSlot *slot, DestReceiver *self)
+{
+	elog(LOG, "view receive");
+	print_slot(slot);
+	fflush(stdout);
+}
+
+static void view_rStartup(DestReceiver *self, int operation,
+						  TupleDesc typeinfo)
+{
+	elog(LOG, "view startup");
+	print_tupledesc(typeinfo);
+	fflush(stdout);
+}
+
+static void view_rShutdown(DestReceiver *self)
+{
+}
+
+static void view_rDestroy(DestReceiver *self)
+{
+}
+
+static DestReceiver*
+create_view_receiver()
+{
+	DestReceiver *self = (DestReceiver*) palloc0(sizeof(DestReceiver));
+
+	self->receiveSlot = view_receiveSlot;
+	self->rStartup = view_rStartup;
+	self->rShutdown = view_rShutdown;
+	self->rDestroy = view_rDestroy;
+
+	return self;
+}
+
 void
 ExecAdhocQuery(SelectStmt* stmt, const char *s)
 {
@@ -681,14 +698,15 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	AdhocViewState *view_state = 0;
 
 	ContinuousViewData data = init_cont_view(stmt, s);
-	struct AdhocSender* sender = sender_create();
+	DestReceiver *view_receiver = 0;
+//	struct AdhocSender* sender = sender_create();
 
 	DestReceiver *worker_receiver = CreateDestReceiver(DestTuplestore);
 
 	Tuplestorestate *batch = tuplestore_begin_heap(true, true,
 			continuous_query_combiner_work_mem);
 
-	(void) (sender);
+//	(void) (sender);
 	(void) (keyColIdx);
 	(void) (exec_adhoc_view);
 	(void) (numCols);
@@ -701,7 +719,9 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	worker_state = init_adhoc_worker(data, worker_receiver);
 	combiner_state = init_adhoc_combiner(data, batch);
 
-	view_state = init_adhoc_view(data, combiner_state->result);
+	view_receiver = create_view_receiver();
+
+	view_state = init_adhoc_view(data, combiner_state->result, view_receiver);
 	view_state->slot = combiner_state->slot;
 
 	if (combiner_state->existing)

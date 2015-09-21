@@ -57,6 +57,8 @@ sender_create()
 	return sender;
 }
 
+// CreateDestReceiver
+
 void
 sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
 		AttrNumber *keyColIdx,
