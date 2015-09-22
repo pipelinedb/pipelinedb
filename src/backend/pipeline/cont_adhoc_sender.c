@@ -7,11 +7,22 @@
 #include "nodes/print.h"
 #include <signal.h>
 
+// enum
+
+typedef enum
+{
+	Append,
+	Single,
+	Aggregate
+} KeyType;
+
 struct AdhocSender
 {
 	List *attnumlist;
 	FmgrInfo *out_funcs;
 	StringInfo msg_buf;
+	KeyType key_type;
+	unsigned row_count;
 };
 
 static List * get_attnums(TupleDesc tupDesc);
@@ -45,7 +56,7 @@ static void
 sender_header(struct AdhocSender *sender, TupleDesc tup_desc);
 
 static void
-sender_keys(struct AdhocSender *sender, TupleDesc tup_desc, bool is_agg,
+sender_keys(struct AdhocSender *sender, TupleDesc tup_desc,
 			AttrNumber *keyColIdx, int	numCols);
 
 static void
@@ -89,6 +100,15 @@ sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
 					  &isvarlena);
 		fmgr_info(out_func_oid, &sender->out_funcs[attnum - 1]);
 	}
+
+	if (!is_agg)
+	{
+		sender->key_type = Append;
+	}
+	else
+	{
+		sender->key_type = numCols ? Aggregate : Single;
+	}
 	
 	sender->msg_buf = makeStringInfo();
 
@@ -100,7 +120,7 @@ sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
 	pq_endmessage(&buf);
 
 	sender_header(sender, tup_desc);
-	sender_keys(sender, tup_desc, is_agg, keyColIdx, numCols);
+	sender_keys(sender, tup_desc, keyColIdx, numCols);
 
 	pq_flush();
 }
@@ -108,49 +128,55 @@ sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
 static void write_msg_type(StringInfo buf, char type)
 {
 	write_char(buf, type);
-	write_char(buf, ' ');
+	write_char(buf, '\t');
 }
 
 void
 sender_keys(struct AdhocSender *sender, TupleDesc tup_desc,
-		bool is_agg,
 		AttrNumber *keyColIdx,
 		int	numCols)
 {
 	bool hdr_delim = false;
-	Form_pg_attribute *attr = tup_desc->attrs;
+//	Form_pg_attribute *attr = tup_desc->attrs;
 	int i = 0;
+	char num_buf[32];
 
 	resetStringInfo(sender->msg_buf);
 	write_msg_type(sender->msg_buf, 'k');
 
-	if (!is_agg)
+	switch(sender->key_type)
 	{
-		write_attribute_out_text(sender->msg_buf, ' ', "append");
-	}
-	else
-	{
-		if (numCols == 0)
+		case Append:
 		{
-			write_attribute_out_text(sender->msg_buf, ' ', "single");
+			sprintf(num_buf, "%d", 1);
+			write_string(sender->msg_buf, num_buf);
+			break;
 		}
-		else
+		case Single:
 		{
-			write_attribute_out_text(sender->msg_buf, ' ', "aggregate");
-			write_char(sender->msg_buf, ' ');
-
+			sprintf(num_buf, "%d", 1);
+			write_string(sender->msg_buf, num_buf);
+			break;
+		}
+		case Aggregate:
+		{
 			for (i = 0; i < numCols; ++i)
 			{
 				int attnum = keyColIdx[i];
-				char	   *colname;
+//				char	   *colname;
 
 				if (hdr_delim)
-					write_char(sender->msg_buf, ' ');
+					write_char(sender->msg_buf, '\t');
+
+				sprintf(num_buf, "%d", attnum);
 
 				hdr_delim = true;
-				colname = NameStr(attr[attnum - 1]->attname);
-				write_attribute_out_text(sender->msg_buf, ' ', colname);
+				write_string(sender->msg_buf, num_buf);
+//				colname = NameStr(attr[attnum - 1]->attname);
+//				write_attribute_out_text(sender->msg_buf, ' ', colname);
 			}
+
+			break;
 		}
 	}
 
@@ -168,17 +194,37 @@ sender_header(struct AdhocSender *sender, TupleDesc tup_desc)
 	resetStringInfo(sender->msg_buf);
 	write_msg_type(sender->msg_buf, 'h');
 
+	switch(sender->key_type)
+	{
+		case Single:
+		{
+			write_string(sender->msg_buf, "result");
+			write_char(sender->msg_buf, '\t');
+			break;
+		}
+		case Append:
+		{
+			write_string(sender->msg_buf, "row_id");
+			write_char(sender->msg_buf, '\t');
+			break;
+		}
+		case Aggregate:
+		{
+			break;
+		}
+	}
+
 	foreach(cur, sender->attnumlist)
 	{
 		int			attnum = lfirst_int(cur);
 		char	   *colname;
 
 		if (hdr_delim)
-			write_char(sender->msg_buf, ' ');
+			write_char(sender->msg_buf, '\t');
 
 		hdr_delim = true;
 		colname = NameStr(attr[attnum - 1]->attname);
-		write_attribute_out_text(sender->msg_buf, ' ', colname);
+		write_attribute_out_text(sender->msg_buf, '\t', colname);
 	}
 
 	write_end_of_row(sender->msg_buf);
@@ -192,20 +238,42 @@ sender_shutdown(struct AdhocSender *sender)
 	pq_flush();
 }
 
-void
-sender_insert(struct AdhocSender *sender, TupleTableSlot *slot)
+static void
+do_sender_update(struct AdhocSender *sender, TupleTableSlot *slot, char type)
 {
-	elog(LOG, "got insert");
 	resetStringInfo(sender->msg_buf);
-	write_msg_type(sender->msg_buf, 'i');
+	write_msg_type(sender->msg_buf, type);
 
 	slot_getallattrs(slot);
+
+	switch(sender->key_type)
+	{
+		case Single:
+		{
+			write_string(sender->msg_buf, "result");
+			write_char(sender->msg_buf, '\t');
+			break;
+		}
+		case Append:
+		{
+			char num_buf[32];
+			sprintf(num_buf, "%010u\t", sender->row_count);
+			write_string(sender->msg_buf, num_buf);
+			break;
+		}
+		case Aggregate:
+		{
+			break;
+		}
+	}
 
 	write_one_row(sender->msg_buf,
 				 sender->out_funcs,
 				 sender->attnumlist,
 				 slot->tts_values,
 				 slot->tts_isnull);
+
+	sender->row_count++;
 
 	sender_send(sender);
 }
@@ -213,18 +281,12 @@ sender_insert(struct AdhocSender *sender, TupleTableSlot *slot)
 void
 sender_update(struct AdhocSender *sender, TupleTableSlot *slot)
 {
-	resetStringInfo(sender->msg_buf);
-	write_msg_type(sender->msg_buf, 'u');
+	do_sender_update(sender, slot, 'u');
+}
 
-	slot_getallattrs(slot);
-
-	write_one_row(sender->msg_buf,
-				 sender->out_funcs,
-				 sender->attnumlist,
-				 slot->tts_values,
-				 slot->tts_isnull);
-
-	sender_send(sender);
+void sender_insert(struct AdhocSender *sender, TupleTableSlot *slot)
+{
+	do_sender_update(sender, slot, 'i');
 }
 
 void
@@ -253,7 +315,7 @@ static void write_one_row(StringInfo msgbuf,
 		bool		isnull = nulls[attnum - 1];
 
 		if (need_delim)
-			write_char(msgbuf, ' ');
+			write_char(msgbuf, '\t');
 
 		need_delim = true;
 
@@ -266,7 +328,7 @@ static void write_one_row(StringInfo msgbuf,
 			string = OutputFunctionCall(&out_funcs[attnum - 1],
 										value);
 
-			write_attribute_out_text(msgbuf,' ',string);
+			write_attribute_out_text(msgbuf,'\t',string);
 		}
 	}
 

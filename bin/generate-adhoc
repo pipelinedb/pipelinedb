@@ -57,8 +57,8 @@ def output(a)
 	STDOUT.flush
 end
 
-output %w[h name value volume foo ts]
-output %w[k name]
+output %w[header name value volume foo ts]
+output %w[key 1]
 
 # pq_flush
 
@@ -71,7 +71,7 @@ while (true) do
 
 		k = [k1 + "\n" + k2];
 #		k = [k1,k2];
-		t = keys.include?(k) ? 'u' : 'i'
+		t = keys.include?(k) ? 'update' : 'insert'
 		output([t,k[0],k2,"x" * (rand(10) + 1),rand(100),Time.now.to_i])
 
 		keys[k] = 1
@@ -90,7 +90,7 @@ while (true) do
 
 		keys.delete(k)
 
-		output(["d"] + k)
+		output(["delete"] + k)
 		STDOUT.flush
 		sleep(0.01)
 	}
