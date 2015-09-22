@@ -51,4 +51,20 @@ spaces(const char *s)
 	return n;
 }
 
+static inline size_t
+tabs(const char *s)
+{
+	size_t n = 0;
+
+	while (*s != '\0')
+	{
+		if (*s == '\t')
+			n++;
+
+		s++;
+	}
+
+	return n;
+}
+
 #endif
