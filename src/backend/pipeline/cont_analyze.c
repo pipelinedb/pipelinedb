@@ -165,7 +165,7 @@ get_inv_streaming_agg(char *name, bool *is_distinct)
 
 		if (pg_strcasecmp(v, name) == 0)
 		{
-			if (is_distinct && pg_strcasecmp(k, "hll_count_distinct") == 0)
+			if (is_distinct && pg_strcasecmp(v, "hll_count_distinct") == 0)
 				*is_distinct = true;
 
 			return k;
