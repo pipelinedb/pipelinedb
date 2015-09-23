@@ -2618,7 +2618,7 @@ static struct config_int ConfigureNamesInt[] =
 	{
 		{"continuous_query_max_wait", PGC_SIGHUP, QUERY_TUNING,
 		 gettext_noop("Sets the time a continuous query process will wait for a batch to accumulate."),
-		 gettext_noop("A higher value usually yields less frequent continuous view updates, but adversly affects "
+		 gettext_noop("A higher value usually yields less frequent continuous view updates, but adversely affects "
 					  "latency."),
 		 GUC_UNIT_MS
 		},
