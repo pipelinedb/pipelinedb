@@ -219,11 +219,15 @@ get_cont_view_id(RangeVar *name)
 {
 	HeapTuple tuple = GetPipelineQueryTuple(name);
 	Form_pipeline_query row;
+	Oid row_id;
 
 	Assert(HeapTupleIsValid(tuple));
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
 
-	return row->id;
+	row_id = row->id;
+	ReleaseSysCache(tuple);
+
+	return row_id;
 }
 
 static ContQueryProc *
@@ -275,6 +279,7 @@ typedef struct{
 static ContinuousViewData
 init_cont_view(SelectStmt *stmt, const char* querystring)
 {
+	// IsAContinuousView
 	ContinuousViewData view_data;
 	RangeVar* view_name = makeRangeVar(0, get_unique_adhoc_view_name(), -1);
 
@@ -290,6 +295,10 @@ init_cont_view(SelectStmt *stmt, const char* querystring)
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 	ExecCreateContViewStmt(create_stmt, querystring);
+
+	// ReleaseCatCache
+	// SearchCatCache
+	// ReleaseSysCache
 	PopActiveSnapshot();
 
 	view_data.view_id = get_cont_view_id(view_name);
@@ -440,7 +449,7 @@ init_adhoc_combiner(ContinuousViewData data,
 }
 
 static bool
-exec_adhoc_worker(AdhocWorkerState* state)
+exec_adhoc_worker(AdhocWorkerState* state, bool *fin)
 {
 	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
@@ -448,6 +457,13 @@ exec_adhoc_worker(AdhocWorkerState* state)
 	EState *estate = 0;
 
 	TupleBufferBatchReaderTrySleep(state->reader, state->last_processed);
+
+	if (QueryCancelPending)
+	{
+		QueryCancelPending = false;
+		*fin = true;
+		return;
+	}
 
 	has_tup = 
 		TupleBufferBatchReaderHasTuplesForCQId(state->reader, state->view_id);
@@ -495,6 +511,7 @@ exec_adhoc_worker(AdhocWorkerState* state)
 
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 
+	*fin = false;
 	return state->num_processed != 0;
 }
 
@@ -752,6 +769,7 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	int numCols = 1;
 	AttrNumber one = 1;
 	AttrNumber *keyColIdx = &one;
+	bool finished = false;
 
 	AdhocWorkerState *worker_state = 0;
 	AdhocCombinerState *combiner_state = 0;
@@ -791,13 +809,14 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	view_state = init_adhoc_view(data, combiner_state->result, (DestReceiver*) view_receiver);
 	view_state->slot = combiner_state->slot;
 
-	// pprint
-	// annoying, probably need to 
-	// sender_startup(sender, combiner_state->tup_desc, keyColIdx, numCols);
-
 	while (true)
 	{
-		bool new_rows = exec_adhoc_worker(worker_state);
+		bool new_rows = exec_adhoc_worker(worker_state, &finished);
+
+		if (finished)
+		{
+			break;
+		}
 
 		if (new_rows)
 		{
@@ -805,4 +824,6 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 			exec_adhoc_view(view_state);
 		}
 	}
+
+//	cleanup_cont_view(data);
 }
