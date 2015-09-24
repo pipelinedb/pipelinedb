@@ -12,6 +12,7 @@
 
 #include "access/htup_details.h"
 #include "catalog/pg_aggregate.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_combine.h"
 #include "catalog/pipeline_query_fn.h"
@@ -190,4 +191,47 @@ SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
 	scan->store = tupstore;
 
 	return scan;
+}
+
+/*
+ * GetGroupHashIndexExpr
+ *
+ * Returns the function expression used to index the given matrel
+ */
+FuncExpr *
+GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri)
+{
+	FuncExpr *result;
+	int i;
+
+	/*
+	 * In order for the hashed group index to be usable, we must use an expression
+	 * that is equivalent to the index expression in the group lookup. The best way
+	 * to do this is to just copy the actual index expression.
+	 */
+	for (i = 0; i < ri->ri_NumIndices; i++)
+	{
+		IndexInfo *idx = ri->ri_IndexRelationInfo[i];
+		Node *n;
+		FuncExpr *func;
+
+		if (!idx->ii_Expressions || list_length(idx->ii_Expressions) != 1)
+			continue;
+
+		n = linitial(idx->ii_Expressions);
+		if (!IsA(n, FuncExpr))
+			continue;
+
+		func = (FuncExpr *) n;
+		if ((func->funcid != HASH_GROUP_OID && func->funcid != LS_HASH_GROUP_OID) ||
+				list_length(func->args) != group_len)
+			continue;
+
+		result = copyObject(func);
+		break;
+	}
+
+	Assert(result);
+
+	return result;
 }
