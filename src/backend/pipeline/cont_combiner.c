@@ -161,6 +161,7 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 				HeapTupleEntry ex = (HeapTupleEntry) LookupTupleHashEntry(existing, slot, &isnew);
 
 				ex->tuple = cached;
+				pos++;
 				continue;
 			}
 		}
