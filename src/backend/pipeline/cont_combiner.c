@@ -65,7 +65,6 @@ typedef struct
 	MemoryContext plan_cache_cxt;
 	MemoryContext tmp_cxt;
 	Tuplestorestate *batch;
-	int64 *batch_hashes;
 	TupleTableSlot *slot;
 	bool isagg;
 	int ngroupatts;
@@ -79,8 +78,8 @@ typedef struct
 	TupleHashTable existing;
 } ContQueryCombinerState;
 
-/* current query state being used in ContinuousQueryCombinerMain */
-static ContQueryCombinerState *current_state;
+/* stores the hashes of the current batch, in parallel to the order of the batch's tuplestore */
+static int64 *group_hashes;
 
 static bool
 should_read_fn(TupleBufferReader *reader, TupleBufferSlot *slot)
@@ -170,7 +169,7 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 		typ = (Form_pg_type) GETSTRUCT(typeinfo);
 
 		/* these are parallel to this tuplestore's underlying array of tuples */
-		d = DatumGetInt64(state->batch_hashes[pos]);
+		d = DatumGetInt64(group_hashes[pos]);
 		pos++;
 
 		hash = makeConst(state->hashfunc->funcresulttype,
@@ -584,7 +583,7 @@ combine(ContQueryCombinerState *state)
 					 NULL);
 
 	tuplestore_clear(state->batch);
-	MemSet(state->batch_hashes, 0, continuous_query_batch_size * sizeof(int64));
+	MemSet(group_hashes, 0, continuous_query_batch_size * sizeof(int64));
 
 	sync_combine(state, result);
 
@@ -641,8 +640,6 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	pstmt = GetContPlan(state->view, Combiner);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
-	state->batch_hashes = palloc0(continuous_query_batch_size * sizeof(int64));
-
 
 	/* this also sets the state's desc field */
 	prepare_combine_plan(state, pstmt);
@@ -786,15 +783,14 @@ read_batch(ContQueryCombinerState *state, TupleBufferBatchReader *reader)
 
 		ExecStoreTuple(heap_copytuple(tbs->tuple->heaptup), state->slot, InvalidBuffer, false);
 		tuplestore_puttupleslot(state->batch, state->slot);
-		state->batch_hashes[count] = tbs->tuple->group_hash;
+		group_hashes[count] = tbs->tuple->group_hash;
 
 		IncrementCQRead(1, tbs->size);
 		count++;
 
 		/*
-		 * This is fairly unlikely, but if it does happen we should
-		 * finish processing this batch immediately because we're storing 8-byte hashes
-		 * in memory alongside each of these tuples.
+		 * This is fairly unlikely, but if it does happen we should finish processing
+		 * this batch immediately instead of writing more tuples to disk.
 		 */
 		if (!tuplestore_in_memory(state->batch))
 			break;
@@ -857,6 +853,7 @@ ContinuousQueryCombinerMain(void)
 	has_queries = has_queries_to_process(queries);
 
 	MemoryContextSwitchTo(run_cxt);
+	group_hashes = palloc0(continuous_query_batch_size * sizeof(int64));
 
 	for (;;)
 	{
@@ -929,10 +926,7 @@ ContinuousQueryCombinerMain(void)
 
 				TupleBufferBatchReaderSetCQId(reader, id);
 
-				/* give should_read_fn access to the current state */
-				current_state = state;
 				count = read_batch(state, reader);
-				current_state = NULL;
 
 				if (count)
 				{
@@ -1036,6 +1030,7 @@ GetCombinerLookupPlan(ContinuousView *view)
 	List *values = NIL;
 
 	init_query_state(&state, view->id, CurrentMemoryContext);
+	group_hashes = palloc0(continuous_query_batch_size * sizeof(int64));
 
 	if (state.isagg && state.ngroupatts > 0)
 	{
