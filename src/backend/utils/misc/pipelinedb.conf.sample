@@ -595,8 +595,8 @@
 # CONTINUOUS VIEW OPTIONS
 #------------------------------------------------------------------------------
 
-# size of the buffer for storing unread stream tuples
-#tuple_buffer_blocks = 128MB
+# number of blocks to allocate per tuple buffer
+#tuple_buffer_blocks = 8192
 
 # synchronization level for combiner commits; off, local, remote_write, or on
 #continuous_query_combiner_synchronous_commit = off
