@@ -33,12 +33,15 @@
 #include "utils/rel.h"
 #include "executor/tstoreReceiver.h"
 #include "nodes/print.h"
+#include "tcop/utility.h"
 
 #include "pipeline/cont_adhoc_sender.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "tcop/tcopprot.h"
 #include "pipeline/cont_analyze.h"
+#include "utils/syscache.h"
+#include "tcop/pquery.h"
 
 // CreateDestReceiver
 
@@ -279,7 +282,6 @@ typedef struct{
 static ContinuousViewData
 init_cont_view(SelectStmt *stmt, const char* querystring)
 {
-	// IsAContinuousView
 	ContinuousViewData view_data;
 	RangeVar* view_name = makeRangeVar(0, get_unique_adhoc_view_name(), -1);
 
@@ -291,14 +293,8 @@ init_cont_view(SelectStmt *stmt, const char* querystring)
 
 	stmt->forContinuousView = true;
 
-	// know we are an adhoc from am_adhoc
-
 	PushActiveSnapshot(GetTransactionSnapshot());
 	ExecCreateContViewStmt(create_stmt, querystring);
-
-	// ReleaseCatCache
-	// SearchCatCache
-	// ReleaseSysCache
 	PopActiveSnapshot();
 
 	view_data.view_id = get_cont_view_id(view_name);
@@ -429,9 +425,6 @@ init_adhoc_combiner(ContinuousViewData data,
 		Agg *agg = (Agg *) pstmt->planTree;
 		state->is_agg = true;
 
-		elog(LOG, "num cols %d", agg->numCols);
-//		raise(SIGSTOP);
-
 		state->existing = create_agg_hash(agg->numCols, agg->grpOperators,
 										  agg->grpColIdx);
 	}
@@ -449,7 +442,7 @@ init_adhoc_combiner(ContinuousViewData data,
 }
 
 static bool
-exec_adhoc_worker(AdhocWorkerState* state, bool *fin)
+exec_adhoc_worker(AdhocWorkerState* state)
 {
 	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
@@ -457,13 +450,6 @@ exec_adhoc_worker(AdhocWorkerState* state, bool *fin)
 	EState *estate = 0;
 
 	TupleBufferBatchReaderTrySleep(state->reader, state->last_processed);
-
-	if (QueryCancelPending)
-	{
-		QueryCancelPending = false;
-		*fin = true;
-		return;
-	}
 
 	has_tup = 
 		TupleBufferBatchReaderHasTuplesForCQId(state->reader, state->view_id);
@@ -511,14 +497,11 @@ exec_adhoc_worker(AdhocWorkerState* state, bool *fin)
 
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 
-	*fin = false;
 	return state->num_processed != 0;
 }
 
 static void
 adhoc_sync_combine(AdhocCombinerState* state);
-
-// cq_bgproc_main
 
 static void
 exec_adhoc_combiner(AdhocCombinerState* state)
@@ -529,8 +512,6 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 
 	/* put all existing groups in with batch. */
 
-	elog(LOG, "exec_adhoc_combiner");
-
 	if (state->is_agg)
 	{
 		foreach_tuple(state->slot, state->batch)
@@ -540,7 +521,6 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 
 			if (entry)
 			{
-				elog(LOG, "found");
 				/* if the group exists, copy it into 'result'
 				 * we are using 'result' as scratch space here. */
 
@@ -548,17 +528,13 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 			}
 			else
 			{
-				elog(LOG, "not found");
 			}
 		}
 
-		elog(LOG, "result");
-
 		foreach_tuple(state->slot, state->result)
 		{
-			elog(LOG, "tuple in result");
-			print_slot(state->slot);
-			fflush(stdout);
+//			print_slot(state->slot);
+//			fflush(stdout);
 
 			tuplestore_puttupleslot(state->batch, state->slot);
 		}
@@ -611,27 +587,26 @@ adhoc_sync_combine(AdhocCombinerState* state)
 
 			if (!isnew)
 			{
-				elog(LOG, "asc update");
-				print_slot(state->slot);
-				fflush(stdout);
+//				elog(LOG, "asc update");
+//				print_slot(state->slot);
+//				fflush(stdout);
 
 				heap_freetuple(entry->tuple);
 				entry->tuple = ExecCopySlotTuple(state->slot);
 			}
 			else
 			{
-				elog(LOG, "asc insert");
-				print_slot(state->slot);
+//				elog(LOG, "asc insert");
+//				print_slot(state->slot);
 
 //				sender_insert(sender, state->slot);
-
 				entry->tuple = ExecCopySlotTuple(state->slot);
 			}
 		}
 		else
 		{
-			elog(LOG, "asc derp");
-			print_slot(state->slot);
+//			elog(LOG, "asc derp");
+//			print_slot(state->slot);
 //			sender_insert(sender, state->slot);
 		}
 	}
@@ -729,7 +704,7 @@ static void view_rStartup(DestReceiver *self, int operation,
 {
 	struct AdaptReceiver *r = (AdaptReceiver*)(self);
 
-	elog(LOG, "wtf %d", r->numCols);
+//	elog(LOG, "wtf %d", r->numCols);
 //sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
 //		AttrNumber *keyColIdx,
 //		int	numCols)
@@ -763,13 +738,69 @@ create_view_receiver()
 	return self;
 }
 
+static void cleanup_cont_view(ContinuousViewData *data)
+{
+	DestReceiver* receiver = 0;
+	DropStmt *stmt = makeNode(DropStmt);
+	List *querytree_list;
+	Node *plan;
+	Portal portal;
+
+	stmt->objects = list_make1(list_make1(makeString(data->view->name.data)));
+	stmt->removeType = OBJECT_CONTINUOUS_VIEW;
+
+	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",
+			NULL, 0);
+
+	// pg_plan_queries
+	plan = ((Query*) linitial(querytree_list))->utilityStmt;
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	portal = CreatePortal("__cleanup_cont_view__", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+			NULL,
+			"DROP",
+			"DROP",
+			list_make1(plan),
+			NULL);
+
+	receiver = CreateDestReceiver(DestNone);
+
+	PortalStart(portal, NULL, 0, GetActiveSnapshot());
+
+	(void) PortalRun(portal,
+			FETCH_ALL,
+			true,
+			receiver,
+			receiver,
+			NULL);
+
+	(*receiver->rDestroy) (receiver);
+	PortalDrop(portal, false);
+	PopActiveSnapshot();
+}
+
+static void
+cleanup(int code, Datum arg)
+{
+	AbortCurrentTransaction();
+
+	StartTransactionCommand();
+	cleanup_cont_view((ContinuousViewData*)(arg));
+	CommitTransactionCommand();
+}
+
+// E
+// canceling.statement
+
 void
 ExecAdhocQuery(SelectStmt* stmt, const char *s)
 {
 	int numCols = 1;
 	AttrNumber one = 1;
 	AttrNumber *keyColIdx = &one;
-	bool finished = false;
 
 	AdhocWorkerState *worker_state = 0;
 	AdhocCombinerState *combiner_state = 0;
@@ -806,24 +837,22 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	view_receiver->keyColIdx = keyColIdx;
 	view_receiver->numCols = numCols;
 
-	view_state = init_adhoc_view(data, combiner_state->result, (DestReceiver*) view_receiver);
+	view_state = init_adhoc_view(data, combiner_state->result,
+				 (DestReceiver*) view_receiver);
 	view_state->slot = combiner_state->slot;
 
-	while (true)
+	PG_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&data));
 	{
-		bool new_rows = exec_adhoc_worker(worker_state, &finished);
-
-		if (finished)
+		while (true)
 		{
-			break;
-		}
+			bool new_rows = exec_adhoc_worker(worker_state);
 
-		if (new_rows)
-		{
-			exec_adhoc_combiner(combiner_state);
-			exec_adhoc_view(view_state);
+			if (new_rows)
+			{
+				exec_adhoc_combiner(combiner_state);
+				exec_adhoc_view(view_state);
+			}
 		}
 	}
-
-//	cleanup_cont_view(data);
+	PG_END_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&data));
 }

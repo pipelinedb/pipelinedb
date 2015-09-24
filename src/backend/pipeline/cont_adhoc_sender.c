@@ -294,7 +294,6 @@ sender_send(struct AdhocSender *sender)
 {
 	pq_putmessage('d', sender->msg_buf->data, sender->msg_buf->len);
 	pq_flush();
-
 }
 
 static void write_one_row(StringInfo msgbuf,

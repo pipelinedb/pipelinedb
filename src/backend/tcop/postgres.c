@@ -873,15 +873,29 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 void
 exec_adhoc_query(SelectStmt* stmt, const char* s)
 {
-	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+	MemoryContext adhoc_cxt = AllocSetContextCreate(CurrentMemoryContext,
+			"AdhocQueryContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	MemoryContext oldcontext = MemoryContextSwitchTo(adhoc_cxt);
 
 	SetAmContQueryAdhoc(true);
 
-	ExecAdhocQuery(stmt, s);
-	SetAmContQueryAdhoc(false);
+	PG_TRY();
+	{
+		ExecAdhocQuery(stmt, s);
+	}
+	PG_CATCH();
+	{
+		SetAmContQueryAdhoc(false);
+		MemoryContextSwitchTo(oldcontext);
+		MemoryContextResetAndDeleteChildren(adhoc_cxt);
+		PG_RE_THROW();
+	}
 
-	MemoryContextSwitchTo(oldcontext);
-	MemoryContextReset(EventContext);
+	PG_END_TRY();
 }
 
 void

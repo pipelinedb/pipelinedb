@@ -1519,6 +1519,7 @@ ExecutePlan(EState *estate,
 	gettimeofday(&scanstart, NULL);
 	startms = (scanstart.tv_sec * 1000) + (scanstart.tv_usec / 1000.0);
 
+
 	/*
 	 * Loop until we've processed the proper number of tuples from the plan.
 	 */
