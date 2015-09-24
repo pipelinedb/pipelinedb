@@ -787,13 +787,6 @@ read_batch(ContQueryCombinerState *state, TupleBufferBatchReader *reader)
 
 		IncrementCQRead(1, tbs->size);
 		count++;
-
-		/*
-		 * This is fairly unlikely, but if it does happen we should finish processing
-		 * this batch immediately instead of writing more tuples to disk.
-		 */
-		if (!tuplestore_in_memory(state->batch))
-			break;
 	}
 
 	if (!TupIsNull(state->slot))
