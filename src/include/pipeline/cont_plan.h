@@ -12,6 +12,7 @@
 #ifndef CONT_PLAN_H
 #define CONT_PLAN_H
 
+#include "nodes/execnodes.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 #include "pipeline/cont_scheduler.h"
@@ -24,6 +25,7 @@
 
 extern PlannedStmt *GetContPlan(ContinuousView *view, ContQueryProcType type);
 extern TuplestoreScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
+extern FuncExpr *GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri);
 extern PlannedStmt *GetCombinerLookupPlan(ContinuousView *view);
 
 #endif

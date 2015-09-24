@@ -331,6 +331,8 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 		}
 	}
 
+	slot->tuple->group_hash = tuple->group_hash;
+
 	slot->queries = (Bitmapset *) pos;
 	memcpy(slot->queries, queries, BITMAPSET_SIZE(queries->nwords));
 
