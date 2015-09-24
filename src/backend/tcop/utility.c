@@ -84,7 +84,6 @@ static void ProcessUtilitySlow(Node *parsetree,
 				   char *completionTag);
 static void ExecDropStmt(DropStmt *stmt, bool isTopLevel);
 
-static void ExecDropStmt(DropStmt *stmt, bool isTopLevel);
 
 /*
  * CommandIsReadOnly: is an executable query read-only?

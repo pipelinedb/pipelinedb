@@ -15,5 +15,6 @@ extern void sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
 extern void sender_shutdown(struct AdhocSender *sender);
 extern void sender_insert(struct AdhocSender *sender, TupleTableSlot *slot);
 extern void sender_update(struct AdhocSender *sender, TupleTableSlot *slot);
+extern void sender_heartbeat(struct AdhocSender *sender);
 
 #endif

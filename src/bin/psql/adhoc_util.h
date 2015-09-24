@@ -12,8 +12,7 @@
 #ifndef ADHOC_UTIL_H
 #define ADHOC_UTIL_H
 
-#include <unistd.h>
-#include <ncurses.h>
+#include <unistd.h> 
 
 void fatal_error(const char *file, unsigned line, const char *fmt, ...)
 	__attribute__ ((format (printf, 3, 4)));
@@ -28,8 +27,10 @@ void fatal_error(const char *file, unsigned line, const char *fmt, ...)
 #ifndef USE_ASSERT_CHECKING
 #define TermAssert(x)
 #else
-#define TermAssert(x) { if (!(x)) { endwin(); Assert((x)); } }
+#define TermAssert(x) { if (!(x)) { do_endwin(); Assert((x)); } }
 #endif
+
+extern void do_endwin(void);
 
 /*
  * Count the number of spaces in a nul terminated string.

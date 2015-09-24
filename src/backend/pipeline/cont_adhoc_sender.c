@@ -289,6 +289,12 @@ void sender_insert(struct AdhocSender *sender, TupleTableSlot *slot)
 	do_sender_update(sender, slot, 'i');
 }
 
+void sender_heartbeat(struct AdhocSender *sender)
+{
+	pq_putemptymessage('d');
+	pq_flush();
+}
+
 void
 sender_send(struct AdhocSender *sender)
 {

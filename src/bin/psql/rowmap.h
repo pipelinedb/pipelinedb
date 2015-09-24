@@ -12,9 +12,6 @@
 #ifndef ROWMAP_H_46D31946
 #define ROWMAP_H_46D31946
 
-#include <unistd.h>
-#include <stdint.h>
-
 #include "postgres_fe.h"
 #include "pqexpbuffer.h"
 
@@ -39,6 +36,8 @@ typedef struct Row
 	size_t  n;
 } Row;
 
+typedef void (*RowFunc) (void *ctx, int type, Row *row);
+
 extern void RowCleanup(Row *r);
 extern size_t RowSize(Row *r);
 extern void RowKeyReset(void);
@@ -49,24 +48,15 @@ extern Field *RowGetField(Row *r, size_t i);
 extern Row RowGetKey(Row *r);
 
 /*
- * Interface modelled after an rbtree. Internally it is currently using
- * a sorted array which resorts after each update/delete.
+ * Interface modelled after an rbtree. Internally it is using bsd_rbtree
  *
  * Row data is allocated outside here, but it is cleaned up here on
  * update/delete.
- *
- * TODO - replace sorted array with rbtree.
  */
 
-typedef struct RowMap
-{
-	Row     *rows;
-	size_t  n;
-	size_t  cap;
-} RowMap;
+typedef struct RowMap RowMap;
 
-typedef Row *RowIterator;
-
+typedef void *RowIterator;
 extern RowMap *RowMapInit(void);
 
 /* RowMapDestroy will perform RowCleanup on all rows */
@@ -83,9 +73,15 @@ extern RowIterator RowMapFindWithRow(RowMap *m, Row *row);
 extern RowIterator RowMapFindWithKey(RowMap *m, Row *key);
 extern RowIterator RowMapLowerBound(RowMap *m, Row *key);
 
-/* debug funcs */
+extern Row* GetRow(RowIterator iter);
+
+extern bool RowIteratorEqual(RowIterator a, RowIterator b);
+extern RowIterator RowIteratorNext(RowMap *m, RowIterator a);
+extern RowIterator RowIteratorPrev(RowMap *m, RowIterator a);
+
+/* debugging funcs */
 extern void RowDump(Row *row);
+extern void RowDumpToString(Row *row, PQExpBuffer buf);
 extern void RowMapDump(RowMap *m);
-extern void RowDumpToString(Row *row, PQExpBuffer buffer);
 
 #endif

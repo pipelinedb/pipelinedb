@@ -43,7 +43,7 @@
 #include "utils/syscache.h"
 #include "tcop/pquery.h"
 
-// CreateDestReceiver
+#include <unistd.h>
 
 void
 dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot);
@@ -300,9 +300,6 @@ init_cont_view(SelectStmt *stmt, const char* querystring)
 	view_data.view_id = get_cont_view_id(view_name);
 	view_data.view = GetContinuousView(view_data.view_id);
 
-	CommitTransactionCommand();
-	StartTransactionCommand();
-
 	return view_data;
 }
 
@@ -324,9 +321,9 @@ dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot)
 static AdhocWorkerState*
 init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 {
-	ResourceOwner owner = CurrentResourceOwner;
 	PlannedStmt *pstmt = 0;
 	AdhocWorkerState *state = palloc0(sizeof(AdhocWorkerState));
+	ResourceOwner owner = CurrentResourceOwner;
 
 	init_cont_query_batch_context();
 
@@ -337,8 +334,6 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	state->view = data.view;
 
 	Assert(state->view);
-
-	(void) (owner);
 	state->dest = receiver;
 
 	// GetContPlan
@@ -349,7 +344,18 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
 										InvalidSnapshot, state->dest, NULL, 0);
 
+	state->query_desc->snapshot = GetTransactionSnapshot();
+	state->query_desc->snapshot->copied = true;
+
+	RegisterSnapshotOnOwner(state->query_desc->snapshot, owner);
+
 	ExecutorStart(state->query_desc, 0);
+
+	state->query_desc->snapshot->active_count++;
+	UnregisterSnapshotFromOwner(state->query_desc->snapshot, owner);
+	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, owner);
+	state->query_desc->snapshot = NULL;
+
 	set_reader(state->query_desc->planstate, state->reader);
 
 	state->query_desc->estate->es_lastoid = InvalidOid;
@@ -365,6 +371,8 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	 */
 	ExecEndNode(state->query_desc->planstate);
 	FreeExecutorState(state->query_desc->estate);
+
+	// CommitTransactionCommand
 
 	state->last_processed = GetCurrentTimestamp();
 
@@ -444,10 +452,10 @@ init_adhoc_combiner(ContinuousViewData data,
 static bool
 exec_adhoc_worker(AdhocWorkerState* state)
 {
-	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
 	bool has_tup = false;
 	EState *estate = 0;
+	ResourceOwner owner = CurrentResourceOwner;
 
 	TupleBufferBatchReaderTrySleep(state->reader, state->last_processed);
 
@@ -576,6 +584,10 @@ adhoc_sync_combine(AdhocCombinerState* state)
 	tuplestore_clear(state->batch);
 	tuplestore_rescan(state->result);
 
+	MemoryContext old_cxt;
+
+	// lame
+
 	foreach_tuple(state->slot, state->result)
 	{
 		if (state->is_agg)
@@ -587,20 +599,17 @@ adhoc_sync_combine(AdhocCombinerState* state)
 
 			if (!isnew)
 			{
-//				elog(LOG, "asc update");
-//				print_slot(state->slot);
-//				fflush(stdout);
-
 				heap_freetuple(entry->tuple);
+
+				old_cxt = MemoryContextSwitchTo(state->existing->tablecxt);
 				entry->tuple = ExecCopySlotTuple(state->slot);
+				MemoryContextSwitchTo(old_cxt);
 			}
 			else
 			{
-//				elog(LOG, "asc insert");
-//				print_slot(state->slot);
-
-//				sender_insert(sender, state->slot);
+				old_cxt = MemoryContextSwitchTo(state->existing->tablecxt);
 				entry->tuple = ExecCopySlotTuple(state->slot);
+				MemoryContextSwitchTo(old_cxt);
 			}
 		}
 		else
@@ -792,8 +801,7 @@ cleanup(int code, Datum arg)
 	CommitTransactionCommand();
 }
 
-// E
-// canceling.statement
+// exec_adhoc_query
 
 void
 ExecAdhocQuery(SelectStmt* stmt, const char *s)
@@ -805,10 +813,21 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	AdhocWorkerState *worker_state = 0;
 	AdhocCombinerState *combiner_state = 0;
 	AdhocViewState *view_state = 0;
+	MemoryContext run_cxt = CurrentMemoryContext;
 
+	ResourceOwner owner = 
+			ResourceOwnerCreate(CurrentResourceOwner, "WorkerResourceOwner");
+
+	StartTransactionCommand();
+	CurrentResourceOwner = owner;
+	MemoryContextSwitchTo(run_cxt);
 	ContinuousViewData data = init_cont_view(stmt, s);
-	AdaptReceiver *view_receiver = 0;
+	CommitTransactionCommand();
 
+	StartTransactionCommand();
+	CurrentResourceOwner = owner;
+	MemoryContextSwitchTo(run_cxt);
+	AdaptReceiver *view_receiver = 0;
 	DestReceiver *worker_receiver = CreateDestReceiver(DestTuplestore);
 
 	Tuplestorestate *batch = tuplestore_begin_heap(true, true,
@@ -841,10 +860,17 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 				 (DestReceiver*) view_receiver);
 	view_state->slot = combiner_state->slot;
 
+	CommitTransactionCommand();
+
 	PG_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&data));
 	{
 		while (true)
 		{
+			StartTransactionCommand();
+			CurrentResourceOwner = owner;
+
+			// in this case, we want the transaction to cleanup memory
+
 			bool new_rows = exec_adhoc_worker(worker_state);
 
 			if (new_rows)
@@ -852,6 +878,12 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 				exec_adhoc_combiner(combiner_state);
 				exec_adhoc_view(view_state);
 			}
+			else
+			{
+				sender_heartbeat(view_receiver->sender);
+			}
+
+			CommitTransactionCommand();
 		}
 	}
 	PG_END_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&data));

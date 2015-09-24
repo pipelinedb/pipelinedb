@@ -1,6 +1,12 @@
 #include "postgres_fe.h"
 #include "screen.h"
 
+#define NCURSES_ENABLE_STDBOOL_H 0
+#include <ncurses.h>
+#undef bool
+
+FILE* debug_log = 0;
+
 /*
  * Allocates and initializes a new Screen.
  */
@@ -11,6 +17,8 @@ Screen *ScreenInit(Model *model)
 
 	Screen *self = pg_malloc(sizeof(Screen));
 	memset(self, 0, sizeof(Screen));
+
+	debug_log = fopen("/tmp/debug_log.txt", "w");
 
 	self->model = model;
 	memset(&self->key, 0, sizeof(Row));
@@ -206,9 +214,10 @@ screen_render(Screen *s)
 	ctr++;
 
 	/* render visible set */
-	for (; iter != end && ctr < lines(s); iter++, ++ctr)
+	for (; !RowIteratorEqual(iter,end) && ctr < lines(s); 
+		 iter = RowIteratorNext(rowmap(s), iter), ++ctr)
 	{
-		render_row(s, iter, ' ');
+		render_row(s, GetRow(iter), ' ');
 	}
 
 	/* blank out any remaining rows below the last row */
@@ -229,6 +238,12 @@ ScreenUpdate(Screen *s)
 static void inline
 set_key(Screen *s, Row r)
 {
+//	PQExpBuffer exp = createPQExpBuffer();
+//	RowDumpToString(&r, exp);
+//	fprintf(debug_log, "%s\n", exp->data);
+//	fflush(debug_log);
+//	destroyPQExpBuffer(exp);
+
 	RowCleanup(&s->key);
 	s->key = r;
 }
@@ -247,10 +262,11 @@ screen_scroll_up(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 
-	if (iter != RowMapBegin(rowmap(s))) {
-		iter--;
+	if (!RowIteratorEqual(iter, RowMapBegin(rowmap(s)))) {
 
-		set_key(s, RowGetKey(iter));
+		iter = RowIteratorPrev(rowmap(s), iter);
+		set_key(s, RowGetKey(GetRow(iter)));
+
 	} else {
 		clear_key(s);
 	}
@@ -261,15 +277,14 @@ screen_scroll_down(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 
-	if (iter != RowMapEnd(rowmap(s)))
+	if (!RowIteratorEqual(iter, RowMapEnd(rowmap(s))))
 	{
-		iter++;
+		iter = RowIteratorNext(rowmap(s), iter);
 
-		if (iter != RowMapEnd(rowmap(s)))
-			set_key(s, RowGetKey(iter));
+		if (!RowIteratorEqual(iter, RowMapEnd(rowmap(s))))
+			set_key(s, RowGetKey(GetRow(iter)));
 	}
 }
-
 
 /*
  * Scroll left/right by adjusting both the current column and column offset

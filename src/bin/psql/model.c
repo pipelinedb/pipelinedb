@@ -2,7 +2,7 @@
 #include "model.h"
 
 /* utility function for creating a row from a string */
-static Row
+Row
 make_row(const char *s)
 {
 	Row row = {0,0,0};
