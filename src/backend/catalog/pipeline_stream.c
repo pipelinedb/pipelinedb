@@ -502,29 +502,31 @@ GetLocalStreamReaders(Oid relid)
 		Bitmapset *local_readers = NULL;
 		HeapTuple tuple;
 		Form_pipeline_query row;
-		int i = 0;
-		Datum str = PointerGetDatum(cstring_to_text(stream_targets));
-		Datum split = PointerGetDatum(cstring_to_text(","));
+		char *targets = pstrdup(stream_targets);
+		List *streams;
+		ListCell *lc;
 
-		while (++i)
+		if (!SplitIdentifierString(targets, ',', &streams))
 		{
-			Datum view_datum = DirectFunctionCall3(split_text, str, split, Int32GetDatum(i));
-			char *view_name = text_to_cstring((const text *) DatumGetPointer(view_datum));
+			/* syntax error in stream_targets */
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid list syntax in parameter \"stream_targets\"")));
+		}
+
+		foreach(lc, streams)
+		{
+			char *view_name = (char *) lfirst(lc);
 			RangeVar *rv;
 			List *name = NIL;
-			int j = 0;
-
-			if (!strlen(view_name))
-				break;
-
-			view_datum = DirectFunctionCall1(btrim1, view_datum);
-			view_name = text_to_cstring((const text *) DatumGetPointer(view_datum));
+			int i = 0;
 
 			/* deconstruct possible qualifiers */
-			while (++j)
+			while (++i)
 			{
 				Datum qual_split = PointerGetDatum(cstring_to_text("."));
-				Datum quals_datum = DirectFunctionCall3(split_text, view_datum, qual_split, Int32GetDatum(j));
+				Datum view_datum = PointerGetDatum(cstring_to_text(view_name));
+				Datum quals_datum = DirectFunctionCall3(split_text, view_datum, qual_split, Int32GetDatum(i));
 				char *qual = text_to_cstring((const text *) DatumGetPointer(quals_datum));
 
 				if (!strlen(qual))
@@ -549,6 +551,8 @@ GetLocalStreamReaders(Oid relid)
 
 		readers = bms_intersect(readers, local_readers);
 		bms_free(local_readers);
+		pfree(targets);
+		list_free(streams);
 	}
 
 	return readers;
