@@ -10,7 +10,7 @@ WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
 DROP CONTINUOUS VIEW msw0;
 
 CREATE CONTINUOUS VIEW msw0 AS SELECT x::integer, COUNT(*), avg(x) FROM msw_stream
-WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds' GROUP BY x;
+WHERE arrival_timestamp > clock_timestamp() - interval '1 minute' GROUP BY x;
 
 CREATE VIEW msw1 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0
 WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
@@ -52,7 +52,7 @@ CREATE CONTINUOUS VIEW msw3 AS SELECT
 	x - y::integer AS b,
 	substring(z::text, 1, 2) AS c
 FROM msw_stream
-WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+WHERE arrival_timestamp > clock_timestamp() - interval '1 minute';
 
 CREATE VIEW msw4 AS SELECT * FROM msw3
 WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
