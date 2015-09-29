@@ -201,7 +201,7 @@ SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
 FuncExpr *
 GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri)
 {
-	FuncExpr *result;
+	FuncExpr *result = NULL;
 	int i;
 
 	/*
@@ -230,8 +230,6 @@ GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri)
 		result = copyObject(func);
 		break;
 	}
-
-	Assert(result);
 
 	return result;
 }

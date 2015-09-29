@@ -132,7 +132,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 
 		state->groupatts = agg->grpColIdx;
 
-		matrel = heap_openrv_extended(state->view->matrel, AccessShareLock, true);
+		matrel = heap_openrv_extended(state->view->matrel, NoLock, true);
 
 		if (matrel == NULL)
 		{
@@ -145,11 +145,20 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 		if (agg->numCols)
 		{
 			FuncExpr *hash = GetGroupHashIndexExpr(agg->numCols, ri);
+			if (hash == NULL)
+			{
+				/* matrel has been dropped */
+				state->view = NULL;
+				CQMatRelClose(ri);
+				heap_close(matrel, NoLock);
+				return;
+			}
+
 			SetCombinerDestReceiverHashFunc(state->dest, hash, CurrentMemoryContext);
 		}
 
 		CQMatRelClose(ri);
-		heap_close(matrel, AccessShareLock);
+		heap_close(matrel, NoLock);
 	}
 
 	set_reader(state->query_desc->planstate, reader);
