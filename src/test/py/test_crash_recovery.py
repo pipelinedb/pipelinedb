@@ -129,3 +129,65 @@ def test_restart_recovery(pipeline, clean_db):
 
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
   assert result['count'] == 4
+
+def test_postmaster_worker_recovery(pipeline, clean_db):
+  """
+  Verify that the Postmaster only restarts crashed worker processes, and does not
+  attempt to start them when the continuous query scheduler should.
+  """
+  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'worker\'').first()
+  expected_workers = result['count']
+
+  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
+  expected_combiners = result['count']
+
+  q = 'SELECT COUNT(*) FROM stream'
+  pipeline.create_cv('test_pm_recovery', q)
+  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+
+  def backend():
+    try:
+      # Just keep a long-running backend connection open
+      client = pipeline.engine.connect()
+      result = client.execute('SELECT pg_sleep(10000)')
+    except:
+      pass
+
+  t = threading.Thread(target=backend)
+  t.start()
+
+  attempts = 0
+  result = None
+  backend_pid = 0
+
+  while not result and attempts < 10:
+    result = pipeline.execute("""SELECT pid, query FROM pg_stat_activity WHERE lower(query) LIKE '%%pg_sleep%%'""").first()
+    time.sleep(1)
+    attempts += 1
+
+  assert result
+
+  backend_pid = result['pid']
+  os.kill(backend_pid, signal.SIGKILL)
+
+  attempts = 0
+  pipeline.conn = None
+
+  while attempts < 10:
+    try:
+      pipeline.conn = pipeline.engine.connect()
+      break
+    except:
+      time.sleep(1)
+      pass
+    attempts += 1
+
+  assert pipeline.conn
+
+  # Now verify that we have the correct number of CQ worker procs
+  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'worker\'').first()
+  assert result['count'] == expected_workers
+
+  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
+  assert result['count'] == expected_combiners
+
