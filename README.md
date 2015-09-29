@@ -1,6 +1,9 @@
 # PipelineDB
 
-![Build Status](https://circleci.com/gh/pipelinedb/pipelinedb.png?style=shield&circle-token=db1a70c164cd6d96544d8eb38b279c48dea24709) [![Gitter chat](https://badges.gitter.im/pipelinedb/pipelinedb.png)](https://gitter.im/pipelinedb/pipelinedb)
+![Build Status](https://circleci.com/gh/pipelinedb/pipelinedb.png?style=shield&circle-token=db1a70c164cd6d96544d8eb38b279c48dea24709)
+[![Release](https://img.shields.io/github/release/pipelinedb/pipelinedb.svg)](https://github.com/pipelinedb/pipelinedb/releases)
+[![License](https://img.shields.io/:license-GPLv3-blue.svg)](https://github.com/pipelinedb/pipelinedb/blob/master/LICENSE)
+[![Gitter chat](https://img.shields.io/badge/gitter-join%20chat-brightgreen.svg)](https://gitter.im/pipelinedb/pipelinedb)
 
 ## Getting started
 

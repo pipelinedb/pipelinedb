@@ -1271,7 +1271,16 @@ ProcessUtilitySlow(Node *parsetree,
 				break;
 
 			case T_ViewStmt:	/* CREATE VIEW */
-				DefineView((ViewStmt *) parsetree, queryString);
+				{
+					ViewStmt *vstmt = (ViewStmt *) parsetree;
+					DefElem *max_age = GetContinuousViewOption(vstmt->options, OPTION_MAX_AGE);
+					if (max_age)
+					{
+						ApplyMaxAge((SelectStmt *) vstmt->query, max_age);
+						vstmt->options = list_delete(vstmt->options, max_age);
+					}
+					DefineView(vstmt, queryString);
+				}
 				break;
 
 			case T_CreateFunctionStmt:	/* CREATE FUNCTION */

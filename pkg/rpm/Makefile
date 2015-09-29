@@ -33,6 +33,7 @@ pipeline:
 	(cd $(TOP_BUILDDIR) && ./configure PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo CFLAGS="$(PIPELINE_CFLAGS)" --disable-rpath)
 	(cd $(TOP_BUILDDIR) && $(MAKE))
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
+	(cd $(TOP_BUILDDIR)/contrib/pipeline_kafka && ./configure && make && make install)
 
 geos:
 	wget http://download.pipelinedb.com/dep/$(GEOS).tar.bz2
