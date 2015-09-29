@@ -147,6 +147,7 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 		size = add_size(size, total_addin_request);
 
 		size = add_size(size, TupleBuffersShmemSize());
+		size = add_size(size, ShmemDynAllocSize());
 
 		/* might as well round it off to a multiple of a typical page size */
 		size = add_size(size, 8192 - (size % 8192));
