@@ -111,7 +111,7 @@ DATA(insert (0 int8inc 0 0 int8_sum_to_int8 20));
 DATA(insert (0 int8inc_any 0 0 int8_sum_to_int8 20));
 
 /* array */
-DATA(insert (array_agg_finalfn array_agg_transfn arrayaggstatesend arrayaggstaterecv array_agg_combine 2277));
+DATA(insert (array_agg_finalfn array_agg_transfn arrayaggstatesend arrayaggstaterecv array_agg_combine 17));
 
 /* text */
 DATA(insert (string_agg_finalfn string_agg_transfn stringaggstatesend stringaggstaterecv string_agg_combine 17));
