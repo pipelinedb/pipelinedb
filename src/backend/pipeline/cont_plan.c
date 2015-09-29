@@ -70,7 +70,7 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 
 	query->isContinuous = true;
 	query->isCombine = is_combine;
-	query->cq_id = id;
+	query->cqId = id;
 
 	plan = pg_plan_query(query, 0, NULL);
 
@@ -113,9 +113,10 @@ get_worker_plan(ContinuousView *view)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	selectstmt->swStepFactor = view->sw_step_factor;
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Worker);
 
-	return get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, selectstmt->forCombiner);
+	return get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, false);
 }
 
 static PlannedStmt*
@@ -129,6 +130,7 @@ get_combiner_plan(ContinuousView *view)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	selectstmt->swStepFactor = view->sw_step_factor;
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Combiner);
 	join_search_hook = get_combiner_join_rel;
 
