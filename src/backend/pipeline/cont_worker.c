@@ -452,6 +452,11 @@ ContinuousQueryWorkerMain(void)
 
 				if (!continuous_query_crash_recovery)
 					exit(1);
+
+				AbortCurrentTransaction();
+				StartTransactionCommand();
+
+				MemoryContextSwitchTo(ContQueryBatchContext);
 			}
 			PG_END_TRY();
 
