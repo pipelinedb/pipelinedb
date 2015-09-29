@@ -3087,6 +3087,8 @@ HandleChildCrash(int pid, int exitstatus, const char *procname)
 	slist_iter	siter;
 	Backend    *bp;
 	bool		take_action;
+	slist_mutable_iter miter;
+
 
 	/*
 	 * We only log messages and send signals if this is the first process
@@ -3102,6 +3104,20 @@ HandleChildCrash(int pid, int exitstatus, const char *procname)
 		LogChildExit(LOG, procname, pid, exitstatus);
 		ereport(LOG,
 				(errmsg("terminating any other active server processes")));
+	}
+
+	/*
+	 * The continuous query scheduler process handles the launching of its child procs,
+	 * so remove its workers from local memory so we don't try to launch them from
+	 * the Postmaster.
+	 */
+	slist_foreach_modify(miter, &BackgroundWorkerList)
+	{
+		RegisteredBgWorker *rw;
+
+		rw = slist_container(RegisteredBgWorker, rw_lnode, miter.cur);
+		if (rw->rw_worker.bgw_flags & BGWORKER_IS_CONT_QUERY_PROC)
+			ForgetBackgroundWorker(&miter);
 	}
 
 	/* Process background workers. */
