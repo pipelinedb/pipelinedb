@@ -4,8 +4,6 @@
 #include "access/tupdesc.h"
 #include "executor/tuptable.h"
 
-// CreateDestReceiver
-
 extern struct AdhocSender* sender_create(void);
 
 extern void sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,

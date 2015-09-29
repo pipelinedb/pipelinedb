@@ -59,48 +59,6 @@ ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 	return scanstate;
 }
 
-//ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
-//{
-//	TuplestoreScanState *tss = makeNode(TuplestoreScanState);
-//	tss->ss.ps.plan = (Plan *) node;
-//	tss->ss.ps.state = estate;
-//	tss->ss.ps.ps_ExprContext = CreateExprContext(estate);
-//
-//	ExecInitResultTupleSlot(estate, &tss->ss.ps);
-//	ExecInitScanTupleSlot(estate, &tss->ss);
-//
-//	ExecSetSlotDescriptor(tss->ss.ss_ScanTupleSlot, node->desc);
-//	ExecSetSlotDescriptor(tss->ss.ps.ps_ResultTupleSlot, node->desc);
-//
-//	scanstate->ps.targetlist = (List *)
-//		ExecInitExpr((Expr *) node->plan.targetlist,
-//					 (PlanState *) scanstate);
-//	scanstate->ps.qual = (List *)
-//		ExecInitExpr((Expr *) node->plan.qual,
-//					 (PlanState *) scanstate);
-//
-////	tss->ss.ps.targetlist = node->scan.plan.targetlist;
-//
-////	tss->ss.ps.plan->scanrelid = 1;
-////ExecAssignScanProjectionInfo(ScanState *node)
-////    Scan *scan = (Scan*) tss->ss.ps.plan;
-////	scan->scanrelid = 1;
-////	Scan	   *scan = (Scan *) node->ps.plan;
-//
-////	{
-////		ScanState* n = (ScanState *) (&tss->ss);
-////		Scan	   *scan = (Scan *) n->ps.plan;
-////		scan->scanrelid = 1;
-////	}
-//
-//	ExecAssignResultTypeFromTL(&tss->ss.ps);
-//	ExecAssignScanProjectionInfo(&tss->ss);
-//
-//	tuplestore_rescan(node->store);
-//
-//	return tss;
-//}
-
 static TupleTableSlot *
 TuplestoreNext(TuplestoreScanState * node)
 {

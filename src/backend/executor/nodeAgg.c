@@ -1562,7 +1562,6 @@ get_aggref_resno(Aggref *aggref, List *targetlist)
 AggState *
 ExecInitAgg(Agg *node, EState *estate, int eflags)
 {
-
 	AggState   *aggstate;
 	AggStatePerAgg peragg;
 	Plan	   *outerPlan;
@@ -1944,12 +1943,10 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 								 peraggstate->aggCollation,
 								 (void *) aggstate, NULL);
 
-
 		/* get info about relevant datatypes */
 		get_typlenbyval(aggref->aggtype,
 						&peraggstate->resulttypeLen,
 						&peraggstate->resulttypeByVal);
-
 		get_typlenbyval(aggtranstype,
 						&peraggstate->transtypeLen,
 						&peraggstate->transtypeByVal);

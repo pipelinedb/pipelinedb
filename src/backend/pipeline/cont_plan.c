@@ -34,7 +34,6 @@
 #include "utils/builtins.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
-#include "nodes/print.h"
 
 
 /*
@@ -114,7 +113,6 @@ get_worker_plan(ContinuousView *view)
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Worker);
-
 
 	return get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, selectstmt->forCombiner);
 }

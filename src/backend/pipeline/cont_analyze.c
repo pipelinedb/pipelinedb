@@ -2449,7 +2449,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 		view->targetList = lappend(view->targetList, create_res_target_for_node(res_val, name));
 	}
 
-//	Assert(mat_relation != NULL);
+	Assert(mat_relation != NULL);
 
 	if (proc_type == Combiner)
 	{

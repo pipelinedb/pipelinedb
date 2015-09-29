@@ -92,12 +92,6 @@ ModelKeyRow(Model *m, Row *r)
 
 	RowKeyReset();
 
-	// first column is either
-	//
-	// single
-	// append
-	// aggregate
-
 	for (i = 0; i < RowSize(r); ++i)
 	{
 		size_t ki = atoi(RowFieldValue(r,i)) - 1;

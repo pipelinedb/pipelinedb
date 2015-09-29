@@ -83,8 +83,6 @@ typedef struct {
 	CQStatEntry stats;
 } ContQueryCombinerState;
 
-
-
 /*
  * prepare_combine_plan
  */

@@ -5,8 +5,6 @@
 #include <ncurses.h>
 #undef bool
 
-FILE* debug_log = 0;
-
 /*
  * Allocates and initializes a new Screen.
  */
@@ -17,8 +15,6 @@ Screen *ScreenInit(Model *model)
 
 	Screen *self = pg_malloc(sizeof(Screen));
 	memset(self, 0, sizeof(Screen));
-
-	debug_log = fopen("/tmp/debug_log.txt", "w");
 
 	self->model = model;
 	memset(&self->key, 0, sizeof(Row));
@@ -238,12 +234,6 @@ ScreenUpdate(Screen *s)
 static void inline
 set_key(Screen *s, Row r)
 {
-//	PQExpBuffer exp = createPQExpBuffer();
-//	RowDumpToString(&r, exp);
-//	fprintf(debug_log, "%s\n", exp->data);
-//	fflush(debug_log);
-//	destroyPQExpBuffer(exp);
-
 	RowCleanup(&s->key);
 	s->key = r;
 }

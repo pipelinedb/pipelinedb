@@ -801,8 +801,6 @@ cleanup(int code, Datum arg)
 	CommitTransactionCommand();
 }
 
-// exec_adhoc_query
-
 void
 ExecAdhocQuery(SelectStmt* stmt, const char *s)
 {

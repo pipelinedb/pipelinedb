@@ -382,10 +382,8 @@ bool
 IsAContinuousView(RangeVar *name)
 {
 	HeapTuple tuple = GetPipelineQueryTuple(name);
-
 	if (!HeapTupleIsValid(tuple))
 		return false;
-
 	ReleaseSysCache(tuple);
 	return true;
 }

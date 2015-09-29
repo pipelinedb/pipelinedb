@@ -64,7 +64,6 @@ CreateTemplateTupleDesc(int natts, bool hasoid)
 	attroffset = sizeof(struct tupleDesc) + natts * sizeof(Form_pg_attribute);
 	attroffset = MAXALIGN(attroffset);
 	stg = palloc(attroffset + natts * MAXALIGN(ATTRIBUTE_FIXED_PART_SIZE));
-
 	desc = (TupleDesc) stg;
 
 	if (natts > 0)
@@ -119,7 +118,6 @@ CreateTupleDesc(int natts, bool hasoid, Form_pg_attribute *attrs)
 	AssertArg(natts >= 0);
 
 	desc = (TupleDesc) palloc(sizeof(struct tupleDesc));
-
 	desc->attrs = attrs;
 	desc->natts = natts;
 	desc->constr = NULL;
