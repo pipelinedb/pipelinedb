@@ -448,12 +448,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	tlist = query->targetList;
 
 	/*
-	 * Run it through the planner, so that if something goes wrong we know now
-	 * rather than finding out when the CV actually activates.
-	 */
-	pg_plan_queries(list_make1(query), 0, NULL);
-
-	/*
 	 * Build a list of columns from the SELECT statement that we
 	 * can use to create a table with
 	 */
@@ -529,15 +523,16 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	indexoid = create_index_on_mat_relation(view, matreloid, matrel, query, context->is_sw);
 	record_dependencies(pqoid, matreloid, viewoid, indexoid, workerselect, query);
 
+	allowSystemTableMods = saveAllowSystemTableMods;
+
 	/*
-	 * Run the combiner queries through the planner, so that if something goes wrong we know now
-	 * rather than finding out when the CV actually activates.
+	 * Run the combiner and worker queries through the planner, so that if something goes wrong
+	 * we know now rather than at activate time.
 	 */
 	cv = GetContinuousView(cvid);
 	GetContPlan(cv, Combiner);
+	GetContPlan(cv, Worker);
 	GetCombinerLookupPlan(cv);
-
-	allowSystemTableMods = saveAllowSystemTableMods;
 
 	heap_close(pipeline_query, NoLock);
 

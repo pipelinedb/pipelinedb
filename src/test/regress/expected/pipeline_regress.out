@@ -176,3 +176,5 @@ SELECT * FROM test_view ORDER BY uid;
  41950 |     6
 (2 rows)
 
+CREATE CONTINUOUS VIEW v AS SELECT array_agg(ARRAY[x::int, y::int]) FROM stream;
+ERROR:  could not find array type for data type integer[]
