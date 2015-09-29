@@ -79,7 +79,8 @@ typedef struct
 } ContQueryCombinerState;
 
 /* stores the hashes of the current batch, in parallel to the order of the batch's tuplestore */
-static int64 *group_hashes;
+static int64 *group_hashes = NULL;
+static int group_hashes_len = 0;
 
 static bool
 should_read_fn(TupleBufferReader *reader, TupleBufferSlot *slot)
@@ -825,6 +826,7 @@ ContinuousQueryCombinerMain(void)
 			ALLOCSET_DEFAULT_MAXSIZE);
 	ContQueryCombinerState **states = init_query_states_array(run_cxt);
 	ContQueryCombinerState *state = NULL;
+	ContQueryRunParams *run_params;
 	Bitmapset *queries;
 	TimestampTz last_processed = GetCurrentTimestamp();
 	bool has_queries;
@@ -847,7 +849,8 @@ ContinuousQueryCombinerMain(void)
 	has_queries = has_queries_to_process(queries);
 
 	MemoryContextSwitchTo(run_cxt);
-	group_hashes = palloc0(continuous_query_batch_size * sizeof(int64));
+	group_hashes_len = continuous_query_batch_size;
+	group_hashes = palloc0(group_hashes_len * sizeof(int64));
 
 	for (;;)
 	{
@@ -862,6 +865,16 @@ ContinuousQueryCombinerMain(void)
 
 		if (MyContQueryProc->group->terminate)
 			break;
+
+		/* If necessary, reallocate resources that depend on runtime parameters that were changed */
+		run_params = GetContQueryRunParams();
+		if (run_params->batch_size != group_hashes_len)
+		{
+			MemoryContextSwitchTo(run_cxt);
+			group_hashes_len = run_params->batch_size;
+			group_hashes = repalloc(group_hashes, group_hashes_len * sizeof(int64));
+			MemSet(group_hashes, 0, group_hashes_len * sizeof(int64));
+		}
 
 		/* If we had no queries, then rescan the catalog. */
 		if (!has_queries)
