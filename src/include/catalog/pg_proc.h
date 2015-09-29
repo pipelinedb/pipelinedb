@@ -5120,7 +5120,7 @@ DESCR("deserializer for numeric aggregation transition states");
 DATA(insert OID = 4309 (naggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ naggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for numeric aggregation transition states");
 
-DATA(insert OID = 4310 (arrayaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "2277" _null_ _null_ _null_ _null_ arrayaggstaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4310 (arrayaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ arrayaggstaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for array aggregation transition states");
 DATA(insert OID = 4311 (arrayaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ arrayaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for array aggregation transition states");
