@@ -53,6 +53,7 @@
 #include "parser/parser.h"
 #include "parser/scansup.h"
 #include "pgstat.h"
+#include "pipeline/cont_analyze.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream.h"
 #include "pipeline/update.h"
@@ -2665,6 +2666,16 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&continuous_view_fillfactor,
 		50, 1, 100,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"sliding_window_step_factor", PGC_USERSET, QUERY_TUNING_OTHER,
+		 gettext_noop("Steps the default step size for a sliding window query as a factor of the window size."),
+		 gettext_noop("A higher number will improve performance but tradeoff refresh interval.")
+		},
+		&sliding_window_step_factor,
+		5, 1, 100,
 		NULL, NULL, NULL
 	},
 

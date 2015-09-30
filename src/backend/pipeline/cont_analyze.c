@@ -53,6 +53,8 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
+int sliding_window_step_factor;
+
 #define CLOCK_TIMESTAMP "clock_timestamp"
 #define DATE_ROUND "date_round"
 #define DATE_TRUNC "date_trunc"
@@ -251,7 +253,6 @@ MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType
 	 */
 	collect_column_names((Node *) select->targetList, context);
 
-	context->combine = select->forCombiner;
 	context->is_sw = has_clock_timestamp(select->whereClause, NULL);
 	context->proc_type = type;
 
@@ -513,28 +514,71 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 	return raw_expression_tree_walker(node, find_clock_timestamp_expr, (void *) context);
 }
 
-static char *
-get_truncation_from_interval_expr(Node *node)
+static Node *
+get_truncation_from_interval(SelectStmt *select, Node *time, Node *interval)
 {
-	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), node, EXPR_KIND_WHERE);
+	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), interval, EXPR_KIND_WHERE);
 	Const *c;
-	Interval *i;
+	Interval *window;
 
 	Assert(IsA(expr, Const));
 	c = (Const *) expr;
-	Assert(c->consttype == INTERVALOID);
 
-	i = (Interval *) c->constvalue;
+	Assert(c->consttype == INTERVALOID);
+	window = (Interval *) c->constvalue;
+
+#ifdef HAVE_INT64_TIMESTAMP
+{
+	FuncCall *func;
+	Interval *step;
+	Interval min_step;
+	float8 factor = select->swStepFactor / (float8) 100.0;
+	int cmp;
+	char *step_str;
+	A_Const *step_const;
+
+	MemSet(&min_step, 0, sizeof(Interval));
+	min_step.time = 1000 * 1000;
+
+	/* We make the step size some percentage of the total window width */
+	step = (Interval *) DirectFunctionCall2(interval_mul, PointerGetDatum(window), Float8GetDatum(factor));
+	cmp = (Datum) DirectFunctionCall2(interval_cmp, (Datum) step, (Datum) &min_step);
+	if (DatumGetInt32(cmp) < 0)
+		step = &min_step;
+
+	step_str = (char *) DirectFunctionCall1(interval_out, (Datum) step);
+	step_const = makeNode(A_Const);
+	step_const->val = *makeString(step_str);
+
+	func = makeNode(FuncCall);
+	func->funcname = list_make1(makeString(DATE_ROUND));
+	func->args = list_make2(time, step_const);
+
+	return (Node *) func;
+}
+/* No int64 timestamp support? Resort to lame duck truncation approach */
+#else
+{
+	Const *c;
+	FuncCall *func = makeNode(FuncCall);
+	char *name;
 
 	/* We make the step size one unit smaller than the granularity of the window size unit */
-	if (i->month)
-		return DATE_TRUNC_DAY;
-	else if (i->day)
-		return DATE_TRUNC_HOUR;
-	else if (i->time >= HOUR_USEC)
-		return DATE_TRUNC_MINUTE;
+	if (window->month)
+		name = DATE_TRUNC_DAY;
+	else if (window->day)
+		name = DATE_TRUNC_HOUR;
+	else if (window->time >= HOUR_USEC)
+		name = DATE_TRUNC_MINUTE;
+	else
+		name = DATE_TRUNC_SECOND;
 
-	return DATE_TRUNC_SECOND;
+	func->funcname = list_make1(makeString(name));
+	func->args = list_make1(time);
+
+	return (Node *) func;
+}
+#endif
 }
 
 static ColumnRef *
@@ -2012,7 +2056,7 @@ make_distincts_explicit(SelectStmt *stmt, ContAnalyzeContext *context)
 }
 
 static bool
-truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
+truncate_timestamp_field(SelectStmt *select, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
 	ListCell *lc;
 	bool truncated = false;
@@ -2041,28 +2085,32 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 
 	if (!truncated)
 	{
-		FuncCall *func = makeNode(FuncCall);
-		func->args = list_make1(copyObject(time));
-
 		/* For sliding windows we try to keep around a certain "fan in" threshold */
 		if (sw_expr)
 		{
 			A_Expr *ct_expr;
-			char *fname;
 
 			if (equal(sw_expr->lexpr, time))
 				ct_expr = (A_Expr *) sw_expr->rexpr;
 			else
 				ct_expr = (A_Expr *) sw_expr->lexpr;
 
-			fname = get_truncation_from_interval_expr(ct_expr->rexpr);
-			func->funcname = list_make1(makeString(fname));
+			/* Fix default step size hint hack */
+			if (select->swStepFactor > 100)
+				select->swStepFactor -= 100;
+
+			time = get_truncation_from_interval(select, time, ct_expr->rexpr);
 		}
 		else
+		{
+			FuncCall *func = makeNode(FuncCall);
+			func->args = list_make1(copyObject(time));
 			func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
-
-		time = (Node *) func;
+			time = (Node *) func;
+		}
 	}
+	else if (select->swStepFactor > 0 && select->swStepFactor <=100)
+		elog(ERROR, "cannot specify both \"step_factor\" and an explicit truncation function");
 
 	context->expr = time;
 
@@ -2072,7 +2120,7 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 static ColumnRef *
 hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
-	bool replace = truncate_timestamp_field(time, sw_expr, context);
+	bool replace = truncate_timestamp_field(proc, time, sw_expr, context);
 	ListCell *lc;
 	bool found = false;
 	ColumnRef *cref;
@@ -2558,21 +2606,16 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 Query *
 GetContQuery(RangeVar *rv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *sel;
 	ContAnalyzeContext *context;
 
-	sql = GetQueryString(rv);
-	parsetree_list = pg_parse_query(sql);
-	sel = linitial(parsetree_list);
-
+	sel = GetContSelectStmt(rv);
 	context = MakeContAnalyzeContext(NULL, sel, Worker);
 	rewrite_streaming_aggs(sel, context);
 
 	MakeSelectsContinuous(sel);
 
-	return parse_analyze((Node *) sel, sql, 0, 0);
+	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
 /*
@@ -2581,17 +2624,14 @@ GetContQuery(RangeVar *rv)
 Query *
 GetContWorkerQuery(RangeVar *rv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *sel;
 	RangeVar *matrel;
 
-	sql = GetQueryString(rv);
-	parsetree_list = pg_parse_query(sql);
 	matrel = GetMatRelationName(rv);
-	sel = TransformSelectStmtForContProcess(matrel, linitial(parsetree_list), NULL, Worker);
+	sel = GetContSelectStmt(rv);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Worker);
 
-	return parse_analyze((Node *) sel, sql, 0, 0);
+	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
 /*
@@ -2600,16 +2640,13 @@ GetContWorkerQuery(RangeVar *rv)
 Query *
 GetContCombinerQuery(RangeVar *rv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *sel;
 	RangeVar *matrel;
 
-	sql = GetQueryString(rv);
-	parsetree_list = pg_parse_query(sql);
 	matrel = GetMatRelationName(rv);
-	sel = TransformSelectStmtForContProcess(matrel, linitial(parsetree_list), NULL, Combiner);
-	return parse_analyze((Node *) sel, sql, 0, 0);
+	sel = GetContSelectStmt(rv);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Combiner);
+	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
 /*
@@ -3444,13 +3481,11 @@ pipeline_rewrite(List *raw_parsetree_list)
 Node *
 GetSWExpr(RangeVar *cv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *view;
+	SelectStmt *sel;
 
-	sql = GetQueryString(cv);
-	parsetree_list = pg_parse_query(sql);
-	TransformSelectStmtForContProcess(cv, linitial(parsetree_list), &view, Worker);
+	sel = GetContSelectStmt(cv);
+	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
 
 	return view->whereClause;
 }
@@ -3477,14 +3512,12 @@ GetSWTimeColumn(RangeVar *rv)
 ColumnRef *
 GetWindowTimeColumn(RangeVar *cv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *view;
+	SelectStmt *sel;
 	ContAnalyzeContext context;
 
-	sql = GetQueryString(cv);
-	parsetree_list = pg_parse_query(sql);
-	TransformSelectStmtForContProcess(cv, linitial(parsetree_list), &view, Worker);
+	sel = GetContSelectStmt(cv);
+	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
 
 	if (view->whereClause)
 	{
@@ -3679,4 +3712,54 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	  stmt->whereClause = (Node *) makeA_Expr(AEXPR_AND, NULL, (Node *) where, stmt->whereClause, -1);
 	else
 	  stmt->whereClause = (Node *) where;
+}
+
+/*
+ * ApplyStorageOptions
+ */
+void
+ApplyStorageOptions(CreateContViewStmt *stmt)
+{
+	DefElem *def;
+	SelectStmt *select = (SelectStmt *) stmt->query;
+
+	/* max_age */
+	def = GetContinuousViewOption(stmt->into->options, OPTION_MAX_AGE);
+	if (def)
+	{
+		ApplyMaxAge(select, def);
+		stmt->into->options = list_delete(stmt->into->options, def);
+	}
+
+	/* SWStepFactor */
+	select->swStepFactor = 0;
+	def = GetContinuousViewOption(stmt->into->options, OPTION_STEP_FACTOR);
+	if (def)
+	{
+		int factor;
+
+		if (!has_clock_timestamp(select->whereClause, NULL))
+			elog(ERROR, "can only specify \"step_factor\" for sliding window queries");
+
+		if (!IsA(def->arg, Integer))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("\"step_size\" must be a valid integer in the range 1..100"),
+					 errhint("For example, ... WITH (step_factor = 25) ...")));
+
+		factor = intVal(def->arg);
+		if (factor < 1 || factor > 100)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("\"step_size\" must be a valid integer in the range 1..100"),
+					 errhint("For example, ... WITH (step_factor = 25) ...")));
+
+		select->swStepFactor = factor;
+		stmt->into->options = list_delete(stmt->into->options, def);
+	}
+	else
+	{
+		/* This is a hack to specify the step factor, but at the same time indicate that it wasn't explicitly specified */
+		select->swStepFactor = 100 + sliding_window_step_factor;
+	}
 }

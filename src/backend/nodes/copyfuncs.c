@@ -2524,6 +2524,7 @@ _copyQuery(const Query *from)
 	COPY_SCALAR_FIELD(isContinuous);
 	COPY_SCALAR_FIELD(isCombine);
 	COPY_SCALAR_FIELD(isCombineLookup);
+	COPY_SCALAR_FIELD(swStepFactor);
 
 	return newnode;
 }
@@ -2595,6 +2596,7 @@ _copySelectStmt(const SelectStmt *from)
 	COPY_NODE_FIELD(larg);
 	COPY_NODE_FIELD(rarg);
 	COPY_SCALAR_FIELD(forContinuousView);
+	COPY_SCALAR_FIELD(swStepFactor);
 
 	return newnode;
 }

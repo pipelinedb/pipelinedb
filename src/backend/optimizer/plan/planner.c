@@ -143,7 +143,7 @@ planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	if (parse->isContinuous)
 	{
 		result->is_continuous = true;
-		result->cq_id = parse->cq_id;
+		result->cq_id = parse->cqId;
 	}
 
 	return result;
