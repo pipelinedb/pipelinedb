@@ -69,7 +69,7 @@ class PipelineDB(object):
 
         self.engine = None
 
-    def run(self):
+    def run(self, params=None):
         """
         Runs a test instance of PipelineDB within our temporary directory on
         a free port
@@ -83,14 +83,19 @@ class PipelineDB(object):
         # PipelineDB to it
         sock.close()
 
-        self.proc = subprocess.Popen([SERVER, '-D', self.data_dir,
-                                      '-p', str(self.port),
-                                      '-c', 'synchronous_stream_insert=true',
-                                      '-c', 'continuous_query_num_combiners=2',
-                                      '-c', 'continuous_query_num_workers=4',
-                                      '-c', 'anonymous_update_checks=false',
-                                      '-c', 'continuous_query_max_wait=5'],
-                                     stderr=subprocess.PIPE)
+        cmd = [SERVER, '-D', self.data_dir,
+               '-p', str(self.port),
+               '-c', 'synchronous_stream_insert=true',
+               '-c', 'continuous_query_num_combiners=2',
+               '-c', 'continuous_query_num_workers=4',
+               '-c', 'anonymous_update_checks=false',
+               '-c', 'continuous_query_max_wait=5']
+
+        if params:
+          for key, value in params.iteritems():
+            cmd.extend(['-c', '%s=%s' % (key, value)])
+
+        self.proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
 
         # Wait for PipelineDB to start up
         while True:
