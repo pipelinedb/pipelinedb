@@ -251,10 +251,10 @@ View definition:
       Column       |           Type           | Modifiers | Storage  | Stats target | Description 
 -------------------+--------------------------+-----------+----------+--------------+-------------
  arrival_timestamp | timestamp with time zone |           | plain    |              | 
- _1                | text(0)                  |           | extended |              | 
+ _0                | text(0)                  |           | extended |              | 
  count             | bigint                   |           | plain    |              | 
 Indexes:
-    "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, _1))
+    "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, _0))
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate6');
@@ -263,7 +263,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate6');
   SELECT combine(cqcreate6_mrel0.count) AS count                                         +
     FROM cqcreate6_mrel0                                                                 +
    WHERE (cqcreate6_mrel0.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval))+
-   GROUP BY cqcreate6_mrel0._1;
+   GROUP BY cqcreate6_mrel0._0;
 (1 row)
 
 -- These use a combine state column

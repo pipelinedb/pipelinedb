@@ -5120,7 +5120,7 @@ DESCR("deserializer for numeric aggregation transition states");
 DATA(insert OID = 4309 (naggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ naggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for numeric aggregation transition states");
 
-DATA(insert OID = 4310 (arrayaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "2277" _null_ _null_ _null_ _null_ arrayaggstaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4310 (arrayaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ arrayaggstaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for array aggregation transition states");
 DATA(insert OID = 4311 (arrayaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ arrayaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for array aggregation transition states");
@@ -5414,8 +5414,8 @@ DATA(insert OID = 4394 ( cmsketch_total	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0
 DESCR("count-min sketch total");
 
 /* date_floor */
-DATA(insert OID = 4395 (  date_floor	   PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 1184 "1184 1186" _null_ _null_ _null_ _null_ timestamptz_floor _null_ _null_ _null_ ));
-DESCR("floor timestamp with time zone to specified interval");
+DATA(insert OID = 4395 (  date_round	   PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 1184 "1184 1186" _null_ _null_ _null_ _null_ timestamptz_round _null_ _null_ _null_ ));
+DESCR("round down timestamp with time zone to specified interval");
 
 /* filtered space saving */
 DATA(insert OID = 4396 ( fss_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5041 "2283 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
@@ -5454,6 +5454,9 @@ DATA(insert OID = 4409 ( pipeline_get_worker_querydef	   PGNSP PGUID 12 1 0 0 0 
 DESCR("gets query run by continuous query worker");
 DATA(insert OID = 4410 ( pipeline_get_combiner_querydef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ pipeline_get_combiner_querydef _null_ _null_ _null_ ));
 DESCR("gets query run by continuous query combiner");
+
+DATA(insert OID = 4411 ( hll_cache_cardinality	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "3998" _null_ _null_ _null_ _null_ hll_cache_cardinality _null_ _null_ _null_ ));
+DESCR("hyperloglog cache cardinality");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

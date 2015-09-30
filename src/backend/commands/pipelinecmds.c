@@ -392,7 +392,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ContAnalyzeContext *context;
 	ContinuousView *cv;
 	Oid cvid;
-	DefElem *max_age;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -421,13 +420,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CreateInferredStreams((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
-	/* if we have a WITH (max_age = ...), transform it into a WHERE arrival_timestamp ... predicate */
-	max_age = GetContinuousViewOption(stmt->into->options, OPTION_MAX_AGE);
-	if (max_age)
-	{
-		ApplyMaxAge((SelectStmt *) stmt->query, max_age);
-		stmt->into->options = list_delete(stmt->into->options, max_age);
-	}
+	/* Apply any CQ storage options like max_age, step_factor */
+	ApplyStorageOptions(stmt);
 
 	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
 
@@ -435,6 +429,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
 	cont_select_sql = deparse_query_def(cont_query);
 	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
+	cont_select->swStepFactor = ((SelectStmt *) stmt->query)->swStepFactor;
 	context = MakeContAnalyzeContext(NULL, cont_select, Worker);
 
 	/*
@@ -446,12 +441,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
 	tlist = query->targetList;
-
-	/*
-	 * Run it through the planner, so that if something goes wrong we know now
-	 * rather than finding out when the CV actually activates.
-	 */
-	pg_plan_queries(list_make1(query), 0, NULL);
 
 	/*
 	 * Build a list of columns from the SELECT statement that we
@@ -531,15 +520,16 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	indexoid = create_index_on_mat_relation(view, matreloid, matrel, query, context->is_sw);
 	record_dependencies(pqoid, matreloid, viewoid, indexoid, workerselect, query);
 
+	allowSystemTableMods = saveAllowSystemTableMods;
+
 	/*
-	 * Run the combiner queries through the planner, so that if something goes wrong we know now
-	 * rather than finding out when the CV actually activates.
+	 * Run the combiner and worker queries through the planner, so that if something goes wrong
+	 * we know now rather than at activate time.
 	 */
 	cv = GetContinuousView(cvid);
 	GetContPlan(cv, Combiner);
+	GetContPlan(cv, Worker);
 	GetCombinerLookupPlan(cv);
-
-	allowSystemTableMods = saveAllowSystemTableMods;
 
 	heap_close(pipeline_query, NoLock);
 

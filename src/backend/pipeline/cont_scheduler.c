@@ -448,7 +448,7 @@ run_background_proc(ContQueryProc *proc)
 
 	strcpy(worker.bgw_name, GetContQueryProcName(proc));
 
-	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
+	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION | BGWORKER_IS_CONT_QUERY_PROC;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	worker.bgw_main = cq_bgproc_main;
 	worker.bgw_notify_pid = MyProcPid;

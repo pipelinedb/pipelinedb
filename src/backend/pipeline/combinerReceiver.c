@@ -17,12 +17,17 @@
 #include "postgres.h"
 #include "pgstat.h"
 
+#include "catalog/pg_type.h"
+#include "access/htup_details.h"
 #include "access/printtup.h"
+#include "nodes/makefuncs.h"
+#include "parser/parse_type.h"
 #include "pipeline/combinerReceiver.h"
 #include "pipeline/tuplebuf.h"
 #include "miscadmin.h"
 #include "storage/shm_alloc.h"
 #include "utils/memutils.h"
+#include "utils/syscache.h"
 
 typedef struct
 {
@@ -30,6 +35,8 @@ typedef struct
 	TupleBufferBatchReader *reader;
 	Bitmapset *queries;
 	Oid cq_id;
+	FunctionCallInfo hash_fcinfo;
+	FuncExpr *hash;
 } CombinerState;
 
 static void
@@ -43,6 +50,30 @@ combiner_startup(DestReceiver *self, int operation,
 		TupleDesc typeinfo)
 {
 
+}
+
+static int64
+hash_group(TupleTableSlot *slot, CombinerState *state)
+{
+	ListCell *lc;
+	Datum result;
+	int i = 0;
+
+	foreach(lc, state->hash->args)
+	{
+		AttrNumber attno = ((Var *) lfirst(lc))->varattno;
+		bool isnull;
+		Datum d;
+
+		d = slot_getattr(slot, attno, &isnull);
+		state->hash_fcinfo->arg[i] = d;
+		state->hash_fcinfo->argnull[i] = isnull;
+		i++;
+	}
+
+	result = FunctionCallInvoke(state->hash_fcinfo);
+
+	return DatumGetInt64(result);
 }
 
 static void
@@ -115,6 +146,18 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	}
 
 	tup = MakeStreamTuple(ExecMaterializeSlot(slot), NULL, num_acks, acks);
+
+	if (c->hash_fcinfo)
+	{
+		/* shard by groups */
+		tup->group_hash = hash_group(slot, c);
+	}
+	else
+	{
+		/* shard by query id */
+		tup->group_hash = bms_singleton_member(c->queries);
+	}
+
 	tbs = TupleBufferInsert(CombinerTupleBuffer, tup, c->queries);
 
 	IncrementCQWrite(1, tbs->size);
@@ -128,6 +171,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 static void combiner_destroy(DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
+
 	bms_free(c->queries);
 	pfree(c);
 }
@@ -158,4 +202,28 @@ SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader
 	c->reader = reader;
 	c->cq_id = cq_id;
 	c->queries = bms_add_member(c->queries, cq_id);
+}
+
+/*
+ * SetCombinerDestReceiverHashFunc
+ *
+ * Initializes the hash function to use to determine which combiner should read a given tuple
+ */
+void
+SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash, MemoryContext context)
+{
+	CombinerState *c = (CombinerState *) self;
+	FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
+
+	fcinfo->flinfo = palloc0(sizeof(FmgrInfo));
+	fcinfo->flinfo->fn_mcxt = context;
+
+	fmgr_info(hash->funcid, fcinfo->flinfo);
+	fmgr_info_set_expr((Node *) hash, fcinfo->flinfo);
+
+	fcinfo->fncollation = hash->funccollid;
+	fcinfo->nargs = list_length(hash->args);
+
+	c->hash_fcinfo = fcinfo;
+	c->hash = hash;
 }

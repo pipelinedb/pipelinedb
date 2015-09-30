@@ -25,6 +25,5 @@ extern void CQMatRelClose(ResultRelInfo *rinfo);
 extern void ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot, EState *estate);
 extern bool ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
 extern void ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
-extern void matrel_heap_delete(Relation relation, ItemPointer tid);
 
 #endif

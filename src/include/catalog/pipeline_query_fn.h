@@ -24,12 +24,13 @@ typedef struct {
 	NameData name;
 	RangeVar *matrel;
 	char *query;
+	int sw_step_factor;
 	int32 hash;
 } ContinuousView;
 
 extern Oid DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc, bool adhoc, Oid *pq_id);
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
-extern char *GetQueryString(RangeVar *name);
+extern SelectStmt *GetContSelectStmt(RangeVar *rv);
 extern bool IsAContinuousView(RangeVar *name);
 extern bool ContainsSlidingWindowContinuousView(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);

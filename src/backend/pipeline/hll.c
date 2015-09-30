@@ -57,9 +57,12 @@
 
 #include "utils/memutils.h"
 
+#define HLL_USE_EXPLICIT 1
+
 #define HLL_DEFAULT_P 14
 #define HLL_BITS_PER_REGISTER 6
 #define HLL_REGISTER_MAX ((1 << HLL_BITS_PER_REGISTER) - 1)
+#define HLL_SPARSE_VAL_MAX_LEN 4
 
 /* Sparse representation
  * ===
@@ -300,8 +303,27 @@
 	*(p) = (((val) - 1) << 2 | ((len) - 1)) | HLL_SPARSE_VAL_BIT; \
 } while(0)
 
+/*
+ * Explicit representation
+ * ===
+ *
+ * The explicit representations encodes the registers explicitly in a sorted array. The array consists
+ * on contiguous 32-bit structures, where the most significant 24 bits encode the register number and
+ * the least significant 8 bits encode the number of leading zeros in that register.
+ *
+ */
+#define HLL_EXPLICIT_GET_NUM_LEADING(p) (*(uint32 *) (p) & 0x000000ff)
+#define HLL_EXPLICIT_GET_REGISTER(p) ((*(uint32 *) (p) >> 8) & 0x00ffffff)
+#define HLL_EXPLICIT_ENTRY_SIZE sizeof(uint32)
+#define HLL_EXPLICIT_SET_NUM_LEADING(p, val) do { \
+	*(uint32 *) (p) = (*(uint32 *) (p) & 0xffffff00) | ((val) & 0x000000ff); \
+} while(0)
+#define HLL_EXPLICIT_SET_REGISTER(p, reg) do { \
+	*((uint32 *) (p)) |= ((reg) << 8) & 0xffffff00; \
+} while(0)
+
 #define HLL_IS_DENSE(hll) ((hll)->encoding == HLL_DENSE_DIRTY || (hll)->encoding == HLL_DENSE_CLEAN)
-#define HLL_IS_CLEAN(hll) ((hll)->encoding == HLL_DENSE_CLEAN || (hll)->encoding == HLL_SPARSE_CLEAN)
+#define HLL_IS_CLEAN(hll) ((hll)->encoding == HLL_DENSE_CLEAN || (hll)->encoding == HLL_SPARSE_CLEAN || (hll)->encoding == HLL_EXPLICIT_CLEAN)
 
 #define MURMUR_SEED 0xbee5bf4112801383L
 
@@ -400,45 +422,39 @@ num_leading_zeroes(HyperLogLog *hll, void *elem, Size size, int *m)
 }
 
 static HyperLogLog *
-hll_dense_add(HyperLogLog *hll, void *elem, Size size, int *result)
+hll_dense_add_internal(HyperLogLog *hll, int m, uint8 leading, int *result)
 {
   uint8 oldleading;
-  uint8 leading;
-  int index;
 
-  /* update the register if this element produced a longer run of zeroes */
-  leading = num_leading_zeroes(hll, elem, size, &index);
-
-  HLL_DENSE_GET_REGISTER(oldleading, hll->M, index);
+  HLL_DENSE_GET_REGISTER(oldleading, hll->M, m);
   if (leading > oldleading)
   {
-		HLL_DENSE_SET_REGISTER(hll->M, index, leading);
-
+		HLL_DENSE_SET_REGISTER(hll->M, m, leading);
 		*result = 1;
   }
   else
-  {
 		*result = 0;
-  }
 
   return hll;
 }
 
-/*
- * sparse_add
- *
- * Adds an element to the given HLL using the sparse representation
- */
 static HyperLogLog *
-hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
+hll_dense_add(HyperLogLog *hll, void *elem, Size size, int *result)
 {
 	int m;
-	int leading;
+	uint8 leading = num_leading_zeroes(hll, elem, size, &m);
+	return hll_dense_add_internal(hll, m, leading, result);
+}
+
+static HyperLogLog *
+hll_sparse_add_internal(HyperLogLog *hll, int m, uint8 leading, int *result, bool realloc)
+{
 	uint8 oldleading;
 	uint8 *sparse;
 	uint8 *end;
 	uint8 *pos;
 	uint8 *next;
+	uint8 *prev;
 	long first;
 	long span;
 	bool iszero = false;
@@ -452,22 +468,25 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
   int seqlen;
   int oldlen;
   int deltalen;
-
-	leading = num_leading_zeroes(hll, elem, size, &m);
+  int scanlen;
 
 	if (leading > 32)
 	{
 		/* the sparse representation can only represent 32-bit cardinalities */
 		hll = hll_sparse_to_dense(hll);
-
-		return hll_dense_add(hll, elem, size, result);
+		return hll_dense_add_internal(hll, m, leading, result);
 	}
 
-  /*
-   * When updating a sparse representation, we may need to enlarge
-   * the buffer by 3 bytes in the worst case (XZERO split into XZERO-VAL-XZERO)
-   */
-	hll = repalloc(hll, HLLSize(hll) + 3);
+
+	/*
+	 * When updating a sparse representation, we may need to enlarge
+	 * the buffer by 3 bytes in the worst case (XZERO split into XZERO-VAL-XZERO)
+	 *
+	 * In case of upgrading an explicit to sparse representation, we already preallocate enough space that
+	 * we never need to perform this reallocation.
+	 */
+	if (realloc)
+		hll = repalloc(hll, HLLSize(hll) + 3);
 
   /*
    * Step 1:
@@ -480,6 +499,7 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 	end = sparse + hll->mlen;
 
   first = 0;
+  prev = NULL; /* points to previous opcode at the end of the loop. */
   next = NULL; /* points to the next opcode at the end of the loop. */
   span = 0;
 
@@ -508,6 +528,7 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		if (m <= first + span - 1)
 			break;
 
+		prev = pos;
 		pos += oplen;
 		first += span;
   }
@@ -567,7 +588,6 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		if (oldleading >= leading)
 		{
 			*result = 0;
-
 			return hll;
 		}
 
@@ -575,12 +595,8 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		if (runlen == 1)
 		{
 			HLL_SPARSE_VAL_SET(pos, leading, 1);
-			hll->encoding = HLL_SPARSE_DIRTY;
+			goto updated;
 		}
-
-		*result = 1;
-
-		return hll;
   }
 
   /*
@@ -590,11 +606,7 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
   if (iszero && runlen == 1)
   {
 		HLL_SPARSE_VAL_SET(pos, leading, 1);
-		hll->encoding = HLL_SPARSE_DIRTY;
-
-		*result = 1;
-
-		return hll;
+		goto updated;
   }
 
   /*
@@ -685,24 +697,252 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 	if (deltalen > 0 && hll->mlen + deltalen > HLL_MAX_SPARSE_BYTES)
 	{
 		hll = hll_sparse_to_dense(hll);
-
-		return hll_dense_add(hll, elem, size, result);
+		return hll_dense_add_internal(hll, m, leading, result);
 	}
 
   /* we already repalloc'd enough space to do this */
 	if (deltalen && next)
 	 memmove(next + deltalen, next, end - next);
 
-	hll = repalloc(hll, HLLSize(hll) + deltalen);
-
 	memcpy(pos, seq, seqlen);
+	hll->mlen += deltalen;
+	end += deltalen;
+
+updated:
+	/*
+	 * Step 4: Merge adjacent values if possible.
+	 *
+	 * The representation was updated, however the resulting representation
+	 * may not be optimal: adjacent VAL opcodes can sometimes be merged into
+	 * a single one.
+	 */
+	pos = prev ? prev : sparse;
+	scanlen = 5; /* Scan up to 5 upcodes starting from prev. */
+	while (pos < end && scanlen--)
+	{
+		if (HLL_SPARSE_IS_XZERO(pos))
+		{
+			pos += 2;
+			continue;
+		}
+		else if (HLL_SPARSE_IS_ZERO(pos))
+		{
+			pos++;
+			continue;
+		}
+
+		/*
+		 * We need two adjacent VAL opcodes to try a merge, having
+		 * the same value, and a len that fits the VAL opcode max len.
+		 */
+		if (pos + 1 < end && HLL_SPARSE_IS_VAL(pos + 1))
+		{
+			int v1 = HLL_SPARSE_VAL_VALUE(pos);
+			int v2 = HLL_SPARSE_VAL_VALUE(pos + 1);
+
+			if (v1 == v2)
+			{
+				int len = HLL_SPARSE_VAL_LEN(pos) + HLL_SPARSE_VAL_LEN(pos + 1);
+
+				if (len <= HLL_SPARSE_VAL_MAX_LEN)
+				{
+					HLL_SPARSE_VAL_SET(pos + 1, v1, len);
+					memmove(pos, pos + 1, end - pos);
+					hll->mlen--;
+					end--;
+
+					/*
+					 * After a merge we reiterate without incrementing 'p'
+					 * in order to try to merge the just merged value with
+					 * a value on its right.
+					 */
+					continue;
+				}
+			}
+		}
+
+		pos++;
+	}
 
 	hll->encoding = HLL_SPARSE_DIRTY;
-	hll->mlen += deltalen;
+	*result = 1;
+	return hll;
+}
 
+/*
+ * hll_sparse_add
+ *
+ * Adds an element to the given HLL using the sparse representation
+ */
+static HyperLogLog *
+hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
+{
+	int m;
+	uint8 leading = num_leading_zeroes(hll, elem, size, &m);
+	return hll_sparse_add_internal(hll, m, leading, result, true);
+}
+
+static HyperLogLog *
+hll_explicit_to_sparse(HyperLogLog *hll)
+{
+	uint8 *pos, *end;
+	int m = 1 << hll->p;
+	int result;
+	int mlen = Max(2, 2 * m / HLL_SPARSE_XZERO_MAX_LEN);
+	/*
+	 * In worst case we'll need 1 XZERO and 1 VAL opcodes for each register and a terminal XZERO
+	 * for each register we're going to insert.
+	 */
+	HyperLogLog *sparse = palloc(sizeof(HyperLogLog) + (3 * HLL_EXPLICIT_GET_NUM_REGISTERS(hll) + 2));
+
+	/* Initialize an *empty* sparse HLL */
+	sparse->p = hll->p;
+	sparse->encoding = HLL_SPARSE_CLEAN;
+	sparse->mlen = mlen;
+
+	pos = sparse->M;
+
+	while (m)
+	{
+		int xzero = Min(HLL_SPARSE_XZERO_MAX_LEN, m);
+		HLL_SPARSE_XZERO_SET(pos, xzero);
+		pos += 2;
+		m -= xzero;
+	}
+
+	/* Insert all non-zero registers into the sparse HLL */
+	pos = hll->M;
+	end = hll->M + hll->mlen;
+
+	while (pos < end)
+	{
+		/*
+		 * Pass the realloc flag as false, so we don't needlessly keep on reallocating
+		 * on each addition
+		 */
+		sparse = hll_sparse_add_internal(sparse, HLL_EXPLICIT_GET_REGISTER(pos),
+				HLL_EXPLICIT_GET_NUM_LEADING(pos), &result, false);
+		pos += HLL_EXPLICIT_ENTRY_SIZE;
+	}
+
+	return sparse;
+}
+
+static HyperLogLog *
+hll_explicit_add_internal(HyperLogLog *hll, int reg, uint8 leading, int *result)
+{
+	uint8 *pos = hll->M;
+	uint8 *end = hll->M + hll->mlen;
+	bool found = false;
+	int skipped = 0;
+
+	Assert(hll->mlen % 4 == 0);
+
+	if (HLL_EXPLICIT_GET_NUM_REGISTERS(hll) >= HLL_MAX_EXPLICIT_REGISTERS)
+	{
+		hll = hll_explicit_to_sparse(hll);
+		return hll_sparse_add_internal(hll, reg, leading, result, true);
+	}
+
+	/*
+	 * We store explicit registers in sorted order, so use an insertion sort like procedure to find the
+	 * register we're looking for.
+	 */
+	while (pos < end)
+	{
+		int curr_reg = HLL_EXPLICIT_GET_REGISTER(pos);
+
+		if (curr_reg < reg)
+		{
+			pos += HLL_EXPLICIT_ENTRY_SIZE;
+			skipped++;
+			continue;
+		}
+
+		if (curr_reg == reg)
+		{
+			if (leading <= HLL_EXPLICIT_GET_NUM_LEADING(pos))
+			{
+				*result = 0;
+				return hll;
+			}
+
+			HLL_EXPLICIT_SET_NUM_LEADING(pos, leading);
+			found = true;
+			break;
+		}
+
+		/* Register needs to be added. */
+		if (MemoryContextContains(CurrentMemoryContext, hll))
+			hll = repalloc(hll, HLLSize(hll) + 4);
+		else
+		{
+			HyperLogLog *new = palloc(HLLSize(hll) + 4);
+			memcpy(new, hll, HLLSize(hll));
+			hll = new;
+		}
+		pos = hll->M + (HLL_EXPLICIT_ENTRY_SIZE * skipped);
+		end = hll->M + hll->mlen;
+		memmove(pos + HLL_EXPLICIT_ENTRY_SIZE, pos, end - pos);
+		*(uint32 *) pos = 0;
+		HLL_EXPLICIT_SET_REGISTER(pos, reg);
+		HLL_EXPLICIT_SET_NUM_LEADING(pos, leading);
+		hll->mlen += HLL_EXPLICIT_ENTRY_SIZE;
+		found = true;
+		break;
+	}
+
+	/* Didn't find a place to put the register? Stick it at the end. */
+	if (!found)
+	{
+		if (MemoryContextContains(CurrentMemoryContext, hll))
+			hll = repalloc(hll, HLLSize(hll) + HLL_EXPLICIT_ENTRY_SIZE);
+		else
+		{
+			HyperLogLog *new = palloc(HLLSize(hll) + HLL_EXPLICIT_ENTRY_SIZE);
+			memcpy(new, hll, HLLSize(hll));
+			hll = new;
+		}
+		end = hll->M + hll->mlen;
+		*(uint32 *) end = 0;
+		HLL_EXPLICIT_SET_REGISTER(end, reg);
+		HLL_EXPLICIT_SET_NUM_LEADING(end, leading);
+		hll->mlen += HLL_EXPLICIT_ENTRY_SIZE;
+	}
+
+	hll->encoding = HLL_EXPLICIT_DIRTY;
 	*result = 1;
 
 	return hll;
+}
+
+static HyperLogLog *
+hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
+{
+	int m;
+	uint8 leading = num_leading_zeroes(hll, elem, size, &m);
+	return hll_explicit_add_internal(hll, m, leading, result);
+}
+
+static double
+hll_explicit_sum(HyperLogLog *hll, double *PE, int *ezp)
+{
+	int m = 1 << hll->p;
+	int ez = m - HLL_EXPLICIT_GET_NUM_REGISTERS(hll);
+	double E = 0;
+	uint8 *pos = hll->M;
+	uint8 *end = hll->M + hll->mlen;
+
+	while (pos < end)
+	{
+		E += PE[HLL_EXPLICIT_GET_NUM_LEADING(pos)];
+		pos += HLL_EXPLICIT_ENTRY_SIZE;
+	}
+
+	E += ez;
+	*ezp = ez;
+
+	return E;
 }
 
 static double
@@ -830,13 +1070,22 @@ HLLCreateWithP(int p)
 	Size size;
 	HyperLogLog *hll;
 	uint8 *pos;
-	int mlen;
+	int mlen = 0;
 
 	/*
-	 * We can represent 1 << 14 registers with every two bytes
-	 * of the sparse representation.
+	 * If HLL_USE_EXPLICIT is on, we initialize an empty HLL in the EXPLICIT
+	 * representation, otherwise we initialize an empty HLL in the SPARSE representation.
 	 */
-	mlen = Max(2, 2 * m / HLL_SPARSE_XZERO_MAX_LEN);
+	if (!HLL_USE_EXPLICIT)
+	{
+		/*
+		 * We can represent 1 << 14 registers with every two bytes
+		 * of the sparse representation.
+		 */
+		mlen = Max(2, 2 * m / HLL_SPARSE_XZERO_MAX_LEN);
+	}
+
+
 	size = sizeof(HyperLogLog) + mlen;
 
 	hll = palloc0(size);
@@ -844,14 +1093,20 @@ HLLCreateWithP(int p)
 	hll->encoding = HLL_SPARSE_CLEAN;
 	hll->mlen = mlen;
 
-	pos = hll->M;
-
-	while (remaining)
+	if (HLL_USE_EXPLICIT)
+		hll->encoding = HLL_EXPLICIT_CLEAN;
+	else
 	{
-		int xzero = Min(m, remaining);
-		HLL_SPARSE_XZERO_SET(pos, xzero);
-		pos += 2;
-		remaining -= xzero;
+		hll->encoding = HLL_SPARSE_CLEAN;
+		pos = hll->M;
+
+		while (remaining)
+		{
+			int xzero = Min(HLL_SPARSE_XZERO_MAX_LEN, remaining);
+			HLL_SPARSE_XZERO_SET(pos, xzero);
+			pos += 2;
+			remaining -= xzero;
+		}
 	}
 
 	return hll;
@@ -869,31 +1124,6 @@ HLLCreate(void)
 }
 
 /*
- * HLLCreateFromRaw
- *
- * Creates a HyperLogLog with the given raw data
- */
-HyperLogLog *
-HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding)
-{
-	Size size;
-	HyperLogLog *hll;
-
-	size = sizeof(HyperLogLog) + mlen;
-
-	hll = palloc0(size);
-	hll->p = p;
-	hll->encoding = encoding;
-	hll->mlen = mlen;
-
-	memcpy(hll->M, M, mlen);
-
-	hll->encoding = HLL_IS_SPARSE(hll) ? HLL_SPARSE_DIRTY : HLL_DENSE_DIRTY;
-
-	return hll;
-}
-
-/*
  * HLLCopy
  *
  * Creates a copy of the given HLL
@@ -901,7 +1131,10 @@ HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding)
 HyperLogLog *
 HLLCopy(HyperLogLog *src)
 {
-	return HLLCreateFromRaw(src->M, src->mlen, src->p, src->encoding);
+	Size size = HLLSize(src);
+	HyperLogLog *new = palloc(size);
+	memcpy((char *) new, (char *) src, size);
+	return new;
 }
 
 /*
@@ -913,14 +1146,18 @@ HyperLogLog *
 HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result)
 {
 	HyperLogLog *ret;
-	if (HLL_IS_SPARSE(hll))
+
+	if (HLL_IS_EXPLICIT(hll))
+		ret = hll_explicit_add(hll, elem, len, result);
+	else if (HLL_IS_SPARSE(hll))
 		ret = hll_sparse_add(hll, elem, len, result);
 	else
 		ret = hll_dense_add(hll, elem, len, result);
 
 	/* if the cardinality changed, invalidate the cached cardinality */
 	if (*result)
-		ret->encoding = HLL_IS_SPARSE(ret) ? HLL_SPARSE_DIRTY : HLL_DENSE_DIRTY;
+		ret->encoding =	HLL_IS_SPARSE(ret) ? HLL_SPARSE_DIRTY :
+				(HLL_IS_DENSE(ret) ? HLL_DENSE_DIRTY : HLL_EXPLICIT_DIRTY);
 
 	return ret;
 }
@@ -969,10 +1206,15 @@ HLLCardinality(HyperLogLog *hll)
 		E = hll_dense_sum(hll, PE, &ez);
 		hll->encoding = HLL_DENSE_CLEAN;
   }
-  else
+  else if (HLL_IS_SPARSE(hll))
   {
 		E = hll_sparse_sum(hll, PE, &ez);
 		hll->encoding = HLL_SPARSE_CLEAN;
+  }
+  else
+  {
+		E = hll_explicit_sum(hll, PE, &ez);
+		hll->encoding = HLL_EXPLICIT_CLEAN;
   }
 
   E = (1 / E) * alpha * m * m;
@@ -1015,20 +1257,13 @@ HLLCardinality(HyperLogLog *hll)
   return hll->card;
 }
 
-/*
- * HLLUnion
- *
- * Returns the lossless union of multiple HyperLogLogs
- */
-HyperLogLog *
-HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
+static HyperLogLog *
+hll_dense_union(HyperLogLog *result, HyperLogLog *incoming)
 {
-  int reg;
-  int m = (1 << result->p);
+	int reg;
+	int m = (1 << result->p);
 
-  /* results always use the dense representation */
-  if (HLL_IS_SPARSE(result))
-		result = hll_sparse_to_dense(result);
+	Assert(HLL_IS_DENSE(result));
 
 	if (HLL_IS_DENSE(incoming))
 	{
@@ -1043,7 +1278,7 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 			HLL_DENSE_SET_REGISTER(result->M, reg, Max(r0, r1));
 		}
 	}
-  else
+	else if (HLL_IS_SPARSE(incoming))
 	{
 		/* run-length encoded, read every non-zero register value */
 		uint8 *pos = incoming->M;
@@ -1082,8 +1317,120 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 			}
 		}
 	}
+	else
+	{
+		/* explicit encoding, iterate through all registers */
+		uint8 *pos = incoming->M;
+		uint8 *end = incoming->M + incoming->mlen;
 
-  result->encoding = HLL_DENSE_DIRTY;
+		while (pos < end)
+		{
+			int reg = HLL_EXPLICIT_GET_REGISTER(pos);
+			uint8 r0 = HLL_EXPLICIT_GET_NUM_LEADING(pos);
+			uint8 r1;
 
-  return result;
+			HLL_DENSE_GET_REGISTER(r1, result->M, reg);
+			HLL_DENSE_SET_REGISTER(result->M, reg, Max(r0, r1));
+
+			pos += HLL_EXPLICIT_ENTRY_SIZE;
+		}
+	}
+
+	result->encoding = HLL_DENSE_DIRTY;
+
+	return result;
+}
+
+static HyperLogLog *
+hll_explicit_union(HyperLogLog *result, HyperLogLog *incoming)
+{
+	uint8 *pos = incoming->M;
+	uint8 *end = incoming->M + incoming->mlen;
+	int r;
+
+	Assert(HLL_IS_EXPLICIT(result) && HLL_IS_EXPLICIT(incoming));
+
+	while (pos < end)
+	{
+		int reg = HLL_EXPLICIT_GET_REGISTER(pos);
+		uint8 leading = HLL_EXPLICIT_GET_NUM_LEADING(pos);
+
+		/*
+		 * The result HLL can upgrade during these additions so we need to consider
+		 * all denser representations.
+		  */
+		if (HLL_IS_EXPLICIT(result))
+			result = hll_explicit_add_internal(result, reg, leading, &r);
+		else if (HLL_IS_SPARSE(result))
+			result = hll_sparse_add_internal(result, reg, leading, &r, true);
+		else
+			result = hll_dense_add_internal(result, reg, leading, &r);
+
+		pos += HLL_EXPLICIT_ENTRY_SIZE;
+	}
+
+	return result;
+}
+
+static HyperLogLog *
+hll_sparse_union(HyperLogLog *result, HyperLogLog *incoming)
+{
+	uint8 *pos = incoming->M;
+	uint8 *end = incoming->M + incoming->mlen;
+	int r;
+
+	Assert(HLL_IS_SPARSE(result) && HLL_IS_EXPLICIT(incoming));
+
+	while (pos < end)
+	{
+		int reg = HLL_EXPLICIT_GET_REGISTER(pos);
+		uint8 leading = HLL_EXPLICIT_GET_NUM_LEADING(pos);
+
+		/*
+		 * The result HLL can upgrade during these additions so we need to consider
+		 * all denser representations.
+		  */
+		if (HLL_IS_SPARSE(result))
+			result = hll_sparse_add_internal(result, reg, leading, &r, true);
+		else
+			result = hll_dense_add_internal(result, reg, leading, &r);
+
+		pos += HLL_EXPLICIT_ENTRY_SIZE;
+	}
+
+	return result;
+}
+
+/*
+ * HLLUnion
+ *
+ * Returns the lossless union of multiple HyperLogLogs
+ *
+ * This function can be potentially slow, but is optimized to run fast
+ * for continuous queries and will try to upgrade to denser representations
+ * as lazily as possible.
+ */
+HyperLogLog *
+HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
+{
+	/* EXPLICIT + EXPLICIT */
+	if (HLL_IS_EXPLICIT(result) && HLL_IS_EXPLICIT(incoming))
+		return hll_explicit_union(result, incoming);
+
+	/* SPARSE + EXPLICIT */
+	/* TODO(usmanm): Add SPARSE || SPARSE support */
+	if (HLL_IS_SPARSE(result) && HLL_IS_EXPLICIT(incoming))
+		return hll_sparse_union(result, incoming);
+
+	/*
+	 * We don't support any other unions for now, so just upgrade result
+	 * to the DENSE representation.
+	 */
+	if (HLL_IS_EXPLICIT(result))
+		result = hll_explicit_to_sparse(result);
+	if (HLL_IS_SPARSE(result))
+		result = hll_sparse_to_dense(result);
+
+	/* DENSE + (DENSE | SPARSE | EXPLICIT) */
+	return hll_dense_union(result, incoming);
 }

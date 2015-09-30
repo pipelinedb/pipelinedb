@@ -441,15 +441,6 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 	BlockNumber next_not_all_visible_block;
 	bool		skipping_all_visible_blocks;
 	xl_heap_freeze_tuple *frozen;
-	SWVacuumContext *cqvcontext = CreateSWVacuumContext(onerel);
-
-	/*
-	 * We need to do a full scan if it's a sliding-window continuous view,
-	 * as we need to check for out-of-window tuples that may exist within
-	 * all-visible pages.
-	 */
-	if (cqvcontext != NULL)
-		scan_all = true;
 
 	pg_rusage_init(&ru0);
 
@@ -899,23 +890,6 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 					break;
 			}
 
-			/*
-			 * Collect all expired SW tuples and mark them as deleted once the scan over the page is over.
-			 * They will be vacuumed in the next cycle.
-			 */
-			if (!tupgone && ShouldVacuumSWTuple(cqvcontext, &tuple))
-			{
-				ItemPointer item = (ItemPointer) palloc0(sizeof(ItemPointerData));
-
-				/*
-				 * We need our own copy of this, because tuple.t_self is reset after each
-				 * iteration of the loop, but we need to process all of these after the
-				 * loop terminates.
-				 */
-				ItemPointerSet(item, blkno, offnum);
-				cqvcontext->expired = lappend(cqvcontext->expired, item);
-			}
-
 			if (tupgone)
 			{
 				lazy_record_dead_tuple(vacrelstats, &(tuple.t_self));
@@ -1058,19 +1032,6 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 
 		UnlockReleaseBuffer(buf);
 
-		/* Delete all tuples that have expired from the SW */
-		if (cqvcontext && cqvcontext->expired)
-		{
-			ListCell *lc;
-			foreach(lc, cqvcontext->expired)
-			{
-				ItemPointer item = (ItemPointer) lfirst(lc);
-				matrel_heap_delete(onerel, item);
-			}
-			list_free_deep(cqvcontext->expired);
-			cqvcontext->expired = NIL;
-		}
-
 		/* Remember the location of the last page with nonremovable tuples */
 		if (hastup)
 			vacrelstats->nonempty_pages = blkno + 1;
@@ -1086,7 +1047,6 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 			RecordPageWithFreeSpace(onerel, blkno, freespace);
 	}
 
-	FreeSWVacuumContext(cqvcontext);
 	pfree(frozen);
 
 	/* save stats for use later */

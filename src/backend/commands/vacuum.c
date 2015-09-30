@@ -36,6 +36,7 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/sw_vacuum.h"
 #include "postmaster/autovacuum.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
@@ -1126,6 +1127,9 @@ vacuum_rel(Oid relid, VacuumStmt *vacstmt, bool do_toast, bool for_wraparound)
 	Oid			save_userid;
 	int			save_sec_context;
 	int			save_nestlevel;
+
+	/* If this is a matrel for a SW continuous view, delete all expired tuples */
+	DeleteSWExpiredTuples(relid);
 
 	/* Begin a transaction for vacuuming this relation */
 	StartTransactionCommand();

@@ -23,6 +23,7 @@
 #include "pipeline/combinerReceiver.h"
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/tuplebuf.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"
@@ -47,6 +48,8 @@ typedef struct {
 	MemoryContext state_cxt;
 	MemoryContext tmp_cxt;
 	CQStatEntry stats;
+	AttrNumber *groupatts;
+	FuncExpr *hashfunc;
 } ContQueryWorkerState;
 
 /*
@@ -120,6 +123,43 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 	UnregisterSnapshotFromOwner(state->query_desc->snapshot, owner);
 	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, owner);
 	state->query_desc->snapshot = NULL;
+
+	if (IsA(state->query_desc->plannedstmt->planTree, Agg))
+	{
+		Agg *agg = (Agg *) state->query_desc->plannedstmt->planTree;
+		Relation matrel;
+		ResultRelInfo *ri;
+
+		state->groupatts = agg->grpColIdx;
+
+		matrel = heap_openrv_extended(state->view->matrel, NoLock, true);
+
+		if (matrel == NULL)
+		{
+			state->view = NULL;
+			return;
+		}
+
+		ri = CQMatRelOpen(matrel);
+
+		if (agg->numCols)
+		{
+			FuncExpr *hash = GetGroupHashIndexExpr(agg->numCols, ri);
+			if (hash == NULL)
+			{
+				/* matrel has been dropped */
+				state->view = NULL;
+				CQMatRelClose(ri);
+				heap_close(matrel, NoLock);
+				return;
+			}
+
+			SetCombinerDestReceiverHashFunc(state->dest, hash, CurrentMemoryContext);
+		}
+
+		CQMatRelClose(ri);
+		heap_close(matrel, NoLock);
+	}
 
 	set_reader(state->query_desc->planstate, reader);
 
@@ -421,6 +461,11 @@ ContinuousQueryWorkerMain(void)
 
 				if (!continuous_query_crash_recovery)
 					exit(1);
+
+				AbortCurrentTransaction();
+				StartTransactionCommand();
+
+				MemoryContextSwitchTo(ContQueryBatchContext);
 			}
 			PG_END_TRY();
 

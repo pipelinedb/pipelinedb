@@ -17,5 +17,6 @@
 
 extern DestReceiver *CreateCombinerDestReceiver(void);
 extern void SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader, Oid cq_id);
+extern void SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash, MemoryContext context);
 
 #endif

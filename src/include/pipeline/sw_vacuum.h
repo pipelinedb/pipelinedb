@@ -20,17 +20,7 @@
 #include "pgstat.h"
 #include "utils/relcache.h"
 
-typedef struct SWVacuumContext
-{
-	TupleTableSlot *slot;
-	ExprContext *econtext;
-	List *predicate;
-	List *expired;
-} SWVacuumContext;
-
-extern uint64_t NumSWVacuumTuples(Oid relid);
-extern SWVacuumContext *CreateSWVacuumContext(Relation relation);
-extern void FreeSWVacuumContext(SWVacuumContext *context);
-extern bool ShouldVacuumSWTuple(SWVacuumContext *context, HeapTuple tuple);
+extern uint64_t NumSWExpiredTuples(Oid relid);
+extern void DeleteSWExpiredTuples(Oid relid);
 
 #endif /* SW_VACUUM_H */

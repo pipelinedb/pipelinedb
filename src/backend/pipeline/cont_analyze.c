@@ -38,6 +38,7 @@
 #include "parser/parse_collate.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_node.h"
+#include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/cont_analyze.h"
@@ -52,8 +53,10 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
+int sliding_window_step_factor;
+
 #define CLOCK_TIMESTAMP "clock_timestamp"
-#define DATE_FLOOR "date_floor"
+#define DATE_ROUND "date_round"
 #define DATE_TRUNC "date_trunc"
 #define DATE_TRUNC_YEAR "year"
 #define DATE_TRUNC_MONTH "month"
@@ -148,6 +151,32 @@ get_streaming_agg(FuncCall *fn)
 	return NULL;
 }
 
+/*
+ * get_inv_streaming_agg
+ */
+char *
+get_inv_streaming_agg(char *name, bool *is_distinct)
+{
+	int i;
+	int len = sizeof(StreamingVariants) / sizeof(char *) / 2;
+
+	for (i = 0; i < len; i++)
+	{
+		char *k = StreamingVariants[i][0];
+		char *v = StreamingVariants[i][1];
+
+		if (pg_strcasecmp(v, name) == 0)
+		{
+			if (is_distinct && pg_strcasecmp(v, "hll_count_distinct") == 0)
+				*is_distinct = true;
+
+			return k;
+		}
+	}
+
+	return name;
+}
+
 static bool
 has_clock_timestamp(Node *node, void *context)
 {
@@ -222,9 +251,8 @@ MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType
 	 * Collect any column names being used, so we don't clobber them when generating
 	 * internal column names for the materialization table.
 	 */
-	collect_column_names((Node *) select, context);
+	collect_column_names((Node *) select->targetList, context);
 
-	context->combine = select->forCombiner;
 	context->is_sw = has_clock_timestamp(select->whereClause, NULL);
 	context->proc_type = type;
 
@@ -486,28 +514,71 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 	return raw_expression_tree_walker(node, find_clock_timestamp_expr, (void *) context);
 }
 
-static char *
-get_truncation_from_interval_expr(Node *node)
+static Node *
+get_truncation_from_interval(SelectStmt *select, Node *time, Node *interval)
 {
-	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), node, EXPR_KIND_WHERE);
+	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), interval, EXPR_KIND_WHERE);
 	Const *c;
-	Interval *i;
+	Interval *window;
 
 	Assert(IsA(expr, Const));
 	c = (Const *) expr;
-	Assert(c->consttype == INTERVALOID);
 
-	i = (Interval *) c->constvalue;
+	Assert(c->consttype == INTERVALOID);
+	window = (Interval *) c->constvalue;
+
+#ifdef HAVE_INT64_TIMESTAMP
+{
+	FuncCall *func;
+	Interval *step;
+	Interval min_step;
+	float8 factor = select->swStepFactor / (float8) 100.0;
+	int cmp;
+	char *step_str;
+	A_Const *step_const;
+
+	MemSet(&min_step, 0, sizeof(Interval));
+	min_step.time = 1000 * 1000;
+
+	/* We make the step size some percentage of the total window width */
+	step = (Interval *) DirectFunctionCall2(interval_mul, PointerGetDatum(window), Float8GetDatum(factor));
+	cmp = (Datum) DirectFunctionCall2(interval_cmp, (Datum) step, (Datum) &min_step);
+	if (DatumGetInt32(cmp) < 0)
+		step = &min_step;
+
+	step_str = (char *) DirectFunctionCall1(interval_out, (Datum) step);
+	step_const = makeNode(A_Const);
+	step_const->val = *makeString(step_str);
+
+	func = makeNode(FuncCall);
+	func->funcname = list_make1(makeString(DATE_ROUND));
+	func->args = list_make2(time, step_const);
+
+	return (Node *) func;
+}
+/* No int64 timestamp support? Resort to lame duck truncation approach */
+#else
+{
+	Const *c;
+	FuncCall *func = makeNode(FuncCall);
+	char *name;
 
 	/* We make the step size one unit smaller than the granularity of the window size unit */
-	if (i->month)
-		return DATE_TRUNC_DAY;
-	else if (i->day)
-		return DATE_TRUNC_HOUR;
-	else if (i->time >= HOUR_USEC)
-		return DATE_TRUNC_MINUTE;
+	if (window->month)
+		name = DATE_TRUNC_DAY;
+	else if (window->day)
+		name = DATE_TRUNC_HOUR;
+	else if (window->time >= HOUR_USEC)
+		name = DATE_TRUNC_MINUTE;
+	else
+		name = DATE_TRUNC_SECOND;
 
-	return DATE_TRUNC_SECOND;
+	func->funcname = list_make1(makeString(name));
+	func->args = list_make1(time);
+
+	return (Node *) func;
+}
+#endif
 }
 
 static ColumnRef *
@@ -541,7 +612,7 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 			FuncCall *fc = (FuncCall *) col;
 			char *name = NameListToString(fc->funcname);
 
-			if (!(pg_strcasecmp(name, DATE_FLOOR) == 0 ||
+			if (!(pg_strcasecmp(name, DATE_ROUND) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
@@ -1714,6 +1785,26 @@ get_unique_colname(ContAnalyzeContext *context)
 {
 	StringInfoData colname;
 
+	/* If hoisted name isn't used already, return that */
+	if (context->hoisted_name)
+	{
+		ListCell *lc;
+		bool exists = false;
+
+		foreach(lc, context->colnames)
+		{
+			char *colname2 = lfirst(lc);
+			if (pg_strcasecmp(context->hoisted_name, colname2) == 0)
+			{
+				exists = true;
+				break;
+			}
+		}
+
+		if (!exists)
+			return context->hoisted_name;
+	}
+
 	initStringInfo(&colname);
 
 	while (true)
@@ -1864,8 +1955,6 @@ hoist_node(List **target_list, Node *node, ContAnalyzeContext *context)
 	if (rt == NULL)
 	{
 		rt = create_unique_res_target(node, context);
-		if (context->hoisted_name)
-			rt->name = context->hoisted_name;
 		*target_list = lappend(*target_list, rt);
 	}
 
@@ -1967,7 +2056,7 @@ make_distincts_explicit(SelectStmt *stmt, ContAnalyzeContext *context)
 }
 
 static bool
-truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
+truncate_timestamp_field(SelectStmt *select, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
 	ListCell *lc;
 	bool truncated = false;
@@ -1980,7 +2069,7 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 		FuncCall *fc = lfirst(lc);
 		char *name = NameListToString(fc->funcname);
 
-		if (pg_strcasecmp(name, DATE_FLOOR) == 0 ||
+		if (pg_strcasecmp(name, DATE_ROUND) == 0 ||
 				pg_strcasecmp(name, DATE_TRUNC) ||
 				pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 				pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
@@ -1996,28 +2085,32 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 
 	if (!truncated)
 	{
-		FuncCall *func = makeNode(FuncCall);
-		func->args = list_make1(copyObject(time));
-
 		/* For sliding windows we try to keep around a certain "fan in" threshold */
 		if (sw_expr)
 		{
 			A_Expr *ct_expr;
-			char *fname;
 
 			if (equal(sw_expr->lexpr, time))
 				ct_expr = (A_Expr *) sw_expr->rexpr;
 			else
 				ct_expr = (A_Expr *) sw_expr->lexpr;
 
-			fname = get_truncation_from_interval_expr(ct_expr->rexpr);
-			func->funcname = list_make1(makeString(fname));
+			/* Fix default step size hint hack */
+			if (select->swStepFactor > 100)
+				select->swStepFactor -= 100;
+
+			time = get_truncation_from_interval(select, time, ct_expr->rexpr);
 		}
 		else
+		{
+			FuncCall *func = makeNode(FuncCall);
+			func->args = list_make1(copyObject(time));
 			func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
-
-		time = (Node *) func;
+			time = (Node *) func;
+		}
 	}
+	else if (select->swStepFactor > 0 && select->swStepFactor <=100)
+		elog(ERROR, "cannot specify both \"step_factor\" and an explicit truncation function");
 
 	context->expr = time;
 
@@ -2027,7 +2120,7 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 static ColumnRef *
 hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
-	bool replace = truncate_timestamp_field(time, sw_expr, context);
+	bool replace = truncate_timestamp_field(proc, time, sw_expr, context);
 	ListCell *lc;
 	bool found = false;
 	ColumnRef *cref;
@@ -2175,8 +2268,13 @@ proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContex
 		time = copyObject(time);
 	}
 
+	context->cols = NIL;
+	collect_types_and_cols(time, context);
+
+	Assert(list_length(context->cols) == 1);
+
 	/* Create and truncate projection and grouping on temporal expression */
-	context->hoisted_name = ARRIVAL_TIMESTAMP;
+	context->hoisted_name = FigureColname(linitial(context->cols));
 	if (context->view_combines)
 		cref = hoist_time_node(proc, time, sw_expr, context);
 	else
@@ -2508,21 +2606,16 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 Query *
 GetContQuery(RangeVar *rv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *sel;
 	ContAnalyzeContext *context;
 
-	sql = GetQueryString(rv);
-	parsetree_list = pg_parse_query(sql);
-	sel = linitial(parsetree_list);
-
+	sel = GetContSelectStmt(rv);
 	context = MakeContAnalyzeContext(NULL, sel, Worker);
 	rewrite_streaming_aggs(sel, context);
 
 	MakeSelectsContinuous(sel);
 
-	return parse_analyze((Node *) sel, sql, 0, 0);
+	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
 /*
@@ -2531,17 +2624,14 @@ GetContQuery(RangeVar *rv)
 Query *
 GetContWorkerQuery(RangeVar *rv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *sel;
 	RangeVar *matrel;
 
-	sql = GetQueryString(rv);
-	parsetree_list = pg_parse_query(sql);
 	matrel = GetMatRelationName(rv);
-	sel = TransformSelectStmtForContProcess(matrel, linitial(parsetree_list), NULL, Worker);
+	sel = GetContSelectStmt(rv);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Worker);
 
-	return parse_analyze((Node *) sel, sql, 0, 0);
+	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
 /*
@@ -2550,16 +2640,13 @@ GetContWorkerQuery(RangeVar *rv)
 Query *
 GetContCombinerQuery(RangeVar *rv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *sel;
 	RangeVar *matrel;
 
-	sql = GetQueryString(rv);
-	parsetree_list = pg_parse_query(sql);
 	matrel = GetMatRelationName(rv);
-	sel = TransformSelectStmtForContProcess(matrel, linitial(parsetree_list), NULL, Combiner);
-	return parse_analyze((Node *) sel, sql, 0, 0);
+	sel = GetContSelectStmt(rv);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Combiner);
+	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
 /*
@@ -3194,8 +3281,6 @@ push_down_sw_predicate(Var *dummy, Query *upper, Query *lower)
 {
 	List *vars = NIL;
 	Var *real;
-	RangeTblEntry *rte;
-	Value *colname;
 
 	pull_vars(lower->jointree->quals, &vars);
 
@@ -3207,11 +3292,6 @@ push_down_sw_predicate(Var *dummy, Query *upper, Query *lower)
 		elog(ERROR, "column \"arrival_timestamp\" does not exist");
 
 	real = (Var *) linitial(vars);
-	rte = list_nth(lower->rtable, real->varno - 1);
-	colname = list_nth(rte->eref->colnames, real->varattno - 1);
-
-	if (pg_strcasecmp(ARRIVAL_TIMESTAMP, strVal(colname)) != 0)
-		elog(ERROR, "column \"arrival_timestamp\" does not exist");
 
 	memcpy(dummy, real, sizeof(Var));
 	lower->jointree->quals = upper->jointree->quals;
@@ -3236,7 +3316,7 @@ get_dummy_sw_predicate(Node *where)
 		return NULL;
 
 	var = (Var *) linitial(vars);
-	if (IS_ARRIVAL_TIMESTAMP_REF(var))
+	if (IS_SW_TIMESTAMP_REF(var))
 		return var;
 
 	return NULL;
@@ -3401,13 +3481,11 @@ pipeline_rewrite(List *raw_parsetree_list)
 Node *
 GetSWExpr(RangeVar *cv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *view;
+	SelectStmt *sel;
 
-	sql = GetQueryString(cv);
-	parsetree_list = pg_parse_query(sql);
-	TransformSelectStmtForContProcess(cv, linitial(parsetree_list), &view, Worker);
+	sel = GetContSelectStmt(cv);
+	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
 
 	return view->whereClause;
 }
@@ -3434,14 +3512,12 @@ GetSWTimeColumn(RangeVar *rv)
 ColumnRef *
 GetWindowTimeColumn(RangeVar *cv)
 {
-	char *sql;
-	List *parsetree_list;
 	SelectStmt *view;
+	SelectStmt *sel;
 	ContAnalyzeContext context;
 
-	sql = GetQueryString(cv);
-	parsetree_list = pg_parse_query(sql);
-	TransformSelectStmtForContProcess(cv, linitial(parsetree_list), &view, Worker);
+	sel = GetContSelectStmt(cv);
+	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
 
 	if (view->whereClause)
 	{
@@ -3472,7 +3548,7 @@ GetWindowTimeColumn(RangeVar *cv)
 }
 
 /*
- * CreateOuterArrivalTimestampRef
+ * CreateOuterSWTimeColumnRef
  *
  * If arrival_timestamp isn't found in an RTE, this hook is invoked by the parser.
  * It ultimately allows us to try to push any references to arrival_timestamp down.
@@ -3481,21 +3557,85 @@ GetWindowTimeColumn(RangeVar *cv)
  * matrel SELECT.
  */
 Node *
-CreateOuterArrivalTimestampRef(ParseState *pstate, ColumnRef *cref, Node *var)
+CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var)
 {
-	char *name;
 	Var *result;
+	char *nspname = NULL;
+	char *relname = NULL;
+	char *colname = NULL;
+	RangeTblEntry *rte = NULL;
+	int	levels_up;
+	RangeVar *rv;
+	ColumnRef *sw_cref;
 
 	if (var != NULL)
 		return NULL;
 
-	name = FigureColname((Node *) cref);
+	/* Try to figure out the name of the sliding window timestamp column */
+	switch (list_length(cref->fields))
+	{
+		case 1:
+		{
+			Assert(list_length(pstate->p_rtable) == 1);
+			rte = linitial(pstate->p_rtable);
+			colname = FigureColname((Node *) cref);
+			break;
+		}
+		case 2:
+		{
+			relname = strVal(linitial(cref->fields));
+			colname = strVal(lsecond(cref->fields));
+			rte = refnameRangeTblEntry(pstate, nspname, relname,
+					cref->location,
+					&levels_up);
+			break;
+		}
+		case 3:
+		{
+			nspname = strVal(linitial(cref->fields));
+			relname = strVal(lsecond(cref->fields));
+			colname = strVal(lthird(cref->fields));
+			rte = refnameRangeTblEntry(pstate, nspname, relname,
+					cref->location,
+					&levels_up);
+			break;
+		}
+		case 4:
+		{
+			nspname = strVal(lsecond(cref->fields));
+			relname = strVal(lthird(cref->fields));
+			colname = strVal(lfourth(cref->fields));
+			rte = refnameRangeTblEntry(pstate, nspname, relname,
+					cref->location,
+					&levels_up);
+			break;
+		}
+		default:
+			return NULL;
+	}
 
-	if (pg_strcasecmp(name, ARRIVAL_TIMESTAMP) != 0)
+	if (rte->relkind != RELKIND_CONTVIEW)
+		return NULL;
+
+	rv = makeRangeVar(
+			get_namespace_name(get_rel_namespace(rte->relid)), get_rel_name(rte->relid), -1);
+
+	if (!GetGCFlag(rv))
+		return NULL;
+
+	sw_cref = GetSWTimeColumn(rv);
+	Assert(sw_cref);
+
+	/*
+	 * TODO(usmanm): For now we always allow ARRIVAL_TIMESTAMP because max_age hard codes it.
+	 * Should fix it.
+	 */
+	if (pg_strcasecmp(colname, FigureColname((Node *) sw_cref)) != 0 &&
+			pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) != 0)
 		return NULL;
 
 	/* we only need to do something if the column couldn't be resolved at this level */
-	result = makeVar(ARRIVAL_TIMESTAMP_REF, 1, TIMESTAMPTZOID, -1, InvalidOid, 0);
+	result = makeVar(SW_TIMESTAMP_REF, 1, TIMESTAMPTZOID, -1, InvalidOid, 0);
 
 	return (Node *) result;
 }
@@ -3541,7 +3681,7 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	ColumnRef *arrival_ts;
 
 	if (has_clock_timestamp(stmt->whereClause, NULL))
-	  elog(ERROR, "cannot specify both \"max_age\" and a sliding window expression in the WHERE clause");
+		elog(ERROR, "cannot specify both \"max_age\" and a sliding window expression in the WHERE clause");
 
 	if (!ContainsSlidingWindowContinuousView(stmt->fromClause) && stmt->forContinuousView == false)
 		elog(ERROR, "\"max_age\" can only be specified when reading from a stream or continuous view");
@@ -3572,4 +3712,54 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	  stmt->whereClause = (Node *) makeA_Expr(AEXPR_AND, NULL, (Node *) where, stmt->whereClause, -1);
 	else
 	  stmt->whereClause = (Node *) where;
+}
+
+/*
+ * ApplyStorageOptions
+ */
+void
+ApplyStorageOptions(CreateContViewStmt *stmt)
+{
+	DefElem *def;
+	SelectStmt *select = (SelectStmt *) stmt->query;
+
+	/* max_age */
+	def = GetContinuousViewOption(stmt->into->options, OPTION_MAX_AGE);
+	if (def)
+	{
+		ApplyMaxAge(select, def);
+		stmt->into->options = list_delete(stmt->into->options, def);
+	}
+
+	/* SWStepFactor */
+	select->swStepFactor = 0;
+	def = GetContinuousViewOption(stmt->into->options, OPTION_STEP_FACTOR);
+	if (def)
+	{
+		int factor;
+
+		if (!has_clock_timestamp(select->whereClause, NULL))
+			elog(ERROR, "can only specify \"step_factor\" for sliding window queries");
+
+		if (!IsA(def->arg, Integer))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("\"step_size\" must be a valid integer in the range 1..100"),
+					 errhint("For example, ... WITH (step_factor = 25) ...")));
+
+		factor = intVal(def->arg);
+		if (factor < 1 || factor > 100)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("\"step_size\" must be a valid integer in the range 1..100"),
+					 errhint("For example, ... WITH (step_factor = 25) ...")));
+
+		select->swStepFactor = factor;
+		stmt->into->options = list_delete(stmt->into->options, def);
+	}
+	else
+	{
+		/* This is a hack to specify the step factor, but at the same time indicate that it wasn't explicitly specified */
+		select->swStepFactor = 100 + sliding_window_step_factor;
+	}
 }

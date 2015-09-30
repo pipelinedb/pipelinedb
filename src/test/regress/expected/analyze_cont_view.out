@@ -300,6 +300,18 @@ ERROR:  continuous queries cannot read from themselves
 LINE 1: ... CONTINUOUS VIEW cqregress4 AS SELECT x::int FROM cqregress4...
                                                              ^
 HINT:  Remove "cqregress4" from the FROM clause.
+CREATE CONTINUOUS VIEW cqregress5 AS SELECT count(DISTINCT x::int), percentile_cont(0.1) WITHIN GROUP (ORDER BY x) FROM analyze_cont_stream;
+\d+ cqregress5
+                  Continuous view "public.cqregress5"
+     Column      |       Type       | Modifiers | Storage | Description 
+-----------------+------------------+-----------+---------+-------------
+ count           | bigint           |           | plain   | 
+ percentile_cont | double precision |           | plain   | 
+View definition:
+ SELECT count(DISTINCT x::integer) AS count,
+    percentile_cont(0.1::double precision) WITHIN GROUP (ORDER BY x::integer::double precision) AS percentile_cont
+   FROM ONLY analyze_cont_stream;
+
 DROP CONTINUOUS VIEW cqregress1;
 DROP CONTINUOUS VIEW cqregress2;
 ERROR:  continuous view "cqregress2" does not exist
@@ -307,3 +319,4 @@ DROP CONTINUOUS VIEW cqregress3;
 ERROR:  continuous view "cqregress3" does not exist
 DROP CONTINUOUS VIEW cqregress4;
 ERROR:  continuous view "cqregress4" does not exist
+DROP CONTINUOUS VIEW cqregress5;

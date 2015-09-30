@@ -23,6 +23,7 @@
 #include "optimizer/planner.h"
 #include "parser/parse_expr.h"
 #include "pipeline/cont_analyze.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/sw_vacuum.h"
 #include "storage/lmgr.h"
 #include "tcop/pquery.h"
@@ -41,11 +42,108 @@ get_sw_vacuum_expr(RangeVar *rv)
 	return (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, expr, -1);
 }
 
+
+/*
+ * DeleteSWExpiredTuples
+ */
+void
+DeleteSWExpiredTuples(Oid relid)
+{
+	char *relname;
+	char *namespace;
+	RangeVar *matrel;
+	RangeVar *cvname;
+	DeleteStmt *stmt;
+	CommandDest dest = DestNone;
+	List *querytree_list;
+	PlannedStmt *plan;
+	Portal portal;
+	DestReceiver *receiver;
+	MemoryContext oldcxt;
+	MemoryContext runctx;
+	bool save_continuous_query_materialization_table_updatable = continuous_query_materialization_table_updatable;
+
+	continuous_query_materialization_table_updatable = true;
+
+	StartTransactionCommand();
+
+	runctx = AllocSetContextCreate(CurrentMemoryContext,
+			"DeleteSWExpiredTuplesContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	oldcxt = MemoryContextSwitchTo(runctx);
+
+	relname = get_rel_name(relid);
+
+	if (!relname)
+		goto end;
+
+	namespace = get_namespace_name(get_rel_namespace(relid));
+	matrel = makeRangeVar(namespace, relname, -1);
+
+	cvname = GetCVNameFromMatRelName(matrel);
+
+	if (!cvname)
+		goto end;
+
+	if (!GetGCFlag(cvname))
+		goto end;
+
+	/* Now we're certain relid if for a SW continuous view's matrel */
+
+	/*
+	 * TODO(usmanm): Use lock contention free strategy here. See https://news.ycombinator.com/item?id=9018129
+	 */
+	stmt = makeNode(DeleteStmt);
+	stmt->relation = matrel;
+	stmt->whereClause = get_sw_vacuum_expr(cvname);
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DELETE",
+			NULL, 0);
+	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
+
+	portal = CreatePortal("__sw_delete_expired__", true, true);
+	portal->visible = false;
+	PortalDefineQuery(portal,
+			NULL,
+			"DELETE",
+			"DELETE",
+			list_make1(plan),
+			NULL);
+
+	receiver = CreateDestReceiver(dest);
+
+	PortalStart(portal, NULL, 0, GetActiveSnapshot());
+	(void) PortalRun(portal,
+			FETCH_ALL,
+			true,
+			receiver,
+			receiver,
+			NULL);
+
+	(*receiver->rDestroy) (receiver);
+	PortalDrop(portal, false);
+
+	PopActiveSnapshot();
+
+end:
+	continuous_query_materialization_table_updatable = save_continuous_query_materialization_table_updatable;
+
+	MemoryContextSwitchTo(oldcxt);
+	MemoryContextDelete(runctx);
+
+	CommitTransactionCommand();
+}
+
 /*
  * NumSWVacuumTuples
  */
 uint64_t
-NumSWVacuumTuples(Oid relid)
+NumSWExpiredTuples(Oid relid)
 {
 	uint64_t count;
 	char *relname = get_rel_name(relid);
@@ -86,7 +184,7 @@ NumSWVacuumTuples(Oid relid)
 		return 0;
 
 	runctx = AllocSetContextCreate(CurrentMemoryContext,
-			"SWAutoVacuumContext",
+			"NumSWExpiredTuplesContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -109,7 +207,7 @@ NumSWVacuumTuples(Oid relid)
 			NULL, 0);
 	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
 
-	portal = CreatePortal("__sw_auto_vacuum__", true, true);
+	portal = CreatePortal("__sw_num_expired__", true, true);
 	portal->visible = false;
 	PortalDefineQuery(portal,
 			NULL,
@@ -153,99 +251,4 @@ NumSWVacuumTuples(Oid relid)
 	MemoryContextDelete(runctx);
 
 	return count;
-}
-
-/*
- * CreateSWVacuumContext
- */
-SWVacuumContext *
-CreateSWVacuumContext(Relation rel)
-{
-	char *namespace = get_namespace_name(RelationGetNamespace(rel));
-	char *relname = RelationGetRelationName(rel);
-	RangeVar *cvname;
-	RangeVar *matrel = makeRangeVar(namespace, relname, -1);
-	Expr *expr;
-	ParseState *ps;
-	ParseNamespaceItem *nsitem;
-	RangeTblEntry *rte;
-	List *colnames = NIL;
-	int i;
-	SWVacuumContext *context;
-	TupleDesc desc = CreateTupleDescCopy(RelationGetDescr(rel));
-
-	cvname = GetCVNameFromMatRelName(matrel);
-	if (!cvname)
-		return NULL;
-
-	if (!GetGCFlag(cvname))
-		return NULL;
-
-	/* Copy colnames from the relation's TupleDesc */
-	for (i = 0; i < desc->natts; i++)
-		colnames = lappend(colnames, makeString(NameStr(desc->attrs[i]->attname)));
-
-	nsitem = (ParseNamespaceItem *) palloc(sizeof(ParseNamespaceItem));
-	nsitem->p_cols_visible = true;
-	nsitem->p_lateral_only = false;
-
-	rte = makeNode(RangeTblEntry);
-	rte->rtekind = RTE_RELATION;
-	rte->alias = NULL;
-	rte->inFromCl = true;
-	rte->requiredPerms = ACL_SELECT;
-	rte->checkAsUser = InvalidOid; /* not set-uid by default, either */
-	rte->selectedCols = NULL;
-	rte->modifiedCols = NULL;
-	rte->eref = makeAlias(relname, colnames);
-	rte->relid = rel->rd_id;
-	nsitem->p_rte = rte;
-
-	ps = make_parsestate(NULL);
-	ps->p_namespace = list_make1(nsitem);
-	ps->p_rtable = list_make1(rte);
-
-	expr = (Expr *) transformExpr(ps, get_sw_vacuum_expr(cvname), EXPR_KIND_WHERE);
-
-	context = (SWVacuumContext *) palloc(sizeof(SWVacuumContext));
-
-	context->econtext = CreateStandaloneExprContext();
-	context->slot = MakeSingleTupleTableSlot(desc);
-	context->econtext->ecxt_scantuple = context->slot;
-	context->predicate = list_make1(ExecInitExpr(expression_planner(expr), NULL));
-	context->expired = NIL;
-
-	return context;
-}
-
-/*
- * FreeSWVacuumContext
- */
-void
-FreeSWVacuumContext(SWVacuumContext *context)
-{
-	if (!context)
-		return;
-
-	ExecDropSingleTupleTableSlot(context->slot);
-	FreeExprContext(context->econtext, false);
-	pfree(context);
-}
-
-/*
- * ShouldVacuumSWTuple
- */
-bool
-ShouldVacuumSWTuple(SWVacuumContext *context, HeapTuple tuple)
-{
-	bool vacuum;
-
-	if (!context)
-		return false;
-
-	ExecStoreTuple(tuple, context->slot, InvalidBuffer, false);
-	vacuum = ExecQual(context->predicate, context->econtext, false);
-	ExecClearTuple(context->slot);
-
-	return vacuum;
 }

@@ -343,33 +343,35 @@ GetCVNameFromMatRelName(RangeVar *name)
 }
 
 /*
- * GetQueryString
- *
- * Retrieves the query string of a registered continuous
- * view. If `select_only` is true, only the SELECT portion
- * of the query string is returned.
+ * GetContSelectStmt
  */
-char *
-GetQueryString(RangeVar *cvname)
+SelectStmt *
+GetContSelectStmt(RangeVar *rv)
 {
 	HeapTuple tuple;
 	bool isnull;
 	Datum tmp;
-	char *result = NULL;
+	char *sql;
+	Query *query;
+	SelectStmt *select;
 
-	tuple = GetPipelineQueryTuple(cvname);
+	tuple = GetPipelineQueryTuple(rv);
 
 	if (!HeapTupleIsValid(tuple))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
-				errmsg("continuous view \"%s\" does not exist", cvname->relname)));
+				errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
-	result = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
+	query = (Query *) stringToNode(TextDatumGetCString(tmp));
+
+	sql = deparse_query_def(query);
+	select = (SelectStmt *) linitial(pg_parse_query(sql));
+	select->swStepFactor = query->swStepFactor;
 
 	ReleaseSysCache(tuple);
 
-	return result;
+	return select;
 }
 
 /*
@@ -480,6 +482,7 @@ GetContinuousView(Oid id)
 	Datum tmp;
 	bool isnull;
 	char *namespace;
+	Query *query;
 
 	if (!HeapTupleIsValid(tuple))
 		return NULL;
@@ -497,7 +500,9 @@ GetContinuousView(Oid id)
 	view->hash = row->hash;
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
-	view->query = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
+	query = (Query *) stringToNode(TextDatumGetCString(tmp));
+	view->query = deparse_query_def(query);
+	view->sw_step_factor = query->swStepFactor;
 
 	ReleaseSysCache(tuple);
 

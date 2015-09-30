@@ -12,6 +12,7 @@
 
 #include "access/htup_details.h"
 #include "catalog/pg_aggregate.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_combine.h"
 #include "catalog/pipeline_query_fn.h"
@@ -69,7 +70,7 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 
 	query->isContinuous = true;
 	query->isCombine = is_combine;
-	query->cq_id = id;
+	query->cqId = id;
 
 	plan = pg_plan_query(query, 0, NULL);
 
@@ -112,9 +113,10 @@ get_worker_plan(ContinuousView *view)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	selectstmt->swStepFactor = view->sw_step_factor;
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Worker);
 
-	return get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, selectstmt->forCombiner);
+	return get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, false);
 }
 
 PlannedStmt*
@@ -167,6 +169,7 @@ get_combiner_plan(ContinuousView *view)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	selectstmt->swStepFactor = view->sw_step_factor;
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Combiner);
 	join_search_hook = get_combiner_join_rel;
 
@@ -229,4 +232,45 @@ SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
 	scan->store = tupstore;
 
 	return scan;
+}
+
+/*
+ * GetGroupHashIndexExpr
+ *
+ * Returns the function expression used to index the given matrel
+ */
+FuncExpr *
+GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri)
+{
+	FuncExpr *result = NULL;
+	int i;
+
+	/*
+	 * In order for the hashed group index to be usable, we must use an expression
+	 * that is equivalent to the index expression in the group lookup. The best way
+	 * to do this is to just copy the actual index expression.
+	 */
+	for (i = 0; i < ri->ri_NumIndices; i++)
+	{
+		IndexInfo *idx = ri->ri_IndexRelationInfo[i];
+		Node *n;
+		FuncExpr *func;
+
+		if (!idx->ii_Expressions || list_length(idx->ii_Expressions) != 1)
+			continue;
+
+		n = linitial(idx->ii_Expressions);
+		if (!IsA(n, FuncExpr))
+			continue;
+
+		func = (FuncExpr *) n;
+		if ((func->funcid != HASH_GROUP_OID && func->funcid != LS_HASH_GROUP_OID) ||
+				list_length(func->args) != group_len)
+			continue;
+
+		result = copyObject(func);
+		break;
+	}
+
+	return result;
 }

@@ -320,9 +320,9 @@ DATA(insert ( 5022	o 1 cq_percentile_cont_float8_transition		cq_percentile_cont_
 DATA(insert ( 5023	o 1 cq_percentile_cont_float8_transition_multi	cq_percentile_cont_float8_final	-		-		-		f f 0	2281	0	0		0	_null_ _null_ ));
 
 /* hyperloglog aggregates */
-DATA(insert ( 4321	n 0 hll_agg_trans	-			-				-				-				f f 0	3998	0	0		0	_null_ _null_ ));
-DATA(insert ( 4322	n 0 hll_agg_transp	-			-				-				-				f f 0	3998	0	0		0	_null_ _null_ ));
-DATA(insert ( 4326	n 0 hll_union_agg_trans	-		-				-				-				f f 0	3998	0	0		0	_null_ _null_ ));
+DATA(insert ( 4321	n 0 hll_agg_trans	hll_cache_cardinality			-				-				-				f f 0	3998	0	0		0	_null_ _null_ ));
+DATA(insert ( 4322	n 0 hll_agg_transp	hll_cache_cardinality			-				-				-				f f 0	3998	0	0		0	_null_ _null_ ));
+DATA(insert ( 4326	n 0 hll_union_agg_trans	hll_cache_cardinality		-				-				-				f f 0	3998	0	0		0	_null_ _null_ ));
 
 /* bloom filter aggregates */
 DATA(insert ( 4329	n 0 bloom_agg_trans			-	-				-				-				f f 0	5030	0	0		0	_null_ _null_ ));

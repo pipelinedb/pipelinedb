@@ -382,3 +382,9 @@ ShmemDynAddrIsValid(void *addr)
 {
 	return ShmemAddrIsValid(addr) && is_allocated(addr);
 }
+
+Size
+ShmemDynAllocSize(void)
+{
+	return 5 * 1024 * 1024; /* 5mb */
+}

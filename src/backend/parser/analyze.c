@@ -121,6 +121,7 @@ parse_analyze(Node *parseTree, const char *sourceText,
 		SelectStmt *stmt = (SelectStmt *) parseTree;
 		query->isContinuous = stmt->forContinuousView;
 		query->isCombineLookup = stmt->forCombineLookup;
+		query->swStepFactor = stmt->swStepFactor;
 	}
 
 	if (post_parse_analyze_hook)
@@ -973,7 +974,7 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	transformFromClause(pstate, stmt->fromClause);
 
 	if (ContainsSlidingWindowContinuousView(stmt->fromClause))
-		pstate->p_post_columnref_hook = CreateOuterArrivalTimestampRef;
+		pstate->p_post_columnref_hook = CreateOuterSWTimeColumnRef;
 
 	/* transform targetlist */
 	qry->targetList = transformTargetList(pstate, stmt->targetList,

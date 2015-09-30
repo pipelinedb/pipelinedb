@@ -21,6 +21,7 @@
 #include "pipeline/miscutils.h"
 #include "utils/rel.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #include "utils/palloc.h"
 #include "utils/syscache.h"
 
@@ -218,42 +219,4 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 
 	heap_insert(ri->ri_RelationDesc, tup, GetCurrentCommandId(true), 0, NULL);
 	ExecInsertCQMatRelIndexTuples(ri, slot, estate);
-}
-
-/*
- * matrel_heap_delete
- *
- * Like simple_heap_delete except that it ignores the error in case the tuple was concurrently
- * updated. This is used by the auto-vacuumer so it doesn't choke in case the combiner updated
- * the expired tuple while the auto-vacuumer tried to delete it.
- */
-void
-matrel_heap_delete(Relation relation, ItemPointer tid)
-{
-	HTSU_Result result;
-	HeapUpdateFailureData hufd;
-
-	result = heap_delete(relation, tid,
-						 GetCurrentCommandId(true), InvalidSnapshot,
-						 true /* wait for commit */ ,
-						 &hufd);
-	switch (result)
-	{
-		case HeapTupleSelfUpdated:
-			/* Tuple was already updated in current command? */
-			elog(ERROR, "tuple already updated by self");
-			break;
-
-		case HeapTupleMayBeUpdated:
-			/* done successfully */
-			break;
-
-		case HeapTupleUpdated:
-			/* Tuple was concurrently updated? Ignore. */
-			break;
-
-		default:
-			elog(ERROR, "unrecognized heap_delete status: %u", result);
-			break;
-	}
 }

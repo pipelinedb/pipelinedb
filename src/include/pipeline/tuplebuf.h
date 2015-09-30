@@ -40,6 +40,7 @@ typedef struct StreamTuple
 	InsertBatchAck *acks; /* the acks this tuple is responsible for */
 	int num_record_descs; /* number of tuple descriptors for RECORD types */
 	RecordTupleDesc *record_descs; /* RECORD type cached tuple descriptors */
+	int64 group_hash; /* hash of this tuple's group columns */
 } StreamTuple;
 
 typedef struct TupleBufferSlot
