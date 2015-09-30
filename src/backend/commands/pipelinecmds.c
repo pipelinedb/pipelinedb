@@ -67,7 +67,7 @@
 /* guc params */
 int continuous_view_fillfactor;
 
-ColumnDef *
+static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
 {
 	ColumnDef *result;

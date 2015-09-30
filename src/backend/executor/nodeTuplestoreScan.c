@@ -29,6 +29,8 @@ extern TuplestoreScanState*
 ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 {
 	TuplestoreScanState *scanstate;
+	ScanState* nscan;
+	Scan* scan;
 
 	scanstate = makeNode(TuplestoreScanState);
 	scanstate->ss.ps.plan = (Plan *) node;
@@ -43,11 +45,9 @@ ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 		ExecInitExpr((Expr *) node->scan.plan.qual,
 					 (PlanState *) scanstate);
 
-	{
-		ScanState* n = (ScanState *) (scanstate);
-		Scan	   *scan = (Scan *) n->ps.plan;
-		scan->scanrelid = 1;
-	}
+	nscan = (ScanState *) (scanstate);
+	scan = (Scan *) nscan->ps.plan;
+	scan->scanrelid = 1;
 
 	ExecInitResultTupleSlot(estate, &scanstate->ss.ps);
 	ExecInitScanTupleSlot(estate, (ScanState*) scanstate);

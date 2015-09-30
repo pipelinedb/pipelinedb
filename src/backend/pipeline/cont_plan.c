@@ -118,7 +118,7 @@ get_worker_plan(ContinuousView *view)
 }
 
 PlannedStmt*
-get_view_plan(ContinuousView *view)
+GetContinuousViewPlan(ContinuousView *view)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;

@@ -13,6 +13,7 @@
 #include "postgres.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/namespace.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
@@ -25,6 +26,7 @@
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
+#include "nodes/nodeFuncs.h"
 #include "nodes/parsenodes.h"
 #include "nodes/print.h"
 #include "pgstat.h"
@@ -44,11 +46,14 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include <unistd.h>
-#include "catalog/namespace.h"
-#include "nodes/nodeFuncs.h"
 
-void
-dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot);
+/* This module performs work analogous to the bg workers and combiners
+ * (and a view select), but does it in memory using tuple stores.
+ *
+ * The flow of data is roughly like so:
+ *
+ * WorkerTupleBuffer -> Worker -> Combiner -> View -> Frontend
+ */
 
 typedef struct {
 	TupleBufferBatchReader  *reader;
@@ -97,7 +102,7 @@ create_agg_hash(int num_cols, Oid *grp_ops, AttrNumber *group_atts)
 	execTuplesHashPrepare(num_cols, grp_ops,
 						  &eq_funcs, &hash_funcs);
 
-	/* this tmp cxt is reqd by hash table, it will reset it internally */
+	/* this tmp cxt is required by hash table, it will reset it internally */
 
 	hash_tmp_cxt = AllocSetContextCreate(CurrentMemoryContext,
 			"AdhocCombinerQueryHashTableTempCxt",
@@ -128,6 +133,7 @@ init_cont_query_batch_context()
 			ALLOCSET_DEFAULT_MAXSIZE);
 }
 
+/* util func to set reader on stream scan nodes */ 
 static void
 set_reader(PlanState *planstate, TupleBufferBatchReader *reader)
 {
@@ -149,32 +155,6 @@ set_reader(PlanState *planstate, TupleBufferBatchReader *reader)
 	set_reader(planstate->lefttree, reader);
 	set_reader(planstate->righttree, reader);
 }
-
-//static void
-//set_reader_on_view_plan(PlanState *planstate,
-//						TupleBufferBatchReader *reader)
-//{
-//	if (planstate == NULL)
-//		return;
-//
-//	// TransformSelectStmtForContProcess
-//	if (IsA(planstate, SeqScanState))
-//	{
-//		// StreamScanState
-//		// SeqScanState
-//		// S*scan = (StreamScanState *) planstate;
-//		// scan->reader = reader;
-//		return;
-//	}
-//	else if (IsA(planstate, SubqueryScanState))
-//	{
-//		set_reader(((SubqueryScanState *) planstate)->subplan, reader);
-//		return;
-//	}
-//
-//	set_reader(planstate->lefttree, reader);
-//	set_reader(planstate->righttree, reader);
-//}
 
 static EState *
 create_estate(QueryDesc *query_desc)
@@ -252,6 +232,7 @@ get_cont_query_proc()
 	return proc;
 }
 
+/* generate a unique name for the adhoc view */
 static char*
 get_unique_adhoc_view_name()
 {
@@ -278,6 +259,10 @@ typedef struct{
 	ContinuousView *view;
 } ContinuousViewData;
 
+/* reuse most of the machinery of ExecCreateContViewStmt to make the view.
+ * The view will be flagged as adhoc because SetAmContQueryAdhoc(true) has been
+ * called earlier - (it is passed into DefineContinuousView) */
+
 static ContinuousViewData
 init_cont_view(SelectStmt *stmt, const char* querystring)
 {
@@ -302,21 +287,7 @@ init_cont_view(SelectStmt *stmt, const char* querystring)
 	return view_data;
 }
 
-void
-dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot)
-{
-	size_t ctr = 0;
-	elog(LOG, "******************************");
-
-	tuplestore_rescan(batch);
-
-	foreach_tuple(slot, batch)
-	{
-		elog(LOG, "dump store %zu", ctr++);
-		print_slot(slot);
-	}
-}
-
+/* get the worker plan and set up the worker state for execution */
 static AdhocWorkerState*
 init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 {
@@ -335,7 +306,6 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	Assert(state->view);
 	state->dest = receiver;
 
-	// GetContPlan
 	PushActiveSnapshot(GetTransactionSnapshot());
 	pstmt = GetContPlan(state->view, Worker);
 	PopActiveSnapshot();
@@ -371,16 +341,16 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	ExecEndNode(state->query_desc->planstate);
 	FreeExecutorState(state->query_desc->estate);
 
-	// CommitTransactionCommand
-
 	state->last_processed = GetCurrentTimestamp();
 
 	return state;
 }
 
+
+/* Prepare the combiner plan to read from the batch */
 static TupleDesc
-prepare_combine_plan(RangeVar *matrel, PlannedStmt *plan,
-					 Tuplestorestate *batch)
+prepare_plan_for_reading(RangeVar *matrel, PlannedStmt *plan,
+					 	 Tuplestorestate *batch)
 {
 	TuplestoreScan *scan;
 
@@ -397,6 +367,7 @@ prepare_combine_plan(RangeVar *matrel, PlannedStmt *plan,
 
 }
 
+/* Get the combiner plan, and prepare the combiner state for execution */
 static AdhocCombinerState*
 init_adhoc_combiner(ContinuousViewData data,
 					Tuplestorestate *batch)
@@ -408,7 +379,7 @@ init_adhoc_combiner(ContinuousViewData data,
 	pstmt = GetContPlan(data.view, Combiner);
 	PopActiveSnapshot();
 
-	state->tup_desc = prepare_combine_plan(data.view->matrel, pstmt, batch);
+	state->tup_desc = prepare_plan_for_reading(data.view->matrel, pstmt, batch);
 	state->dest = CreateDestReceiver(DestTuplestore);
 	 
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
@@ -425,7 +396,8 @@ init_adhoc_combiner(ContinuousViewData data,
 	SetTuplestoreDestReceiverParams(state->dest, state->result,
 									CurrentMemoryContext, true);
 
-	// required by combiner group stuff.
+	/* if this is an aggregating query, set up a hash table to store the
+	 * groups */
 
 	if (IsA(pstmt->planTree, Agg))
 	{
@@ -448,6 +420,13 @@ init_adhoc_combiner(ContinuousViewData data,
 	return state;
 }
 
+/* run the worker - this will block for one sec waiting for tuples in the worker tuple
+ * buffer. 
+ *
+ * If it has no tuples, it will return false.
+ *
+ * Otherwise, tuples are processed with the worker plan and sent to the dest receiver
+ */
 static bool
 exec_adhoc_worker(AdhocWorkerState* state)
 {
@@ -456,7 +435,7 @@ exec_adhoc_worker(AdhocWorkerState* state)
 	EState *estate = 0;
 	ResourceOwner owner = CurrentResourceOwner;
 
-	TupleBufferBatchReaderTrySleep(state->reader, state->last_processed);
+	TupleBufferBatchReaderTrySleepTimeout(state->reader, state->last_processed, 1000);
 
 	has_tup = 
 		TupleBufferBatchReaderHasTuplesForCQId(state->reader, state->view_id);
@@ -510,6 +489,9 @@ exec_adhoc_worker(AdhocWorkerState* state)
 static void
 adhoc_sync_combine(AdhocCombinerState* state);
 
+/* 
+ * combine rows in state->batch (from worker)
+ */
 static void
 exec_adhoc_combiner(AdhocCombinerState* state)
 {
@@ -517,7 +499,8 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 	struct Plan *plan = 0;
 	EState *estate = 0;
 
-	/* put all existing groups in with batch. */
+	/* if this is an agg query, check for any existing groups, and put them in the
+	 * batch to be processed also */
 
 	if (state->is_agg)
 	{
@@ -528,9 +511,7 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 
 			if (entry)
 			{
-				/* if the group exists, copy it into 'result'
-				 * we are using 'result' as scratch space here. */
-
+				/* we are using 'result' as scratch space here. */
 				tuplestore_puttuple(state->result, entry->tuple);
 			}
 			else
@@ -540,15 +521,14 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 
 		foreach_tuple(state->slot, state->result)
 		{
-//			print_slot(state->slot);
-//			fflush(stdout);
-
 			tuplestore_puttupleslot(state->batch, state->slot);
 		}
 
 		tuplestore_clear(state->result);
 		tuplestore_rescan(state->batch);
 	}
+
+	/* run the combine plan */
 
 	state->query_desc->estate = create_estate(state->query_desc);
 	estate = state->query_desc->estate;
@@ -574,9 +554,11 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 
+	/* sync */
 	adhoc_sync_combine(state);
 }
 
+/* update results in hash table if need be */
 static void
 adhoc_sync_combine(AdhocCombinerState* state)
 {
@@ -612,6 +594,7 @@ adhoc_sync_combine(AdhocCombinerState* state)
 	}
 }
 
+/* get the view plan and set up the view state for execution */
 static AdhocViewState*
 init_adhoc_view(ContinuousViewData data,
 				Tuplestorestate *batch,
@@ -622,10 +605,10 @@ init_adhoc_view(ContinuousViewData data,
 	TupleDesc desc;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
-	pstmt = get_view_plan(data.view);
+	pstmt = GetContinuousViewPlan(data.view);
 	PopActiveSnapshot();
 
-	desc = prepare_combine_plan(data.view->matrel, pstmt, batch);
+	desc = prepare_plan_for_reading(data.view->matrel, pstmt, batch);
 	(void) desc;
 
 	state->batch = batch;
@@ -647,6 +630,7 @@ init_adhoc_view(ContinuousViewData data,
 	return state;
 }
 
+/* execute the view and send rows to adhoc dest receiver */
 static void
 exec_adhoc_view(AdhocViewState* state)
 {
@@ -680,6 +664,7 @@ exec_adhoc_view(AdhocViewState* state)
 	tuplestore_clear(state->batch);
 }
 
+/* Execute a drop view statement to cleanup the adhoc view */
 static void cleanup_cont_view(ContinuousViewData *data)
 {
 	DestReceiver* receiver = 0;
@@ -694,7 +679,6 @@ static void cleanup_cont_view(ContinuousViewData *data)
 	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",
 			NULL, 0);
 
-	// pg_plan_queries
 	plan = ((Query*) linitial(querytree_list))->utilityStmt;
 	PushActiveSnapshot(GetTransactionSnapshot());
 
@@ -724,6 +708,7 @@ static void cleanup_cont_view(ContinuousViewData *data)
 	PopActiveSnapshot();
 }
 
+/* To be called when adhoc query is finished */
 static void
 cleanup(int code, Datum arg)
 {
@@ -734,6 +719,9 @@ cleanup(int code, Datum arg)
 	CommitTransactionCommand();
 }
 
+/* Initialize the worker, combiner and view modules, then loop until done.
+ * The current exit conditions are when the query is cancelled, or when the frontend
+ * goes away (the heartbeat will fail to send) */
 static void
 exec_adhoc_query(SelectStmt* stmt, const char *s)
 {
@@ -758,7 +746,6 @@ exec_adhoc_query(SelectStmt* stmt, const char *s)
 	CurrentResourceOwner = owner;
 	MemoryContextSwitchTo(run_cxt);
 	view_data = init_cont_view(stmt, s);
-
 	CommitTransactionCommand();
 
 	StartTransactionCommand();
@@ -768,10 +755,6 @@ exec_adhoc_query(SelectStmt* stmt, const char *s)
 
 	batch = tuplestore_begin_heap(true, true, 
 				continuous_query_combiner_work_mem);
-
-	(void) (keyColIdx);
-	(void) (exec_adhoc_view);
-	(void) (numCols);
 
 	SetTuplestoreDestReceiverParams(worker_receiver, batch,
 			CurrentMemoryContext, true);
@@ -802,10 +785,10 @@ exec_adhoc_query(SelectStmt* stmt, const char *s)
 		while (true)
 		{
 			bool new_rows = false;
+
+			/* use normal transaction machinery to cleanup any 'run' allocs */
 			StartTransactionCommand();
 			CurrentResourceOwner = owner;
-
-			// in this case, we want the transaction to cleanup memory
 
 			new_rows = exec_adhoc_worker(worker_state);
 
@@ -816,7 +799,7 @@ exec_adhoc_query(SelectStmt* stmt, const char *s)
 			}
 			else
 			{
-				/* XXX - check deadline timeout */
+				/* TODO - check deadline timeout */
 				AdhocDestReceiverHeartbeat(adhoc_receiver);
 			}
 
@@ -826,12 +809,15 @@ exec_adhoc_query(SelectStmt* stmt, const char *s)
 	PG_END_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&view_data));
 }
 
+/* Setup the enviroment for running the query inside the frontend, and execute it */
 void
 ExecAdhocQuery(SelectStmt* stmt, const char* s)
 {
+	/* Break out of the top level xact (from exec_simple_query) */
 	AbortCurrentTransaction();
 
 	{
+		/* Set up our own top level mem ctx for cleanup */
 		MemoryContext adhoc_cxt = AllocSetContextCreate(CurrentMemoryContext,
 				"AdhocQueryContext",
 				ALLOCSET_DEFAULT_MINSIZE,
@@ -839,8 +825,13 @@ ExecAdhocQuery(SelectStmt* stmt, const char* s)
 				ALLOCSET_DEFAULT_MAXSIZE);
 		
 		MemoryContext oldcontext = MemoryContextSwitchTo(adhoc_cxt);
+
+		/* This must be set so that newly created views are tagged properly */
 		SetAmContQueryAdhoc(true);
 
+		/* At present, the queries always exit through the error path */
+		/* The 'errors' are from query cancel, or the frontend not responding to
+		 * a heartbeat */
 		PG_TRY();
 		{
 			exec_adhoc_query(stmt, s);
@@ -850,14 +841,14 @@ ExecAdhocQuery(SelectStmt* stmt, const char* s)
 			SetAmContQueryAdhoc(false);
 			MemoryContextSwitchTo(oldcontext);
 			MemoryContextResetAndDeleteChildren(adhoc_cxt);
-
 			PG_RE_THROW();
 		}
-
 		PG_END_TRY();
 	}
 }
 
+/* walk the parse nodes, and set context to 1 if we find a stream or 
+ * a non-existing relation. */
 static bool
 walk_nodes(Node *node, int *context)
 {
@@ -887,10 +878,9 @@ walk_nodes(Node *node, int *context)
 	return raw_expression_tree_walker(node, walk_nodes, (void *) context);
 }
 
+/* returns true iff the query is an adhoc select */
 bool IsAdhocQuery(Node *node)
 {
-	// collect_rels_and_streams
-	
 	int res = 0;
 	walk_nodes(node, &res);
 
