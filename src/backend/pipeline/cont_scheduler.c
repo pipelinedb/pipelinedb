@@ -670,8 +670,8 @@ ContQuerySchedulerMain(int argc, char *argv[])
 
 	dbs = get_database_list();
 
-	/* Loop forever if continuous queries are enabled */
-	while (continuous_queries_enabled)
+	/* Loop forever */
+	for (;;)
 	{
 		ListCell *lc;
 		int rc;

@@ -71,6 +71,8 @@ extern int continuous_query_combiner_cache_mem;
 extern int continuous_query_combiner_synchronous_commit;
 extern double continuous_query_proc_priority;
 
+#define ContQueriesEnabled() (continuous_queries_enabled)
+
 /* shared memory stuff */
 extern Size ContQuerySchedulerShmemSize(void);
 extern void ContQuerySchedulerShmemInit(void);
