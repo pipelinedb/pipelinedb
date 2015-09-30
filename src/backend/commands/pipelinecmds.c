@@ -580,28 +580,6 @@ ExecTruncateContViewStmt(TruncateStmt *stmt)
 	heap_close(pipeline_query, NoLock);
 }
 
-/*
- * ExecActivateStmt
- */
-void
-ExecActivateStmt(ActivateStmt *stmt)
-{
-	if (!ContQuerySetStateAndWait(true, 1000))
-		ereport(ERROR,
-				(errmsg("failed to activate continuous views")));
-}
-
-/*
- * ExecDeactivateStmt
- */
-void
-ExecDeactivateStmt(DeactivateStmt *stmt)
-{
-	if (!ContQuerySetStateAndWait(false, 1000))
-		ereport(ERROR,
-				(errmsg("failed to deactivate continuous views")));
-}
-
 static void
 explain_cont_plan(char *name, PlannedStmt *plan, ExplainState *base_es, TupleDesc desc, DestReceiver *dest)
 {

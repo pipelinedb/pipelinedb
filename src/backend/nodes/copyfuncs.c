@@ -3879,20 +3879,6 @@ _copyCreateContViewStmt(const CreateContViewStmt *from)
 	return newnode;
 }
 
-static ActivateStmt *
-_copyActivateStmt(const ActivateStmt *from)
-{
-	ActivateStmt *newnode = makeNode(ActivateStmt);
-	return newnode;
-}
-
-static DeactivateStmt *
-_copyDeactivateStmt(const DeactivateStmt *from)
-{
-	DeactivateStmt *newnode = makeNode(DeactivateStmt);
-	return newnode;
-}
-
 /* ****************************************************************
  *					pg_list.h copy functions
  * ****************************************************************
@@ -4615,13 +4601,6 @@ copyObject(const void *from)
 		case T_CreateContViewStmt:
 			retval = _copyCreateContViewStmt(from);
 			break;
-		case T_ActivateStmt:
-			retval = _copyActivateStmt(from);
-			break;
-		case T_DeactivateStmt:
-			retval = _copyDeactivateStmt(from);
-			break;
-
 		case T_A_Expr:
 			retval = _copyAExpr(from);
 			break;

@@ -859,8 +859,6 @@ ContinuousQueryCombinerMain(void)
 		int id;
 		bool updated_queries = false;
 
-		sleep_if_deactivated();
-
 		TupleBufferBatchReaderTrySleep(reader, last_processed);
 
 		if (MyContQueryProc->group->terminate)

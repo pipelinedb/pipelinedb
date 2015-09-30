@@ -1528,7 +1528,17 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"continuous_query_crash_recovery", PGC_BACKEND, DEVELOPER_OPTIONS,
+		{"continuous_queries_enabled", PGC_POSTMASTER, DEVELOPER_OPTIONS,
+		 gettext_noop("Enable execution of continuous queries."),
+		 NULL,
+		},
+		&continuous_queries_enabled,
+		true,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_crash_recovery", PGC_POSTMASTER, DEVELOPER_OPTIONS,
 		 gettext_noop("Recover from errors and crashes in continuous query processes."),
 		 NULL,
 		},
@@ -1538,7 +1548,7 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"anonymous_update_checks", PGC_BACKEND, DEVELOPER_OPTIONS,
+		{"anonymous_update_checks", PGC_POSTMASTER, DEVELOPER_OPTIONS,
 		 gettext_noop("Anonymously check for available updates."),
 		 NULL,
 		},
