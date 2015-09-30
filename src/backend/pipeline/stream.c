@@ -29,6 +29,7 @@
 #include "parser/parse_collate.h"
 #include "parser/parse_target.h"
 #include "pgstat.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
 #include "pipeline/streamReceiver.h"
 #include "storage/shm_alloc.h"
@@ -54,12 +55,34 @@ bool synchronous_stream_insert;
 char *stream_targets = NULL;
 
 static HTAB *prepared_stream_inserts = NULL;
-static bool *cont_queries_active = NULL;
 
 static InsertStmt *extended_stream_insert = NULL;
 
 int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;
 void *copy_iter_arg = NULL;
+
+static Bitmapset *
+get_stream_readers(Oid relid)
+{
+	Bitmapset *targets = GetLocalStreamReaders(relid);
+	char *name = get_rel_name(relid);
+
+	if (targets == NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("no continuous views are currently reading from stream %s", name),
+				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", name)));
+	}
+
+	if (!continuous_queries_enabled)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot insert into stream %s since continuous queries are disabled", name),
+				 errhint("Enable continuous queries using the \"continuous_queries_enabled\" parameter.")));
+
+	return targets;
+}
 
 /*
  * get_desc
@@ -234,24 +257,11 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	Bitmapset *targets = GetLocalStreamReaders(pstmt->relid);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
 	Size size = 0;
-
-	/*
-	 * If it's a typed stream we can get here because technically the relation does exist.
-	 * However, we don't want to silently accept data that isn't being read by anything.
-	 */
-	if (targets == NULL)
-	{
-		char *name = get_rel_name(pstmt->relid);
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("no continuous views are currently reading from stream %s", name),
-				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", name)));
-	}
+	Bitmapset *targets = get_stream_readers(pstmt->relid);
 
 	if (synchronous_stream_insert)
 	{
@@ -324,7 +334,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	Oid relid = RangeVarGetRelid(ins->relation, NoLock, false);
-	Bitmapset *targets = GetLocalStreamReaders(relid);
+	Bitmapset *targets = get_stream_readers(relid);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
@@ -339,16 +349,6 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 	Assert(IsA(ins->selectStmt, SelectStmt));
 	stmt = ((SelectStmt *) ins->selectStmt);
-
-	/*
-	 * If it's a typed stream we can get here because technically the relation does exist.
-	 * However, we don't want to silently accept data that isn't being read by anything.
-	 */
-	if (targets == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("no continuous views are currently reading from stream %s", ins->relation->relname),
-				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", ins->relation->relname)));
 
 	if (synchronous_stream_insert)
 	{
@@ -464,18 +464,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	Size size = 0;
 	bool snap = ActiveSnapshotSet();
 
-	targets = GetLocalStreamReaders(RelationGetRelid(stream));
-
-	/*
-	 * If it's a typed stream we can get here because technically the relation does exist.
-	 * However, we don't want to silently accept data that isn't being read by anything.
-	 */
-	if (!IsInferredStream(RelationGetRelid(stream)) && targets == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("no continuous views are currently reading from stream %s", RelationGetRelationName(stream)),
-				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.",
-						 RelationGetRelationName(stream))));
+	targets = get_stream_readers(RelationGetRelid(stream));
 
 	if (synchronous_stream_insert)
 	{
@@ -531,13 +520,10 @@ InsertBatchCreate(void)
 void
 InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 {
-	if (cont_queries_active ==  NULL)
-		cont_queries_active = ContQueryGetActiveFlag();
-
 	if (num_tuples)
 	{
 		batch->num_wtups = num_tuples;
-		while (!StreamBatchAllAcked(batch) && *cont_queries_active)
+		while (!StreamBatchAllAcked(batch))
 		{
 			pg_usleep(SLEEP_MS * 1000);
 			CHECK_FOR_INTERRUPTS();

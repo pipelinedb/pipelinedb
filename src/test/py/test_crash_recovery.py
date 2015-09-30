@@ -191,3 +191,29 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
   result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
   assert result['count'] == expected_combiners
 
+def test_continuous_queries_enabled(pipeline, clean_db):
+  # Check that continuous query processes are running
+  try:
+    procs = check_output('ps aux | grep "pipeline" | grep "combiner0"',
+                         shell=True).split('\n')
+  except:
+    procs = []
+
+  procs = filter(lambda s: s, procs)
+  assert len(procs)
+
+  # Restart with continuous queries disabled.
+  pipeline.stop()
+  pipeline.run(params={'continuous_queries_enabled': 'off'})
+
+  try:
+    procs = check_output('ps aux | grep "pipeline" | grep "combiner0"',
+                         shell=True).split('\n')
+  except:
+    procs = []
+
+  procs = filter(lambda s: s, procs)
+  assert len(procs) == 1 # grep cmd
+
+  pipeline.stop()
+  pipeline.run()
