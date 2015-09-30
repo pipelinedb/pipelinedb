@@ -216,7 +216,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 }
 
 %type <node>	stmt schema_stmt
-		ActivateStmt AlterEventTrigStmt
+		AlterEventTrigStmt
 		AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
 		AlterFdwStmt AlterForeignServerStmt AlterGroupStmt
 		AlterObjectSchemaStmt AlterOwnerStmt AlterSeqStmt AlterSystemStmt AlterTableStmt
@@ -232,7 +232,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		CreateFdwStmt CreateForeignServerStmt CreateForeignTableStmt
 		CreateAssertStmt CreateTrigStmt CreateEventTrigStmt
 		CreateUserStmt CreateUserMappingStmt CreateRoleStmt
-		CreatedbStmt DeactivateStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
+		CreatedbStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
 		DropGroupStmt DropOpClassStmt DropOpFamilyStmt DropPLangStmt DropStmt
 		DropAssertStmt DropTrigStmt DropRuleStmt DropCastStmt DropRoleStmt
 		DropUserStmt DropdbStmt DropTableSpaceStmt DropFdwStmt
@@ -525,7 +525,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
  */
 
 /* ordinary key words in alphabetical order */
-%token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ACTIVATE ADD_P ADMIN AFTER
+%token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
 	AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
 	ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
 
@@ -541,7 +541,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_SCHEMA
 	CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR CYCLE
 
-	DATA_P DATABASE DAY_P DEACTIVATE DEALLOCATE DEC DECIMAL_P DECLARE DECODED DEFAULT DEFAULTS
+	DATA_P DATABASE DAY_P DEALLOCATE DEC DECIMAL_P DECLARE DECODED DEFAULT DEFAULTS
 	DEFERRABLE DEFERRED DEFINER DELETE_P DELIMITER DELIMITERS DESC
 	DICTIONARY DISABLE_P DISCARD DISTINCT DO DOCUMENT_P DOMAIN_P DOUBLE_P DROP
 
@@ -714,8 +714,7 @@ stmtmulti:	stmtmulti ';' stmt
 		;
 
 stmt :
-			ActivateStmt
-			| AlterEventTrigStmt
+			AlterEventTrigStmt
 			| AlterDatabaseStmt
 			| AlterDatabaseSetStmt
 			| AlterDefaultPrivilegesStmt
@@ -777,7 +776,6 @@ stmt :
 			| CreateUserStmt
 			| CreateUserMappingStmt
 			| CreatedbStmt
-			| DeactivateStmt
 			| DeallocateStmt
 			| DeclareCursorStmt
 			| DefineStmt
@@ -2777,34 +2775,6 @@ ExplainContViewStmt:
 					n->view = $7;
 					n->options = $5;
 					$$ = (Node *) n;
-				}
-		;
-
-/*****************************************************************************
- *
- *		QUERY :
- *				ACTIVATE
- *
- *****************************************************************************/
-
-ActivateStmt: ACTIVATE
-				{
-					ActivateStmt *s = makeNode(ActivateStmt);
-					$$ = (Node *) s;
-				}
-		;
-
-/*****************************************************************************
- *
- *		QUERY :
- *				DEACTIVATE
- *
- *****************************************************************************/
-
-DeactivateStmt: DEACTIVATE
-				{
-					DeactivateStmt *s = makeNode(DeactivateStmt);
-					$$ = (Node *)s;
 				}
 		;
 
@@ -12927,7 +12897,6 @@ unreserved_keyword:
 			| ABSOLUTE_P
 			| ACCESS
 			| ACTION
-			| ACTIVATE
 			| ADD_P
 			| ADMIN
 			| AFTER
@@ -12973,7 +12942,6 @@ unreserved_keyword:
 			| DATA_P
 			| DATABASE
 			| DAY_P
-			| DEACTIVATE
 			| DEALLOCATE
 			| DECLARE
 			| DECODED

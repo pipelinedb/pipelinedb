@@ -60,6 +60,7 @@ extern ContQueryProc *MyContQueryProc;
 extern char *GetContQueryProcName(ContQueryProc *proc);
 
 /* guc parameters */
+extern bool continuous_queries_enabled;
 extern bool continuous_query_crash_recovery;
 extern int continuous_query_num_combiners;
 extern int continuous_query_num_workers;
@@ -69,6 +70,8 @@ extern int continuous_query_combiner_work_mem;
 extern int continuous_query_combiner_cache_mem;
 extern int continuous_query_combiner_synchronous_commit;
 extern double continuous_query_proc_priority;
+
+#define ContQueriesEnabled() (continuous_queries_enabled)
 
 /* shared memory stuff */
 extern Size ContQuerySchedulerShmemSize(void);
@@ -92,10 +95,6 @@ extern void ContQuerySchedulerMain(int argc, char *argv[]) __attribute__((noretu
 
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
-
-extern void sleep_if_deactivated(void);
-extern bool ContQuerySetStateAndWait(bool state, int waitms);
-extern bool *ContQueryGetActiveFlag(void);
 
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
