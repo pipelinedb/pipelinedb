@@ -2681,7 +2681,7 @@ static struct config_int ConfigureNamesInt[] =
 
 	{
 		{"sliding_window_step_factor", PGC_USERSET, QUERY_TUNING_OTHER,
-		 gettext_noop("Sets the default step size for a sliding window query as a factor of the window size."),
+		 gettext_noop("Sets the default step size for a sliding window query as a percentage of the window size."),
 		 gettext_noop("A higher number will improve performance but tradeoff refresh interval.")
 		},
 		&sliding_window_step_factor,
