@@ -11,39 +11,41 @@
  */
 
 #include "postgres.h"
-#include "pipeline/cont_adhoc.h"
-#include "pipeline/tuplebuf.h"
-#include "catalog/pipeline_query_fn.h"
-#include "tcop/dest.h"
-#include "executor/execdesc.h"
-#include "pgstat.h"
-#include "executor/executor.h"
-#include "utils/memutils.h"
-#include "executor/tupletableReceiver.h"
-#include "utils/snapmgr.h"
-#include "catalog/pipeline_query.h"
 #include "access/htup_details.h"
-#include "storage/ipc.h"
-#include "storage/proc.h"
-#include "miscadmin.h"
-#include "commands/pipelinecmds.h"
-#include "nodes/makefuncs.h"
 #include "access/xact.h"
-#include "pipeline/cont_plan.h"
-#include "utils/rel.h"
+#include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_query.h"
+#include "catalog/pipeline_stream_fn.h"
+#include "commands/pipelinecmds.h"
+#include "executor/execdesc.h"
+#include "executor/executor.h"
 #include "executor/tstoreReceiver.h"
-#include "nodes/print.h"
-#include "tcop/utility.h"
-
-#include "pipeline/cont_adhoc_sender.h"
+#include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
-#include "tcop/tcopprot.h"
+#include "miscadmin.h"
+#include "nodes/makefuncs.h"
+#include "nodes/parsenodes.h"
+#include "nodes/print.h"
+#include "pgstat.h"
+#include "pipeline/cont_adhoc.h"
+#include "pipeline/cont_adhoc_sender.h"
 #include "pipeline/cont_analyze.h"
-#include "utils/syscache.h"
+#include "pipeline/cont_plan.h"
+#include "pipeline/tuplebuf.h"
+#include "storage/ipc.h"
+#include "storage/proc.h"
+#include "tcop/dest.h"
 #include "tcop/pquery.h"
-
+#include "tcop/tcopprot.h"
+#include "tcop/utility.h"
+#include "utils/memutils.h"
+#include "utils/rel.h"
+#include "utils/snapmgr.h"
+#include "utils/syscache.h"
 #include <unistd.h>
+#include "catalog/namespace.h"
+#include "nodes/nodeFuncs.h"
 
 void
 dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot);
@@ -59,9 +61,6 @@ typedef struct {
 	uint32 					num_processed;
 
 } AdhocWorkerState;
-
-// exec_adhoc_worker
-// init_query_state
 
 typedef struct {
 	QueryDesc               *query_desc;
@@ -581,46 +580,36 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 static void
 adhoc_sync_combine(AdhocCombinerState* state)
 {
+	MemoryContext old_cxt;
+
 	tuplestore_clear(state->batch);
 	tuplestore_rescan(state->result);
 
-	MemoryContext old_cxt;
-
-	// lame
+	if (!state->is_agg)
+		return;
 
 	foreach_tuple(state->slot, state->result)
 	{
-		if (state->is_agg)
+		bool isnew = false;
+
+		HeapTupleEntry entry = (HeapTupleEntry) 
+			LookupTupleHashEntry(state->existing, state->slot, &isnew);
+
+		if (!isnew)
 		{
-			bool isnew = false;
+			heap_freetuple(entry->tuple);
 
-			HeapTupleEntry entry = (HeapTupleEntry) 
-				LookupTupleHashEntry(state->existing, state->slot, &isnew);
-
-			if (!isnew)
-			{
-				heap_freetuple(entry->tuple);
-
-				old_cxt = MemoryContextSwitchTo(state->existing->tablecxt);
-				entry->tuple = ExecCopySlotTuple(state->slot);
-				MemoryContextSwitchTo(old_cxt);
-			}
-			else
-			{
-				old_cxt = MemoryContextSwitchTo(state->existing->tablecxt);
-				entry->tuple = ExecCopySlotTuple(state->slot);
-				MemoryContextSwitchTo(old_cxt);
-			}
+			old_cxt = MemoryContextSwitchTo(state->existing->tablecxt);
+			entry->tuple = ExecCopySlotTuple(state->slot);
+			MemoryContextSwitchTo(old_cxt);
 		}
 		else
 		{
-//			elog(LOG, "asc derp");
-//			print_slot(state->slot);
-//			sender_insert(sender, state->slot);
+			old_cxt = MemoryContextSwitchTo(state->existing->tablecxt);
+			entry->tuple = ExecCopySlotTuple(state->slot);
+			MemoryContextSwitchTo(old_cxt);
 		}
 	}
-
-//	tuplestore_clear(state->result);
 }
 
 static AdhocViewState*
@@ -691,62 +680,6 @@ exec_adhoc_view(AdhocViewState* state)
 	tuplestore_clear(state->batch);
 }
 
-typedef struct AdaptReceiver
-{
-	DestReceiver pub;
-	struct AdhocSender* sender; 
-
-	bool is_agg;
-	AttrNumber *keyColIdx;
-	int numCols;
-
-} AdaptReceiver;
-
-static void view_receiveSlot(TupleTableSlot *slot, DestReceiver *self)
-{
-	AdaptReceiver* receiver = (AdaptReceiver*)(self);
-	sender_insert(receiver->sender, slot);
-}
-
-static void view_rStartup(DestReceiver *self, int operation,
-						  TupleDesc typeinfo)
-{
-	struct AdaptReceiver *r = (AdaptReceiver*)(self);
-
-//	elog(LOG, "wtf %d", r->numCols);
-//sender_startup(struct AdhocSender *sender, TupleDesc tup_desc,
-//		AttrNumber *keyColIdx,
-//		int	numCols)
-//{
-
-//	raise(SIGSTOP);
-	sender_startup(r->sender, typeinfo, r->is_agg, r->keyColIdx, r->numCols);
-}
-
-static void view_rShutdown(DestReceiver *self)
-{
-
-}
-
-static void view_rDestroy(DestReceiver *self)
-{
-
-}
-
-static AdaptReceiver*
-create_view_receiver()
-{
-	AdaptReceiver *self = (AdaptReceiver*) palloc0(sizeof(AdaptReceiver));
-
-	self->pub.receiveSlot = view_receiveSlot;
-	self->pub.rStartup = view_rStartup;
-	self->pub.rShutdown = view_rShutdown;
-	self->pub.rDestroy = view_rDestroy;
-	self->sender = sender_create();
-
-	return self;
-}
-
 static void cleanup_cont_view(ContinuousViewData *data)
 {
 	DestReceiver* receiver = 0;
@@ -801,8 +734,8 @@ cleanup(int code, Datum arg)
 	CommitTransactionCommand();
 }
 
-void
-ExecAdhocQuery(SelectStmt* stmt, const char *s)
+static void
+exec_adhoc_query(SelectStmt* stmt, const char *s)
 {
 	int numCols = 1;
 	AttrNumber one = 1;
@@ -811,7 +744,12 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	AdhocWorkerState *worker_state = 0;
 	AdhocCombinerState *combiner_state = 0;
 	AdhocViewState *view_state = 0;
+	AdhocDestReceiver *adhoc_receiver = 0;
+	DestReceiver *worker_receiver = 0;
+
 	MemoryContext run_cxt = CurrentMemoryContext;
+	ContinuousViewData view_data;
+	Tuplestorestate *batch = 0;
 
 	ResourceOwner owner = 
 			ResourceOwnerCreate(CurrentResourceOwner, "WorkerResourceOwner");
@@ -819,17 +757,17 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	StartTransactionCommand();
 	CurrentResourceOwner = owner;
 	MemoryContextSwitchTo(run_cxt);
-	ContinuousViewData data = init_cont_view(stmt, s);
+	view_data = init_cont_view(stmt, s);
+
 	CommitTransactionCommand();
 
 	StartTransactionCommand();
 	CurrentResourceOwner = owner;
 	MemoryContextSwitchTo(run_cxt);
-	AdaptReceiver *view_receiver = 0;
-	DestReceiver *worker_receiver = CreateDestReceiver(DestTuplestore);
+	worker_receiver = CreateDestReceiver(DestTuplestore);
 
-	Tuplestorestate *batch = tuplestore_begin_heap(true, true,
-			continuous_query_combiner_work_mem);
+	batch = tuplestore_begin_heap(true, true, 
+				continuous_query_combiner_work_mem);
 
 	(void) (keyColIdx);
 	(void) (exec_adhoc_view);
@@ -840,8 +778,8 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 
 	MyContQueryProc = get_cont_query_proc();
 
-	worker_state = init_adhoc_worker(data, worker_receiver);
-	combiner_state = init_adhoc_combiner(data, batch);
+	worker_state = init_adhoc_worker(view_data, worker_receiver);
+	combiner_state = init_adhoc_combiner(view_data, batch);
 
 	if (combiner_state->existing)
 	{
@@ -849,27 +787,27 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 		numCols = combiner_state->existing->numCols;
 	}
 
-	view_receiver = create_view_receiver();
-	view_receiver->is_agg = combiner_state->is_agg;
-	view_receiver->keyColIdx = keyColIdx;
-	view_receiver->numCols = numCols;
+	adhoc_receiver = CreateAdhocDestReceiver(combiner_state->is_agg,
+										 keyColIdx,
+										 numCols);
 
-	view_state = init_adhoc_view(data, combiner_state->result,
-				 (DestReceiver*) view_receiver);
+	view_state = init_adhoc_view(view_data, combiner_state->result,
+				 (DestReceiver*) adhoc_receiver);
 	view_state->slot = combiner_state->slot;
 
 	CommitTransactionCommand();
 
-	PG_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&data));
+	PG_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&view_data));
 	{
 		while (true)
 		{
+			bool new_rows = false;
 			StartTransactionCommand();
 			CurrentResourceOwner = owner;
 
 			// in this case, we want the transaction to cleanup memory
 
-			bool new_rows = exec_adhoc_worker(worker_state);
+			new_rows = exec_adhoc_worker(worker_state);
 
 			if (new_rows)
 			{
@@ -878,11 +816,83 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 			}
 			else
 			{
-				sender_heartbeat(view_receiver->sender);
+				/* XXX - check deadline timeout */
+				AdhocDestReceiverHeartbeat(adhoc_receiver);
 			}
 
 			CommitTransactionCommand();
 		}
 	}
-	PG_END_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&data));
+	PG_END_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&view_data));
+}
+
+void
+ExecAdhocQuery(SelectStmt* stmt, const char* s)
+{
+	AbortCurrentTransaction();
+
+	{
+		MemoryContext adhoc_cxt = AllocSetContextCreate(CurrentMemoryContext,
+				"AdhocQueryContext",
+				ALLOCSET_DEFAULT_MINSIZE,
+				ALLOCSET_DEFAULT_INITSIZE,
+				ALLOCSET_DEFAULT_MAXSIZE);
+		
+		MemoryContext oldcontext = MemoryContextSwitchTo(adhoc_cxt);
+		SetAmContQueryAdhoc(true);
+
+		PG_TRY();
+		{
+			exec_adhoc_query(stmt, s);
+		}
+		PG_CATCH();
+		{
+			SetAmContQueryAdhoc(false);
+			MemoryContextSwitchTo(oldcontext);
+			MemoryContextResetAndDeleteChildren(adhoc_cxt);
+
+			PG_RE_THROW();
+		}
+
+		PG_END_TRY();
+	}
+}
+
+static bool
+walk_nodes(Node *node, int *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, RangeVar))
+	{
+		bool is_inf = false;
+		Oid relid = InvalidOid;
+
+		if (RangeVarIsForStream((RangeVar *) node, &is_inf))
+		{
+			*context = true;
+		}
+
+		relid = RangeVarGetRelid((RangeVar*) node, NoLock, true);
+
+		if (!OidIsValid(relid))
+		{
+			*context = true;
+		}
+
+		return false;
+	}
+
+	return raw_expression_tree_walker(node, walk_nodes, (void *) context);
+}
+
+bool IsAdhocQuery(Node *node)
+{
+	// collect_rels_and_streams
+	
+	int res = 0;
+	walk_nodes(node, &res);
+
+	return res;
 }

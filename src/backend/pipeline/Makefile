@@ -17,6 +17,6 @@ include $(top_builddir)/src/Makefile.global
 OBJS = combinerReceiver.o cont_plan.o tuplebuf.o update.o stream.o \
 			 cqmatrel.o sw_vacuum.o tdigest.o miscutils.o bloom.o hll.o cmsketch.o \
 			 cont_analyze.o cont_scheduler.o cont_worker.o cont_combiner.o \
-			 groupcache.o streamReceiver.o fss.o cont_adhoc_sender.o cont_adhoc.o
+			 groupcache.o streamReceiver.o fss.o cont_adhoc_format.o cont_adhoc_sender.o cont_adhoc.o
 
 include $(top_srcdir)/src/backend/common.mk

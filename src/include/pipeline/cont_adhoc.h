@@ -16,5 +16,6 @@
 #include "nodes/parsenodes.h"
 
 extern void ExecAdhocQuery(SelectStmt* stmt, const char* s);
+extern bool IsAdhocQuery(Node *node);
 
 #endif

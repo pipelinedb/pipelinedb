@@ -873,38 +873,6 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 }
 
 void
-exec_adhoc_query(SelectStmt* stmt, const char* s)
-{
-	AbortCurrentTransaction();
-
-	{
-		MemoryContext adhoc_cxt = AllocSetContextCreate(CurrentMemoryContext,
-				"AdhocQueryContext",
-				ALLOCSET_DEFAULT_MINSIZE,
-				ALLOCSET_DEFAULT_INITSIZE,
-				ALLOCSET_DEFAULT_MAXSIZE);
-		
-		MemoryContext oldcontext = MemoryContextSwitchTo(adhoc_cxt);
-		SetAmContQueryAdhoc(true);
-
-		PG_TRY();
-		{
-			ExecAdhocQuery(stmt, s);
-		}
-		PG_CATCH();
-		{
-			SetAmContQueryAdhoc(false);
-			MemoryContextSwitchTo(oldcontext);
-			MemoryContextResetAndDeleteChildren(adhoc_cxt);
-
-			PG_RE_THROW();
-		}
-
-		PG_END_TRY();
-	}
-}
-
-void
 exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *params)
 {
 	CommandDest dest = whereToSendOutput;
@@ -932,45 +900,6 @@ exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *para
 
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(EventContext);
-}
-
-static bool
-walk_nodes(Node *node, int *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, RangeVar))
-	{
-		bool is_inf = false;
-		Oid relid = InvalidOid;
-
-		if (RangeVarIsForStream((RangeVar *) node, &is_inf))
-		{
-			*context = true;
-		}
-
-		relid = RangeVarGetRelid((RangeVar*) node, NoLock, true);
-
-		if (!OidIsValid(relid))
-		{
-			*context = true;
-		}
-
-		return false;
-	}
-
-	return raw_expression_tree_walker(node, walk_nodes, (void *) context);
-}
-
-static bool is_adhoc(Node *node)
-{
-	// collect_rels_and_streams
-	
-	int res = 0;
-	walk_nodes(node, &res);
-
-	return res;
 }
 
 /*
@@ -1061,9 +990,9 @@ exec_simple_query(const char *query_string)
 			break;
 		}
 
-		if (IsA(parsetree, SelectStmt) && is_adhoc(parsetree))
+		if (IsA(parsetree, SelectStmt) && IsAdhocQuery(parsetree))
 		{
-			exec_adhoc_query((SelectStmt*) parsetree, query_string);
+			ExecAdhocQuery((SelectStmt*) parsetree, query_string);
 			continue;
 		}
 
