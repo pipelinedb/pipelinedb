@@ -25,12 +25,12 @@
 static TupleTableSlot *TuplestoreNext(TuplestoreScanState * node);
 static bool TuplestoreRecheck(TuplestoreScanState * node, TupleTableSlot *slot);
 
-extern TuplestoreScanState*
+extern TuplestoreScanState *
 ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 {
 	TuplestoreScanState *scanstate;
-	ScanState* nscan;
-	Scan* scan;
+	ScanState *nscan;
+	Scan *scan;
 
 	scanstate = makeNode(TuplestoreScanState);
 	scanstate->ss.ps.plan = (Plan *) node;
@@ -50,11 +50,11 @@ ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 	scan->scanrelid = 1;
 
 	ExecInitResultTupleSlot(estate, &scanstate->ss.ps);
-	ExecInitScanTupleSlot(estate, (ScanState*) scanstate);
-	ExecSetSlotDescriptor(((ScanState*) scanstate)->ss_ScanTupleSlot, node->desc);
+	ExecInitScanTupleSlot(estate, (ScanState *) scanstate);
+	ExecSetSlotDescriptor(((ScanState *) scanstate)->ss_ScanTupleSlot, node->desc);
 
 	ExecAssignResultTypeFromTL(&scanstate->ss.ps);
-	ExecAssignScanProjectionInfo((ScanState*) scanstate);
+	ExecAssignScanProjectionInfo((ScanState *) scanstate);
 
 	return scanstate;
 }

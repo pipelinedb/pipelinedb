@@ -18,7 +18,7 @@
 /* This module is for performing adhoc in-memory continuous queries. Rows are not 
  * persisted in a matrel, but are streamed down to the client in adhoc format */
 
-extern void ExecAdhocQuery(SelectStmt* stmt, const char* s);
+extern void ExecAdhocQuery(SelectStmt *stmt, const char *s);
 
 /* returns true iff this parsetree is an adhoc query */
 extern bool IsAdhocQuery(Node *node);

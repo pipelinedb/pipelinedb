@@ -328,13 +328,13 @@ static void adhoc_dest_heartbeat(struct AdhocDestReceiver *adhoc_dest)
 
 static void adhoc_receive_slot(TupleTableSlot *slot, DestReceiver *self)
 {
-	adhoc_dest_insert((AdhocDestReceiver*) (self), slot);
+	adhoc_dest_insert((AdhocDestReceiver *) (self), slot);
 }
 
 static void adhoc_startup(DestReceiver *self, int operation,
 						  TupleDesc typeinfo)
 {
-	struct AdhocDestReceiver *r = (AdhocDestReceiver*)(self);
+	struct AdhocDestReceiver *r = (AdhocDestReceiver *)(self);
 	adhoc_dest_startup(r, typeinfo, r->is_agg, r->keyColIdx, r->numCols);
 }
 
@@ -348,12 +348,12 @@ static void adhoc_destroy(DestReceiver *self)
 {
 }
 
-AdhocDestReceiver*
+AdhocDestReceiver *
 CreateAdhocDestReceiver(bool is_agg,
 					    AttrNumber *keyColIdx,
 					    int num_cols)
 {
-	AdhocDestReceiver *self = (AdhocDestReceiver*) palloc0(sizeof(AdhocDestReceiver));
+	AdhocDestReceiver *self = (AdhocDestReceiver *) palloc0(sizeof(AdhocDestReceiver));
 
 	self->pub.receiveSlot = adhoc_receive_slot;
 	self->pub.rStartup = adhoc_startup;
@@ -367,7 +367,7 @@ CreateAdhocDestReceiver(bool is_agg,
 	return self;
 }
 
-void AdhocDestReceiverHeartbeat(AdhocDestReceiver* receiver)
+void AdhocDestReceiverHeartbeat(AdhocDestReceiver *receiver)
 {
 	adhoc_dest_heartbeat(receiver);
 }

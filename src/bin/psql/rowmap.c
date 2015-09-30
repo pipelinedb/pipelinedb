@@ -20,15 +20,15 @@ RowSize(Row *r)
 	return r->n;
 }
 
-typedef struct Node
+typedef struct TreeNode
 {
 	bsd_rb_node_t node;
 	Row row;
-} Node;
+} TreeNode;
 
 typedef struct Key
 {
-	Row* row;
+	Row *row;
 	int is_key;
 } Key;
 
@@ -60,8 +60,8 @@ RowFieldLength(Row *r, size_t i)
 	return r->fields[i].n;
 }
 
-Field
-*RowGetField(Row *r, size_t i)
+Field *
+RowGetField(Row *r, size_t i)
 {
 	return r->fields + i;
 }
@@ -189,26 +189,26 @@ row_cmp_row_key(Row *r1, Row *r2)
 static int
 compare_key(void *ctx, const void *a, const void *b)
 {
-	const Node* na = (const Node*)(a);
-	const Key* nb = (const Key*)(b);
+	const TreeNode *na = (const TreeNode *)(a);
+	const Key *nb = (const Key *)(b);
 
 	if (nb->is_key)
 	{
-		return row_cmp_row_key((Row*) &na->row, (Row*) nb->row);
+		return row_cmp_row_key((Row *) &na->row, (Row *) nb->row);
 	}
 	else
 	{
-		return row_cmp_row_row((Row*) &na->row, (Row*) nb->row);
+		return row_cmp_row_row((Row *) &na->row, (Row *) nb->row);
 	}
 }
 
 static int
 compare_nodes(void *ctx, const void *a, const void *b)
 {
-	const Node* na = (const Node*)(a);
-	const Node* nb = (const Node*)(b);
+	const TreeNode *na = (const TreeNode *)(a);
+	const TreeNode *nb = (const TreeNode *)(b);
 
-	return row_cmp_row_row((Row*) &na->row, (Row*) &nb->row);
+	return row_cmp_row_row((Row *) &na->row, (Row *) &nb->row);
 }
 
 RowMap *
@@ -230,11 +230,11 @@ RowMapInit()
 void
 RowMapDestroy(RowMap *m)
 {
-	void* node = bsd_rb_tree_iterate(&m->tree, 0, 0);
+	void *node = bsd_rb_tree_iterate(&m->tree, 0, 0);
 
 	while(node != 0)
 	{
-		Row* row;
+		Row *row;
 		void *delnode;
 
 		row = GetRow(node);
@@ -251,9 +251,10 @@ RowMapDestroy(RowMap *m)
 	pg_free(m);
 }
 
-Row* GetRow(RowIterator iter)
+Row *
+GetRow(RowIterator iter)
 {
-	return &((Node*)(iter))->row;
+	return &((TreeNode *)(iter))->row;
 }
 
 void
@@ -271,16 +272,16 @@ RowMapErase(RowMap *m, Row *key)
 void
 RowMapUpdate(RowMap *m, Row *row)
 {
-	Node* res = 0;
+	TreeNode *res = 0;
 
-	Node *new_node = pg_malloc0(sizeof(Node));
+	TreeNode *new_node = pg_malloc0(sizeof(TreeNode));
 	new_node->row = *row;
 
 	res = bsd_rb_tree_insert_node(&m->tree, new_node);
 
 	if (res != new_node)
 	{
-		// replace old contents, free unneeded new node
+		/* replace old contents, free unneeded new node */
 		
 		RowCleanup(&res->row);
 
@@ -334,7 +335,7 @@ RowMapLowerBound(RowMap *m, Row *key)
 void
 RowMapDump(RowMap *m)
 {
-	void* node = bsd_rb_tree_iterate(&m->tree, 0, 0);
+	void *node = bsd_rb_tree_iterate(&m->tree, 0, 0);
 
 	for(; node != 0; node = bsd_rb_tree_iterate(&m->tree, node, 1))
 	{

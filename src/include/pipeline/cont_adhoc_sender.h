@@ -10,11 +10,11 @@
 
 typedef struct AdhocDestReceiver AdhocDestReceiver;
 
-extern AdhocDestReceiver* CreateAdhocDestReceiver(bool is_agg,
+extern AdhocDestReceiver *CreateAdhocDestReceiver(bool is_agg,
 												  AttrNumber *keyColIdx,
 												  int num_cols);
 
 /* call this every so often to detect if the client has gone away */
-extern void AdhocDestReceiverHeartbeat(AdhocDestReceiver* receiver);
+extern void AdhocDestReceiverHeartbeat(AdhocDestReceiver *receiver);
 
 #endif

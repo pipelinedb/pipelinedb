@@ -9,8 +9,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef ROWMAP_H_46D31946
-#define ROWMAP_H_46D31946
+#ifndef ROWMAP_H
+#define ROWMAP_H
 
 #include "postgres_fe.h"
 #include "pqexpbuffer.h"
@@ -73,7 +73,7 @@ extern RowIterator RowMapFindWithRow(RowMap *m, Row *row);
 extern RowIterator RowMapFindWithKey(RowMap *m, Row *key);
 extern RowIterator RowMapLowerBound(RowMap *m, Row *key);
 
-extern Row* GetRow(RowIterator iter);
+extern Row *GetRow(RowIterator iter);
 
 extern bool RowIteratorEqual(RowIterator a, RowIterator b);
 extern RowIterator RowIteratorNext(RowMap *m, RowIterator a);

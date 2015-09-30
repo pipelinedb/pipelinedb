@@ -956,7 +956,7 @@ SignalContQuerySchedulerRefresh(void)
 	signal_cont_query_scheduler(SIGINT);
 }
 
-ContQueryProc*
+ContQueryProc *
 ContQueryGetAdhoc(Oid db_oid)
 {
 	bool found = false;

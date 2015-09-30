@@ -233,7 +233,7 @@ get_cont_query_proc()
 }
 
 /* generate a unique name for the adhoc view */
-static char*
+static char *
 get_unique_adhoc_view_name()
 {
 	char *relname = palloc0(NAMEDATALEN);
@@ -264,16 +264,16 @@ typedef struct{
  * called earlier - (it is passed into DefineContinuousView) */
 
 static ContinuousViewData
-init_cont_view(SelectStmt *stmt, const char* querystring)
+init_cont_view(SelectStmt *stmt, const char * querystring)
 {
 	ContinuousViewData view_data;
-	RangeVar* view_name = makeRangeVar(0, get_unique_adhoc_view_name(), -1);
+	RangeVar *view_name = makeRangeVar(0, get_unique_adhoc_view_name(), -1);
 
 	CreateContViewStmt *create_stmt	= makeNode(CreateContViewStmt);
 
 	create_stmt->into = makeNode(IntoClause);
 	create_stmt->into->rel = view_name;
-	create_stmt->query = (Node*) stmt;
+	create_stmt->query = (Node *) stmt;
 
 	stmt->forContinuousView = true;
 
@@ -288,7 +288,7 @@ init_cont_view(SelectStmt *stmt, const char* querystring)
 }
 
 /* get the worker plan and set up the worker state for execution */
-static AdhocWorkerState*
+static AdhocWorkerState *
 init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 {
 	PlannedStmt *pstmt = 0;
@@ -368,7 +368,7 @@ prepare_plan_for_reading(RangeVar *matrel, PlannedStmt *plan,
 }
 
 /* Get the combiner plan, and prepare the combiner state for execution */
-static AdhocCombinerState*
+static AdhocCombinerState *
 init_adhoc_combiner(ContinuousViewData data,
 					Tuplestorestate *batch)
 {
@@ -428,7 +428,7 @@ init_adhoc_combiner(ContinuousViewData data,
  * Otherwise, tuples are processed with the worker plan and sent to the dest receiver
  */
 static bool
-exec_adhoc_worker(AdhocWorkerState* state)
+exec_adhoc_worker(AdhocWorkerState * state)
 {
 	struct Plan *plan = 0;
 	bool has_tup = false;
@@ -487,13 +487,13 @@ exec_adhoc_worker(AdhocWorkerState* state)
 }
 
 static void
-adhoc_sync_combine(AdhocCombinerState* state);
+adhoc_sync_combine(AdhocCombinerState *state);
 
 /* 
  * combine rows in state->batch (from worker)
  */
 static void
-exec_adhoc_combiner(AdhocCombinerState* state)
+exec_adhoc_combiner(AdhocCombinerState *state)
 {
 	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
@@ -560,7 +560,7 @@ exec_adhoc_combiner(AdhocCombinerState* state)
 
 /* update results in hash table if need be */
 static void
-adhoc_sync_combine(AdhocCombinerState* state)
+adhoc_sync_combine(AdhocCombinerState *state)
 {
 	MemoryContext old_cxt;
 
@@ -595,7 +595,7 @@ adhoc_sync_combine(AdhocCombinerState* state)
 }
 
 /* get the view plan and set up the view state for execution */
-static AdhocViewState*
+static AdhocViewState *
 init_adhoc_view(ContinuousViewData data,
 				Tuplestorestate *batch,
 				DestReceiver *receiver)
@@ -632,7 +632,7 @@ init_adhoc_view(ContinuousViewData data,
 
 /* execute the view and send rows to adhoc dest receiver */
 static void
-exec_adhoc_view(AdhocViewState* state)
+exec_adhoc_view(AdhocViewState *state)
 {
 	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
@@ -667,7 +667,7 @@ exec_adhoc_view(AdhocViewState* state)
 /* Execute a drop view statement to cleanup the adhoc view */
 static void cleanup_cont_view(ContinuousViewData *data)
 {
-	DestReceiver* receiver = 0;
+	DestReceiver *receiver = 0;
 	DropStmt *stmt = makeNode(DropStmt);
 	List *querytree_list;
 	Node *plan;
@@ -679,7 +679,7 @@ static void cleanup_cont_view(ContinuousViewData *data)
 	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",
 			NULL, 0);
 
-	plan = ((Query*) linitial(querytree_list))->utilityStmt;
+	plan = ((Query *) linitial(querytree_list))->utilityStmt;
 	PushActiveSnapshot(GetTransactionSnapshot());
 
 	portal = CreatePortal("__cleanup_cont_view__", true, true);
@@ -715,7 +715,7 @@ cleanup(int code, Datum arg)
 	AbortCurrentTransaction();
 
 	StartTransactionCommand();
-	cleanup_cont_view((ContinuousViewData*)(arg));
+	cleanup_cont_view((ContinuousViewData *)(arg));
 	CommitTransactionCommand();
 }
 
@@ -723,7 +723,7 @@ cleanup(int code, Datum arg)
  * The current exit conditions are when the query is cancelled, or when the frontend
  * goes away (the heartbeat will fail to send) */
 static void
-exec_adhoc_query(SelectStmt* stmt, const char *s)
+exec_adhoc_query(SelectStmt *stmt, const char *s)
 {
 	int numCols = 1;
 	AttrNumber one = 1;
@@ -775,7 +775,7 @@ exec_adhoc_query(SelectStmt* stmt, const char *s)
 										 numCols);
 
 	view_state = init_adhoc_view(view_data, combiner_state->result,
-				 (DestReceiver*) adhoc_receiver);
+				 (DestReceiver *) adhoc_receiver);
 	view_state->slot = combiner_state->slot;
 
 	CommitTransactionCommand();
@@ -811,7 +811,7 @@ exec_adhoc_query(SelectStmt* stmt, const char *s)
 
 /* Setup the enviroment for running the query inside the frontend, and execute it */
 void
-ExecAdhocQuery(SelectStmt* stmt, const char* s)
+ExecAdhocQuery(SelectStmt *stmt, const char *s)
 {
 	/* Break out of the top level xact (from exec_simple_query) */
 	AbortCurrentTransaction();
@@ -865,7 +865,7 @@ walk_nodes(Node *node, int *context)
 			*context = true;
 		}
 
-		relid = RangeVarGetRelid((RangeVar*) node, NoLock, true);
+		relid = RangeVarGetRelid((RangeVar *) node, NoLock, true);
 
 		if (!OidIsValid(relid))
 		{

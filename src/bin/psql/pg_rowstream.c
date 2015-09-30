@@ -23,7 +23,7 @@ PGRowStream *PGRowStreamInit(const char* sql, RowFunc cb, void *ctx)
 	PGRowStream *self = pg_malloc0(sizeof(PGRowStream));
 	PGresult *res = 0;
 
-	const char* conninfo = "dbname=pipeline host=/tmp";
+	const char *conninfo = "dbname=pipeline host=/tmp";
 
     self->conn = PQconnectdb(conninfo);
 
@@ -147,7 +147,7 @@ parse_text_row(const char *line)
 
 bool PGRowStreamPostInit(PGRowStream *s)
 {
-	char* buffer = 0;
+	char *buffer = 0;
 
 	while (true)
 	{
@@ -189,7 +189,7 @@ handle_data(PGRowStream *stream, const char *buf)
 bool
 PGRowStreamHandleInput(PGRowStream *s)
 {
-	char* buffer = 0;
+	char *buffer = 0;
 	PQconsumeInput(s->conn);
 
 	while (true)

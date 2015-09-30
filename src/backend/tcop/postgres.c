@@ -992,7 +992,7 @@ exec_simple_query(const char *query_string)
 
 		if (IsA(parsetree, SelectStmt) && IsAdhocQuery(parsetree))
 		{
-			ExecAdhocQuery((SelectStmt*) parsetree, query_string);
+			ExecAdhocQuery((SelectStmt *) parsetree, query_string);
 			continue;
 		}
 
