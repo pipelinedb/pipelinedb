@@ -46,6 +46,7 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include <unistd.h>
+#include "utils/builtins.h"
 
 /* This module performs work analogous to the bg workers and combiners
  * (and a view select), but does it in memory using tuple stores.
@@ -809,9 +810,26 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	PG_END_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&view_data));
 }
 
-/* Setup the enviroment for running the query inside the frontend, and execute it */
+static const char* get_stmt_sql(Node* node)
+{
+	/* assumes IsAdhocQuery has returned true on node already. */
+
+	SelectStmt *stmt = (SelectStmt*) (node);
+	Node *first_node = 0;
+	ResTarget *target = 0;
+	FuncCall *func = 0;
+	A_Const *sql_arg = 0;
+
+	first_node = (Node *) linitial(stmt->targetList);
+	target = (ResTarget*) (first_node);
+	func = (FuncCall*) (target->val);
+	sql_arg = linitial(func->args);
+
+	return sql_arg->val.val.str;
+}
+
 void
-ExecAdhocQuery(SelectStmt *stmt, const char *s)
+ExecAdhocQuery(Node *stmt, const char *s)
 {
 	/* Break out of the top level xact (from exec_simple_query) */
 	AbortCurrentTransaction();
@@ -834,7 +852,11 @@ ExecAdhocQuery(SelectStmt *stmt, const char *s)
 		 * a heartbeat */
 		PG_TRY();
 		{
-			exec_adhoc_query(stmt, s);
+			List *parsetree_list;
+			const char* inner_sql = get_stmt_sql(stmt);
+			parsetree_list = pg_parse_query(inner_sql);
+
+			exec_adhoc_query(linitial(parsetree_list), inner_sql);
 		}
 		PG_CATCH();
 		{
@@ -847,42 +869,77 @@ ExecAdhocQuery(SelectStmt *stmt, const char *s)
 	}
 }
 
-/* walk the parse nodes, and set context to 1 if we find a stream or 
- * a non-existing relation. */
-static bool
-walk_nodes(Node *node, int *context)
+static bool check_func(FuncCall* func,
+					   const char* name)
 {
-	if (node == NULL)
+	Node* node = 0;
+	Value* value = 0;
+	A_Const *sql_arg = 0;
+
+	if (list_length(func->funcname) != 1)
 		return false;
 
-	if (IsA(node, RangeVar))
-	{
-		bool is_inf = false;
-		Oid relid = InvalidOid;
+	node = linitial(func->funcname);
 
-		if (RangeVarIsForStream((RangeVar *) node, &is_inf))
-		{
-			*context = true;
-		}
-
-		relid = RangeVarGetRelid((RangeVar *) node, NoLock, true);
-
-		if (!OidIsValid(relid))
-		{
-			*context = true;
-		}
-
+	if (!IsA(node, String))
 		return false;
-	}
 
-	return raw_expression_tree_walker(node, walk_nodes, (void *) context);
+	value = (Value*) (node);
+
+	if (strcmp(value->val.str, name) != 0)
+		return false;
+
+	if (!func->args)
+		return false;
+
+	if (list_length(func->args) != 1)
+		return false;
+
+	sql_arg = linitial(func->args);
+
+	if (!IsA(sql_arg, A_Const))
+		return false;
+
+	return true;
 }
 
 /* returns true iff the query is an adhoc select */
 bool IsAdhocQuery(Node *node)
 {
-	int res = 0;
-	walk_nodes(node, &res);
+	SelectStmt *stmt = (SelectStmt*) (node);
+	Node *first_node = 0;
+	ResTarget *target = 0;
+	FuncCall *func = 0;
 
-	return res;
+	if (!IsA(node, SelectStmt))
+		return false;
+
+	if (list_length(stmt->targetList) != 1)
+		return false;
+
+	first_node = (Node *) linitial(stmt->targetList);
+
+	if (!IsA(first_node, ResTarget))
+		return false;
+
+	target = (ResTarget*)(first_node);
+
+	if (!target->val)
+		return false;
+
+	if (!IsA(target->val, FuncCall))
+		return false;
+
+	func = (FuncCall*)(target->val);
+
+	if (!check_func(func, "pipeline_exec_adhoc_query"))
+		return false;
+
+	return true;
+}
+
+Datum pipeline_exec_adhoc_query(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "pipeline_exec_adhoc_query intercept failure");
+	PG_RETURN_TEXT_P(CStringGetTextDatum(""));
 }

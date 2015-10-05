@@ -990,12 +990,6 @@ exec_simple_query(const char *query_string)
 			break;
 		}
 
-		if (IsA(parsetree, SelectStmt) && IsAdhocQuery(parsetree))
-		{
-			ExecAdhocQuery((SelectStmt *) parsetree, query_string);
-			continue;
-		}
-
 		if (IsA(parsetree, InsertStmt))
 		{
 			InsertStmt *ins = (InsertStmt *) parsetree;
@@ -1004,6 +998,11 @@ exec_simple_query(const char *query_string)
 				exec_stream_inserts(ins, NULL, NIL);
 				continue;
 			}
+		}
+		else if (IsAdhocQuery(parsetree))
+		{
+			ExecAdhocQuery(parsetree, query_string);
+			continue;
 		}
 
 		tmp_list = lappend(tmp_list, parsetree);
