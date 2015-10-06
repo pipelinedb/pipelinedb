@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include "libpq-fe.h"
 
 /*
  * Create a default initialized PGRowStream and returns a pointer to it.
@@ -24,7 +25,6 @@ PGRowStream *PGRowStreamInit(const char* sql, RowFunc cb, void *ctx)
 	PGresult *res = 0;
 
 	const char *conninfo = "dbname=pipeline host=/tmp";
-
     self->conn = PQconnectdb(conninfo);
 
     if (PQstatus(self->conn) != CONNECTION_OK)
@@ -37,10 +37,24 @@ PGRowStream *PGRowStreamInit(const char* sql, RowFunc cb, void *ctx)
 	self->callback = cb;
 	self->cb_ctx = ctx;
 
-	PQsetnonblocking(self->conn, true);
-	res = PQexec(self->conn, sql);
+	PQExpBuffer sql_str = createPQExpBuffer();
 
-	(void) (res);
+	char* esc_sql = PQescapeLiteral(self->conn, sql, strlen(sql));
+	appendPQExpBuffer(sql_str, "select pipeline_exec_adhoc_query(%s);", esc_sql);
+
+	PQsetnonblocking(self->conn, true);
+	res = PQexec(self->conn, sql_str->data);
+
+	ExecStatusType type = PQresultStatus(res);
+
+	if (type != PGRES_COPY_OUT)
+	{
+		char *err_msg = PQresultErrorMessage(res);
+		fprintf(stderr, "%s", err_msg);
+		exit(1);
+	}
+
+	destroyPQExpBuffer(sql_str);
 
 	return self;
 }

@@ -606,7 +606,7 @@ init_adhoc_view(ContinuousViewData data,
 	TupleDesc desc;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
-	pstmt = GetContinuousViewPlan(data.view);
+	pstmt = GetContinuousViewOverlayPlan(data.view);
 	PopActiveSnapshot();
 
 	desc = prepare_plan_for_reading(data.view->matrel, pstmt, batch);

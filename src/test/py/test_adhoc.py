@@ -25,7 +25,6 @@ def gen_insert(target, desc, rows):
   values = values.replace('None', 'null')
   return 'INSERT INTO %s (%s) VALUES %s;\n' % (target, header, values)
 
-
 def test_adhoc_group_query(pipeline, clean_db):
   """
   Runs an adhoc grouping query, and checks the results.
