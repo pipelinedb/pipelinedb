@@ -61,6 +61,7 @@ extern void ValidateContQuery(RangeVar *name, Node *node, const char *sql);
 
 extern void transformContSelectStmt(ParseState *pstate, SelectStmt *select);
 extern List *transformContSelectTargetList(ParseState *pstate, List *tlist);
+extern void ApplyTransitionOut(List *nodes);
 extern List *transformContViewOverlayTargetList(ParseState *pstate, List *tlist);
 extern void transformCreateStreamStmt(CreateStreamStmt *stmt);
 extern SelectStmt *TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, SelectStmt **viewptr, ContQueryProcType type);

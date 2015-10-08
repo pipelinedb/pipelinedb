@@ -1508,6 +1508,40 @@ get_combine_state_type(Expr *expr)
 }
 
 /*
+ * ApplyTransitionOut
+ *
+ * Apply transition out functions to all relevant aggregates in the given list of nodes
+ */
+void
+ApplyTransitionOut(List *nodes)
+{
+	ListCell *lc;
+	foreach(lc, nodes)
+	{
+		Expr *expr = (Expr *) lfirst(lc);
+		if (IsA(expr, TargetEntry))
+			expr = ((TargetEntry *) expr)->expr;
+
+		if (IsA(expr, Aggref))
+		{
+			Aggref *agg = (Aggref *) expr;
+			Oid type = get_combine_state_type((Expr *) agg);
+
+			if (OidIsValid(type))
+				apply_transout((Expr *) agg, agg->aggfnoid);
+		}
+		else if (IsA(expr, WindowFunc))
+		{
+			WindowFunc *win = (WindowFunc *) expr;
+			Oid type = get_combine_state_type((Expr *) win);
+
+			if (OidIsValid(type))
+				apply_transout((Expr *) win, win->winfnoid);
+		}
+	}
+}
+
+/*
  * transformContSelectTargetList
  */
 List *
