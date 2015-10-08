@@ -496,6 +496,15 @@ adhoc_sync_combine(AdhocCombinerState *state);
 static void
 exec_adhoc_combiner(AdhocCombinerState *state)
 {
+	foreach_tuple(state->slot, state->batch)
+	{
+		print_slot(state->slot);
+	}
+
+	tuplestore_clear(state->batch);
+
+	return;
+
 	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
 	EState *estate = 0;
@@ -563,6 +572,8 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 static void
 adhoc_sync_combine(AdhocCombinerState *state)
 {
+	return;
+
 	MemoryContext old_cxt;
 
 	tuplestore_clear(state->batch);
@@ -635,6 +646,8 @@ init_adhoc_view(ContinuousViewData data,
 static void
 exec_adhoc_view(AdhocViewState *state)
 {
+	return;
+
 	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
 	EState *estate = 0;

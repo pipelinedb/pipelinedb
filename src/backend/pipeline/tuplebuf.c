@@ -51,6 +51,7 @@
 
 TupleBuffer *WorkerTupleBuffer = NULL;
 TupleBuffer *CombinerTupleBuffer = NULL;
+TupleBuffer *AdhocTupleBuffer = NULL;
 
 /* GUC parameters */
 int tuple_buffer_blocks;
@@ -412,7 +413,7 @@ static Size tuple_buffer_size()
 Size
 TupleBuffersShmemSize(void)
 {
-	return MAXALIGN(mul_size(add_size(tuple_buffer_size(), tuple_buffer_header_size()), 2));
+	return MAXALIGN(mul_size(add_size(tuple_buffer_size(), tuple_buffer_header_size()), 3));
 }
 
 /*
@@ -423,6 +424,7 @@ TupleBuffersShmemInit(void)
 {
 	WorkerTupleBuffer = TupleBufferInit("WorkerTupleBuffer", tuple_buffer_size(), WorkerBufferHeadLock, WorkerBufferTailLock);
 	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", tuple_buffer_size(), CombinerBufferHeadLock, CombinerBufferTailLock);
+	AdhocTupleBuffer = TupleBufferInit("AdhocTupleBuffer", tuple_buffer_size(), AdhocBufferHeadLock, AdhocBufferTailLock);
 }
 
 /*

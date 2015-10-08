@@ -30,5 +30,6 @@ void PipelineShmemInit()
 
 	ShmemDynAllocShmemInit();
 	ContQuerySchedulerShmemInit();
+	AdhocShmemInit();
 	TupleBuffersShmemInit();
 }
