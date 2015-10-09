@@ -469,11 +469,12 @@ TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock)
 TupleBufferReader *
 TupleBufferOpenReader(TupleBuffer *buf, TupleBufferShouldReadFunc should_read_fn)
 {
-	TupleBufferReader *reader = (TupleBufferReader *) ShmemDynAlloc(sizeof(TupleBufferReader));
+	TupleBufferReader *reader;
 
 	if (MyContQueryProc == NULL)
 		ereport(ERROR, (errmsg("tuple buffer readers can only be opened by continuous query processes")));
 
+	reader = (TupleBufferReader *) ShmemDynAlloc0(sizeof(TupleBufferReader));
 	reader->buf = buf;
 	reader->proc = MyContQueryProc;
 	reader->slot = NULL;

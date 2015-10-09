@@ -100,8 +100,4 @@ extern uint32 bms_hash_value(const Bitmapset *a);
 /* debug print */
 extern char *bms_print(const Bitmapset *a);
 
-/* shared memory bms */
-extern Bitmapset *shm_bms_add_member(Bitmapset *bms, int x);
-extern void shm_bms_free(Bitmapset *bms);
-
 #endif   /* BITMAPSET_H */

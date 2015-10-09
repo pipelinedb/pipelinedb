@@ -32,7 +32,6 @@
 #include "storage/proc.h"
 #include "storage/shmem.h"
 #include "storage/shm_alloc.h"
-#include "storage/shm_array.h"
 #include "storage/sinval.h"
 #include "storage/spin.h"
 #include "tcop/pquery.h"
