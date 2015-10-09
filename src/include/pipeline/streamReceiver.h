@@ -23,16 +23,31 @@ typedef struct StreamReceiver
 	DestReceiver pub;
 	InsertBatchAck *acks;
 	int nacks;
+
+	InsertBatchAck *adhoc_acks;
+	int adhoc_nacks;
+
 	Bitmapset *targets;
+	Bitmapset *adhoc_targets;
+
 	long count;
 	TupleDesc desc;
 	MemoryContext context;
 	Size bytes;
 	TimestampTz lastcommit;
+
 } StreamReceiver;
 
 extern DestReceiver *CreateStreamDestReceiver(void);
-extern void SetStreamDestReceiverParams(DestReceiver *self, Bitmapset *targets,
-		TupleDesc desc, int nbatches, InsertBatchAck *acks);
+
+extern void
+SetStreamDestReceiverParams(DestReceiver *self,
+							Bitmapset *targets,
+							Bitmapset *adhoc_targets,
+							TupleDesc desc,
+							int nacks, 
+							InsertBatchAck *acks,
+							int adhoc_nacks,
+							InsertBatchAck *adhoc_acks);
 
 #endif

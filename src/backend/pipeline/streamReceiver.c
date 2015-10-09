@@ -32,15 +32,59 @@ static void
 stream_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	StreamReceiver *stream = (StreamReceiver *) self;
+	int num_worker = bms_num_members(stream->targets);
+	int num_adhoc = bms_num_members(stream->adhoc_targets);
+
+	int count = 0;
+	Size bytes = 0;
+
 	MemoryContext old = MemoryContextSwitchTo(stream->context);
 	HeapTuple tup = ExecMaterializeSlot(slot);
-	StreamTuple *tuple = MakeStreamTuple(tup, stream->desc, stream->nacks, stream->acks);
 
-	if (TupleBufferInsert(WorkerTupleBuffer, tuple, stream->targets))
+	if (num_worker)
 	{
-		stream->count++;
-		stream->bytes += tuple->heaptup->t_len + HEAPTUPLESIZE;
+		StreamTuple *tuple = MakeStreamTuple(tup, stream->desc, stream->nacks, stream->acks);
+
+		if (TupleBufferInsert(WorkerTupleBuffer, tuple, stream->targets))
+		{
+			count++;
+			bytes += tuple->heaptup->t_len + HEAPTUPLESIZE;
+		}
 	}
+
+	if (num_adhoc)
+	{
+		Bitmapset *tmp_targets = bms_copy(stream->adhoc_targets);
+		int target = 0;
+		int i = 0;
+
+		while ((target = bms_first_member(tmp_targets)) >= 0)
+		{
+			int tmp_count = 0;
+			Size tmp_bytes = 0;
+			InsertBatchAck *ack = 0;
+			StreamTuple *tuple = 0;
+			Bitmapset *targets = 0;
+			
+			ack = &stream->adhoc_acks[i++];
+			tuple = MakeStreamTuple(tup, stream->desc, 1, ack);
+			tuple->group_hash = target;
+
+			targets = bms_add_member(0, target);
+
+			if (TupleBufferInsert(AdhocTupleBuffer, tuple, targets))
+			{
+				tmp_count++;
+				tmp_bytes += tuple->heaptup->t_len + HEAPTUPLESIZE;
+
+				count = Max(count, tmp_count);
+				bytes = Max(bytes, tmp_bytes);
+			}
+		}
+	}
+
+	stream->count = count;
+	stream->bytes = bytes;
 
 	MemoryContextSwitchTo(old);
 }
@@ -69,14 +113,25 @@ CreateStreamDestReceiver(void)
 }
 
 void
-SetStreamDestReceiverParams(DestReceiver *self, Bitmapset *targets, TupleDesc desc,
-		int nacks, InsertBatchAck *acks)
+SetStreamDestReceiverParams(DestReceiver *self,
+							Bitmapset *targets,
+							Bitmapset *adhoc_targets,
+							TupleDesc desc,
+							int nacks, 
+							InsertBatchAck *acks,
+							int adhoc_nacks,
+							InsertBatchAck *adhoc_acks)
 {
 	StreamReceiver *stream = (StreamReceiver *) self;
 
 	stream->desc = desc;
 	stream->targets = targets;
+	stream->adhoc_targets = adhoc_targets;
 	stream->nacks = nacks;
 	stream->acks = acks;
+
+	stream->adhoc_acks = adhoc_acks;
+	stream->adhoc_nacks = adhoc_nacks;
+
 	stream->context = CurrentMemoryContext;
 }

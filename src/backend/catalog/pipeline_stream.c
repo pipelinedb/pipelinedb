@@ -473,7 +473,8 @@ GetAllStreamReaders(Oid relid)
 	if (!HeapTupleIsValid(tup))
 		return NULL;
 
-	raw = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
+	raw = SysCacheGetAttr(PIPELINESTREAMRELID, tup,
+						  Anum_pipeline_stream_queries, &isnull);
 
 	if (isnull)
 		return NULL;
@@ -491,6 +492,99 @@ GetAllStreamReaders(Oid relid)
 
 	return result;
 }
+
+Bitmapset *
+GetAdhocContinuousViewIds(void)
+{
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
+	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
+	HeapTuple tup;
+	Bitmapset *result = NULL;
+
+	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+		Oid id = row->id;
+
+		if (!row->adhoc)
+		{
+			continue;
+		}
+
+		result = bms_add_member(result, id);
+	}
+
+	heap_endscan(scan_desc);
+	heap_close(pipeline_query, AccessShareLock);
+
+	return result;
+}
+
+//Bitmapset *
+//GetAdhocStreamReaders(Oid relid)
+//{
+//	Bitmapset *readers = GetAllStreamReaders(relid);
+//
+//	if (stream_targets && strlen(stream_targets) && readers)
+//	{
+//		Bitmapset *local_readers = NULL;
+//		HeapTuple tuple;
+//		Form_pipeline_query row;
+//		char *targets = pstrdup(stream_targets);
+//		List *streams;
+//		ListCell *lc;
+//
+//		if (!SplitIdentifierString(targets, ',', &streams))
+//		{
+//			/* syntax error in stream_targets */
+//			ereport(ERROR,
+//					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+//					 errmsg("invalid list syntax in parameter \"stream_targets\"")));
+//		}
+//
+//		foreach(lc, streams)
+//		{
+//			char *view_name = (char *) lfirst(lc);
+//			RangeVar *rv;
+//			List *name = NIL;
+//			int i = 0;
+//
+//			/* deconstruct possible qualifiers */
+//			while (++i)
+//			{
+//				Datum qual_split = PointerGetDatum(cstring_to_text("."));
+//				Datum view_datum = PointerGetDatum(cstring_to_text(view_name));
+//				Datum quals_datum = DirectFunctionCall3(split_text, view_datum, qual_split, Int32GetDatum(i));
+//				char *qual = text_to_cstring((const text *) DatumGetPointer(quals_datum));
+//
+//				if (!strlen(qual))
+//					break;
+//
+//				name = lappend(name, makeString(qual));
+//			}
+//
+//			rv = makeRangeVarFromNameList(name);
+//			tuple = GetPipelineQueryTuple(rv);
+//
+//			if (!HeapTupleIsValid(tuple))
+//				ereport(ERROR,
+//						(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+//						errmsg("continuous view \"%s\" does not exist", view_name)));
+//
+//			row = (Form_pipeline_query) GETSTRUCT(tuple);
+//			local_readers = bms_add_member(local_readers, row->id);
+//
+//			ReleaseSysCache(tuple);
+//		}
+//
+//		readers = bms_intersect(readers, local_readers);
+//		bms_free(local_readers);
+//		pfree(targets);
+//		list_free(streams);
+//	}
+//
+//	return readers;
+//}
 
 Bitmapset *
 GetLocalStreamReaders(Oid relid)
@@ -557,6 +651,8 @@ GetLocalStreamReaders(Oid relid)
 
 	return readers;
 }
+
+
 
 TupleDesc
 GetInferredStreamTupleDesc(Oid relid, List *colnames)

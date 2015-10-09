@@ -32,6 +32,7 @@
 #include "pgstat.h"
 #include "pipeline/cont_adhoc.h"
 #include "pipeline/cont_adhoc_sender.h"
+#include "pipeline/cont_adhoc_mgr.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_plan.h"
 #include "pipeline/tuplebuf.h"
@@ -45,8 +46,8 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
-#include <unistd.h>
 #include "utils/builtins.h"
+#include <unistd.h>
 
 /* This module performs work analogous to the bg workers and combiners
  * (and a view select), but does it in memory using tuple stores.
@@ -117,11 +118,10 @@ create_agg_hash(int num_cols, Oid *grp_ops, AttrNumber *group_atts)
 							   CurrentMemoryContext, hash_tmp_cxt);
 }
 
-/* read everything */
 static bool
 should_read_fn(TupleBufferReader *reader, TupleBufferSlot *slot)
 {
-	return true;
+	return slot->tuple->group_hash == reader->proc->group_id;
 }
 
 static void
@@ -216,21 +216,17 @@ get_cont_view_id(RangeVar *name)
 static ContQueryProc *
 get_cont_query_proc()
 {
-	Oid key = MyDatabaseId;
-	ContQueryProc *proc = ContQueryGetAdhoc(key);
-
+	ContQueryProc *proc = AdhocMgrGetProc();
 	Assert(proc);
 
-	/* TODO - manage cq procs for adhoc queries correctly.
-	 * cont_scheduler.c:start_group is currently doing the rest of this.
-	 * id can't be too high - if the bms tries to resize it will die
-	 */
-	
-	proc->id = 23; /* HACK */
-	proc->latch = &MyProc->procLatch;
-	proc->active = true;
-
 	return proc;
+}
+
+static void
+release_cont_query_proc()
+{
+	AdhocMgrReleaseProc(MyContQueryProc);
+	MyContQueryProc = 0;
 }
 
 /* generate a unique name for the adhoc view */
@@ -285,6 +281,8 @@ init_cont_view(SelectStmt *stmt, const char * querystring)
 	view_data.view_id = get_cont_view_id(view_name);
 	view_data.view = GetContinuousView(view_data.view_id);
 
+	MyContQueryProc->group_id = view_data.view_id;
+
 	return view_data;
 }
 
@@ -299,7 +297,7 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	init_cont_query_batch_context();
 
 	state->reader = 
-		TupleBufferOpenBatchReader(WorkerTupleBuffer, &should_read_fn);
+		TupleBufferOpenBatchReader(AdhocTupleBuffer, &should_read_fn);
 
 	state->view_id = data.view_id;
 	state->view = data.view;
@@ -436,7 +434,8 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	EState *estate = 0;
 	ResourceOwner owner = CurrentResourceOwner;
 
-	TupleBufferBatchReaderTrySleepTimeout(state->reader, state->last_processed, 1000);
+	TupleBufferBatchReaderTrySleep(state->reader, state->last_processed);
+//	TupleBufferBatchReaderTrySleepTimeout(state->reader, state->last_processed, 1000);
 
 	has_tup = 
 		TupleBufferBatchReaderHasTuplesForCQId(state->reader, state->view_id);
@@ -498,6 +497,8 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 {
 	foreach_tuple(state->slot, state->batch)
 	{
+//		elog(LOG, "adhoc %d got tup", getpid());
+//		fflush(stdout);
 		print_slot(state->slot);
 	}
 
@@ -722,16 +723,30 @@ static void cleanup_cont_view(ContinuousViewData *data)
 	PopActiveSnapshot();
 }
 
+typedef struct CleanupData
+{
+	ContinuousViewData *cont_view_data;
+	AdhocWorkerState *worker_state;
+} CleanupData;
+
 /* To be called when adhoc query is finished */
 static void
 cleanup(int code, Datum arg)
 {
 	AbortCurrentTransaction();
 
+	CleanupData *cleanup = (CleanupData*)(arg);
+
+	TupleBufferBatchReaderReset(cleanup->worker_state->reader);
+
 	StartTransactionCommand();
-	cleanup_cont_view((ContinuousViewData *)(arg));
+	cleanup_cont_view(cleanup->cont_view_data);
 	CommitTransactionCommand();
+
+	release_cont_query_proc();
+//	AdhocWorkerState
 }
+
 
 /* Initialize the worker, combiner and view modules, then loop until done.
  * The current exit conditions are when the query is cancelled, or when the frontend
@@ -756,6 +771,8 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	ResourceOwner owner = 
 			ResourceOwnerCreate(CurrentResourceOwner, "WorkerResourceOwner");
 
+	MyContQueryProc = get_cont_query_proc();
+
 	StartTransactionCommand();
 	CurrentResourceOwner = owner;
 	MemoryContextSwitchTo(run_cxt);
@@ -772,8 +789,6 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 
 	SetTuplestoreDestReceiverParams(worker_receiver, batch,
 			CurrentMemoryContext, true);
-
-	MyContQueryProc = get_cont_query_proc();
 
 	worker_state = init_adhoc_worker(view_data, worker_receiver);
 	combiner_state = init_adhoc_combiner(view_data, batch);
@@ -794,7 +809,9 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 
 	CommitTransactionCommand();
 
-	PG_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&view_data));
+	CleanupData cleanup_data = { &view_data, worker_state };
+
+	PG_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&cleanup_data));
 	{
 		while (true)
 		{
@@ -820,7 +837,7 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 			CommitTransactionCommand();
 		}
 	}
-	PG_END_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&view_data));
+	PG_END_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&cleanup_data));
 }
 
 static const char* get_stmt_sql(Node* node)

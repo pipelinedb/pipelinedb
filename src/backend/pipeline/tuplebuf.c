@@ -119,6 +119,7 @@ static void try_moving_tail(TupleBuffer *buf, TupleBufferSlot *tail)
 
 	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 
+
 	/*
 	 * If this slot was the tail, move tail ahead to the next slot that is not read.
 	 */
@@ -377,6 +378,7 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 			{
 				buf->waiters = bms_del_member(buf->waiters, i);
 				buf->readers[i] = NULL;
+
 				SetLatch(reader->proc->latch);
 			}
 		}
@@ -687,6 +689,33 @@ TupleBufferDrain(TupleBuffer *buf, Oid db_oid)
 	{
 		if (slot->db_oid == db_oid)
 			slot->unread = false;
+		slot = slot->next;
+	}
+
+	slot = buf->tail;
+
+	LWLockRelease(buf->tail_lock);
+
+	try_moving_tail(buf, slot);
+
+	LWLockRelease(buf->head_lock);
+}
+
+void
+TupleBufferDrainGeneric(TupleBuffer *buf, TupleBufferShouldDrainFunc fn, void *ctx)
+{
+	TupleBufferSlot *slot;
+
+	LWLockAcquire(buf->head_lock, LW_EXCLUSIVE);
+	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
+
+	slot = buf->tail;
+
+	while (slot)
+	{
+		if (fn(slot, ctx))
+			slot->unread = false;
+
 		slot = slot->next;
 	}
 
