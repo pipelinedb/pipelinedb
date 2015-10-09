@@ -4,6 +4,11 @@
 #include <stdlib.h>
 #include <ncurses.h>
 
+void do_endwin()
+{
+	endwin();
+}
+
 void
 fatal_error(const char *file, unsigned line, const char *fmt, ...)
 {

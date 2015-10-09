@@ -1814,7 +1814,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		peraggstate->transfn_oid = transfn_oid = aggform->aggtransfn;
 		peraggstate->finalfn_oid = finalfn_oid = aggform->aggfinalfn;
 
-		peraggstate->finalize = !(AGGKIND_IS_COMBINE(aggref->aggkind) || IsContQueryProcess());
+		peraggstate->finalize = !(AGGKIND_IS_COMBINE(aggref->aggkind) || IsContQueryProcess() || IsContQueryAdhocProcess());
 
 		/*
 		 * If it's a combine, we dynamically load the transition function

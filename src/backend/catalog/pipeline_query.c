@@ -207,7 +207,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(RangeVar *name, Query *query, RangeVar* matrelname, bool gc, Oid *pq_id)
+DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc, bool adhoc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -257,6 +257,7 @@ DefineContinuousView(RangeVar *name, Query *query, RangeVar* matrelname, bool gc
 
 	/* Copy flags */
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
+	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 
 	hash = (MurmurHash3_64(name->relname, strlen(name->relname), MURMUR_SEED) ^
 			MurmurHash3_64(query_str, strlen(query_str), MURMUR_SEED) ^
@@ -550,6 +551,12 @@ GetAllContinuousViewIds(void)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
 		Oid id = row->id;
+
+		if (row->adhoc)
+		{
+			continue;
+		}
+
 		result = bms_add_member(result, id);
 	}
 

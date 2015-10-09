@@ -46,7 +46,9 @@
 
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
 #define INIT_PROC_TABLE_SZ 4
-#define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
+
+/* extra +1 slot is for the adhoc query */
+#define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners + 1)
 #define MIN_WAIT_TERMINATE_MS 250
 #define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
@@ -63,6 +65,7 @@ ContQueryProc *MyContQueryProc = NULL;
 static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
 static bool am_cont_combiner = false;
+static bool am_cont_adhoc = false;
 
 /* guc parameters */
 bool continuous_queries_enabled;
@@ -102,6 +105,12 @@ Size
 ContQuerySchedulerShmemSize(void)
 {
 	return MAXALIGN(sizeof(ContQuerySchedulerShmemStruct));
+}
+
+void
+SetAmContQueryAdhoc(bool s)
+{
+	am_cont_adhoc = s;
 }
 
 static void
@@ -173,6 +182,12 @@ bool
 IsContQueryWorkerProcess(void)
 {
 	return am_cont_worker;
+}
+
+bool
+IsContQueryAdhocProcess(void)
+{
+	return am_cont_adhoc;
 }
 
 bool
@@ -453,8 +468,8 @@ run_background_proc(ContQueryProc *proc)
 static void
 start_group(ContQueryProcGroup *grp)
 {
-	int slot_idx;
-	int group_id;
+	int slot_idx = 0;
+	int i = 0;
 
 	SpinLockInit(&grp->mutex);
 	SpinLockAcquire(&grp->mutex);
@@ -463,31 +478,41 @@ start_group(ContQueryProcGroup *grp)
 	grp->terminate = false;
 
 	/* Start workers */
-	for (slot_idx = 0, group_id = 0; slot_idx < continuous_query_num_workers; slot_idx++, group_id++)
+	for (i = 0; i < continuous_query_num_workers; i++, slot_idx++)
 	{
 		ContQueryProc *proc = &grp->procs[slot_idx];
-
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
 		proc->type = Worker;
-		proc->group_id = group_id;
+		proc->group_id = i;
 		proc->group = grp;
 
 		run_background_proc(proc);
 	}
 
 	/* Start combiners */
-	for (group_id = 0; slot_idx < TOTAL_SLOTS; slot_idx++, group_id++)
+	for (i = 0; i < continuous_query_num_combiners; i++, slot_idx++)
 	{
 		ContQueryProc *proc = &grp->procs[slot_idx];
-
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
 		proc->type = Combiner;
-		proc->group_id = group_id;
+		proc->group_id = i;
 		proc->group = grp;
 
 		run_background_proc(proc);
+	}
+
+	/* Set up a spare slot for an adhoc query 
+	 * TODO - determine how many adhoc queries we should support */
+	{
+		ContQueryProc *proc = &grp->procs[slot_idx];
+		MemSet(proc, 0, sizeof(ContQueryProc));
+		proc->type = Scheduler; /* TODO - make a new type */
+		proc->group_id = slot_idx;
+		proc->group = grp;
+
+		slot_idx++;
 	}
 
 	SpinLockRelease(&grp->mutex);
@@ -831,4 +856,16 @@ void
 SignalContQuerySchedulerRefresh(void)
 {
 	signal_cont_query_scheduler(SIGINT);
+}
+
+ContQueryProc *
+ContQueryGetAdhoc(Oid db_oid)
+{
+	bool found = false;
+	ContQueryProcGroup *grp = hash_search(ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, &found);
+
+	Assert(found);
+	Assert(grp);
+
+	return grp->procs + TOTAL_SLOTS - 1;
 }

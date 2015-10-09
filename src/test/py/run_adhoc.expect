@@ -1,0 +1,48 @@
+#!/usr/bin/expect
+
+# capture all the output from an adhoc query
+
+log_user 0
+set timeout 1
+
+set psql [lindex $argv 0];
+set port [lindex $argv 1];
+set query [lindex $argv 2];
+set input_file [lindex $argv 3];
+
+spawn $psql  -p $port -c "select pipeline_exec_adhoc_query('$query');"
+set adhoc $spawn_id
+
+# synchronize with h/k
+
+expect -re "(h.*?)\r\n"
+puts "$expect_out(1,string)"
+expect -re "(k.*?)\r\n"
+puts "$expect_out(1,string)"
+
+spawn $psql -p $port -f $input_file
+set inserter $spawn_id
+
+expect {
+
+	-i adhoc -re "(.*)\r\n" {
+		puts "$expect_out(1,string)"
+		exp_continue
+	}
+
+	-i inserter -re "(.*)\r\n" {
+		exp_continue
+	}
+}
+
+expect {
+	-i adhoc -re "(.*)\r\n" {
+		puts "$expect_out(1,string)"
+		exp_continue
+	}
+}
+
+set spawn_id $adhoc
+send \003
+wait 
+

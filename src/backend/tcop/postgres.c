@@ -96,7 +96,9 @@
 #include "utils/tqual.h"
 #include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
-
+#include "pipeline/cont_adhoc.h"
+#include "nodes/nodeFuncs.h"
+#include "catalog/namespace.h"
 
 /* ----------------
  *		global variables
@@ -997,6 +999,11 @@ exec_simple_query(const char *query_string)
 				continue;
 			}
 		}
+		else if (IsAdhocQuery(parsetree))
+		{
+			ExecAdhocQuery(parsetree, query_string);
+			continue;
+		}
 
 		tmp_list = lappend(tmp_list, parsetree);
 	}
@@ -1085,6 +1092,7 @@ exec_simple_query(const char *query_string)
 
 		querytree_list = pg_analyze_and_rewrite(parsetree, query_string,
 												NULL, 0);
+
 
 		plantree_list = pg_plan_queries(querytree_list, 0, NULL);
 

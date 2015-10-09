@@ -5458,6 +5458,10 @@ DESCR("gets query run by continuous query combiner");
 DATA(insert OID = 4411 ( hll_cache_cardinality	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "3998" _null_ _null_ _null_ _null_ hll_cache_cardinality _null_ _null_ _null_ ));
 DESCR("hyperloglog cache cardinality");
 
+DATA(insert OID = 5043 ( pipeline_exec_adhoc_query PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ pipeline_exec_adhoc_query _null_ _null_ _null_ ));
+
+DESCR("exec adhoc query");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

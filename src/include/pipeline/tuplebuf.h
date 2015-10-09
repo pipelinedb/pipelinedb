@@ -117,6 +117,7 @@ extern bool TupleBufferIsEmpty(TupleBuffer *buf);
 
 extern void TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, Latch *proclatch);
 extern void TupleBufferTryWait(TupleBufferReader *reader);
+extern void TupleBufferTryWaitTimeout(TupleBufferReader *reader, int timeout);
 extern void TupleBufferNotifyAndClearWaiters(TupleBuffer *buf);
 
 /* low level API for reading/writing to a TupleBuffer */
@@ -137,6 +138,7 @@ extern TupleBufferSlot *TupleBufferBatchReaderNext(TupleBufferBatchReader *reade
 extern void TupleBufferBatchReaderRewind(TupleBufferBatchReader *reader);
 extern void TupleBufferBatchReaderReset(TupleBufferBatchReader *reader);
 extern void TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_processed);
+extern void TupleBufferBatchReaderTrySleepTimeout(TupleBufferBatchReader *reader, TimestampTz last_processed, int timeout);
 
 extern void TupleBufferDrain(TupleBuffer *buf, Oid db_oid);
 

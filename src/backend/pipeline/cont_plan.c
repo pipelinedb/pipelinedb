@@ -103,8 +103,8 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 	return plan;
 }
 
-static PlannedStmt*
-get_worker_plan(ContinuousView *view)
+static SelectStmt* get_worker_select_stmts(ContinuousView* view,
+									       SelectStmt** viewptr)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
@@ -114,9 +114,51 @@ get_worker_plan(ContinuousView *view)
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt->swStepFactor = view->sw_step_factor;
-	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Worker);
+	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, viewptr, Worker);
 
-	return get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, false);
+	return selectstmt;
+}
+
+static PlannedStmt*
+get_worker_plan(ContinuousView *view, SelectStmt** viewptr)
+{
+	SelectStmt* stmt = get_worker_select_stmts(view, viewptr);
+	return get_plan_from_stmt(view->id, (Node *) stmt, view->query, false);
+}
+
+PlannedStmt*
+GetContinuousViewOverlayPlan(ContinuousView *view)
+{
+	PlannedStmt *result;
+	SelectStmt	*selectstmt;
+	SelectStmt	*viewstmt;
+
+	selectstmt = get_worker_select_stmts(view, &viewstmt);
+	selectstmt = viewstmt;
+
+	join_search_hook = get_combiner_join_rel;
+
+	PG_TRY();
+	{
+		result = get_plan_from_stmt(view->id, (Node *) selectstmt, 
+									view->query, false);
+		join_search_hook = NULL;
+		post_parse_analyze_hook = NULL;
+	}
+	PG_CATCH();
+	{
+		/*
+		 * These hooks won't be reset if there's an error, so we need to make
+		 * sure that they're not set for whatever query is run next in this xact.
+		 */
+		join_search_hook = NULL;
+		post_parse_analyze_hook = NULL;
+		PG_RE_THROW();
+	}
+
+	PG_END_TRY();
+
+	return result;
 }
 
 static PlannedStmt*
@@ -163,7 +205,7 @@ GetContPlan(ContinuousView *view, ContQueryProcType type)
 	Assert(type == Worker || type == Combiner);
 
 	if (type == Worker)
-		plan = get_worker_plan(view);
+		plan = get_worker_plan(view, NULL);
 	else if (type == Combiner)
 		plan = get_combiner_plan(view);
 

@@ -1573,7 +1573,7 @@ transformContSelectTargetList(ParseState *pstate, List *tlist)
 				 * CV's aggregate types will not have been changed. This can cause a
 				 * signature resolution error when resolving the transout function.
 				 */
-				if (IsContQueryProcess())
+				if (IsContQueryProcess() || IsContQueryAdhocProcess())
 					apply_transout((Expr *) agg, agg->aggfnoid);
 			}
 		}
@@ -1594,7 +1594,7 @@ transformContSelectTargetList(ParseState *pstate, List *tlist)
 				 * CV's aggregate types will not have been changed. This can cause a
 				 * signature resolution error when resolving the transout function.
 				 */
-				if (IsContQueryProcess())
+				if (IsContQueryProcess() || IsContQueryAdhocProcess())
 					apply_transout((Expr *) win, win->winfnoid);
 			}
 		}
