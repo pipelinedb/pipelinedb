@@ -235,7 +235,22 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	Bitmapset *targets = GetLocalStreamReaders(pstmt->relid);
+	int adhoc_count = 0;
+
+	Bitmapset *all_targets = GetLocalStreamReaders(pstmt->relid);
+	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
+
+	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
+	Bitmapset *adhoc_targets = bms_difference(all_targets, targets);
+
+	InsertBatchAck adhoc_acks[16];
+	int* active_flags[16];
+	int active_cqs[16];
+	int adhoc_counts[16];
+
+	int num_worker = bms_num_members(targets);
+	int num_adhoc = bms_num_members(adhoc_targets);
+
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
@@ -245,7 +260,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	 * If it's a typed stream we can get here because technically the relation does exist.
 	 * However, we don't want to silently accept data that isn't being read by anything.
 	 */
-	if (targets == NULL)
+	if (targets == NULL && adhoc_targets == NULL)
 	{
 		char *name = get_rel_name(pstmt->relid);
 		ereport(ERROR,
@@ -256,12 +271,40 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate();
-		num_batches = 1;
+		if (num_worker)
+		{
+			batch = InsertBatchCreate();
+			num_batches = 1;
 
-		acks[0].batch_id = batch->id;
-		acks[0].batch = batch;
-		acks[0].count = 1;
+			acks[0].batch_id = batch->id;
+			acks[0].batch = batch;
+			acks[0].count = 1;
+		}
+
+		if (num_adhoc)
+		{
+			InsertBatch* adhoc_batch = 0;
+
+			int i = 0;
+			int target = 0;
+
+			Bitmapset *tmp_targets = bms_copy(adhoc_targets);
+
+			while ((target = bms_first_member(tmp_targets)) >= 0)
+			{
+				adhoc_batch = InsertBatchCreate();
+
+				adhoc_acks[i].batch_id = adhoc_batch->id;
+				adhoc_acks[i].batch = adhoc_batch;
+				adhoc_acks[i].count = 1;
+				adhoc_counts[i] = 0;
+
+				active_flags[i] = AdhocMgrGetActiveFlag(target);
+				active_cqs[i] = target;
+
+				i++;
+			}
+		}
 	}
 
 	Assert(pstmt->desc);
@@ -294,11 +337,42 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			nulls[i] = params->params[i].isnull;
 		}
 
-		tuple = MakeStreamTuple(heap_form_tuple(pstmt->desc, values, nulls), pstmt->desc, num_batches, acks);
-		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+		if (num_worker)
+		{
+			tuple = MakeStreamTuple(heap_form_tuple(pstmt->desc, values, nulls), pstmt->desc, num_batches, acks);
+			TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
-		count++;
-		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+			count++;
+			size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+		}
+
+		if (num_adhoc)
+		{
+			Bitmapset *tmp_targets = bms_copy(adhoc_targets);
+			int target = 0;
+			int ai = 0;
+
+			while ((target = bms_first_member(tmp_targets)) >= 0)
+			{
+				int tmp_count = 0;
+				Size tmp_bytes = 0;
+				InsertBatchAck *ack = 0;
+				StreamTuple *tuple = 0;
+				Bitmapset *targets = 0;
+				Bitmapset *single = bms_make_singleton(target);
+				
+				ack = &adhoc_acks[ai];
+				tuple = MakeStreamTuple(heap_form_tuple(pstmt->desc, values, nulls), pstmt->desc, 1, ack);
+				tuple->group_hash = target;
+
+				if (TupleBufferInsert(AdhocTupleBuffer, tuple, single))
+				{
+					adhoc_counts[ai]++;
+				}
+
+				ai++;
+			}
+		}
 	}
 
 	pstmt->inserts = NIL;
@@ -306,7 +380,25 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	stream_stat_report(pstmt->relid, count, 1, size);
 
 	if (synchronous_stream_insert)
-		InsertBatchWaitAndRemove(batch, count);
+	{
+		if (num_worker)
+		{
+			InsertBatchWaitAndRemove(batch, count);
+		}
+
+		if (num_adhoc)
+		{
+			int i = 0;
+
+			for (i = 0; i < num_adhoc; ++i)
+			{
+				InsertBatchWaitAndRemoveActive(adhoc_acks[i].batch, 
+											   adhoc_counts[i],
+											   active_flags[i],
+											   active_cqs[i]);
+			}
+		}
+	}
 
 	return count;
 }
@@ -331,9 +423,6 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
 	Bitmapset *adhoc_targets = bms_difference(all_targets, targets);
 
-	// is this racy? yes. there is nothing really protecting the
-	// CQs from wrapping around.
-
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
@@ -341,8 +430,6 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	InsertBatchAck adhoc_acks[16];
 	int* active_flags[16];
 	int active_cqs[16];
-
-	int num_adhoc_batches = 0;
 
 	int num_worker = bms_num_members(targets);
 	int num_adhoc = bms_num_members(adhoc_targets);
@@ -366,7 +453,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	 * If it's a typed stream we can get here because technically the relation does exist.
 	 * However, we don't want to silently accept data that isn't being read by anything.
 	 */
-	if (targets == NULL || adhoc_targets == NULL)
+	if (targets == NULL && adhoc_targets == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("no continuous views are currently reading from stream %s", ins->relation->relname),
@@ -392,7 +479,6 @@ InsertIntoStream(InsertStmt *ins, List *params)
 			int i = 0;
 			int target = 0;
 
-			num_adhoc_batches = num_adhoc;
 			Bitmapset *tmp_targets = bms_copy(adhoc_targets);
 
 			while ((target = bms_first_member(tmp_targets)) >= 0)
@@ -405,6 +491,8 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 				active_flags[i] = AdhocMgrGetActiveFlag(target);
 				active_cqs[i] = target;
+
+				i++;
 			}
 		}
 	}
@@ -458,7 +546,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 	receiver = CreateDestReceiver(DestStream);
 	desc = get_desc(colnames, query);
-	SetStreamDestReceiverParams(receiver, targets, adhoc_targets, desc, num_batches, acks, num_adhoc_batches, adhoc_acks);
+	SetStreamDestReceiverParams(receiver, targets, adhoc_targets, desc, num_batches, acks, num_adhoc, adhoc_acks);
 
 	portal = CreatePortal("__insert__", true, true);
 	portal->visible = false;
@@ -487,9 +575,6 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 	stream_stat_report(relid, count, 1, size);
 
-	elog(LOG, "sleep before ack");
-	pg_usleep(3000 * 1000);
-
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
@@ -504,7 +589,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 		{
 			int i = 0;
 
-			for (i = 0; i < num_adhoc_batches; ++i)
+			for (i = 0; i < num_adhoc; ++i)
 			{
 				InsertBatchWaitAndRemoveActive(adhoc_acks[i].batch, 
 											   count,
@@ -525,7 +610,6 @@ InsertIntoStream(InsertStmt *ins, List *params)
 uint64
 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	Bitmapset *targets;
 	uint64 count = 0;
 	int i;
 	InsertBatchAck acks[1];
@@ -534,13 +618,25 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	Size size = 0;
 	bool snap = ActiveSnapshotSet();
 
-	targets = GetLocalStreamReaders(RelationGetRelid(stream));
+	Bitmapset *all_targets = GetLocalStreamReaders(RelationGetRelid(stream));
+	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
+
+	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
+	Bitmapset *adhoc_targets = bms_difference(all_targets, targets);
+
+	InsertBatchAck adhoc_acks[16];
+	int* active_flags[16];
+	int active_cqs[16];
+	int adhoc_counts[16];
+
+	int num_worker = bms_num_members(targets);
+	int num_adhoc = bms_num_members(adhoc_targets);
 
 	/*
 	 * If it's a typed stream we can get here because technically the relation does exist.
 	 * However, we don't want to silently accept data that isn't being read by anything.
 	 */
-	if (!IsInferredStream(RelationGetRelid(stream)) && targets == NULL)
+	if (!IsInferredStream(RelationGetRelid(stream)) && (num_worker + num_adhoc == 0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("no continuous views are currently reading from stream %s", RelationGetRelationName(stream)),
@@ -549,12 +645,40 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate();
-		num_batches = 1;
+		if (num_worker)
+		{
+			batch = InsertBatchCreate();
+			num_batches = 1;
 
-		acks[0].batch_id = batch->id;
-		acks[0].batch = batch;
-		acks[0].count = 1;
+			acks[0].batch_id = batch->id;
+			acks[0].batch = batch;
+			acks[0].count = 1;
+		}
+
+		if (num_adhoc)
+		{
+			InsertBatch* adhoc_batch = 0;
+
+			int i = 0;
+			int target = 0;
+
+			Bitmapset *tmp_targets = bms_copy(adhoc_targets);
+
+			while ((target = bms_first_member(tmp_targets)) >= 0)
+			{
+				adhoc_batch = InsertBatchCreate();
+
+				adhoc_acks[i].batch_id = adhoc_batch->id;
+				adhoc_acks[i].batch = adhoc_batch;
+				adhoc_acks[i].count = 1;
+				adhoc_counts[i] = 0;
+
+				active_flags[i] = AdhocMgrGetActiveFlag(target);
+				active_cqs[i] = target;
+
+				i++;
+			}
+		}
 	}
 
 	if (snap)
@@ -565,11 +689,38 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 		HeapTuple htup = tuples[i];
 		StreamTuple *tuple;
 
-		tuple = MakeStreamTuple(htup, desc, num_batches, acks);
-		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+		if (num_worker)
+		{
+			tuple = MakeStreamTuple(htup, desc, num_batches, acks);
+			TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+			count++;
+			size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+		}
 
-		count++;
-		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+		if (num_adhoc)
+		{
+			Bitmapset *tmp_targets = bms_copy(adhoc_targets);
+			int target = 0;
+			int ai = 0;
+
+			while ((target = bms_first_member(tmp_targets)) >= 0)
+			{
+				int tmp_count = 0;
+				Size tmp_bytes = 0;
+				InsertBatchAck *ack = 0;
+				StreamTuple *tuple = 0;
+				Bitmapset *single = bms_make_singleton(target);
+				
+				ack = &adhoc_acks[ai++];
+				tuple = MakeStreamTuple(htup, desc, 1, ack);
+				tuple->group_hash = target;
+
+				if (TupleBufferInsert(AdhocTupleBuffer, tuple, single))
+				{
+					adhoc_counts[ai]++;
+				}
+			}
+		}
 	}
 
 	stream_stat_report(RelationGetRelid(stream), count, 1, size);
@@ -578,7 +729,25 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
-		InsertBatchWaitAndRemove(batch, count);
+	{
+		if (num_worker)
+		{
+			InsertBatchWaitAndRemove(batch, count);
+		}
+
+		if (num_adhoc)
+		{
+			int i = 0;
+
+			for (i = 0; i < num_adhoc; ++i)
+			{
+				InsertBatchWaitAndRemoveActive(adhoc_acks[i].batch, 
+											   adhoc_counts[i],
+											   active_flags[i],
+											   active_cqs[i]);
+			}
+		}
+	}
 
 	if (snap)
 		PushActiveSnapshot(GetTransactionSnapshot());
