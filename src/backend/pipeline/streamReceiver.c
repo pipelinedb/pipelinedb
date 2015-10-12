@@ -33,7 +33,6 @@ stream_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	StreamReceiver *stream = (StreamReceiver *) self;
 	int num_worker = bms_num_members(stream->targets);
-	int num_adhoc = bms_num_members(stream->adhoc_targets);
 
 	int count = 0;
 	Size bytes = 0;
@@ -52,39 +51,36 @@ stream_receive(TupleTableSlot *slot, DestReceiver *self)
 		}
 	}
 
-	if (num_adhoc)
+	if (stream->adhoc_data->num_adhoc)
 	{
-		Bitmapset *tmp_targets = bms_copy(stream->adhoc_targets);
-		int target = 0;
 		int i = 0;
 
-		while ((target = bms_first_member(tmp_targets)) >= 0)
+		int tmp_count = 0;
+		int tmp_bytes = 0;
+
+		for (i = 0; i < stream->adhoc_data->num_adhoc; ++i)
 		{
-			int tmp_count = 0;
-			Size tmp_bytes = 0;
-			InsertBatchAck *ack = 0;
-			StreamTuple *tuple = 0;
-			Bitmapset *targets = 0;
-			
-			ack = &stream->adhoc_acks[i++];
-			tuple = MakeStreamTuple(tup, stream->desc, 1, ack);
-			tuple->group_hash = target;
+			AdhocQuery *query = &stream->adhoc_data->queries[i];
+			StreamTuple *tuple = 
+				MakeStreamTuple(tup, stream->desc, 1, &query->ack);
+			Bitmapset *single = bms_make_singleton(query->cq_id);
 
-			targets = bms_add_member(0, target);
+			tuple->group_hash = query->cq_id;
 
-			if (TupleBufferInsert(AdhocTupleBuffer, tuple, targets))
+			if (TupleBufferInsert(AdhocTupleBuffer, tuple, single))
 			{
+				query->count++;
 				tmp_count++;
 				tmp_bytes += tuple->heaptup->t_len + HEAPTUPLESIZE;
-
-				count = Max(count, tmp_count);
-				bytes = Max(bytes, tmp_bytes);
 			}
+
+			count = Max(count, tmp_count);
+			bytes = Max(bytes, tmp_bytes);
 		}
 	}
 
-	stream->count = count;
-	stream->bytes = bytes;
+	stream->count += count;
+	stream->bytes += bytes;
 
 	MemoryContextSwitchTo(old);
 }
@@ -115,23 +111,18 @@ CreateStreamDestReceiver(void)
 void
 SetStreamDestReceiverParams(DestReceiver *self,
 							Bitmapset *targets,
-							Bitmapset *adhoc_targets,
 							TupleDesc desc,
 							int nacks, 
 							InsertBatchAck *acks,
-							int adhoc_nacks,
-							InsertBatchAck *adhoc_acks)
+							AdhocData *adhoc_data)
 {
 	StreamReceiver *stream = (StreamReceiver *) self;
 
 	stream->desc = desc;
 	stream->targets = targets;
-	stream->adhoc_targets = adhoc_targets;
 	stream->nacks = nacks;
 	stream->acks = acks;
 
-	stream->adhoc_acks = adhoc_acks;
-	stream->adhoc_nacks = adhoc_nacks;
-
+	stream->adhoc_data = adhoc_data;
 	stream->context = CurrentMemoryContext;
 }

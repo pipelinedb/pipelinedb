@@ -225,6 +225,39 @@ DropPreparedStreamInsert(const char *name)
 		hash_search(prepared_stream_inserts, (void *) name, HASH_REMOVE, NULL);
 }
 
+static void init_adhoc_data(AdhocData* data, Bitmapset *adhoc_targets)
+{
+	int num_adhoc = bms_num_members(adhoc_targets);
+	Bitmapset *tmp_targets;
+
+	memset(data, 0, sizeof(AdhocData));
+	data->num_adhoc = num_adhoc;
+
+	if (!data->num_adhoc)
+		return;
+
+	tmp_targets = bms_copy(adhoc_targets);
+	int ctr = 0;
+	int target = 0;
+	data->queries = palloc0(sizeof(AdhocQuery) * num_adhoc);
+
+	while ((target = bms_first_member(tmp_targets)) >= 0)
+	{
+		AdhocQuery *query = &data->queries[ctr++];
+
+		query->cq_id = target;
+		query->active_flag = AdhocMgrGetActiveFlag(target);
+		query->count = 0;
+
+		if (synchronous_stream_insert)
+		{
+			query->ack.batch = InsertBatchCreate();
+			query->ack.batch_id = query->ack.batch->id;
+			query->ack.count = 1;
+		}
+	}
+}
+
 /*
  * InsertIntoStreamPrepared
  *
@@ -416,6 +449,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	int count = 0;
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
+	AdhocData adhoc_data;
 	Oid relid = RangeVarGetRelid(ins->relation, NoLock, false);
 	Bitmapset *all_targets = GetLocalStreamReaders(relid);
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
@@ -427,15 +461,8 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
 
-	InsertBatchAck adhoc_acks[16];
-	int* active_flags[16];
-	int active_cqs[16];
-
 	int num_worker = bms_num_members(targets);
-	int num_adhoc = bms_num_members(adhoc_targets);
-
-	// actually need the group id.
-	// TupleBufferInsert
+	init_adhoc_data(&adhoc_data, adhoc_targets);
 
 	Size size = 0;
 	List *queries;
@@ -453,48 +480,21 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	 * If it's a typed stream we can get here because technically the relation does exist.
 	 * However, we don't want to silently accept data that isn't being read by anything.
 	 */
-	if (targets == NULL && adhoc_targets == NULL)
+	if (targets == NULL && (adhoc_data.num_adhoc == 0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("no continuous views are currently reading from stream %s", ins->relation->relname),
 				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", ins->relation->relname)));
 
 
-	if (synchronous_stream_insert)
+	if (synchronous_stream_insert && num_worker)
 	{
-		if (num_worker)
-		{
-			batch = InsertBatchCreate();
-			num_batches = 1;
+		batch = InsertBatchCreate();
+		num_batches = 1;
 
-			acks[0].batch_id = batch->id;
-			acks[0].batch = batch;
-			acks[0].count = 1;
-		}
-
-		if (num_adhoc)
-		{
-			InsertBatch* adhoc_batch = 0;
-
-			int i = 0;
-			int target = 0;
-
-			Bitmapset *tmp_targets = bms_copy(adhoc_targets);
-
-			while ((target = bms_first_member(tmp_targets)) >= 0)
-			{
-				adhoc_batch = InsertBatchCreate();
-
-				adhoc_acks[i].batch_id = adhoc_batch->id;
-				adhoc_acks[i].batch = adhoc_batch;
-				adhoc_acks[i].count = 1;
-
-				active_flags[i] = AdhocMgrGetActiveFlag(target);
-				active_cqs[i] = target;
-
-				i++;
-			}
-		}
+		acks[0].batch_id = batch->id;
+		acks[0].batch = batch;
+		acks[0].count = 1;
 	}
 
 	if (!numcols)
@@ -546,7 +546,8 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 	receiver = CreateDestReceiver(DestStream);
 	desc = get_desc(colnames, query);
-	SetStreamDestReceiverParams(receiver, targets, adhoc_targets, desc, num_batches, acks, num_adhoc, adhoc_acks);
+
+	SetStreamDestReceiverParams(receiver, targets, desc, num_batches, acks, &adhoc_data);
 
 	portal = CreatePortal("__insert__", true, true);
 	portal->visible = false;
@@ -585,16 +586,18 @@ InsertIntoStream(InsertStmt *ins, List *params)
 			InsertBatchWaitAndRemove(batch, count);
 		}
 
-		if (num_adhoc)
+		if (adhoc_data.num_adhoc)
 		{
 			int i = 0;
 
-			for (i = 0; i < num_adhoc; ++i)
+			for (i = 0; i < adhoc_data.num_adhoc; ++i)
 			{
-				InsertBatchWaitAndRemoveActive(adhoc_acks[i].batch, 
-											   count,
-											   active_flags[i],
-											   active_cqs[i]);
+				AdhocQuery *query = &adhoc_data.queries[i];
+
+				InsertBatchWaitAndRemoveActive(query->ack.batch,
+											   query->count,
+											   query->active_flag,
+											   query->cq_id);
 			}
 		}
 	}

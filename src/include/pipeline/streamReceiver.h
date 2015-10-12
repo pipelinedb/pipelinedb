@@ -15,8 +15,8 @@
 #define STREAM_RECEIVER_H
 
 #include "postgres.h"
-
 #include "tcop/dest.h"
+
 
 typedef struct StreamReceiver
 {
@@ -24,11 +24,8 @@ typedef struct StreamReceiver
 	InsertBatchAck *acks;
 	int nacks;
 
-	InsertBatchAck *adhoc_acks;
-	int adhoc_nacks;
-
 	Bitmapset *targets;
-	Bitmapset *adhoc_targets;
+	AdhocData *adhoc_data;
 
 	long count;
 	TupleDesc desc;
@@ -43,11 +40,9 @@ extern DestReceiver *CreateStreamDestReceiver(void);
 extern void
 SetStreamDestReceiverParams(DestReceiver *self,
 							Bitmapset *targets,
-							Bitmapset *adhoc_targets,
 							TupleDesc desc,
 							int nacks, 
 							InsertBatchAck *acks,
-							int adhoc_nacks,
-							InsertBatchAck *adhoc_acks);
+							AdhocData *adhoc_data);
 
 #endif
