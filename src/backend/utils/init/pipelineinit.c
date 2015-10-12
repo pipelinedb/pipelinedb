@@ -18,6 +18,7 @@
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/tuplebuf.h"
 #include "storage/shm_alloc.h"
+#include "pipeline/cont_adhoc_mgr.h"
 
 /*
  * InitPipeline

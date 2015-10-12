@@ -15,6 +15,7 @@
 typedef struct AdhocShmemStruct
 {
 	ContQueryProcGroup groups[MAX_ADHOC]; // one proc per group
+	int index;
 
 } AdhocShmemStruct;
 
@@ -33,21 +34,24 @@ AdhocShmemInit(void)
 	MemSet(AdhocShmem, 0, sizeof(AdhocShmemStruct));
 }
 
-// XXX - pass cq_id in first.
-ContQueryProc* 
-AdhocMgrGetProc(void)
+ContQueryProc*
+AdhocMgrGetProc()
 {
 	ContQueryProcGroup* grp = 0;
 	ContQueryProc* proc = 0;
-	size_t i = 0;
+	int i = 0;
+	int ind = 0;
 
 	LWLockAcquire(AdhocMgrLock, LW_EXCLUSIVE);
 
 	for (i = 0; i < MAX_ADHOC; ++i)
 	{
-		if (AdhocShmem->groups[i].db_oid == 0)
+		int mi = (AdhocShmem->index + i) % MAX_ADHOC;
+
+		if (AdhocShmem->groups[mi].db_oid == 0)
 		{
-			grp = &AdhocShmem->groups[i];
+			grp = &AdhocShmem->groups[mi];
+			ind = AdhocShmem->index++;
 			break;
 		}
 	}
@@ -63,8 +67,8 @@ AdhocMgrGetProc(void)
 		proc = grp->procs;
 
 		proc->type = Scheduler;
-		proc->id = i;
-		proc->group_id = i;
+		proc->id = ind;
+		proc->group_id = 0;
 		proc->latch = &MyProc->procLatch;
 		proc->active = true;
 		proc->group = grp;
@@ -85,41 +89,44 @@ AdhocMgrReleaseProc(ContQueryProc* proc)
 	LWLockRelease(AdhocMgrLock);
 }
 
-static bool should_drain_fn(TupleBufferSlot *slot, void *ctx)
+static ContQueryProc* get_cq(int cq_id)
 {
 	int i = 0;
 
-	// XXX - optimize this
-	
 	for (i = 0; i < MAX_ADHOC; ++i)
 	{
-		if (AdhocShmem->groups[i].procs[0].group_id == slot->tuple->group_hash)
+		if (AdhocShmem->groups[i].procs[0].group_id == cq_id)
 		{
-			return true;
+			return AdhocShmem->groups[i].procs;
 		}
 	}
 
-	return false;
+	return NULL;
+}
+
+static bool is_active(int cq_id)
+{
+	return get_cq(cq_id) != NULL;
+}
+
+static bool should_drain_fn(TupleBufferSlot *slot, void *ctx)
+{
+	return !is_active(slot->tuple->group_hash);
 }
 
 void
 AdhocMgrPeriodicCleanup()
 {
 	LWLockAcquire(AdhocMgrLock, LW_EXCLUSIVE);
-	TupleBufferDrainGeneric(AdhocTupleBuffer, should_drain_fn, NULL);
+
+	TupleBufferDrainGeneric(AdhocTupleBuffer, should_drain_fn, 0);
+
 	LWLockRelease(AdhocMgrLock);
 }
 
 int* AdhocMgrGetActiveFlag(int cq_id)
 {
-	int i = 0;
-	for (i = 0; i < MAX_ADHOC; ++i)
-	{
-		if (AdhocShmem->groups[i].procs[0].group_id == cq_id)
-		{
-			return &AdhocShmem->groups[i].procs[0].active;
-		}
-	}
+	ContQueryProc *cq = get_cq(cq_id);
 
-	return 0;
+	return cq ? &cq->group_id : 0;
 }

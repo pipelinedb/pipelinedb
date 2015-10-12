@@ -331,12 +331,16 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
 	Bitmapset *adhoc_targets = bms_difference(all_targets, targets);
 
+	// is this racy? yes. there is nothing really protecting the
+	// CQs from wrapping around.
+
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
 
 	InsertBatchAck adhoc_acks[16];
 	int* active_flags[16];
+	int active_cqs[16];
 
 	int num_adhoc_batches = 0;
 
@@ -388,6 +392,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 			int i = 0;
 			int target = 0;
 
+			num_adhoc_batches = num_adhoc;
 			Bitmapset *tmp_targets = bms_copy(adhoc_targets);
 
 			while ((target = bms_first_member(tmp_targets)) >= 0)
@@ -399,6 +404,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 				adhoc_acks[i].count = 1;
 
 				active_flags[i] = AdhocMgrGetActiveFlag(target);
+				active_cqs[i] = target;
 			}
 		}
 	}
@@ -481,6 +487,9 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 	stream_stat_report(relid, count, 1, size);
 
+	elog(LOG, "sleep before ack");
+	pg_usleep(3000 * 1000);
+
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
@@ -499,7 +508,8 @@ InsertIntoStream(InsertStmt *ins, List *params)
 			{
 				InsertBatchWaitAndRemoveActive(adhoc_acks[i].batch, 
 											   count,
-											   (bool*) active_flags[i]);
+											   active_flags[i],
+											   active_cqs[i]);
 			}
 		}
 	}
@@ -594,20 +604,29 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 	if (cont_queries_active ==  NULL)
 		cont_queries_active = ContQueryGetActiveFlag();
 
-	InsertBatchWaitAndRemoveActive(batch, num_tuples, cont_queries_active);
-}
-
-void
-InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples, bool *active)
-{
-	if (!active)
-		return;
-
 	if (num_tuples)
 	{
 		batch->num_wtups = num_tuples;
 
-		while (!StreamBatchAllAcked(batch) && *active)
+		while (!StreamBatchAllAcked(batch) && *cont_queries_active)
+		{
+			pg_usleep(SLEEP_MS * 1000);
+			CHECK_FOR_INTERRUPTS();
+		}
+	}
+
+	ShmemDynFree(batch);
+}
+
+void
+InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples, 
+							   int *active, int cq_id)
+{
+	if (num_tuples && active)
+	{
+		batch->num_wtups = num_tuples;
+
+		while (!StreamBatchAllAcked(batch) && (*active == cq_id))
 		{
 			pg_usleep(SLEEP_MS * 1000);
 			CHECK_FOR_INTERRUPTS();
