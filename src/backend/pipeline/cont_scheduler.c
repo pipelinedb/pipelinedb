@@ -711,7 +711,6 @@ ContQuerySchedulerMain(int argc, char *argv[])
 			{
 				grp->db_oid = db_entry->oid;
 				namestrcpy(&grp->db_name, NameStr(db_entry->name));
-
 				start_group(grp);
 			}
 		}
@@ -723,11 +722,16 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		 * Wait until naptime expires or we get some type of signal (all the
 		 * signal handlers will wake us by calling SetLatch).
 		 */
-		rc = WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+		rc = WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, 1000);
 
 		ResetLatch(&MyProc->procLatch);
 
 		DisableCatchupInterrupt();
+
+		if (rc & WL_TIMEOUT)
+		{
+			AdhocMgrPeriodicCleanup();
+		}
 
 		/*
 		 * Emergency bailout if postmaster has died.  This is to avoid the

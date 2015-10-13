@@ -705,8 +705,6 @@ void
 TupleBufferDrainGeneric(TupleBuffer *buf, TupleBufferShouldDrainFunc fn, void *ctx)
 {
 	TupleBufferSlot *slot;
-
-	LWLockAcquire(buf->head_lock, LW_EXCLUSIVE);
 	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 
 	slot = buf->tail;
@@ -724,8 +722,6 @@ TupleBufferDrainGeneric(TupleBuffer *buf, TupleBufferShouldDrainFunc fn, void *c
 	LWLockRelease(buf->tail_lock);
 
 	try_moving_tail(buf, slot);
-
-	LWLockRelease(buf->head_lock);
 }
 
 /*

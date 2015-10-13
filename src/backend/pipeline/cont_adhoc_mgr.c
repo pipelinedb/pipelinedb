@@ -120,9 +120,7 @@ void
 AdhocMgrPeriodicCleanup()
 {
 	LWLockAcquire(AdhocMgrLock, LW_EXCLUSIVE);
-
 	TupleBufferDrainGeneric(AdhocTupleBuffer, should_drain_fn, 0);
-
 	LWLockRelease(AdhocMgrLock);
 }
 

@@ -213,13 +213,10 @@ get_cont_view_id(RangeVar *name)
 	return row_id;
 }
 
-static ContQueryProc *
-get_cont_query_proc()
+static void
+acquire_cont_query_proc()
 {
-	ContQueryProc *proc = AdhocMgrGetProc();
-	Assert(proc);
-
-	return proc;
+	MyContQueryProc = AdhocMgrGetProc();
 }
 
 static void
@@ -495,17 +492,6 @@ adhoc_sync_combine(AdhocCombinerState *state);
 static void
 exec_adhoc_combiner(AdhocCombinerState *state)
 {
-//	foreach_tuple(state->slot, state->batch)
-//	{
-////		elog(LOG, "adhoc %d got tup", getpid());
-////		fflush(stdout);
-//		print_slot(state->slot);
-//	}
-//
-//	tuplestore_clear(state->batch);
-//
-//	return;
-
 	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
 	EState *estate = 0;
@@ -736,13 +722,12 @@ cleanup(int code, Datum arg)
 	TupleBufferBatchReaderReset(cleanup->worker_state->reader);
 	TupleBufferCloseBatchReader(cleanup->worker_state->reader);
 
+	release_cont_query_proc();
+
 	StartTransactionCommand();
 	cleanup_cont_view(cleanup->cont_view_data);
 	CommitTransactionCommand();
-
-	release_cont_query_proc();
 }
-
 
 /* Initialize the worker, combiner and view modules, then loop until done.
  * The current exit conditions are when the query is cancelled, or when the frontend
@@ -767,7 +752,12 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	ResourceOwner owner = 
 			ResourceOwnerCreate(CurrentResourceOwner, "WorkerResourceOwner");
 
-	MyContQueryProc = get_cont_query_proc();
+	acquire_cont_query_proc();
+
+	if (!MyContQueryProc)
+	{
+		elog(ERROR, "too many adhoc processes");
+	}
 
 	StartTransactionCommand();
 	CurrentResourceOwner = owner;
