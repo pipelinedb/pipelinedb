@@ -14,8 +14,11 @@
 
 #include "access/htup_details.h"
 #include "catalog/pg_type.h"
+#include "funcapi.h"
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
+#include "miscadmin.h"
+#include "nodes/execnodes.h"
 #include "nodes/nodeFuncs.h"
 #include "pipeline/fss.h"
 #include "utils/array.h"
@@ -100,6 +103,38 @@ fss_agg_trans(PG_FUNCTION_ARGS)
 }
 
 Datum
+fss_agg_weighted_trans(PG_FUNCTION_ARGS)
+{
+	MemoryContext old;
+	MemoryContext context;
+	FSS *state;
+	Datum incoming = PG_GETARG_DATUM(1);
+	int64 weight = PG_GETARG_INT64(3);
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		elog(ERROR, "fss_agg_weighted_trans called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(context);
+
+	if (PG_ARGISNULL(0))
+	{
+		uint16_t k = PG_GETARG_INT64(2);
+		Oid type = AggGetInitialArgType(fcinfo);
+		TypeCacheEntry *typ = lookup_type_cache(type, 0);
+		fcinfo->flinfo->fn_extra = typ;
+		state = FSSCreate(k, typ);
+	}
+	else
+		state = fss_fix_ptrs(PG_GETARG_VARLENA_P(0));
+
+	FSSIncrementWeighted(state, incoming, weight);
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(state);
+}
+
+Datum
 fss_agg_transp(PG_FUNCTION_ARGS)
 {
 	MemoryContext old;
@@ -164,6 +199,54 @@ fss_topk(PG_FUNCTION_ARGS)
 {
 	FSS *fss;
 	Datum *datums;
+	uint64_t *freqs;
+	uint16_t found;
+	Tuplestorestate *store;
+	ReturnSetInfo *rsi;
+	TupleDesc desc;
+	int i;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	fss = fss_fix_ptrs(PG_GETARG_VARLENA_P(0));
+	desc= CreateTemplateTupleDesc(2, false);
+	TupleDescInitEntry(desc, (AttrNumber) 1, "value", fss->typ.typoid, -1, 0);
+	TupleDescInitEntry(desc, (AttrNumber) 2, "frequency", INT8OID, -1, 0);
+
+	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsi->returnMode = SFRM_Materialize;
+	rsi->setDesc = BlessTupleDesc(desc);
+
+	store = tuplestore_begin_heap(false, false, work_mem);
+	datums = FSSTopK(fss, fss->k, &found);
+	freqs = FSSTopKCounts(fss, fss->k, &found);
+
+	for (i = 0; i < found; i++)
+	{
+		Datum values[2];
+		bool nulls[2];
+		HeapTuple tup;
+
+		MemSet(nulls, false, sizeof(nulls));
+
+		values[0] = datums[i];
+		values[1] = freqs[i];
+
+		tup = heap_form_tuple(rsi->setDesc, values, nulls);
+		tuplestore_puttuple(store, tup);
+	}
+
+	rsi->setResult = store;
+
+	PG_RETURN_NULL();
+}
+
+Datum
+fss_topk_values(PG_FUNCTION_ARGS)
+{
+	FSS *fss;
+	Datum *datums;
 	ArrayType *arr;
 	TypeCacheEntry *typ;
 	uint16_t found;
@@ -176,6 +259,25 @@ fss_topk(PG_FUNCTION_ARGS)
 	datums = FSSTopK(fss, fss->k, &found);
 	typ = lookup_type_cache(fss->typ.typoid, 0);
 	arr = construct_array(datums, found, typ->type_id, typ->typlen, typ->typbyval, typ->typalign);
+
+	PG_RETURN_ARRAYTYPE_P(arr);
+}
+
+Datum
+fss_topk_freqs(PG_FUNCTION_ARGS)
+{
+	FSS *fss;
+	Datum *datums;
+	ArrayType *arr;
+	uint16_t found;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	fss = fss_fix_ptrs(PG_GETARG_VARLENA_P(0));
+
+	datums = FSSTopKCounts(fss, fss->k, &found);
+	arr = construct_array(datums, found, INT8OID, 8, true, 'd');
 
 	PG_RETURN_ARRAYTYPE_P(arr);
 }

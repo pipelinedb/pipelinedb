@@ -19,28 +19,104 @@ INSERT INTO test_fss_agg_stream (k, x) VALUES ('b', 3.0);
 SELECT k, fss_topk(fss_agg) FROM test_fss_agg0 ORDER BY k;
  k | fss_topk 
 ---+----------
- a | {1,2,3}
- b | {3,4,5}
-(2 rows)
+ a | (1,3)
+ a | (2,2)
+ a | (3,1)
+ b | (3,3)
+ b | (4,2)
+ b | (5,1)
+(6 rows)
 
 SELECT k, fss_topk(fss_agg) FROM test_fss_agg1 ORDER BY k;
  k | fss_topk 
 ---+----------
+ a | (1,3)
+ a | (2,2)
+ a | (3,1)
+ b | (3,3)
+ b | (4,2)
+ b | (5,1)
+(6 rows)
+
+SELECT k, fss_topk_values(fss_agg) FROM test_fss_agg0 ORDER BY k;
+ k | fss_topk_values 
+---+-----------------
  a | {1,2,3}
  b | {3,4,5}
+(2 rows)
+
+SELECT k, fss_topk_freqs(fss_agg) FROM test_fss_agg0 ORDER BY k;
+ k | fss_topk_freqs 
+---+----------------
+ a | {3,2,1}
+ b | {3,2,1}
 (2 rows)
 
 SELECT fss_topk(combine(fss_agg)) FROM test_fss_agg0;
  fss_topk 
 ----------
- {3,1,4}
-(1 row)
+ (3,4)
+ (1,3)
+ (4,2)
+(3 rows)
 
 SELECT fss_topk(combine(fss_agg)) FROM test_fss_agg1;
  fss_topk 
 ----------
- {3,1,4}
-(1 row)
+ (3,4)
+ (1,3)
+ (4,2)
+(3 rows)
 
 DROP CONTINUOUS VIEW test_fss_agg0;
 DROP CONTINUOUS VIEW test_fss_agg1;
+CREATE CONTINUOUS VIEW test_fss_agg3 AS SELECT fss_agg_weighted(x::integer, 3, y::integer) FROM test_fss_agg_stream;
+INSERT INTO test_fss_agg_stream (x, y) VALUES (0, 10);
+INSERT INTO test_fss_agg_stream (x, y) VALUES (0, 10);
+SELECT fss_topk(fss_agg_weighted) FROM test_fss_agg3;
+ fss_topk 
+----------
+ (0,20)
+(1 row)
+
+INSERT INTO test_fss_agg_stream (x, y) VALUES (2, 1);
+INSERT INTO test_fss_agg_stream (x, y) VALUES (2, 1);
+SELECT fss_topk(fss_agg_weighted) FROM test_fss_agg3;
+ fss_topk 
+----------
+ (0,20)
+ (2,2)
+(2 rows)
+
+INSERT INTO test_fss_agg_stream (x, y) VALUES (3, 1);
+INSERT INTO test_fss_agg_stream (x, y) VALUES (3, 1);
+SELECT fss_topk(fss_agg_weighted) FROM test_fss_agg3;
+ fss_topk 
+----------
+ (0,20)
+ (2,2)
+ (3,2)
+(3 rows)
+
+INSERT INTO test_fss_agg_stream (x, y) VALUES (4, 1);
+INSERT INTO test_fss_agg_stream (x, y) VALUES (4, 10);
+SELECT fss_topk(fss_agg_weighted) FROM test_fss_agg3;
+ fss_topk 
+----------
+ (0,20)
+ (4,11)
+ (2,2)
+(3 rows)
+
+INSERT INTO test_fss_agg_stream (x, y) VALUES (5, 500);
+INSERT INTO test_fss_agg_stream (x, y) VALUES (6, 1000);
+INSERT INTO test_fss_agg_stream (x, y) VALUES (7, 10000);
+SELECT fss_topk(fss_agg_weighted) FROM test_fss_agg3;
+ fss_topk  
+-----------
+ (7,10000)
+ (6,1000)
+ (5,500)
+(3 rows)
+
+DROP CONTINUOUS VIEW test_fss_agg3;

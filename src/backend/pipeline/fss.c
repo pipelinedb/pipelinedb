@@ -124,6 +124,12 @@ element_cmp(const void *a, const void *b)
 void
 FSSIncrement(FSS *fss, Datum datum)
 {
+	FSSIncrementWeighted(fss, datum, 1);
+}
+
+void
+FSSIncrementWeighted(FSS *fss, Datum datum, uint64_t weight)
+{
 	StringInfo buf;
 	uint64_t hash;
 	Counter *counter;
@@ -180,7 +186,7 @@ FSSIncrement(FSS *fss, Datum datum)
 		/* We found datum, so its monitored */
 		if (found)
 		{
-			m_elt->frequency++;
+			m_elt->frequency += weight;
 			slot = i;
 			goto done;
 		}
@@ -202,7 +208,7 @@ FSSIncrement(FSS *fss, Datum datum)
 
 
 	/* This is only executed if datum is not monitored */
-	if (counter->alpha + 1 >= fss->monitored_elements[fss->m - 1].frequency)
+	if (counter->alpha + weight >= fss->monitored_elements[fss->m - 1].frequency)
 	{
 		/* Need to evict an element? */
 		if (free_slot == -1)
@@ -227,7 +233,7 @@ FSSIncrement(FSS *fss, Datum datum)
 		}
 
 		m_elt->value = elt;
-		m_elt->frequency = counter->alpha + 1;
+		m_elt->frequency = counter->alpha + weight;
 		m_elt->error = counter->alpha;
 		m_elt->set = true;
 		m_elt->counter = counter_idx;
@@ -235,7 +241,7 @@ FSSIncrement(FSS *fss, Datum datum)
 	}
 	else
 	{
-		counter->alpha++;
+		counter->alpha += weight;
 		needs_sort = false;
 	}
 
@@ -365,16 +371,16 @@ FSSTopK(FSS *fss, uint16_t k, uint16_t *found)
 	return datums;
 }
 
-uint32_t *
+uint64_t *
 FSSTopKCounts(FSS *fss, uint16_t k, uint16_t *found)
 {
 	int i;
-	uint32_t *counts;
+	uint64_t *counts;
 
 	if (k > fss->k)
 		elog(ERROR, "maximum value for k exceeded");
 
-	counts = palloc(sizeof(uint32_t) * k);
+	counts = palloc0(sizeof(uint64_t) * k);
 
 	for (i = 0; i < k; i++)
 	{
@@ -433,7 +439,7 @@ FSSPrint(FSS *fss)
 		Counter *counter = &fss->bitmap_counter[i];
 		if (i && i % 4 == 0)
 			appendStringInfoChar(buf, '\n');
-		appendStringInfo(buf, "| (%d, %d) |", counter->alpha, counter->count);
+		appendStringInfo(buf, "| (%ld, %d) |", counter->alpha, counter->count);
 	}
 
 	appendStringInfo(buf, "\n----------\nMONITORED LIST:\n");
@@ -442,7 +448,7 @@ FSSPrint(FSS *fss)
 	{
 		MonitoredElement *elt = &fss->monitored_elements[i];
 		if (elt->set)
-			appendStringInfo(buf, "| (%ld, %d, %d) |", elt->value, elt->frequency, elt->error);
+			appendStringInfo(buf, "| (%ld, %ld, %d) |", elt->value, elt->frequency, elt->error);
 		else
 			appendStringInfo(buf, "| (-, -, -) |");
 
