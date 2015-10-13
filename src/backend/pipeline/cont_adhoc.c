@@ -49,6 +49,9 @@
 #include "utils/builtins.h"
 #include <unistd.h>
 
+#include <sys/time.h>
+#include <sys/resource.h>
+
 /* This module performs work analogous to the bg workers and combiners
  * (and a view select), but does it in memory using tuple stores.
  *
@@ -431,8 +434,7 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	EState *estate = 0;
 	ResourceOwner owner = CurrentResourceOwner;
 
-	TupleBufferBatchReaderTrySleep(state->reader, state->last_processed);
-//	TupleBufferBatchReaderTrySleepTimeout(state->reader, state->last_processed, 1000);
+	TupleBufferBatchReaderTrySleepTimeout(state->reader, state->last_processed, 1000);
 
 	has_tup = 
 		TupleBufferBatchReaderHasTuplesForCQId(state->reader, state->view_id);
@@ -662,7 +664,7 @@ exec_adhoc_view(AdhocViewState *state)
 }
 
 /* Execute a drop view statement to cleanup the adhoc view */
-static void cleanup_cont_view(ContinuousViewData *data)
+void cleanup_cont_view(ContinuousView *view)
 {
 	DestReceiver *receiver = 0;
 	DropStmt *stmt = makeNode(DropStmt);
@@ -670,7 +672,7 @@ static void cleanup_cont_view(ContinuousViewData *data)
 	Node *plan;
 	Portal portal;
 
-	stmt->objects = list_make1(list_make1(makeString(data->view->name.data)));
+	stmt->objects = list_make1(list_make1(makeString(view->name.data)));
 	stmt->removeType = OBJECT_CONTINUOUS_VIEW;
 
 	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",
@@ -725,7 +727,7 @@ cleanup(int code, Datum arg)
 	release_cont_query_proc();
 
 	StartTransactionCommand();
-	cleanup_cont_view(cleanup->cont_view_data);
+	cleanup_cont_view(cleanup->cont_view_data->view);
 	CommitTransactionCommand();
 }
 
@@ -844,6 +846,18 @@ static const char* get_stmt_sql(Node* node)
 	return sql_arg->val.val.str;
 }
 
+static void set_nice_priority()
+{
+	int default_priority = getpriority(PRIO_PROCESS, MyProcPid);
+	int priority = Max(default_priority, 20 - ceil(continuous_query_proc_priority * (20 - default_priority)));
+
+	priority = nice(priority);
+}
+
+static void set_default_priority()
+{
+}
+
 void
 ExecAdhocQuery(Node *stmt, const char *s)
 {
@@ -863,6 +877,8 @@ ExecAdhocQuery(Node *stmt, const char *s)
 		/* This must be set so that newly created views are tagged properly */
 		SetAmContQueryAdhoc(true);
 
+		set_nice_priority();
+
 		/* At present, the queries always exit through the error path */
 		/* The 'errors' are from query cancel, or the frontend not responding to
 		 * a heartbeat */
@@ -877,6 +893,8 @@ ExecAdhocQuery(Node *stmt, const char *s)
 		PG_CATCH();
 		{
 			SetAmContQueryAdhoc(false);
+
+			set_default_priority();
 			MemoryContextSwitchTo(oldcontext);
 			MemoryContextResetAndDeleteChildren(adhoc_cxt);
 			PG_RE_THROW();

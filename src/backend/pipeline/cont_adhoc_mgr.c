@@ -6,6 +6,9 @@
 #include "storage/proc.h"
 #include "miscadmin.h"
 #include "pipeline/tuplebuf.h"
+#include "access/xact.h"
+#include "catalog/pipeline_stream_fn.h"
+#include "catalog/pipeline_query_fn.h"
 
 typedef struct AdhocShmemStruct
 {
@@ -129,4 +132,21 @@ int* AdhocMgrGetActiveFlag(int cq_id)
 	ContQueryProc *cq = get_cq(cq_id);
 
 	return cq ? &cq->group_id : 0;
+}
+
+void AdhocMgrDeleteAdhocs(void)
+{	
+	int id = 0;
+	Bitmapset *view_ids;
+
+	StartTransactionCommand();
+	view_ids = GetAdhocContinuousViewIds();
+
+	while ((id = bms_first_member(view_ids)) >= 0)
+	{
+		ContinuousView* cv = GetContinuousView(id);
+		cleanup_cont_view(cv);
+	}
+
+	CommitTransactionCommand();
 }

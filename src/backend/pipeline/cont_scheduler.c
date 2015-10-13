@@ -424,6 +424,10 @@ cq_bgproc_main(Datum arg)
 		break;
 	case Worker:
 		am_cont_worker = true;
+
+		/* TODO - put this somewhere nicer */
+		AdhocMgrDeleteAdhocs();
+
 		run = &ContinuousQueryWorkerMain;
 		break;
 	default:
