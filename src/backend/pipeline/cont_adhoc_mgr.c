@@ -7,31 +7,33 @@
 #include "miscadmin.h"
 #include "pipeline/tuplebuf.h"
 
-// assume that the number of adhoc procs is incredibly low.
-// one global array across all dbs will do it.
-
-#define MAX_ADHOC 16
-
 typedef struct AdhocShmemStruct
 {
-	ContQueryProcGroup groups[MAX_ADHOC]; // one proc per group
 	int index;
+	ContQueryProcGroup groups[1];
 
 } AdhocShmemStruct;
 
 static AdhocShmemStruct *AdhocShmem;
 
+static size_t
+adhoc_size_required()
+{
+	return MAXALIGN(add_size(sizeof(int), 
+					mul_size(max_worker_processes,
+								sizeof(ContQueryProcGroup))));
+}
+
 void
 AdhocShmemInit(void)
 {
 	bool found = false;
-	AdhocShmem = ShmemInitStruct("AdhocShmem",
-		sizeof(AdhocShmemStruct), &found);
+	AdhocShmem = ShmemInitStruct("AdhocShmem", adhoc_size_required(), &found);
 
 	if (found)
 		return;
 
-	MemSet(AdhocShmem, 0, sizeof(AdhocShmemStruct));
+	MemSet(AdhocShmem, 0, adhoc_size_required());
 }
 
 ContQueryProc*
@@ -39,19 +41,21 @@ AdhocMgrGetProc()
 {
 	ContQueryProcGroup* grp = 0;
 	ContQueryProc* proc = 0;
+
 	int i = 0;
 	int ind = 0;
 
 	LWLockAcquire(AdhocMgrLock, LW_EXCLUSIVE);
 
-	for (i = 0; i < MAX_ADHOC; ++i)
+	for (i = 0; i < max_worker_processes; ++i)
 	{
-		int mi = (AdhocShmem->index + i) % MAX_ADHOC;
+		ind = (AdhocShmem->index + i) % max_worker_processes;
 
-		if (AdhocShmem->groups[mi].db_oid == 0)
+		if (AdhocShmem->groups[ind].db_oid == 0)
 		{
-			grp = &AdhocShmem->groups[mi];
-			ind = AdhocShmem->index++;
+			grp = &AdhocShmem->groups[ind];
+			AdhocShmem->index++;
+
 			break;
 		}
 	}
@@ -83,9 +87,7 @@ AdhocMgrReleaseProc(ContQueryProc* proc)
 	ContQueryProcGroup* grp = proc->group;
 
 	LWLockAcquire(AdhocMgrLock, LW_EXCLUSIVE);
-
 	MemSet(grp, 0, sizeof(ContQueryProcGroup));
-
 	LWLockRelease(AdhocMgrLock);
 }
 
@@ -93,7 +95,7 @@ static ContQueryProc* get_cq(int cq_id)
 {
 	int i = 0;
 
-	for (i = 0; i < MAX_ADHOC; ++i)
+	for (i = 0; i < max_worker_processes; ++i)
 	{
 		if (AdhocShmem->groups[i].procs[0].group_id == cq_id)
 		{

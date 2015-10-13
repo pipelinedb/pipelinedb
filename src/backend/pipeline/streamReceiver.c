@@ -42,7 +42,8 @@ stream_receive(TupleTableSlot *slot, DestReceiver *self)
 
 	if (num_worker)
 	{
-		StreamTuple *tuple = MakeStreamTuple(tup, stream->desc, stream->nacks, stream->acks);
+		StreamTuple *tuple = 
+			MakeStreamTuple(tup, stream->desc, stream->nacks, stream->acks);
 
 		if (TupleBufferInsert(WorkerTupleBuffer, tuple, stream->targets))
 		{
@@ -53,30 +54,14 @@ stream_receive(TupleTableSlot *slot, DestReceiver *self)
 
 	if (stream->adhoc_data->num_adhoc)
 	{
-		int i = 0;
+		Size abytes = 0;
+		int acount = 0;
 
-		int tmp_count = 0;
-		int tmp_bytes = 0;
+		acount = SendTupleToAdhoc(stream->adhoc_data,
+								  tup, stream->desc, &abytes);
 
-		for (i = 0; i < stream->adhoc_data->num_adhoc; ++i)
-		{
-			AdhocQuery *query = &stream->adhoc_data->queries[i];
-			StreamTuple *tuple = 
-				MakeStreamTuple(tup, stream->desc, 1, &query->ack);
-			Bitmapset *single = bms_make_singleton(query->cq_id);
-
-			tuple->group_hash = query->cq_id;
-
-			if (TupleBufferInsert(AdhocTupleBuffer, tuple, single))
-			{
-				query->count++;
-				tmp_count++;
-				tmp_bytes += tuple->heaptup->t_len + HEAPTUPLESIZE;
-			}
-
-			count = Max(count, tmp_count);
-			bytes = Max(bytes, tmp_bytes);
-		}
+		count = Max(count, acount);
+		bytes = Max(bytes, abytes);
 	}
 
 	stream->count += count;

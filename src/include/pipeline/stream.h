@@ -102,5 +102,11 @@ extern void InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples,
 
 extern void InsertBatchIncrementNumCTuples(InsertBatch *batch);
 extern void InsertBatchMarkAcked(InsertBatchAck *ack);
+extern int SendTupleToAdhoc(AdhocData *data,
+							HeapTuple tup,
+							TupleDesc desc,
+							Size *bytes);
+
+
 
 #endif

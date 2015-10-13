@@ -258,6 +258,52 @@ static void init_adhoc_data(AdhocData* data, Bitmapset *adhoc_targets)
 	}
 }
 
+int SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
+					Size *bytes)
+{
+	int i = 0;
+	*bytes = 0;
+	int count = 0;
+
+	for (i = 0; i < adhoc_data->num_adhoc; ++i)
+	{
+		AdhocQuery *query = &adhoc_data->queries[i];
+
+		StreamTuple *tuple = 
+			MakeStreamTuple(tup, desc, 1, &query->ack);
+		Bitmapset *single = bms_make_singleton(query->cq_id);
+
+		tuple->group_hash = query->cq_id;
+
+		if (TupleBufferInsert(AdhocTupleBuffer, tuple, single))
+		{
+			query->count++;
+
+			if (i == 0)
+			{
+				count++;
+				(*bytes) += tuple->heaptup->t_len + HEAPTUPLESIZE;
+			}
+		}
+	}
+
+	return count;
+}
+
+static void WaitForAdhoc(AdhocData *adhoc_data)
+{
+	int i = 0;
+	for (i = 0; i < adhoc_data->num_adhoc; ++i)
+	{
+		AdhocQuery *query = &adhoc_data->queries[i];
+
+		InsertBatchWaitAndRemoveActive(query->ack.batch,
+									   query->count,
+									   query->active_flag,
+									   query->cq_id);
+	}
+}
+
 /*
  * InsertIntoStreamPrepared
  *
@@ -352,27 +398,18 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			size += tuple->heaptup->t_len + HEAPTUPLESIZE;
 		}
 
-		int ai =0;
-
-		for (ai = 0; ai < adhoc_data.num_adhoc; ++ai)
+		if (adhoc_data.num_adhoc)
 		{
-			AdhocQuery *query = &adhoc_data.queries[ai];
-			tuple = MakeStreamTuple(
-					heap_form_tuple(pstmt->desc, values, nulls),
-						pstmt->desc, 1, &query->ack);
+			int acount = 0;
+			Size abytes = 0;
 
-			Bitmapset *single = bms_make_singleton(query->cq_id);
-			tuple->group_hash = query->cq_id;
+			HeapTuple tup = heap_form_tuple(pstmt->desc, values, nulls);
+			acount = SendTupleToAdhoc(&adhoc_data, tup, pstmt->desc, &abytes);
 
-			if (TupleBufferInsert(AdhocTupleBuffer, tuple, single))
+			if (!num_worker)
 			{
-				query->count++;
-
-				if (num_worker == 0 && ai == 0)
-				{
-					count++;
-					size += tuple->heaptup->t_len + HEAPTUPLESIZE;
-				}
+				count += acount;
+				size += abytes;
 			}
 		}
 	}
@@ -390,14 +427,9 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			InsertBatchWaitAndRemove(batch, count);
 		}
 
-		for (i = 0; i < adhoc_data.num_adhoc; ++i)
+		if (adhoc_data.num_adhoc)
 		{
-			AdhocQuery *query = &adhoc_data.queries[i];
-
-			InsertBatchWaitAndRemoveActive(query->ack.batch,
-										   query->count,
-										   query->active_flag,
-										   query->cq_id);
+			WaitForAdhoc(&adhoc_data);
 		}
 	}
 
@@ -556,17 +588,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 		if (adhoc_data.num_adhoc)
 		{
-			int i = 0;
-
-			for (i = 0; i < adhoc_data.num_adhoc; ++i)
-			{
-				AdhocQuery *query = &adhoc_data.queries[i];
-
-				InsertBatchWaitAndRemoveActive(query->ack.batch,
-											   query->count,
-											   query->active_flag,
-											   query->cq_id);
-			}
+			WaitForAdhoc(&adhoc_data);
 		}
 	}
 
@@ -638,26 +660,17 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 			size += tuple->heaptup->t_len + HEAPTUPLESIZE;
 		}
 
-		int ai = 0;
-
-		for (ai = 0; ai < adhoc_data.num_adhoc; ++ai)
+		if (adhoc_data.num_adhoc)
 		{
-			AdhocQuery *query = &adhoc_data.queries[ai];
-			StreamTuple *tuple = 
-				MakeStreamTuple(htup, desc, 1, &query->ack);
+			int acount = 0;
+			Size abytes = 0;
 
-			Bitmapset *single = bms_make_singleton(query->cq_id);
-			tuple->group_hash = query->cq_id;
+			acount = SendTupleToAdhoc(&adhoc_data, htup, desc, &abytes);
 
-			if (TupleBufferInsert(AdhocTupleBuffer, tuple, single))
+			if (!num_worker)
 			{
-				query->count++;
-
-				if (num_worker == 0 && ai == 0)
-				{
-					count++;
-					size += tuple->heaptup->t_len + HEAPTUPLESIZE;
-				}
+				count += acount;
+				size += abytes;
 			}
 		}
 	}
@@ -674,16 +687,9 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 			InsertBatchWaitAndRemove(batch, count);
 		}
 
-		int i = 0;
-
-		for (i = 0; i < adhoc_data.num_adhoc; ++i)
+		if (adhoc_data.num_adhoc)
 		{
-			AdhocQuery *query = &adhoc_data.queries[i];
-
-			InsertBatchWaitAndRemoveActive(query->ack.batch,
-										   query->count,
-										   query->active_flag,
-										   query->cq_id);
+			WaitForAdhoc(&adhoc_data);
 		}
 	}
 

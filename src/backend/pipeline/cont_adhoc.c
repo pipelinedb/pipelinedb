@@ -738,6 +738,7 @@ cleanup(int code, Datum arg)
 	CleanupData *cleanup = (CleanupData*)(arg);
 
 	TupleBufferBatchReaderReset(cleanup->worker_state->reader);
+	TupleBufferCloseBatchReader(cleanup->worker_state->reader);
 
 	StartTransactionCommand();
 	cleanup_cont_view(cleanup->cont_view_data);
