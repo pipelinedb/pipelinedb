@@ -5447,7 +5447,7 @@ DESCR("filtered space saving increment");
 DATA(insert OID = 4407 (fss_print PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 25 "5041" _null_ _null_ _null_ _null_ fss_print _null_ _null_ _null_ ));
 DESCR("filtered space saving print function");
 /* filtered space saving topk */
-DATA(insert OID = 4408 (fss_topk PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2277 "5041" _null_ _null_ _null_ _null_ fss_topk _null_ _null_ _null_ ));
+DATA(insert OID = 4408 (fss_topk PGNSP PGUID 12 1 0 0 0 f f f f f t i 1 0 2249 "5041" "{2283,23}" "{o,o}" "{value,frequency}" _null_ fss_topk _null_ _null_ _null_ ));
 DESCR("filtered space saving top-k function");
 
 DATA(insert OID = 4409 ( pipeline_get_worker_querydef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ pipeline_get_worker_querydef _null_ _null_ _null_ ));
@@ -5457,6 +5457,16 @@ DESCR("gets query run by continuous query combiner");
 
 DATA(insert OID = 4411 ( hll_cache_cardinality	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "3998" _null_ _null_ _null_ _null_ hll_cache_cardinality _null_ _null_ _null_ ));
 DESCR("hyperloglog cache cardinality");
+
+DATA(insert OID = 4412 ( fss_agg_weighted	PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 5041 "2283 20 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("filtered space saving aggregate");
+DATA(insert OID = 4413 ( fss_agg_weighted_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 4 0 5041 "5041 2283 20 20" _null_ _null_ _null_ _null_ fss_agg_weighted_trans _null_ _null_ _null_ ));
+DESCR("filtered space saving aggregate with weight");
+
+DATA(insert OID = 4414 (fss_topk_values PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2277 "5041" _null_ _null_ _null_ _null_ fss_topk_values _null_ _null_ _null_ ));
+DESCR("filtered space saving top-k function");
+DATA(insert OID = 4415 (fss_topk_freqs PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2277 "5041" _null_ _null_ _null_ _null_ fss_topk_freqs _null_ _null_ _null_ ));
+DESCR("filtered space saving top-k function");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

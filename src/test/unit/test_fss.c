@@ -74,9 +74,9 @@ START_TEST(test_basic)
 	TypeCacheEntry *typ = get_int8_type();
 	FSS *fss = FSSCreate(K, typ);
 	int i;
-	int *counts = palloc0(sizeof(int) * 1000);
+	int *counts = palloc0(sizeof(uint64_t) * 1000);
 	Datum *values;
-	uint32_t *freqs;
+	uint64_t *freqs;
 	int soft_errors;
 
 	for (i = 0; i < NUM_ITEMS; i++)
@@ -111,7 +111,7 @@ START_TEST(test_merge)
 	FSS *fss2 = FSSCreate(K, typ);
 	int i, j;
 	Datum *values1, *values2;
-	uint32_t *freqs1, *freqs2;
+	uint64_t *freqs1, *freqs2;
 	int soft_errors;
 
 	for (j = 0; j < 10; j++)
@@ -158,9 +158,9 @@ START_TEST(test_error)
 	TypeCacheEntry *typ = get_int8_type();
 	FSS *fss = FSSCreate(K, typ);
 	int i;
-	int *counts = palloc0(sizeof(int) * 1000);
+	int *counts = palloc0(sizeof(uint64_t) * 1000);
 	Datum *values;
-	uint32_t *freqs;
+	uint64_t *freqs;
 	int min_freq = NUM_ITEMS / fss->m;
 
 	for (i = 0; i <= min_freq; i++)
@@ -194,6 +194,47 @@ START_TEST(test_error)
 }
 END_TEST
 
+START_TEST(test_weighted)
+{
+	TypeCacheEntry *typ = get_int8_type();
+	FSS *fss = FSSCreate(K, typ);
+	int i;
+	int *counts = palloc0(sizeof(uint64_t) * 1000);
+	Datum *values;
+	uint64_t *freqs;
+	int min_freq = NUM_ITEMS / fss->m;
+
+	for (i = 0; i <= min_freq; i++)
+	{
+		FSSIncrementWeighted(fss, 1, 10);
+		FSSIncrementWeighted(fss, 2, 20);
+		FSSIncrementWeighted(fss, 3, 30);
+		counts[1] += 10;
+		counts[2] += 20;
+		counts[3] += 30;
+		assert_sorted(fss);
+	}
+
+	for (i = 0; i < NUM_ITEMS - (2 * min_freq); i++)
+	{
+		int value = (int) uniform() % 500 + 4;
+		FSSIncrementWeighted(fss, value, 1);
+		counts[value]++;
+		assert_sorted(fss);
+	}
+
+	values = FSSTopK(fss, K, NULL);
+	freqs = FSSTopKCounts(fss, K, NULL);
+
+	for (i = 0; i < 3; i++)
+	{
+		int value = values[i];
+		ck_assert(value == 1 || value == 2 || value == 3);
+		ck_assert(abs(freqs[i] - counts[value]) == 0);
+	}
+}
+END_TEST
+
 Suite *
 test_fss_suite(void)
 {
@@ -206,6 +247,7 @@ test_fss_suite(void)
 	tcase_add_test(tc, test_basic);
 	tcase_add_test(tc, test_merge);
 	tcase_add_test(tc, test_error);
+	tcase_add_test(tc, test_weighted);
 	suite_add_tcase(s, tc);
 
 	return s;

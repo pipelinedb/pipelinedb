@@ -199,5 +199,6 @@ DATA(insert (0 cmsketch_agg_transp 0 0 cmsketch_merge_agg_trans 5038));
 /* fss_agg */
 DATA(insert (0 fss_agg_trans  0 0 fss_merge_agg_trans 5041));
 DATA(insert (0 fss_agg_transp 0 0 fss_merge_agg_trans 5041));
+DATA(insert (0 fss_agg_weighted_trans 0 0 fss_merge_agg_trans 5041));
 
 #endif

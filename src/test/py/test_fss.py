@@ -27,7 +27,7 @@ def test_fss_agg(pipeline, clean_db):
   random.shuffle(values)
   
   pipeline.insert('test_fss_stream', desc, values)
-  result = list(pipeline.execute('SELECT k, fss_topk(fss_agg) FROM test_fss_agg ORDER BY k'))
+  result = list(pipeline.execute('SELECT k, fss_topk_values(fss_agg) FROM test_fss_agg ORDER BY k'))
   topk = map(int, result[0][1].rstrip('}').lstrip('{').split(','))
   assert sorted(topk) == sorted(a_items[-5:])
   topk = map(int, result[1][1].rstrip('}').lstrip('{').split(','))
