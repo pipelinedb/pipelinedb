@@ -2808,16 +2808,6 @@ typedef struct ExplainContViewStmt
 	List 		*options;
 } ExplainContViewStmt;
 
-typedef struct DeactivateStmt
-{
-	NodeTag	type;
-} DeactivateStmt;
-
-typedef struct ActivateStmt
-{
-	NodeTag	type;
-} ActivateStmt;
-
 typedef struct CreateStreamStmt
 {
 	CreateStmt	base;
