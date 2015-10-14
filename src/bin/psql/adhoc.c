@@ -228,6 +228,13 @@ static int handle_options(int argc, char** argv, struct adhoc_opts * options)
 
 	parse_psql_options(argc, argv, options);
 
+	if (!options->action_string)
+	{
+		fprintf(stderr, "Error: Must specify an sql command\n\n");
+		usage();
+		exit(1);
+	}
+
 	if (options->username == NULL)
 		password_prompt = pg_strdup(_("Password: "));
 	else
@@ -297,13 +304,7 @@ main(int argc, char *argv[])
 	struct adhoc_opts options;
 	handle_options(argc, argv, &options);
 
-	if (!options.action_string)
-	{
-		fprintf(stderr, "Error: Must specify an sql command\n\n");
-
-		usage();
-		exit(1);
-	}
+	
 
 	App app = {0,0};
 	Model *model = ModelInit();

@@ -48,7 +48,7 @@
 #define INIT_PROC_TABLE_SZ 4
 
 /* extra +1 slot is for the adhoc query */
-#define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners + 1)
+#define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
 #define MIN_WAIT_TERMINATE_MS 250
 #define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
@@ -506,18 +506,6 @@ start_group(ContQueryProcGroup *grp)
 		run_background_proc(proc);
 	}
 
-	/* Set up a spare slot for an adhoc query 
-	 * TODO - determine how many adhoc queries we should support */
-	{
-		ContQueryProc *proc = &grp->procs[slot_idx];
-		MemSet(proc, 0, sizeof(ContQueryProc));
-		proc->type = Scheduler; /* TODO - make a new type */
-		proc->group_id = slot_idx;
-		proc->group = grp;
-
-		slot_idx++;
-	}
-
 	SpinLockRelease(&grp->mutex);
 }
 
@@ -962,16 +950,4 @@ void
 SignalContQuerySchedulerRefresh(void)
 {
 	signal_cont_query_scheduler(SIGINT);
-}
-
-ContQueryProc *
-ContQueryGetAdhoc(Oid db_oid)
-{
-	bool found = false;
-	ContQueryProcGroup *grp = hash_search(ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, &found);
-
-	Assert(found);
-	Assert(grp);
-
-	return grp->procs + TOTAL_SLOTS - 1;
 }
