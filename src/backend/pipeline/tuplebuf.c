@@ -119,7 +119,6 @@ static void try_moving_tail(TupleBuffer *buf, TupleBufferSlot *tail)
 
 	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 
-
 	/*
 	 * If this slot was the tail, move tail ahead to the next slot that is not read.
 	 */
@@ -378,7 +377,6 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 			{
 				buf->waiters = bms_del_member(buf->waiters, i);
 				buf->readers[i] = NULL;
-
 				SetLatch(reader->proc->latch);
 			}
 		}
