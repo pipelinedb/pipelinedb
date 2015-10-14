@@ -19,13 +19,12 @@
 static void
 handle_data(PGRowStream *stream, const char *buf);
 
-PGRowStream *PGRowStreamInit(const char* sql, RowFunc cb, void *ctx)
+PGRowStream *PGRowStreamInit(PGconn *db, const char* sql, RowFunc cb, void *ctx)
 {
 	PGRowStream *self = pg_malloc0(sizeof(PGRowStream));
 	PGresult *res = 0;
 
-	const char *conninfo = "dbname=pipeline host=/tmp";
-    self->conn = PQconnectdb(conninfo);
+    self->conn = db;
 
     if (PQstatus(self->conn) != CONNECTION_OK)
     {
