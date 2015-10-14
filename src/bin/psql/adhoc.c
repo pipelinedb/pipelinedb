@@ -86,7 +86,14 @@ usage()
 	}
 
 	printf("General options:\n");
-	printf("%s\n", "  -c, --command=COMMAND    run adhoc sql command\n");
+	printf("  -c, --command=COMMAND    run adhoc sql command\n");
+
+	/* Display default database */
+	env = getenv("PGDATABASE");
+	if (!env)
+		env = user;
+
+	printf("  -d, --dbname=DBNAME      database name to connect to (default: \"%s\")\n", env);
 
 	printf("Connection options:\n");
 
@@ -104,7 +111,7 @@ usage()
 	if (!env)
 		env = user;
 
-	printf("  -U, --username=USERNAME  database user name (default: \"%s\")\n"), env;
+	printf("  -U, --username=USERNAME  database user name (default: \"%s\")\n", env);
 	printf("  -w, --no-password        never prompt for password\n");
 	printf("  -W, --password           force password prompt (should happen automatically)\n");
 }
