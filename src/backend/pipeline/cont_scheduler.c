@@ -436,12 +436,17 @@ run_background_proc(ContQueryProc *proc)
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION | BGWORKER_IS_CONT_QUERY_PROC;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	worker.bgw_main = cq_bgproc_main;
-	worker.bgw_notify_pid = MyProcPid;
+	worker.bgw_notify_pid = 0;
 	worker.bgw_restart_time = 1; /* recover in 1s */
 	worker.bgw_let_crash = false;
 	worker.bgw_main_arg = PointerGetDatum(proc);
 
 	success = RegisterDynamicBackgroundWorker(&worker, &handle);
+
+	/*
+	 * TODO(usmanm): We should probably use something like WaitForBackgroundWorkerStartup here, but
+	 * the postmaster can't signal the continuous query scheduler since it isn't a valid 'backend'.
+	 */
 
 	if (success)
 		proc->handle = *handle;
