@@ -21,8 +21,11 @@ handle_data(PGRowStream *stream, const char *buf);
 
 PGRowStream *PGRowStreamInit(PGconn *db, const char* sql, RowFunc cb, void *ctx)
 {
+	ExecStatusType type;
 	PGRowStream *self = pg_malloc0(sizeof(PGRowStream));
+	PQExpBuffer sql_str;
 	PGresult *res = 0;
+	char* esc_sql = 0;
 
     self->conn = db;
 
@@ -36,15 +39,16 @@ PGRowStream *PGRowStreamInit(PGconn *db, const char* sql, RowFunc cb, void *ctx)
 	self->callback = cb;
 	self->cb_ctx = ctx;
 
-	PQExpBuffer sql_str = createPQExpBuffer();
+	sql_str = createPQExpBuffer();
 
-	char* esc_sql = PQescapeLiteral(self->conn, sql, strlen(sql));
-	appendPQExpBuffer(sql_str, "select pipeline_exec_adhoc_query(%s);", esc_sql);
+	esc_sql = PQescapeLiteral(self->conn, sql, strlen(sql));
+	appendPQExpBuffer(sql_str, "select pipeline_exec_adhoc_query(%s);",
+					  esc_sql);
 
 	PQsetnonblocking(self->conn, true);
 	res = PQexec(self->conn, sql_str->data);
 
-	ExecStatusType type = PQresultStatus(res);
+	type = PQresultStatus(res);
 
 	if (type != PGRES_COPY_OUT)
 	{

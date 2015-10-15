@@ -33,11 +33,9 @@ CATALOG(pipeline_query,4242)
 	Oid			namespace;
 	NameData	name;
 	NameData	matrelname;
-
 	bool		gc;
 	bool 		adhoc;
 	int32		hash;
-
 #ifdef CATALOG_VARLEN
 	text		query;
 #endif

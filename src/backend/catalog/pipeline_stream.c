@@ -586,8 +586,6 @@ GetLocalStreamReaders(Oid relid)
 	return readers;
 }
 
-
-
 TupleDesc
 GetInferredStreamTupleDesc(Oid relid, List *colnames)
 {

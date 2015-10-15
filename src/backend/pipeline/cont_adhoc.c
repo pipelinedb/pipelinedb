@@ -52,7 +52,8 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
-/* This module performs work analogous to the bg workers and combiners
+/* 
+ * This module performs work analogous to the bg workers and combiners
  * (and a view select), but does it in memory using tuple stores.
  *
  * The flow of data is roughly like so:
@@ -664,7 +665,7 @@ exec_adhoc_view(AdhocViewState *state)
 }
 
 /* Execute a drop view statement to cleanup the adhoc view */
-void cleanup_cont_view(ContinuousView *view)
+void AdhocMgrCleanupContinuousView(ContinuousView *view)
 {
 	DestReceiver *receiver = 0;
 	DropStmt *stmt = makeNode(DropStmt);
@@ -717,9 +718,10 @@ typedef struct CleanupData
 static void
 cleanup(int code, Datum arg)
 {
+	CleanupData *cleanup;
 	AbortCurrentTransaction();
-
-	CleanupData *cleanup = (CleanupData*)(arg);
+	
+	cleanup = (CleanupData *)(arg);
 
 	TupleBufferBatchReaderReset(cleanup->worker_state->reader);
 	TupleBufferCloseBatchReader(cleanup->worker_state->reader);
@@ -727,7 +729,7 @@ cleanup(int code, Datum arg)
 	release_cont_query_proc();
 
 	StartTransactionCommand();
-	cleanup_cont_view(cleanup->cont_view_data->view);
+	AdhocMgrCleanupContinuousView(cleanup->cont_view_data->view);
 	CommitTransactionCommand();
 }
 
@@ -750,6 +752,7 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	MemoryContext run_cxt = CurrentMemoryContext;
 	ContinuousViewData view_data;
 	Tuplestorestate *batch = 0;
+	CleanupData cleanup_data;
 
 	ResourceOwner owner = 
 			ResourceOwnerCreate(CurrentResourceOwner, "WorkerResourceOwner");
@@ -797,7 +800,8 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 
 	CommitTransactionCommand();
 
-	CleanupData cleanup_data = { &view_data, worker_state };
+	cleanup_data.cont_view_data = &view_data;
+	cleanup_data.worker_state = worker_state;
 
 	PG_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&cleanup_data));
 	{
@@ -828,25 +832,32 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	PG_END_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&cleanup_data));
 }
 
-static const char* get_stmt_sql(Node* node)
+/* 
+ * grabs the sql out of a statement like 
+ * select pipeline_exec_adhoc_query('select avg(x::int) from stream');
+ */
+static const char *
+get_stmt_sql(Node *node)
 {
 	/* assumes IsAdhocQuery has returned true on node already. */
 
-	SelectStmt *stmt = (SelectStmt*) (node);
+	SelectStmt *stmt = (SelectStmt *) (node);
 	Node *first_node = 0;
 	ResTarget *target = 0;
 	FuncCall *func = 0;
 	A_Const *sql_arg = 0;
 
 	first_node = (Node *) linitial(stmt->targetList);
-	target = (ResTarget*) (first_node);
-	func = (FuncCall*) (target->val);
+	target = (ResTarget *) (first_node);
+	func = (FuncCall *) (target->val);
 	sql_arg = linitial(func->args);
 
 	return sql_arg->val.val.str;
 }
 
-static void set_nice_priority()
+/* set a lower process priority for adhoc backends */
+static void
+set_nice_priority()
 {
 	int default_priority = getpriority(PRIO_PROCESS, MyProcPid);
 	int priority = Max(default_priority, 20 - ceil(continuous_query_proc_priority * (20 - default_priority)));
@@ -854,8 +865,10 @@ static void set_nice_priority()
 	priority = nice(priority);
 }
 
-static void set_default_priority()
+static void
+set_default_priority()
 {
+	/* TODO - figure out how to reset priority */
 }
 
 void
@@ -903,11 +916,12 @@ ExecAdhocQuery(Node *stmt, const char *s)
 	}
 }
 
-static bool check_func(FuncCall* func,
-					   const char* name)
+/* returns true iff the function name matches the argument */
+static bool
+check_adhoc_func(FuncCall *func, const char *name)
 {
-	Node* node = 0;
-	Value* value = 0;
+	Node *node = 0;
+	Value *value = 0;
 	A_Const *sql_arg = 0;
 
 	if (list_length(func->funcname) != 1)
@@ -918,7 +932,7 @@ static bool check_func(FuncCall* func,
 	if (!IsA(node, String))
 		return false;
 
-	value = (Value*) (node);
+	value = (Value *) (node);
 
 	if (strcmp(value->val.str, name) != 0)
 		return false;
@@ -938,7 +952,8 @@ static bool check_func(FuncCall* func,
 }
 
 /* returns true iff the query is an adhoc select */
-bool IsAdhocQuery(Node *node)
+bool
+IsAdhocQuery(Node *node)
 {
 	SelectStmt *stmt = (SelectStmt*) (node);
 	Node *first_node = 0;
@@ -964,15 +979,21 @@ bool IsAdhocQuery(Node *node)
 	if (!IsA(target->val, FuncCall))
 		return false;
 
-	func = (FuncCall*)(target->val);
+	func = (FuncCall *)(target->val);
 
-	if (!check_func(func, "pipeline_exec_adhoc_query"))
+	if (!check_adhoc_func(func, "pipeline_exec_adhoc_query"))
 		return false;
 
 	return true;
 }
 
-Datum pipeline_exec_adhoc_query(PG_FUNCTION_ARGS)
+/* 
+ * Placeholder function to prevent people from defining this function.
+ * This function is meant to be intercepted, not executed, hence the elog
+ * error if it does get executed.
+ */
+Datum
+pipeline_exec_adhoc_query(PG_FUNCTION_ARGS)
 {
 	elog(ERROR, "pipeline_exec_adhoc_query intercept failure");
 	PG_RETURN_TEXT_P(CStringGetTextDatum(""));

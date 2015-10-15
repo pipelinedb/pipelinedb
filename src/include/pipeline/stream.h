@@ -90,7 +90,7 @@ typedef struct AdhocQuery
 typedef struct AdhocData
 {
 	int num_adhoc;
-	AdhocQuery* queries;
+	AdhocQuery *queries;
 
 } AdhocData;
 
@@ -106,7 +106,5 @@ extern int SendTupleToAdhoc(AdhocData *data,
 							HeapTuple tup,
 							TupleDesc desc,
 							Size *bytes);
-
-
 
 #endif

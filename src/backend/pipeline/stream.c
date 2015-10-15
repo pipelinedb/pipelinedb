@@ -248,9 +248,14 @@ DropPreparedStreamInsert(const char *name)
 		hash_search(prepared_stream_inserts, (void *) name, HASH_REMOVE, NULL);
 }
 
+/*
+ * Initialize data structures to support sending data to adhoc tuple buffer
+ */
 static void init_adhoc_data(AdhocData* data, Bitmapset *adhoc_targets)
 {
 	int num_adhoc = bms_num_members(adhoc_targets);
+	int ctr = 0;
+	int target = 0;
 	Bitmapset *tmp_targets;
 
 	memset(data, 0, sizeof(AdhocData));
@@ -260,8 +265,6 @@ static void init_adhoc_data(AdhocData* data, Bitmapset *adhoc_targets)
 		return;
 
 	tmp_targets = bms_copy(adhoc_targets);
-	int ctr = 0;
-	int target = 0;
 	data->queries = palloc0(sizeof(AdhocQuery) * num_adhoc);
 
 	while ((target = bms_first_member(tmp_targets)) >= 0)
@@ -281,12 +284,16 @@ static void init_adhoc_data(AdhocData* data, Bitmapset *adhoc_targets)
 	}
 }
 
+/*
+ * Send a heap tuple to the adhoc buffer, by making a new stream tuple
+ * for each adhoc query that is listening
+ */
 int SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
 					Size *bytes)
 {
 	int i = 0;
-	*bytes = 0;
 	int count = 0;
+	*bytes = 0;
 
 	for (i = 0; i < adhoc_data->num_adhoc; ++i)
 	{
@@ -337,9 +344,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	int adhoc_count = 0;
 
-	//Bitmapset *all_targets = GetLocalStreamReaders(pstmt->relid);
 	Bitmapset *all_targets = get_stream_readers(pstmt->relid);
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
 
@@ -348,7 +353,6 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	AdhocData adhoc_data;
 
 	int num_worker = bms_num_members(targets);
-	int num_adhoc = bms_num_members(adhoc_targets);
 
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
@@ -356,7 +360,6 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	Size size = 0;
 
 	init_adhoc_data(&adhoc_data, adhoc_targets);
-
 
 	if (synchronous_stream_insert)
 	{
@@ -432,8 +435,6 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 
 	if (synchronous_stream_insert)
 	{
-		int i = 0;
-
 		if (num_worker)
 		{
 			InsertBatchWaitAndRemove(batch, count);
@@ -473,9 +474,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
-
 	int num_worker = bms_num_members(targets);
-	init_adhoc_data(&adhoc_data, adhoc_targets);
 
 	Size size = 0;
 	List *queries;
@@ -485,6 +484,8 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	Portal portal;
 	Query *query;
 	SelectStmt *stmt;
+
+	init_adhoc_data(&adhoc_data, adhoc_targets);
 
 	Assert(IsA(ins->selectStmt, SelectStmt));
 	stmt = ((SelectStmt *) ins->selectStmt);
