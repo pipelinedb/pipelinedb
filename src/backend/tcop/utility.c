@@ -210,6 +210,9 @@ check_xact_readonly(Node *parsetree)
 		case T_AlterTableSpaceOptionsStmt:
 		case T_CreateForeignTableStmt:
 		case T_SecLabelStmt:
+		case T_CreateContViewStmt:
+		case T_CreateStreamStmt:
+		case T_TruncateContViewStmt:
 			PreventCommandIfReadOnly(CreateCommandTag(parsetree));
 			break;
 		default:
@@ -519,6 +522,10 @@ standard_ProcessUtility(Node *parsetree,
 
 		case T_TruncateStmt:
 			ExecuteTruncate((TruncateStmt *) parsetree);
+			break;
+
+		case T_TruncateContViewStmt:
+			ExecTruncateContViewStmt((TruncateContViewStmt *) parsetree);
 			break;
 
 		case T_CommentStmt:
@@ -2013,17 +2020,11 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_TruncateStmt:
-			switch (((TruncateStmt *) parsetree)->objType)
-			{
-			case OBJECT_CONTINUOUS_VIEW:
-				tag = "TRUNCATE CONTINUOUS VIEW";
-				break;
-			case OBJECT_TABLE:
-				tag = "TRUNCATE TABLE";
-				break;
-			default:
-				tag = "???";
-			}
+			tag = "TRUNCATE TABLE";
+			break;
+
+		case T_TruncateContViewStmt:
+			tag = "TRUNCATE CONTINUOUS VIEW";
 			break;
 
 		case T_CommentStmt:

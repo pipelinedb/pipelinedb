@@ -538,7 +538,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
  * ExecTruncateContViewStmt
  */
 void
-ExecTruncateContViewStmt(TruncateStmt *stmt)
+ExecTruncateContViewStmt(TruncateContViewStmt *stmt)
 {
 	ListCell *lc;
 	Relation pipeline_query;
@@ -574,7 +574,6 @@ ExecTruncateContViewStmt(TruncateStmt *stmt)
 		ResetTStateEntry(lfirst_oid(lc));
 
 	/* Call TRUNCATE on the backing view table(s). */
-	stmt->objType = OBJECT_TABLE;
 	ExecuteTruncate(stmt);
 
 	heap_close(pipeline_query, NoLock);
