@@ -35,7 +35,6 @@ def test_adhoc_group_query(pipeline, clean_db):
 
   path = os.path.abspath(os.path.join(pipeline.tmp_dir, 'test_adhoc.sql'))
   tmp_file = open(path, 'w')
-  print(tmp_file)
 
   v = gen_insert('stream', ['x'], rows)
 

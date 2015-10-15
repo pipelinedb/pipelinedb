@@ -134,7 +134,7 @@ find_cq(Oid db_oid, int cq_id)
 	for (i = 0; i < max_worker_processes; ++i)
 	{
 		if (AdhocShmem->groups[i].db_oid == db_oid &&
-		    AdhocShmem->groups[i].procs[0].id == cq_id)
+		    AdhocShmem->groups[i].procs[0].group_id == cq_id)
 		{
 			return AdhocShmem->groups[i].procs;
 		}

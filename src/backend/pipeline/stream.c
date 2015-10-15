@@ -490,17 +490,6 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	Assert(IsA(ins->selectStmt, SelectStmt));
 	stmt = ((SelectStmt *) ins->selectStmt);
 
-	/*
-	 * If it's a typed stream we can get here because technically the relation does exist.
-	 * However, we don't want to silently accept data that isn't being read by anything.
-	 */
-	if (targets == NULL && (adhoc_data.num_adhoc == 0))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("no continuous views are currently reading from stream %s", ins->relation->relname),
-				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", ins->relation->relname)));
-
-
 	if (synchronous_stream_insert && num_worker)
 	{
 		batch = InsertBatchCreate();
