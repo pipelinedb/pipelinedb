@@ -898,7 +898,7 @@ ExecAdhocQuery(Node *stmt, const char *s)
 		PG_TRY();
 		{
 			List *parsetree_list;
-			const char* inner_sql = get_stmt_sql(stmt);
+			const char *inner_sql = get_stmt_sql(stmt);
 			parsetree_list = pg_parse_query(inner_sql);
 
 			exec_adhoc_query(linitial(parsetree_list), inner_sql);
@@ -955,7 +955,7 @@ check_adhoc_func(FuncCall *func, const char *name)
 bool
 IsAdhocQuery(Node *node)
 {
-	SelectStmt *stmt = (SelectStmt*) (node);
+	SelectStmt *stmt = (SelectStmt *) (node);
 	Node *first_node = 0;
 	ResTarget *target = 0;
 	FuncCall *func = 0;
@@ -971,7 +971,7 @@ IsAdhocQuery(Node *node)
 	if (!IsA(first_node, ResTarget))
 		return false;
 
-	target = (ResTarget*)(first_node);
+	target = (ResTarget *)(first_node);
 
 	if (!target->val)
 		return false;

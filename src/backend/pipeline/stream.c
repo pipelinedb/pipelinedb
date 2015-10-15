@@ -251,7 +251,7 @@ DropPreparedStreamInsert(const char *name)
 /*
  * Initialize data structures to support sending data to adhoc tuple buffer
  */
-static void init_adhoc_data(AdhocData* data, Bitmapset *adhoc_targets)
+static void init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
 {
 	int num_adhoc = bms_num_members(adhoc_targets);
 	int ctr = 0;

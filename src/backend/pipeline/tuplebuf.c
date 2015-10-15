@@ -941,7 +941,7 @@ TupleBufferBatchReaderReset(TupleBufferBatchReader *reader)
 void
 TupleBufferCloseBatchReader(TupleBufferBatchReader *reader)
 {
-	TupleBuffer* buf = reader->rdr->buf;
+	TupleBuffer *buf = reader->rdr->buf;
 
 	SpinLockAcquire(&buf->mutex);
 	buf->waiters = bms_del_member(buf->waiters, reader->rdr->proc->id);

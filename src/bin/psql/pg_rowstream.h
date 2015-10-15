@@ -40,7 +40,7 @@ typedef struct PGRowStream
 
 } PGRowStream;
 
-extern PGRowStream *PGRowStreamInit(PGconn *db, const char* sql, RowFunc fn, void *ctx);
+extern PGRowStream *PGRowStreamInit(PGconn *db, const char *sql, RowFunc fn, void *ctx);
 extern bool PGRowStreamPostInit(PGRowStream *s);
 
 extern void PGRowStreamDestroy(PGRowStream *s);

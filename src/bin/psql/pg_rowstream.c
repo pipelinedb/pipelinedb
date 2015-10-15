@@ -19,13 +19,13 @@
 static void
 handle_data(PGRowStream *stream, const char *buf);
 
-PGRowStream *PGRowStreamInit(PGconn *db, const char* sql, RowFunc cb, void *ctx)
+PGRowStream *PGRowStreamInit(PGconn *db, const char *sql, RowFunc cb, void *ctx)
 {
 	ExecStatusType type;
 	PGRowStream *self = pg_malloc0(sizeof(PGRowStream));
 	PQExpBuffer sql_str;
 	PGresult *res = 0;
-	char* esc_sql = 0;
+	char *esc_sql = 0;
 
     self->conn = db;
 
@@ -94,7 +94,7 @@ typedef struct RowMessage
 	Row row;
 } RowMessage;
 
-static void chomp(char* line)
+static void chomp(char *line)
 {
 	size_t n = strlen(line);
 

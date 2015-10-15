@@ -113,9 +113,9 @@ AdhocMgrGetProc()
  * AdhocMgrGetActiveFlag
  */
 void
-AdhocMgrReleaseProc(ContQueryProc* proc)
+AdhocMgrReleaseProc(ContQueryProc *proc)
 {
-	ContQueryProcGroup* grp = proc->group;
+	ContQueryProcGroup *grp = proc->group;
 
 	LWLockAcquire(AdhocMgrLock, LW_EXCLUSIVE);
 	MemSet(grp, 0, sizeof(ContQueryProcGroup));
@@ -126,7 +126,7 @@ AdhocMgrReleaseProc(ContQueryProc* proc)
  * Find a cq in the array with matching db_oid and cq_id.
  * Returns NULL if not found.
  */
-static ContQueryProc*
+static ContQueryProc *
 find_cq(Oid db_oid, int cq_id)
 {
 	int i = 0;
@@ -179,7 +179,8 @@ AdhocMgrPeriodicCleanup()
  *
  * TODO - a more robust sync mechanism might be required.
  * */
-int* AdhocMgrGetActiveFlag(int cq_id)
+int *
+AdhocMgrGetActiveFlag(int cq_id)
 {
 	ContQueryProc *cq = find_cq(MyDatabaseId, cq_id);
 	return cq ? &cq->group_id : 0;
@@ -196,7 +197,7 @@ void AdhocMgrDeleteAdhocs(void)
 
 	while ((id = bms_first_member(view_ids)) >= 0)
 	{
-		ContinuousView* cv = GetContinuousView(id);
+		ContinuousView *cv = GetContinuousView(id);
 		AdhocMgrCleanupContinuousView(cv);
 	}
 
