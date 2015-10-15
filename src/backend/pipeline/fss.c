@@ -16,6 +16,7 @@
 #include <math.h>
 #include "pipeline/fss.h"
 #include "pipeline/miscutils.h"
+#include "utils/datum.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"
 
@@ -26,24 +27,37 @@
 #define MURMUR_SEED 0x02cd1b4c451c1fb8L
 
 FSS *
-FSSCreateWithMAndH(uint64_t k, TypeCacheEntry *typ, uint64_t m, uint64_t h)
+FSSFromBytes(struct varlena *bytes)
+{
+	char *pos;
+	FSS *fss = (FSS *) bytes;
+
+	/* Fix pointers */
+	pos = (char *) fss;
+	pos += sizeof(FSS);
+	fss->bitmap_counter = (Counter *) pos;
+	pos += sizeof(Counter) * fss->h;
+	fss->monitored_elements = (MonitoredElement *) pos;
+
+	if (FSS_STORES_DATUMS(fss))
+	{
+		pos += sizeof(MonitoredElement) * fss->m;
+		fss->top_k = (ArrayType *) pos;
+	}
+	else
+		fss->top_k = NULL;
+
+	return fss;
+}
+
+FSS *
+FSSCreateWithMAndH(uint16_t k, TypeCacheEntry *typ, uint16_t m, uint16_t h)
 {
 	Size sz = sizeof(FSS) + (sizeof(Counter) * h) + (sizeof(MonitoredElement) * m);
 	char *pos;
 	FSS *fss;
 
-	if (k > m)
-		elog(ERROR, "maximum value of k exceeded");
-
-	/* TODO(usmanm): Check bounds for k, m, h */
-
-	/* TODO(usmanm): Add support for ref types */
-	if (!typ->typbyval)
-		elog(ERROR, "fss does not support reference types");
-
-	/* We only store datums if they're passed by value. */
-	if (typ->typbyval)
-		sz += sizeof(Datum) * k;
+	Assert (k <= m);
 
 	pos = palloc0(sz);
 
@@ -55,19 +69,25 @@ FSSCreateWithMAndH(uint64_t k, TypeCacheEntry *typ, uint64_t m, uint64_t h)
 
 	if (!typ->typbyval)
 	{
+		int i;
+
+		for (i = 0; i < m; i++)
+			fss->monitored_elements[i].varlen_index = (Datum ) i;
+
 		pos += sizeof(MonitoredElement) * m;
-		fss->top_k = (Datum *) pos;
+		fss->top_k = construct_empty_array(typ->type_id);
 	}
 	else
 		fss->top_k = NULL;
 
-	fss->packed = true;
 	fss->h = h;
 	fss->m = m;
 	fss->k = k;
 	fss->typ.typoid = typ->type_id;
 	fss->typ.typlen = typ->typlen;
 	fss->typ.typbyval = typ->typbyval;
+	fss->typ.typalign = typ->typalign;
+	fss->typ.typtype = typ->typtype;
 
 	SET_VARSIZE(fss, FSSSize(fss));
 
@@ -87,12 +107,63 @@ FSSDestroy(FSS *fss)
 	pfree(fss);
 }
 
+/*
+ * fss_resize_topk
+ *
+ * Resize the given FSS so that it can contiguously store the given top k array
+ */
+static FSS *
+fss_resize_topk(FSS *fss, ArrayType *top_k)
+{
+	Size delta = Abs((int) ARR_SIZE(top_k) - (int) ARR_SIZE(fss->top_k));
+	FSS *result = fss;
+
+	if (delta != 0)
+	{
+		result = repalloc(result, FSSSize(fss) + delta);
+		result = FSSFromBytes((struct varlena *) result);
+	}
+	memcpy(result->top_k, top_k, ARR_SIZE(top_k));
+	SET_VARSIZE(result, FSSSize(result));
+
+	return result;
+}
+
+/*
+ * get_monitored_value
+ *
+ * Get the monitored value, which could be either byval or byref. If it's byref,
+ * we need to pull the actual value out of FSS's varlena array.
+ */
+static Datum
+get_monitored_value(FSS *fss, MonitoredElement *element, bool *isnull)
+{
+	Datum result = element->value;
+	int index;
+
+	*isnull = IS_NULL(element);
+
+	if (fss->typ.typbyval)
+		return result;
+
+	Assert(fss->top_k);
+	Assert(element->varlen_index < fss->m);
+	Assert(element->varlen_index < ArrayGetNItems(ARR_NDIM(fss->top_k), ARR_DIMS(fss->top_k)));
+
+	index = (int) element->varlen_index;
+	result = array_ref(fss->top_k, 1, &index,
+			-1, fss->typ.typlen, fss->typ.typbyval, fss->typ.typalign, isnull);
+
+	return result;
+}
+
 FSS *
 FSSCopy(FSS *fss)
 {
 	Size size = FSSSize(fss);
 	char *new = palloc(size);
 	memcpy(new, (char *) fss, size);
+
 	return (FSS *) new;
 }
 
@@ -102,9 +173,9 @@ element_cmp(const void *a, const void *b)
 	MonitoredElement *m1 = (MonitoredElement *) a;
 	MonitoredElement *m2 = (MonitoredElement *) b;
 
-	if (!m1->set)
+	if (!IS_SET(m1))
 		return 1;
-	if (!m2->set)
+	if (!IS_SET(m2))
 		return -1;
 
 	/* We sort by (-frequency, error) */
@@ -121,45 +192,78 @@ element_cmp(const void *a, const void *b)
 	return 0;
 }
 
-void
-FSSIncrement(FSS *fss, Datum datum)
+FSS *
+FSSIncrement(FSS *fss, Datum datum, bool isnull)
 {
-	FSSIncrementWeighted(fss, datum, 1);
+	return FSSIncrementWeighted(fss, datum, isnull, 1);
 }
 
-void
-FSSIncrementWeighted(FSS *fss, Datum datum, uint64_t weight)
+/*
+ * set_varlena
+ *
+ * Store the monitored varlena value in the given FSS's varlena array
+ */
+static FSS *
+set_varlena(FSS *fss, MonitoredElement *element, Datum value, bool isnull)
 {
-	StringInfo buf;
-	uint64_t hash;
-	Counter *counter;
-	bool compare_hash;
-	Datum elt;
-	int free_slot = -1;
-	MonitoredElement *m_elt;
-	int slot;
-	bool needs_sort = true;
-	int counter_idx;
+	ArrayType *result;
+	int index;
+
+	Assert(fss->top_k);
+	Assert(element->varlen_index < fss->m);
+
+	/* For byref types, the value is actually an index into the varlena array */
+	index = element->varlen_index;
+	result = array_set(fss->top_k, 1, &index, value,
+			isnull, -1, fss->typ.typlen, fss->typ.typbyval, fss->typ.typalign);
+
+	fss = fss_resize_topk(fss, result);
+
+	return fss;
+}
+
+/*
+ * hash_datum
+ *
+ * Hash a datum using the given FSS's type information
+ */
+static uint64_t
+hash_datum(FSS* fss, Datum d)
+{
+	uint64_t h;
+	StringInfoData buf;
 	TypeCacheEntry typ;
 
 	typ.type_id = fss->typ.typoid;
 	typ.typbyval = fss->typ.typbyval;
 	typ.typlen = fss->typ.typlen;
+	typ.typtype = fss->typ.typtype;
 
-	buf = makeStringInfo();
-	DatumToBytes(datum, &typ, buf);
-	hash = MurmurHash3_64(buf->data, buf->len, MURMUR_SEED);
-	pfree(buf->data);
-	pfree(buf);
+	initStringInfo(&buf);
+	DatumToBytes(d, &typ, &buf);
+	h = MurmurHash3_64(buf.data, buf.len, MURMUR_SEED);
+	pfree(buf.data);
 
-	counter_idx = hash % fss->h;
+	return h;
+}
+
+FSS *
+FSSIncrementWeighted(FSS *fss, Datum incoming, bool incoming_null, uint64_t weight)
+{
+	uint64_t incoming_hash;
+	Counter *counter;
+	int free_slot = -1;
+	MonitoredElement *m_elt;
+	int slot;
+	bool needs_sort = true;
+	int counter_idx;
+	Datum store_value;
+
+	incoming_hash = hash_datum(fss, incoming_null ? 0 : incoming);
+	counter_idx = incoming_hash % fss->h;
 	counter = &fss->bitmap_counter[counter_idx];
-	compare_hash = FSS_STORES_DATUMS(fss);
 
-	if (compare_hash)
-		elt = (Datum) hash;
-	else
-		elt = datum;
+	store_value = fss->typ.typbyval ? incoming : incoming_hash;
 
 	if (counter->count > 0)
 	{
@@ -170,13 +274,13 @@ FSSIncrementWeighted(FSS *fss, Datum datum, uint64_t weight)
 		{
 			m_elt = &fss->monitored_elements[i];
 
-			if (!m_elt->set)
+			if (!IS_SET(m_elt))
 			{
 				free_slot = i;
 				break;
 			}
 
-			if (m_elt->value == elt)
+			if (m_elt->value == store_value && (incoming_null == IS_NULL(m_elt)))
 			{
 				found = true;
 				break;
@@ -191,14 +295,14 @@ FSSIncrementWeighted(FSS *fss, Datum datum, uint64_t weight)
 			goto done;
 		}
 	}
-	else if (!fss->monitored_elements[fss->m - 1].set)
+	else if (!IS_SET(&fss->monitored_elements[fss->m - 1]))
 	{
 		int i;
 
 		/* Find the first free slot */
 		for (i = 0; i < fss->m; i++)
 		{
-			if (!fss->monitored_elements[i].set)
+			if (!IS_SET(&fss->monitored_elements[i]))
 			{
 				free_slot = i;
 				break;
@@ -206,25 +310,22 @@ FSSIncrementWeighted(FSS *fss, Datum datum, uint64_t weight)
 		}
 	}
 
-
 	/* This is only executed if datum is not monitored */
 	if (counter->alpha + weight >= fss->monitored_elements[fss->m - 1].frequency)
 	{
 		/* Need to evict an element? */
 		if (free_slot == -1)
 		{
-			Counter *counter;
-
+			Counter *c;
 			/*
 			 * We always evict the last element because the monitored element array is
 			 * sorted by (-frequency, error).
 			 */
 			slot = fss->m - 1;
 			m_elt = &fss->monitored_elements[slot];
-			counter = &fss->bitmap_counter[m_elt->counter];
-			counter->count--;
-			counter->alpha = m_elt->frequency;
-
+			c = &fss->bitmap_counter[m_elt->counter];
+			c->count--;
+			c->alpha = m_elt->frequency;
 		}
 		else
 		{
@@ -232,12 +333,21 @@ FSSIncrementWeighted(FSS *fss, Datum datum, uint64_t weight)
 			m_elt = &fss->monitored_elements[slot];
 		}
 
-		m_elt->value = elt;
+		SET(m_elt);
+		if (incoming_null)
+			SET_NULL(m_elt);
+
 		m_elt->frequency = counter->alpha + weight;
 		m_elt->error = counter->alpha;
-		m_elt->set = true;
 		m_elt->counter = counter_idx;
+		m_elt->value = store_value;
 		counter->count++;
+
+		if (!fss->typ.typbyval)
+		{
+			fss = set_varlena(fss, m_elt, incoming, incoming_null);
+			m_elt = &fss->monitored_elements[slot];
+		}
 	}
 	else
 	{
@@ -271,6 +381,10 @@ done:
 	}
 
 	fss->count++;
+
+	SET_VARSIZE(fss, FSSSize(fss));
+
+	return fss;
 }
 
 /*
@@ -284,6 +398,7 @@ FSSMerge(FSS *fss, FSS *incoming)
 {
 	int i, j, k;
 	MonitoredElement *tmp;
+	ArrayType *top_k;
 
 	Assert(fss->h == incoming->h);
 	Assert(fss->m == incoming->m);
@@ -302,38 +417,80 @@ FSSMerge(FSS *fss, FSS *incoming)
 	for (i = 0; i < fss->m; i++)
 	{
 		bool found = false;
-		MonitoredElement *elt1 = &incoming->monitored_elements[i];
+		MonitoredElement *incoming_elt = &incoming->monitored_elements[i];
 
-		if (!elt1->set)
+		if (!IS_SET(incoming_elt))
 			break;
 
 		for (j = 0; j < fss->m; j++)
 		{
-			MonitoredElement *elt2 = &tmp[j];
+			MonitoredElement *elt = &tmp[j];
 
-			if (elt1->value == elt2->value)
+			if (!IS_SET(elt))
+				break;
+
+			if (incoming_elt->value == elt->value && (IS_NULL(incoming_elt) == IS_NULL(elt)))
 			{
-				elt2->frequency += elt1->frequency;
-				elt2->error += elt1->error;
+				elt->frequency += incoming_elt->frequency;
+				elt->error += incoming_elt->error;
 				found = true;
 				break;
 			}
 		}
 
 		if (!found)
-			tmp[k++] = *elt1;
+		{
+			tmp[k] = *incoming_elt;
+			SET_NEW(&tmp[k]);
+			k++;
+		}
 	}
 
 	qsort(tmp, k, sizeof(MonitoredElement), element_cmp);
-	memcpy(fss->monitored_elements, tmp, sizeof(MonitoredElement) * fss->m);
 
+	/* If we added any new byref elements, we need to rebuild the varlena array */
+	if (k - fss->m > 0 && !fss->typ.typbyval)
+	{
+		top_k = construct_empty_array(fss->typ.typoid);
+
+		/*
+		 * For each monitored element in the sorted array, point its value to the
+		 * varlena array attached to the output FSS
+		 */
+		for (i = 0; i < fss->m; i++)
+		{
+			MonitoredElement *elt = &tmp[i];
+			Datum value;
+			bool isnull;
+
+			if (!IS_SET(elt))
+				break;
+
+			if (IS_NEW(elt))
+			{
+				value = get_monitored_value(incoming, elt, &isnull);
+				UNSET_NEW(elt);
+			}
+			else
+				value = get_monitored_value(fss, elt, &isnull);
+
+			top_k = array_set(top_k, 1, &i, value,
+					isnull, -1, fss->typ.typlen, fss->typ.typbyval, fss->typ.typalign);
+
+			elt->varlen_index = (Datum ) i;
+		}
+
+		fss = fss_resize_topk(fss, top_k);
+	}
+
+	memcpy(fss->monitored_elements, tmp, sizeof(MonitoredElement) * fss->m);
 	pfree(tmp);
 
 	for (i = 0; i < fss->m; i++)
 	{
 		MonitoredElement *elt = &fss->monitored_elements[i];
 
-		if (!elt->set)
+		if (!IS_SET(elt))
 			break;
 
 		fss->bitmap_counter[elt->counter].count++;
@@ -341,32 +498,44 @@ FSSMerge(FSS *fss, FSS *incoming)
 
 	fss->count += incoming->count;
 
+	SET_VARSIZE(fss, FSSSize(fss));
+
 	return fss;
 }
 
 Datum *
-FSSTopK(FSS *fss, uint16_t k, uint16_t *found)
+FSSTopK(FSS *fss, uint16_t k, bool **nulls, uint16_t *found)
 {
 	int i;
 	Datum *datums;
+	bool *null_k;
 
 	if (k > fss->k)
 		elog(ERROR, "maximum value for k exceeded");
 
 	datums = palloc(sizeof(Datum) * k);
 
+	if (nulls)
+		null_k = palloc0(sizeof(bool) * k);
+
 	for (i = 0; i < k; i++)
 	{
 		MonitoredElement *elt = &fss->monitored_elements[i];
+		bool isnull;
 
-		if (!elt->set)
+		if (!IS_SET(elt))
 			break;
 
-		datums[i] = elt->value;
+		datums[i] = get_monitored_value(fss, elt, &isnull);
+		if (nulls)
+			null_k[i] = isnull;
 	}
 
 	if (found)
 		*found = i;
+
+	if (nulls)
+		*nulls = null_k;
 
 	return datums;
 }
@@ -386,7 +555,7 @@ FSSTopKCounts(FSS *fss, uint16_t k, uint16_t *found)
 	{
 		MonitoredElement *elt = &fss->monitored_elements[i];
 
-		if (!elt->set)
+		if (!IS_SET(elt))
 			break;
 
 		counts[i] = elt->frequency;
@@ -410,7 +579,7 @@ FSSSize(FSS *fss)
 	Size sz = sizeof(FSS) + (sizeof(Counter) * fss->h) + (sizeof(MonitoredElement) * fss->m);
 
 	if (FSS_STORES_DATUMS(fss))
-		sz += sizeof(Datum) * fss->k;
+		sz += ARR_SIZE(fss->top_k);
 
 	return sz;
 }
@@ -447,8 +616,10 @@ FSSPrint(FSS *fss)
 	for (i = 0; i < fss->m; i++)
 	{
 		MonitoredElement *elt = &fss->monitored_elements[i];
-		if (elt->set)
-			appendStringInfo(buf, "| (%ld, %ld, %d) |", elt->value, elt->frequency, elt->error);
+		bool isnull;
+		Datum value = get_monitored_value(fss, elt, &isnull);
+		if (IS_SET(elt))
+			appendStringInfo(buf, "| (%ld, %ld, %d) |", value, elt->frequency, elt->error);
 		else
 			appendStringInfo(buf, "| (-, -, -) |");
 

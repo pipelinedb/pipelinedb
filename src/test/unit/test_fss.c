@@ -41,7 +41,7 @@ assert_sorted(FSS *fss)
 	{
 		MonitoredElement *elt = &fss->monitored_elements[i];
 
-		if (!elt->set)
+		if (!IS_SET(elt))
 		{
 			saw_unset = true;
 			continue;
@@ -83,12 +83,12 @@ START_TEST(test_basic)
 	{
 		int value = 10 * gaussian();
 		value %= 500;
-		FSSIncrement(fss, value);
+		FSSIncrement(fss, value, false);
 		counts[value + 500]++;
 		assert_sorted(fss);
 	}
 
-	values = FSSTopK(fss, K, NULL);
+	values = FSSTopK(fss, K, NULL, NULL);
 	freqs = FSSTopKCounts(fss, K, NULL);
 
 	soft_errors = 0;
@@ -122,8 +122,8 @@ START_TEST(test_merge)
 		{
 			int value = 10 * gaussian();
 			value %= 500;
-			FSSIncrement(fss1, value);
-			FSSIncrement(tmp, value);
+			FSSIncrement(fss1, value, false);
+			FSSIncrement(tmp, value, false);
 			assert_sorted(fss1);
 			assert_sorted(tmp);
 		}
@@ -132,9 +132,9 @@ START_TEST(test_merge)
 		FSSDestroy(tmp);
 	}
 
-	values1 = FSSTopK(fss1, K, NULL);
+	values1 = FSSTopK(fss1, K, NULL, NULL);
 	freqs1 = FSSTopKCounts(fss1, K, NULL);
-	values2 = FSSTopK(fss2, K, NULL);
+	values2 = FSSTopK(fss2, K, NULL, NULL);
 	freqs2 = FSSTopKCounts(fss2, K, NULL);
 	soft_errors = 0;
 
@@ -165,9 +165,9 @@ START_TEST(test_error)
 
 	for (i = 0; i <= min_freq; i++)
 	{
-		FSSIncrement(fss, 1);
-		FSSIncrement(fss, 2);
-		FSSIncrement(fss, 3);
+		FSSIncrement(fss, 1, false);
+		FSSIncrement(fss, 2, false);
+		FSSIncrement(fss, 3, false);
 		counts[1]++;
 		counts[2]++;
 		counts[3]++;
@@ -177,12 +177,12 @@ START_TEST(test_error)
 	for (i = 0; i < NUM_ITEMS - (2 * min_freq); i++)
 	{
 		int value = (int) uniform() % 500 + 4;
-		FSSIncrement(fss, value);
+		FSSIncrement(fss, value, false);
 		counts[value]++;
 		assert_sorted(fss);
 	}
 
-	values = FSSTopK(fss, K, NULL);
+	values = FSSTopK(fss, K, NULL, NULL);
 	freqs = FSSTopKCounts(fss, K, NULL);
 
 	for (i = 0; i < 3; i++)
@@ -206,9 +206,9 @@ START_TEST(test_weighted)
 
 	for (i = 0; i <= min_freq; i++)
 	{
-		FSSIncrementWeighted(fss, 1, 10);
-		FSSIncrementWeighted(fss, 2, 20);
-		FSSIncrementWeighted(fss, 3, 30);
+		fss = FSSIncrementWeighted(fss, 1, false, 10);
+		fss = FSSIncrementWeighted(fss, 2, false, 20);
+		fss = FSSIncrementWeighted(fss, 3, false, 30);
 		counts[1] += 10;
 		counts[2] += 20;
 		counts[3] += 30;
@@ -218,12 +218,12 @@ START_TEST(test_weighted)
 	for (i = 0; i < NUM_ITEMS - (2 * min_freq); i++)
 	{
 		int value = (int) uniform() % 500 + 4;
-		FSSIncrementWeighted(fss, value, 1);
+		fss = FSSIncrementWeighted(fss, value, false, 1);
 		counts[value]++;
 		assert_sorted(fss);
 	}
 
-	values = FSSTopK(fss, K, NULL);
+	values = FSSTopK(fss, K, NULL, NULL);
 	freqs = FSSTopKCounts(fss, K, NULL);
 
 	for (i = 0; i < 3; i++)
