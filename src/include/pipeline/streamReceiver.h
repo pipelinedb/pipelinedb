@@ -25,6 +25,8 @@ typedef struct StreamReceiver
 	int nacks;
 
 	Bitmapset *targets;
+	int num_targets;
+
 	AdhocData *adhoc_data;
 
 	long count;

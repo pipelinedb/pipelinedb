@@ -32,7 +32,6 @@ static void
 stream_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	StreamReceiver *stream = (StreamReceiver *) self;
-	int num_worker = bms_num_members(stream->targets);
 
 	int count = 0;
 	Size bytes = 0;
@@ -40,7 +39,7 @@ stream_receive(TupleTableSlot *slot, DestReceiver *self)
 	MemoryContext old = MemoryContextSwitchTo(stream->context);
 	HeapTuple tup = ExecMaterializeSlot(slot);
 
-	if (num_worker)
+	if (stream->num_targets)
 	{
 		StreamTuple *tuple = 
 			MakeStreamTuple(tup, stream->desc, stream->nacks, stream->acks);
@@ -105,6 +104,7 @@ SetStreamDestReceiverParams(DestReceiver *self,
 
 	stream->desc = desc;
 	stream->targets = targets;
+	stream->num_targets = bms_num_members(stream->targets);
 	stream->nacks = nacks;
 	stream->acks = acks;
 
