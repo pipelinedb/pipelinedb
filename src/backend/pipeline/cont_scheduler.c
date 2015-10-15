@@ -425,7 +425,7 @@ cq_bgproc_main(Datum arg)
 	case Worker:
 		am_cont_worker = true;
 
-		/* TODO - put this somewhere nicer */
+		/* XXX - put this somewhere nicer */
 		AdhocMgrDeleteAdhocs();
 
 		run = &ContinuousQueryWorkerMain;
@@ -722,6 +722,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 
 		if (rc & WL_TIMEOUT)
 		{
+			/* XXX - put this in a nicer place. */
 			AdhocMgrPeriodicCleanup();
 		}
 
