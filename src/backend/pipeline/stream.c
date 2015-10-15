@@ -708,7 +708,6 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 	if (num_tuples)
 	{
 		batch->num_wtups = num_tuples;
-
 		while (!StreamBatchAllAcked(batch))
 		{
 			pg_usleep(SLEEP_MS * 1000);
@@ -719,7 +718,10 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 	ShmemDynFree(batch);
 }
 
-/* checks that a cq is active by checking its id is the same */
+/* 
+ * Waits for a batch to be acked, but breaks early if it 
+ * detects that the adhoc cq is no longer active. 
+ */
 void
 InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples, 
 							   int *active, int cq_id)

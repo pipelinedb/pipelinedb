@@ -493,6 +493,12 @@ GetAllStreamReaders(Oid relid)
 	return result;
 }
 
+/* 
+ * GetAdhocContinuousViewIds
+ * 
+ * Returns a bitmapset of all the continuous views that 
+ * are marked as adhoc.
+ */  
 Bitmapset *
 GetAdhocContinuousViewIds(void)
 {

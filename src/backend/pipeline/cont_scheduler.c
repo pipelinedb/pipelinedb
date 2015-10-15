@@ -471,8 +471,8 @@ run_background_proc(ContQueryProc *proc)
 static void
 start_group(ContQueryProcGroup *grp)
 {
-	int slot_idx = 0;
-	int i = 0;
+	int slot_idx;
+	int group_id;
 
 	SpinLockInit(&grp->mutex);
 	SpinLockAcquire(&grp->mutex);
@@ -481,26 +481,28 @@ start_group(ContQueryProcGroup *grp)
 	grp->terminate = false;
 
 	/* Start workers */
-	for (i = 0; i < continuous_query_num_workers; i++, slot_idx++)
+	for (slot_idx = 0, group_id = 0; slot_idx < continuous_query_num_workers; slot_idx++, group_id++)
 	{
 		ContQueryProc *proc = &grp->procs[slot_idx];
+
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
 		proc->type = Worker;
-		proc->group_id = i;
+		proc->group_id = group_id;
 		proc->group = grp;
 
 		run_background_proc(proc);
 	}
 
 	/* Start combiners */
-	for (i = 0; i < continuous_query_num_combiners; i++, slot_idx++)
+	for (group_id = 0; slot_idx < TOTAL_SLOTS; slot_idx++, group_id++)
 	{
 		ContQueryProc *proc = &grp->procs[slot_idx];
+
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
 		proc->type = Combiner;
-		proc->group_id = i;
+		proc->group_id = group_id;
 		proc->group = grp;
 
 		run_background_proc(proc);
