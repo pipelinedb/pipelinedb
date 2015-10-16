@@ -11,17 +11,17 @@ set db [lindex $argv 2];
 set query [lindex $argv 3];
 set input_file [lindex $argv 4];
 
-spawn $psql  -p $port -c "select pipeline_exec_adhoc_query('$query');"
+spawn $psql -p $port -d $db -c "select pipeline_exec_adhoc_query('$query');"
 set adhoc $spawn_id
 
-# synchronize with h/k
+# synchronize with header / key lines
 
 expect -re "(h.*?)\r\n"
 puts "$expect_out(1,string)"
 expect -re "(k.*?)\r\n"
 puts "$expect_out(1,string)"
 
-spawn $psql -p $port -f $input_file
+spawn $psql -p $port -d $db -f $input_file
 set inserter $spawn_id
 
 expect {
