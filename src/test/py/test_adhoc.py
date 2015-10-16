@@ -47,7 +47,7 @@ def test_adhoc_group_query(pipeline, clean_db):
   psql = os.path.abspath(os.path.join(pipeline.tmp_dir, 'bin/psql'))
 
   # need to use expect because psycopg won't work with adhoc
-  cmd = ["./run_adhoc.expect", psql, str(pipeline.port), q, path]
+  cmd = ["./run_adhoc.expect", psql, str(pipeline.port), "pipeline", q, path]
   output = subprocess.Popen(cmd, stdout=PIPE).communicate()[0]
 
   lines = output.split('\n')

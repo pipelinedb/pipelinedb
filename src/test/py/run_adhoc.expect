@@ -7,8 +7,9 @@ set timeout 1
 
 set psql [lindex $argv 0];
 set port [lindex $argv 1];
-set query [lindex $argv 2];
-set input_file [lindex $argv 3];
+set db [lindex $argv 2];
+set query [lindex $argv 3];
+set input_file [lindex $argv 4];
 
 spawn $psql  -p $port -c "select pipeline_exec_adhoc_query('$query');"
 set adhoc $spawn_id
