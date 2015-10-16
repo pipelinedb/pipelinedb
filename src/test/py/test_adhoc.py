@@ -101,15 +101,13 @@ def test_adhoc_single_query(pipeline, clean_db):
 
   path = os.path.abspath(os.path.join(pipeline.tmp_dir, 'test_adhoc.sql'))
   tmp_file = open(path, 'w')
-  print(tmp_file)
 
   v = gen_insert('stream', ['x'], rows)
 
   for x in range(0, 100):
     tmp_file.write(v)
 
-  tmp_file.close
-  tmp_file = None
+  tmp_file.close()
 
   psql = os.path.abspath(os.path.join(pipeline.tmp_dir, 'bin/psql'))
 
@@ -143,3 +141,46 @@ def test_adhoc_single_query(pipeline, clean_db):
   # check that query has been cleaned up
   result = list(pipeline.execute("select table_name, table_schema from INFORMATION_SCHEMA.COLUMNS where table_schema = 'public'"))
   assert(len(result) == 0)
+
+def test_adhoc_against_identical_cv(pipeline, clean_db):
+  """
+  Verify that an adhoc query produces the same output as an identical
+  continuous view
+  """
+  q = """
+  SELECT x::integer + 1 AS g, sum(y::integer), avg(z::integer), count(*)
+  FROM test_adhoc_stream GROUP BY g;
+  """
+  pipeline.create_cv('test_adhoc_cv', q)
+
+  rows = [(x % 10, random.randint(1, 1000), random.randint(1, 1000)) for x in range(1000)]
+
+  path = os.path.abspath(os.path.join(pipeline.tmp_dir, 'test_adhoc_against_identical_cv.sql'))
+  tmp_file = open(path, 'w')
+
+  for row in rows:
+    v = gen_insert('test_adhoc_stream', ('x', 'y', 'z'), [row])
+    tmp_file.write(v)
+
+  tmp_file.close()
+
+  psql = os.path.abspath(os.path.join(pipeline.tmp_dir, 'bin/psql'))
+  cmd = ['./run_adhoc.expect', psql, str(pipeline.port), q, 'pipeline', path]
+  output = subprocess.Popen(cmd, stdout=PIPE).communicate()[0]
+
+  lines = output.split('\n')
+  lines = filter(lambda x: not re.match(r'^\s*$', x), lines)
+  lines = [l.split('\t')[1:] for l in lines]
+  lines = lines[-10:]
+
+  adhoc_results = {}
+  for line in lines:
+    g, s, a, c = line
+    adhoc_results[int(g)] = int(g), int(s), float(a), int(c)
+
+  cv_result = pipeline.execute('SELECT * FROM test_adhoc_cv')
+  for row in cv_result:
+    adhoc_row = adhoc_results[row[0]]
+    assert adhoc_row[1] == row[1]
+    assert abs(adhoc_row[2] - float(row[2])) < 0.001
+    assert adhoc_row[3] == row[3]
