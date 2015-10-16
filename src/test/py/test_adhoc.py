@@ -101,15 +101,13 @@ def test_adhoc_single_query(pipeline, clean_db):
 
   path = os.path.abspath(os.path.join(pipeline.tmp_dir, 'test_adhoc.sql'))
   tmp_file = open(path, 'w')
-  print(tmp_file)
 
   v = gen_insert('stream', ['x'], rows)
 
   for x in range(0, 100):
     tmp_file.write(v)
 
-  tmp_file.close
-  tmp_file = None
+  tmp_file.close()
 
   psql = os.path.abspath(os.path.join(pipeline.tmp_dir, 'bin/psql'))
 
@@ -144,83 +142,45 @@ def test_adhoc_single_query(pipeline, clean_db):
   result = list(pipeline.execute("select table_name, table_schema from INFORMATION_SCHEMA.COLUMNS where table_schema = 'public'"))
   assert(len(result) == 0)
 
-
-def test_same_stream(pipeline, clean_db):
+def test_adhoc_against_identical_cv(pipeline, clean_db):
   """
-  Runs an adhoc grouping query, and checks the results.
+  Verify that an adhoc query produces the same output as an identical
+  continuous view
   """
-  q = 'SELECT x::int, COUNT(*) FROM stream GROUP BY x'
+  q = """
+  SELECT x::integer + 1 AS g, sum(y::integer), avg(z::integer), count(*)
+  FROM test_adhoc_stream GROUP BY g;
+  """
+  pipeline.create_cv('test_adhoc_cv', q)
 
-  pipeline.create_cv('test_same_stream', q)
-    
-  rows = [(n+1,) for n in range(100)]
+  rows = [(x % 10, random.randint(1, 1000), random.randint(1, 1000)) for x in range(1000)]
 
-  path = os.path.abspath(os.path.join(pipeline.tmp_dir, 'test_adhoc.sql'))
+  path = os.path.abspath(os.path.join(pipeline.tmp_dir, 'test_adhoc_against_identical_cv.sql'))
   tmp_file = open(path, 'w')
 
-  v = gen_insert('stream', ['x'], rows)
-
-  for x in range(0, 100):
+  for row in rows:
+    v = gen_insert('test_adhoc_stream', ('x', 'y', 'z'), [row])
     tmp_file.write(v)
 
-  tmp_file.close
-  tmp_file = None
+  tmp_file.close()
 
   psql = os.path.abspath(os.path.join(pipeline.tmp_dir, 'bin/psql'))
-
-  # need to use expect because psycopg won't work with adhoc
-  cmd = ["./run_adhoc.expect", psql, str(pipeline.port), "pipeline", q, path]
-
-  print cmd
+  cmd = ['./run_adhoc.expect', psql, str(pipeline.port), 'pipeline', q, path]
   output = subprocess.Popen(cmd, stdout=PIPE).communicate()[0]
 
   lines = output.split('\n')
   lines = filter(lambda x: not re.match(r'^\s*$', x), lines)
+  lines = [l.split('\t')[1:] for l in lines]
+  lines = lines[-10:]
 
-  # 2 hdr lines, 100 * 100 expected
-  assert len(lines) == (10000 + 2);
+  adhoc_results = {}
+  for line in lines:
+    g, s, a, c = line
+    adhoc_results[int(g)] = int(g), int(s), float(a), int(c)
 
-  assert(lines[0] == "h\tx\tcount")
-  assert(lines[1] == "k\t1")
-
-  lines.pop(0)
-  lines.pop(0)
-
-  lines = map(lambda x: x.split("\t"), lines)
-  d = {}
-
-  # check that all the updates are monotonically increasing
-
-  for l in lines:
-      k = int(l[1])
-      v = int(l[2])
-
-      assert(k >= 1 and k <= 100)
-
-      if (not d.has_key(k)):
-          d[k] = 0
-
-      old_val = d[k]
-      assert(v - old_val == 1)
-      d[k] = v
-
-  # check the final tallies
-
-  for x in range(1, 101):
-      assert(d[x] == 100)
-
-  # check that query has been cleaned up
-  result = list(pipeline.execute("select table_name, table_schema from INFORMATION_SCHEMA.COLUMNS where table_schema = 'public' and table_name like 'adhoc%%'"))
-  assert(len(result) == 0)
-
-  # check that the cv has 100 groups with count 100
-
-  from_cv = list(pipeline.execute('SELECT * from test_same_stream order by x'))
-  assert(len(from_cv) == 100)
-
-  for x in range(0,100):
-      group = from_cv[x]
-      assert(group[0] == x+1)
-      assert(group[1] == 100)
-
-
+  cv_result = pipeline.execute('SELECT * FROM test_adhoc_cv')
+  for row in cv_result:
+    adhoc_row = adhoc_results[row[0]]
+    assert adhoc_row[1] == row[1]
+    assert abs(adhoc_row[2] - float(row[2])) < 0.001
+    assert adhoc_row[3] == row[3]
