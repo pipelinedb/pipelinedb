@@ -1213,18 +1213,6 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					errmsg("continuous queries don't support DISTINCT expressions for \"%s\" aggregate", name),
 					parser_errposition(context->pstate, func->location)));
-
-		if (pg_strcasecmp(name, "fss_agg") == 0 && list_length(func->args))
-		{
-			Oid type = exprType(transformExpr(context->pstate, linitial(func->args), EXPR_KIND_WHERE));
-			TypeCacheEntry *typ = lookup_type_cache(type, 0);
-
-			if (!typ->typbyval)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						errmsg("fss_agg does not support reference types"),
-						parser_errposition(context->pstate, func->location)));
-		}
 	}
 
 	/* Ensure that any WINDOWs are legal */
@@ -1505,6 +1493,40 @@ get_combine_state_type(Expr *expr)
 		result = GetCombineStateType(((WindowFunc *) expr)->winfnoid);
 
 	return result;
+}
+
+/*
+ * ApplyTransitionOut
+ *
+ * Apply transition out functions to all relevant aggregates in the given list of nodes
+ */
+void
+ApplyTransitionOut(List *nodes)
+{
+	ListCell *lc;
+	foreach(lc, nodes)
+	{
+		Expr *expr = (Expr *) lfirst(lc);
+		if (IsA(expr, TargetEntry))
+			expr = ((TargetEntry *) expr)->expr;
+
+		if (IsA(expr, Aggref))
+		{
+			Aggref *agg = (Aggref *) expr;
+			Oid type = get_combine_state_type((Expr *) agg);
+
+			if (OidIsValid(type))
+				apply_transout((Expr *) agg, agg->aggfnoid);
+		}
+		else if (IsA(expr, WindowFunc))
+		{
+			WindowFunc *win = (WindowFunc *) expr;
+			Oid type = get_combine_state_type((Expr *) win);
+
+			if (OidIsValid(type))
+				apply_transout((Expr *) win, win->winfnoid);
+		}
+	}
 }
 
 /*

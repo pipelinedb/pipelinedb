@@ -452,6 +452,33 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
 }
 
 /*
+ * RelIdIsAMatRel
+ *
+ * Returns true if the given oid represents a materialization table
+ */
+Oid
+RelIdIsAMatRel(Oid relid)
+{
+	Relation rel = heap_open(relid, NoLock);
+	Oid namespace = RelationGetNamespace(rel);
+	char *relname = pstrdup(RelationGetRelationName(rel));
+	HeapTuple tup;
+
+	heap_close(rel, NoLock);
+
+	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL,
+			ObjectIdGetDatum(namespace), CStringGetDatum(relname));
+
+	if (!HeapTupleIsValid(tup))
+		return false;
+
+	ReleaseSysCache(tup);
+
+	return true;
+}
+
+
+/*
  * GetGCFlag
  */
 bool

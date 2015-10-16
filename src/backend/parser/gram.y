@@ -251,6 +251,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		AlterTSConfigurationStmt AlterTSDictionaryStmt
 		CreateMatViewStmt RefreshMatViewStmt
 		CreateContViewStmt ExplainContViewStmt CreateStreamStmt
+		TruncateContViewStmt
 
 %type <node>	select_no_parens select_with_parens select_clause
 				simple_select values_clause
@@ -826,6 +827,7 @@ stmt :
 			| SelectStmt
 			| TransactionStmt
 			| TruncateStmt
+			| TruncateContViewStmt
 			| UnlistenStmt
 			| UpdateStmt
 			| VacuumStmt
@@ -5418,16 +5420,17 @@ TruncateStmt:
 			TRUNCATE opt_table relation_expr_list opt_restart_seqs opt_drop_behavior
 				{
 					TruncateStmt *n = makeNode(TruncateStmt);
-					n->objType = OBJECT_TABLE;
 					n->relations = $3;
 					n->restart_seqs = $4;
 					n->behavior = $5;
 					$$ = (Node *)n;
 				}
-			| TRUNCATE CONTINUOUS VIEW relation_expr_list opt_restart_seqs opt_drop_behavior
+		;
+
+TruncateContViewStmt:
+			TRUNCATE CONTINUOUS VIEW relation_expr_list opt_restart_seqs opt_drop_behavior
 				{
-					TruncateStmt *n = makeNode(TruncateStmt);
-					n->objType = OBJECT_CONTINUOUS_VIEW;
+					TruncateContViewStmt *n = makeNode(TruncateContViewStmt);
 					n->relations = $4;
 					n->restart_seqs = $5;
 					n->behavior = $6;

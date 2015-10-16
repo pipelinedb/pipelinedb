@@ -41,7 +41,7 @@ assert_sorted(FSS *fss)
 	{
 		MonitoredElement *elt = &fss->monitored_elements[i];
 
-		if (!elt->set)
+		if (!IS_SET(elt))
 		{
 			saw_unset = true;
 			continue;
@@ -74,21 +74,21 @@ START_TEST(test_basic)
 	TypeCacheEntry *typ = get_int8_type();
 	FSS *fss = FSSCreate(K, typ);
 	int i;
-	int *counts = palloc0(sizeof(int) * 1000);
+	int *counts = palloc0(sizeof(uint64_t) * 1000);
 	Datum *values;
-	uint32_t *freqs;
+	uint64_t *freqs;
 	int soft_errors;
 
 	for (i = 0; i < NUM_ITEMS; i++)
 	{
 		int value = 10 * gaussian();
 		value %= 500;
-		FSSIncrement(fss, value);
+		FSSIncrement(fss, value, false);
 		counts[value + 500]++;
 		assert_sorted(fss);
 	}
 
-	values = FSSTopK(fss, K, NULL);
+	values = FSSTopK(fss, K, NULL, NULL);
 	freqs = FSSTopKCounts(fss, K, NULL);
 
 	soft_errors = 0;
@@ -111,7 +111,7 @@ START_TEST(test_merge)
 	FSS *fss2 = FSSCreate(K, typ);
 	int i, j;
 	Datum *values1, *values2;
-	uint32_t *freqs1, *freqs2;
+	uint64_t *freqs1, *freqs2;
 	int soft_errors;
 
 	for (j = 0; j < 10; j++)
@@ -122,8 +122,8 @@ START_TEST(test_merge)
 		{
 			int value = 10 * gaussian();
 			value %= 500;
-			FSSIncrement(fss1, value);
-			FSSIncrement(tmp, value);
+			FSSIncrement(fss1, value, false);
+			FSSIncrement(tmp, value, false);
 			assert_sorted(fss1);
 			assert_sorted(tmp);
 		}
@@ -132,9 +132,9 @@ START_TEST(test_merge)
 		FSSDestroy(tmp);
 	}
 
-	values1 = FSSTopK(fss1, K, NULL);
+	values1 = FSSTopK(fss1, K, NULL, NULL);
 	freqs1 = FSSTopKCounts(fss1, K, NULL);
-	values2 = FSSTopK(fss2, K, NULL);
+	values2 = FSSTopK(fss2, K, NULL, NULL);
 	freqs2 = FSSTopKCounts(fss2, K, NULL);
 	soft_errors = 0;
 
@@ -158,16 +158,16 @@ START_TEST(test_error)
 	TypeCacheEntry *typ = get_int8_type();
 	FSS *fss = FSSCreate(K, typ);
 	int i;
-	int *counts = palloc0(sizeof(int) * 1000);
+	int *counts = palloc0(sizeof(uint64_t) * 1000);
 	Datum *values;
-	uint32_t *freqs;
+	uint64_t *freqs;
 	int min_freq = NUM_ITEMS / fss->m;
 
 	for (i = 0; i <= min_freq; i++)
 	{
-		FSSIncrement(fss, 1);
-		FSSIncrement(fss, 2);
-		FSSIncrement(fss, 3);
+		FSSIncrement(fss, 1, false);
+		FSSIncrement(fss, 2, false);
+		FSSIncrement(fss, 3, false);
 		counts[1]++;
 		counts[2]++;
 		counts[3]++;
@@ -177,12 +177,53 @@ START_TEST(test_error)
 	for (i = 0; i < NUM_ITEMS - (2 * min_freq); i++)
 	{
 		int value = (int) uniform() % 500 + 4;
-		FSSIncrement(fss, value);
+		FSSIncrement(fss, value, false);
 		counts[value]++;
 		assert_sorted(fss);
 	}
 
-	values = FSSTopK(fss, K, NULL);
+	values = FSSTopK(fss, K, NULL, NULL);
+	freqs = FSSTopKCounts(fss, K, NULL);
+
+	for (i = 0; i < 3; i++)
+	{
+		int value = values[i];
+		ck_assert(value == 1 || value == 2 || value == 3);
+		ck_assert(abs(freqs[i] - counts[value]) == 0);
+	}
+}
+END_TEST
+
+START_TEST(test_weighted)
+{
+	TypeCacheEntry *typ = get_int8_type();
+	FSS *fss = FSSCreate(K, typ);
+	int i;
+	int *counts = palloc0(sizeof(uint64_t) * 1000);
+	Datum *values;
+	uint64_t *freqs;
+	int min_freq = NUM_ITEMS / fss->m;
+
+	for (i = 0; i <= min_freq; i++)
+	{
+		fss = FSSIncrementWeighted(fss, 1, false, 10);
+		fss = FSSIncrementWeighted(fss, 2, false, 20);
+		fss = FSSIncrementWeighted(fss, 3, false, 30);
+		counts[1] += 10;
+		counts[2] += 20;
+		counts[3] += 30;
+		assert_sorted(fss);
+	}
+
+	for (i = 0; i < NUM_ITEMS - (2 * min_freq); i++)
+	{
+		int value = (int) uniform() % 500 + 4;
+		fss = FSSIncrementWeighted(fss, value, false, 1);
+		counts[value]++;
+		assert_sorted(fss);
+	}
+
+	values = FSSTopK(fss, K, NULL, NULL);
 	freqs = FSSTopKCounts(fss, K, NULL);
 
 	for (i = 0; i < 3; i++)
@@ -206,6 +247,7 @@ test_fss_suite(void)
 	tcase_add_test(tc, test_basic);
 	tcase_add_test(tc, test_merge);
 	tcase_add_test(tc, test_error);
+	tcase_add_test(tc, test_weighted);
 	suite_add_tcase(s, tc);
 
 	return s;

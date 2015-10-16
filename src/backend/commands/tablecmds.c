@@ -1015,12 +1015,6 @@ ExecuteTruncate(TruncateStmt *stmt)
 	SubTransactionId mySubid;
 	ListCell   *cell;
 
-	if (stmt->objType == OBJECT_CONTINUOUS_VIEW)
-		return ExecTruncateContViewStmt(stmt);
-
-	if (stmt->objType != OBJECT_TABLE)
-		elog(ERROR, "unknown object type %d", stmt->objType);
-
 	/*
 	 * Open, exclusive-lock, and check all the explicitly-specified relations
 	 */

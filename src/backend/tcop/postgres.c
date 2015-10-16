@@ -1608,7 +1608,15 @@ exec_bind_message(StringInfo input_message)
 	}
 
 	if (psrc && psrc->raw_parse_tree && IsA(psrc->raw_parse_tree, InsertStmt))
-		stream_insert_stmt = FetchPreparedStreamInsert(stmt_name);
+	{
+		/*
+		 * It's possible to have unnamed prepared stream and table inserts during
+		 * the same session, so make sure we're actually looking for a prepared stream insert.
+		 */
+		InsertStmt *ins = (InsertStmt *) psrc->raw_parse_tree;
+		if (RangeVarIsForStream(ins->relation, NULL))
+			stream_insert_stmt = FetchPreparedStreamInsert(stmt_name);
+	}
 
 	/*
 	 * Report query to various monitoring facilities.

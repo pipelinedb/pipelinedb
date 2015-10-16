@@ -199,8 +199,8 @@ def test_continuous_queries_enabled(pipeline, clean_db):
   except:
     procs = []
 
-  procs = filter(lambda s: s, procs)
-  assert len(procs) > 1
+  procs = filter(lambda s: s and 'grep' not in s, procs)
+  assert len(procs) > 0
 
   # Restart with continuous queries disabled.
   pipeline.stop()
@@ -212,8 +212,8 @@ def test_continuous_queries_enabled(pipeline, clean_db):
   except:
     procs = []
 
-  procs = filter(lambda s: s, procs)
-  assert len(procs) == 1 # grep cmd
+  procs = filter(lambda s: s and 'grep' not in s, procs)
+  assert len(procs) == 0
 
   pipeline.stop()
   pipeline.run()

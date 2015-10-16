@@ -15,7 +15,6 @@
 #include "nodes/bitmapset.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
-#include "storage/shm_array.h"
 #include "storage/s_lock.h"
 #include "storage/shmem.h"
 #include "storage/latch.h"
