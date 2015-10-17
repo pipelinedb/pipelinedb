@@ -184,3 +184,118 @@ def test_adhoc_against_identical_cv(pipeline, clean_db):
     assert adhoc_row[1] == row[1]
     assert abs(adhoc_row[2] - float(row[2])) < 0.001
     assert adhoc_row[3] == row[3]
+
+
+def test_multi_adhoc(pipeline, clean_db):
+  """
+  Verify that multiple cq and adhocs can run off the same stream.
+  """
+
+  q1 = 'select a::text, count(*) from stream group by a'
+  q2 = 'select b::text, count(*) from stream group by b'
+  q3 = 'select c::text, count(*) from stream group by c'
+  q4 = 'select d::text, count(*) from stream group by d'
+
+  pipeline.create_cv('cv_1', q1)
+  pipeline.create_cv('cv_2', q2)
+
+  rows = [('a%d'%x, 'b%d'%x, 'c%d'%x, 'd%d'%x) for x in range(100)]
+  v = gen_insert('stream', ['a','b','c','d'], rows)
+
+  path = os.path.abspath(os.path.join(pipeline.tmp_dir, 'test_multi_adhoc.sql'))
+
+  tmp_file = open(path, 'w')
+
+  for x in range(100):
+    tmp_file.write(v)
+
+  tmp_file.close()
+
+
+  psql = os.path.abspath(os.path.join(pipeline.tmp_dir, 'bin/psql'))
+
+  cmd = ['./run_multi_adhoc.expect', psql, str(pipeline.port), 'pipeline', q3, q4, path]
+
+  output = subprocess.Popen(cmd, stdout=PIPE).communicate()[0]
+  lines = output.split('\n')
+
+  gate = None
+  adhoc1_buf = []
+  adhoc2_buf = []
+
+  # multi adhoc expect will output a tag line before a set of lines 
+  # for each adhoc. this loops splits up the data
+
+  for line in lines:
+
+    line = line.strip()
+
+    if (len(line) == 0):
+      continue
+
+    if (line == "adhoc1"):
+      gate = adhoc1_buf
+    elif (line == "adhoc2"):
+      gate = adhoc2_buf
+    elif (gate != None):
+      gate.append(line.split('\t'))
+
+  # test adhoc1 has all the groups we expect (cXX)
+  d = {}
+
+  for line in adhoc1_buf:
+    t,group,count = line
+
+    assert(group[0] == 'c')
+
+    count = int(count)
+
+    if (not d.has_key(group)):
+      d[group] = 0
+
+    old_val = d[group]
+    delta = count - old_val
+
+    assert(delta == 1)
+    d[group] = count
+
+  for k,v in d.iteritems():
+    assert(v == 100)
+
+  # test adhoc2 has all the groups we expect (dXX)
+  d = {}
+
+  for line in adhoc2_buf:
+    t,group,count = line
+
+    assert(group[0] == 'd')
+
+    count = int(count)
+
+    if (not d.has_key(group)):
+      d[group] = 0
+
+    old_val = d[group]
+    delta = count - old_val
+
+    assert(delta == 1)
+    d[group] = count
+
+  for k,v in d.iteritems():
+    assert(v == 100)
+
+  # check cv_1 gets exactly 100 groups
+  cv_result_1 = pipeline.execute('SELECT count(*) FROM cv_1').first()
+  assert(cv_result_1[0] == 100)
+
+  # check cv_1 gets 100 aXX groups
+  cv_result_1 = pipeline.execute('SELECT count(*) as c FROM cv_1 where a like \'a%%\' and count = 100').first()
+  assert(cv_result_1[0] == 100)
+
+  # check cv_2 gets exactly 100 groups
+  cv_result_2 = pipeline.execute('SELECT count(*) FROM cv_2').first()
+  assert(cv_result_2[0] == 100)
+
+  # check cv_2 gets 100 bXX groups
+  cv_result_2 = pipeline.execute('SELECT count(*) as c FROM cv_2 where b like \'b%%\' and count = 100').first()
+  assert(cv_result_2[0] == 100)
