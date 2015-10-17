@@ -27,15 +27,11 @@ OBJS=	command.o common.o help.o input.o stringutils.o mainloop.o copy.o \
 	sql_help.o pipeline.o \
 	$(WIN32RES)
 
-AOBJS= adhoc.o adhoc_options.o adhoc_util.o model.o bsd_rbtree.o rowmap.o rowstream.o pg_rowstream.o screen.o variables.o
 
-all: psql padhoc
+all: psql
 
 psql: $(OBJS) | submake-libpq submake-libpgport
 	$(CC) $(CFLAGS) $(OBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
-
-padhoc: $(AOBJS) | submake-libpq submake-libpgport
-	$(CC) $(CFLAGS) $(AOBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) -lncurses $(LIBS) -o $@$(X)
 
 help.o: sql_help.h
 
@@ -59,7 +55,6 @@ distprep: sql_help.h psqlscan.c
 
 install: all installdirs
 	$(INSTALL_PROGRAM) psql$(X) '$(DESTDIR)$(bindir)/psql$(X)'
-	$(INSTALL_PROGRAM) padhoc$(X) '$(DESTDIR)$(bindir)/padhoc$(X)'
 	$(INSTALL_DATA) $(srcdir)/psqlrc.sample '$(DESTDIR)$(datadir)/psqlrc.sample'
 	@rm -f '$(DESTDIR)$(bindir)/pipeline$(X)'
 	$(LN_S) psql $(DESTDIR)$(bindir)/pipeline
@@ -69,12 +64,11 @@ installdirs:
 
 uninstall:
 	rm -f '$(DESTDIR)$(bindir)/psql$(X)' '$(DESTDIR)$(datadir)/psqlrc.sample'
-	rm -f '$(DESTDIR)$(bindir)/padhoc$(X)'
 	rm -f '$(DESTDIR)$(bindir)/pipeline$(X)'
 
 # psqlscan.c is in the distribution tarball, so is not cleaned here
 clean distclean:
-	rm -f psql$(X) $(OBJS) $(AOBJS) dumputils.c keywords.c kwlookup.c lex.backup
+	rm -f psql$(X) $(OBJS) dumputils.c keywords.c kwlookup.c lex.backup
 
 maintainer-clean: distclean
 	rm -f sql_help.h sql_help.c psqlscan.c
