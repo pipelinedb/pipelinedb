@@ -513,9 +513,7 @@ GetAdhocContinuousViewIds(void)
 		Oid id = row->id;
 
 		if (!row->adhoc)
-		{
 			continue;
-		}
 
 		result = bms_add_member(result, id);
 	}

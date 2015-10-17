@@ -1990,7 +1990,7 @@ ExecInitWindowAgg(WindowAgg *node, EState *estate, int eflags)
 			peraggstate->wfuncno = wfuncno;
 			peraggstate->wfunc = wfunc;
 
-			peraggstate->finalize = !(AGGKIND_IS_COMBINE(wfunc->winaggkind) || IsContQueryProcess() || IsContQueryAdhocProcess());
+			peraggstate->finalize = !(AGGKIND_IS_COMBINE(wfunc->winaggkind) || IsContQueryProcess());
 		}
 		else
 		{

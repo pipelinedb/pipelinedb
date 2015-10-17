@@ -1561,7 +1561,7 @@ transformContSelectTargetList(ParseState *pstate, List *tlist)
 				 * CV's aggregate types will not have been changed. This can cause a
 				 * signature resolution error when resolving the transout function.
 				 */
-				if (IsContQueryProcess() || IsContQueryAdhocProcess())
+				if (IsContQueryProcess())
 					apply_transout((Expr *) agg, agg->aggfnoid);
 			}
 		}
@@ -1582,7 +1582,7 @@ transformContSelectTargetList(ParseState *pstate, List *tlist)
 				 * CV's aggregate types will not have been changed. This can cause a
 				 * signature resolution error when resolving the transout function.
 				 */
-				if (IsContQueryProcess() || IsContQueryAdhocProcess())
+				if (IsContQueryProcess())
 					apply_transout((Expr *) win, win->winfnoid);
 			}
 		}
@@ -2896,7 +2896,7 @@ make_finalize_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var, Node *ar
 	Oid finaltype = InvalidOid;
 	Query *q = GetContWorkerQuery(cvrv);
 
-	Assert(!IsContQueryProcess());
+	Assert(IsContQueryAdhocProcess() || !IsContQueryProcess());
 
 	result = attr_to_aggs(var->varattno, q->targetList);
 	extract_agg_final_info(result, &fnoid, &type, &finaltype);

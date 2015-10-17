@@ -85,7 +85,7 @@ extern bool IsContQueryCombinerProcess(void);
 extern bool IsContQueryAdhocProcess(void);
 
 #define IsContQueryProcess() \
-	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess())
+	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess())
 
 /* functions to start the scheduler process */
 extern pid_t StartContQueryScheduler(void);
