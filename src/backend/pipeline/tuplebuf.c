@@ -614,7 +614,7 @@ TupleBufferTryWait(TupleBufferReader *reader)
 	SpinLockRelease(&buf->mutex);
 
 	if (should_wait)
-		WaitLatch(reader->proc->latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+		WaitLatch(reader->proc->latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, IsContQueryCombinerProcess() ? 1 : 0);
 }
 
 /*

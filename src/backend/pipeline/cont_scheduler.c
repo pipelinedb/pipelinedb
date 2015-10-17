@@ -673,6 +673,10 @@ ContQuerySchedulerMain(int argc, char *argv[])
 	ContQuerySchedulerShmem->scheduler_pid = MyProcPid;
 
 	dbs = get_database_list();
+	if (list_length(dbs) * TOTAL_SLOTS > max_worker_processes)
+		ereport(ERROR,
+				(errmsg("%d background worker slots are required but there are only %d available", list_length(dbs) * TOTAL_SLOTS, max_worker_processes),
+						errhint("Each database requires %d background worker slots. Increase max_worker_processes to enable more capacity.", TOTAL_SLOTS)));
 
 	/* Loop forever */
 	for (;;)
