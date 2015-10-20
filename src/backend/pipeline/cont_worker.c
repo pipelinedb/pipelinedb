@@ -57,27 +57,7 @@ typedef struct {
  *
  * Sets the TupleBufferBatchReader for any StreamScanState nodes in the PlanState.
  */
-static void
-set_reader(PlanState *planstate, TupleBufferBatchReader *reader)
-{
-	if (planstate == NULL)
-		return;
 
-	if (IsA(planstate, StreamScanState))
-	{
-		StreamScanState *scan = (StreamScanState *) planstate;
-		scan->reader = reader;
-		return;
-	}
-	else if (IsA(planstate, SubqueryScanState))
-	{
-		set_reader(((SubqueryScanState *) planstate)->subplan, reader);
-		return;
-	}
-
-	set_reader(planstate->lefttree, reader);
-	set_reader(planstate->righttree, reader);
-}
 
 static void
 init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, ResourceOwner owner, TupleBufferBatchReader *reader)
@@ -161,7 +141,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 		heap_close(matrel, NoLock);
 	}
 
-	set_reader(state->query_desc->planstate, reader);
+	SetReader(state->query_desc->planstate, reader);
 
 	state->query_desc->estate->es_lastoid = InvalidOid;
 
@@ -421,7 +401,7 @@ ContinuousQueryWorkerMain(void)
 				/* initialize the plan for execution within this xact */
 				plan = state->query_desc->plannedstmt->planTree;
 				state->query_desc->planstate = ExecInitNode(plan, state->query_desc->estate, 0);
-				set_reader(state->query_desc->planstate, reader);
+				SetReader(state->query_desc->planstate, reader);
 
 				/*
 				 * We pass a timeout of 0 because the underlying TupleBufferBatchReader takes care of

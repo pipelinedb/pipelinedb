@@ -246,13 +246,9 @@ adhoc_dest_startup(struct AdhocDestReceiver *adhoc_dest, TupleDesc tup_desc,
 	}
 
 	if (!is_agg)
-	{
 		adhoc_dest->key_type = Append;
-	}
 	else
-	{
 		adhoc_dest->key_type = numCols ? Aggregate : Single;
-	}
 	
 	adhoc_dest->msg_buf = makeStringInfo();
 

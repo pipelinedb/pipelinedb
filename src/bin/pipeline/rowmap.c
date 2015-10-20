@@ -193,13 +193,9 @@ compare_key(void *ctx, const void *a, const void *b)
 	const Key *nb = (const Key *)(b);
 
 	if (nb->is_key)
-	{
 		return row_cmp_row_key((Row *) &na->row, (Row *) nb->row);
-	}
 	else
-	{
 		return row_cmp_row_row((Row *) &na->row, (Row *) nb->row);
-	}
 }
 
 static int

@@ -103,8 +103,8 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 	return plan;
 }
 
-static SelectStmt* get_worker_select_stmts(ContinuousView* view,
-									       SelectStmt** viewptr)
+static SelectStmt *
+get_worker_select_stmt(ContinuousView* view, SelectStmt** viewptr)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
@@ -114,15 +114,16 @@ static SelectStmt* get_worker_select_stmts(ContinuousView* view,
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt->swStepFactor = view->sw_step_factor;
-	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, viewptr, Worker);
+	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt,
+												   viewptr, Worker);
 
 	return selectstmt;
 }
 
 static PlannedStmt*
-get_worker_plan(ContinuousView *view, SelectStmt** viewptr)
+get_worker_plan(ContinuousView *view)
 {
-	SelectStmt* stmt = get_worker_select_stmts(view, viewptr);
+	SelectStmt* stmt = get_worker_select_stmt(view, NULL);
 	return get_plan_from_stmt(view->id, (Node *) stmt, view->query, false);
 }
 
@@ -133,7 +134,7 @@ GetContinuousViewOverlayPlan(ContinuousView *view)
 	SelectStmt	*selectstmt;
 	SelectStmt	*viewstmt;
 
-	selectstmt = get_worker_select_stmts(view, &viewstmt);
+	selectstmt = get_worker_select_stmt(view, &viewstmt);
 	selectstmt = viewstmt;
 
 	join_search_hook = get_combiner_join_rel;
@@ -149,7 +150,8 @@ GetContinuousViewOverlayPlan(ContinuousView *view)
 	{
 		/*
 		 * These hooks won't be reset if there's an error, so we need to make
-		 * sure that they're not set for whatever query is run next in this xact.
+		 * sure that they're not set for whatever query is run next in 
+		 * this xact.
 		 */
 		join_search_hook = NULL;
 		post_parse_analyze_hook = NULL;
@@ -197,6 +199,29 @@ get_combiner_plan(ContinuousView *view)
 	return result;
 }
 
+/* util func to set reader on stream scan nodes */ 
+void
+SetReader(PlanState *planstate, TupleBufferBatchReader *reader)
+{
+	if (planstate == NULL)
+		return;
+
+	if (IsA(planstate, StreamScanState))
+	{
+		StreamScanState *scan = (StreamScanState *) planstate;
+		scan->reader = reader;
+		return;
+	}
+	else if (IsA(planstate, SubqueryScanState))
+	{
+		SetReader(((SubqueryScanState *) planstate)->subplan, reader);
+		return;
+	}
+
+	SetReader(planstate->lefttree, reader);
+	SetReader(planstate->righttree, reader);
+}
+
 PlannedStmt *
 GetContPlan(ContinuousView *view, ContQueryProcType type)
 {
@@ -205,7 +230,7 @@ GetContPlan(ContinuousView *view, ContQueryProcType type)
 	Assert(type == Worker || type == Combiner);
 
 	if (type == Worker)
-		plan = get_worker_plan(view, NULL);
+		plan = get_worker_plan(view);
 	else if (type == Combiner)
 		plan = get_combiner_plan(view);
 

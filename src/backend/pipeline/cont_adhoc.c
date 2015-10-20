@@ -98,6 +98,8 @@ typedef struct {
 
 } AdhocViewState;
 
+#define ADHOC_TIMEOUT_MS 1000
+
 static TupleHashTable
 create_agg_hash(int num_cols, Oid *grp_ops, AttrNumber *group_atts)
 {
@@ -136,29 +138,6 @@ init_cont_query_batch_context()
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
-}
-
-/* util func to set reader on stream scan nodes */ 
-static void
-set_reader(PlanState *planstate, TupleBufferBatchReader *reader)
-{
-	if (planstate == NULL)
-		return;
-
-	if (IsA(planstate, StreamScanState))
-	{
-		StreamScanState *scan = (StreamScanState *) planstate;
-		scan->reader = reader;
-		return;
-	}
-	else if (IsA(planstate, SubqueryScanState))
-	{
-		set_reader(((SubqueryScanState *) planstate)->subplan, reader);
-		return;
-	}
-
-	set_reader(planstate->lefttree, reader);
-	set_reader(planstate->righttree, reader);
 }
 
 static EState *
@@ -227,7 +206,7 @@ static void
 release_cont_query_proc()
 {
 	AdhocMgrReleaseProc(MyContQueryProc);
-	MyContQueryProc = 0;
+	MyContQueryProc = NULL;
 }
 
 /* generate a unique name for the adhoc view */
@@ -260,13 +239,11 @@ typedef struct{
 /* reuse most of the machinery of ExecCreateContViewStmt to make the view.
  * The view will be flagged as adhoc because SetAmContQueryAdhoc(true) has been
  * called earlier - (it is passed into DefineContinuousView) */
-
-static ContinuousViewData
-init_cont_view(SelectStmt *stmt, const char * querystring)
+static void
+init_cont_view(ContinuousViewData *view_data, SelectStmt *stmt,
+			   const char * querystring)
 {
-	ContinuousViewData view_data;
 	RangeVar *view_name = makeRangeVar(0, get_unique_adhoc_view_name(), -1);
-
 	CreateContViewStmt *create_stmt	= makeNode(CreateContViewStmt);
 
 	create_stmt->into = makeNode(IntoClause);
@@ -279,12 +256,12 @@ init_cont_view(SelectStmt *stmt, const char * querystring)
 	ExecCreateContViewStmt(create_stmt, querystring);
 	PopActiveSnapshot();
 
-	view_data.view_id = get_cont_view_id(view_name);
-	view_data.view = GetContinuousView(view_data.view_id);
+	memset(view_data, 0, sizeof(ContinuousViewData));
 
-	MyContQueryProc->group_id = view_data.view_id;
+	view_data->view_id = get_cont_view_id(view_name);
+	view_data->view = GetContinuousView(view_data->view_id);
 
-	return view_data;
+	MyContQueryProc->group_id = view_data->view_id;
 }
 
 /* get the worker plan and set up the worker state for execution */
@@ -325,7 +302,7 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, owner);
 	state->query_desc->snapshot = NULL;
 
-	set_reader(state->query_desc->planstate, state->reader);
+	SetReader(state->query_desc->planstate, state->reader);
 
 	state->query_desc->estate->es_lastoid = InvalidOid;
 
@@ -433,9 +410,12 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	struct Plan *plan = 0;
 	bool has_tup = false;
 	EState *estate = 0;
+	int num_processed = 0;
 	ResourceOwner owner = CurrentResourceOwner;
 
-	TupleBufferBatchReaderTrySleepTimeout(state->reader, state->last_processed, 1000);
+	TupleBufferBatchReaderTrySleepTimeout(state->reader,
+									      state->last_processed,
+										  ADHOC_TIMEOUT_MS);
 
 	has_tup = 
 		TupleBufferBatchReaderHasTuplesForCQId(state->reader, state->view_id);
@@ -452,13 +432,12 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	TupleBufferBatchReaderSetCQId(state->reader, state->view_id);
 
 	set_snapshot(estate, owner);
-
 	plan = state->query_desc->plannedstmt->planTree;
 
 	state->query_desc->planstate = 
 		ExecInitNode(plan, state->query_desc->estate, 0);
 
-	set_reader(state->query_desc->planstate, state->reader);
+	SetReader(state->query_desc->planstate, state->reader);
 
 	ExecutePlan(estate, state->query_desc->planstate, 
 				state->query_desc->operation,
@@ -466,12 +445,10 @@ exec_adhoc_worker(AdhocWorkerState * state)
 
 	ExecEndNode(state->query_desc->planstate);
 	state->query_desc->planstate = NULL;
-	state->num_processed = estate->es_processed + estate->es_filtered;
+	num_processed = estate->es_processed + estate->es_filtered;
 
-	if (state->num_processed)
-	{
+	if (num_processed)
 		state->last_processed = GetCurrentTimestamp();
-	}
 
 	unset_snapshot(estate, owner);
 
@@ -483,7 +460,7 @@ exec_adhoc_worker(AdhocWorkerState * state)
 
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 
-	return state->num_processed != 0;
+	return num_processed != 0;
 }
 
 static void
@@ -499,9 +476,10 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 	struct Plan *plan = 0;
 	EState *estate = 0;
 
-	/* if this is an agg query, check for any existing groups, and put them in the
-	 * batch to be processed also */
-
+	/* 
+	 * if this is an agg query, check for any existing groups, 
+	 * and put them in the batch to be processed also 
+	 */
 	if (state->is_agg)
 	{
 		foreach_tuple(state->slot, state->batch)
@@ -510,13 +488,7 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 				LookupTupleHashEntry(state->existing, state->slot, NULL);
 
 			if (entry)
-			{
-				/* we are using 'result' as scratch space here. */
 				tuplestore_puttuple(state->result, entry->tuple);
-			}
-			else
-			{
-			}
 		}
 
 		foreach_tuple(state->slot, state->result)
@@ -673,7 +645,7 @@ void AdhocMgrCleanupContinuousView(ContinuousView *view)
 	Node *plan;
 	Portal portal;
 
-	stmt->objects = list_make1(list_make1(makeString(view->name.data)));
+	stmt->objects = list_make1(list_make1(makeString(NameStr(view->name))));
 	stmt->removeType = OBJECT_CONTINUOUS_VIEW;
 
 	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",
@@ -720,6 +692,7 @@ cleanup(int code, Datum arg)
 {
 	CleanupData *cleanup;
 	AbortCurrentTransaction();
+	XactReadOnly = false;
 	
 	cleanup = (CleanupData *)(arg);
 
@@ -767,7 +740,7 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	StartTransactionCommand();
 	CurrentResourceOwner = owner;
 	MemoryContextSwitchTo(run_cxt);
-	view_data = init_cont_view(stmt, s);
+	init_cont_view(&view_data, stmt, s);
 	CommitTransactionCommand();
 
 	StartTransactionCommand();
@@ -799,6 +772,8 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	view_state->slot = combiner_state->slot;
 
 	CommitTransactionCommand();
+
+	XactReadOnly = true;
 
 	cleanup_data.cont_view_data = &view_data;
 	cleanup_data.worker_state = worker_state;
@@ -892,9 +867,10 @@ ExecAdhocQuery(Node *stmt, const char *s)
 
 		set_nice_priority();
 
-		/* At present, the queries always exit through the error path */
-		/* The 'errors' are from query cancel, or the frontend not responding to
-		 * a heartbeat */
+		/* At present, the queries always exit through the error path
+		 * The 'errors' are from query cancel, or the frontend not 
+		 * responding to * a heartbeat 
+		 */
 		PG_TRY();
 		{
 			List *parsetree_list;
@@ -916,9 +892,18 @@ ExecAdhocQuery(Node *stmt, const char *s)
 	}
 }
 
-/* returns true iff the function name matches the argument */
+/* 
+ * Functions for intercepting the select pipeline_exec_adhoc_query('xxx') call.
+ *
+ * We have to do it this way rather than executing a regular function call, 
+ * because the environment inside a portal is not conducive to sending
+ * msgs async to the client.
+ */
+#define PIPELINE_FN_NAME "pipeline_exec_adhoc_query"
+
+/* returns true iff func call matches expected signature */
 static bool
-check_adhoc_func(FuncCall *func, const char *name)
+check_adhoc_func(FuncCall *func)
 {
 	Node *node = 0;
 	Value *value = 0;
@@ -934,7 +919,7 @@ check_adhoc_func(FuncCall *func, const char *name)
 
 	value = (Value *) (node);
 
-	if (strcmp(value->val.str, name) != 0)
+	if (strcmp(strVal(value), PIPELINE_FN_NAME) != 0)
 		return false;
 
 	if (!func->args)
@@ -981,7 +966,7 @@ IsAdhocQuery(Node *node)
 
 	func = (FuncCall *)(target->val);
 
-	if (!check_adhoc_func(func, "pipeline_exec_adhoc_query"))
+	if (!check_adhoc_func(func))
 		return false;
 
 	return true;
