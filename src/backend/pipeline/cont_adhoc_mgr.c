@@ -96,7 +96,7 @@ AdhocMgrGetProc()
 
 		proc = grp->procs;
 
-		proc->type = Scheduler;
+		proc->type = Adhoc;
 		proc->id = ind;
 		proc->group_id = 0;
 		proc->latch = &MyProc->procLatch;
@@ -163,8 +163,11 @@ should_drain_fn(TupleBufferSlot *slot, void *ctx)
  * TODO - a better sync method between readers and writers may be required.
  */
 void
-AdhocMgrPeriodicCleanup()
+AdhocMgrPeriodicDrain()
 {
+	if (!continuous_queries_adhoc_enabled)
+		return;
+
 	LWLockAcquire(AdhocMgrLock, LW_EXCLUSIVE);
 	TupleBufferDrainGeneric(AdhocTupleBuffer, should_drain_fn, 0);
 	LWLockRelease(AdhocMgrLock);
@@ -188,7 +191,7 @@ AdhocMgrGetActiveFlag(int cq_id)
 
 /* needs to be called per db */
 void AdhocMgrDeleteAdhocs(void)
-{	
+{
 	int id = 0;
 	Bitmapset *view_ids;
 

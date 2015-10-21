@@ -69,7 +69,6 @@ typedef struct {
 	QueryDesc               *query_desc;
 	CQStatEntry             stats;
 	TimestampTz 			last_processed;
-	uint32 					num_processed;
 
 } AdhocWorkerState;
 
@@ -828,22 +827,6 @@ get_stmt_sql(Node *node)
 	sql_arg = linitial(func->args);
 
 	return sql_arg->val.val.str;
-}
-
-/* set a lower process priority for adhoc backends */
-static void
-set_nice_priority()
-{
-	int default_priority = getpriority(PRIO_PROCESS, MyProcPid);
-	int priority = Max(default_priority, 20 - ceil(continuous_query_proc_priority * (20 - default_priority)));
-
-	priority = nice(priority);
-}
-
-static void
-set_default_priority()
-{
-	/* TODO - figure out how to reset priority */
 }
 
 void

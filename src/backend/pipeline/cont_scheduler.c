@@ -48,7 +48,6 @@
 #define INIT_PROC_TABLE_SZ 4
 #define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
 #define MIN_WAIT_TERMINATE_MS 250
-#define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
 typedef struct
 {
@@ -165,6 +164,10 @@ GetContQueryProcName(ContQueryProc *proc)
 		break;
 	case Scheduler:
 		return "scheduler";
+		break;
+	case Adhoc:
+		return "adhoc";
+		break;
 	}
 
 	return buf;
@@ -384,8 +387,6 @@ static void
 cq_bgproc_main(Datum arg)
 {
 	void (*run) (void);
-	int default_priority = getpriority(PRIO_PROCESS, MyProcPid);
-	int priority;
 
 	MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
@@ -408,13 +409,8 @@ cq_bgproc_main(Datum arg)
 	 */
 	MyContQueryProc->id = MyContQueryProc->handle.slot;
 
-	/*
-	 * Be nice!
-	 *
-	 * More is less here. A higher number indicates a lower scheduling priority.
-	 */
-	priority = Max(default_priority, MAX_PRIORITY - ceil(continuous_query_proc_priority * (MAX_PRIORITY - default_priority)));
-	priority = nice(priority);
+	/* Be nice! - give up some cpu */
+	SetNicePriority();
 
 	switch (MyContQueryProc->type)
 	{
@@ -730,7 +726,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		if (rc & WL_TIMEOUT)
 		{
 			/* XXX - put this in a nicer place. */
-			AdhocMgrPeriodicCleanup();
+			AdhocMgrPeriodicDrain();
 		}
 
 		/*

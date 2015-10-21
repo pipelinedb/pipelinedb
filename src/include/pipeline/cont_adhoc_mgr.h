@@ -22,7 +22,7 @@ extern void AdhocShmemInit(void);
 
 extern ContQueryProc *AdhocMgrGetProc(void);
 extern void AdhocMgrReleaseProc(ContQueryProc *);
-extern void AdhocMgrPeriodicCleanup(void);
+extern void AdhocMgrPeriodicDrain(void);
 
 extern void AdhocMgrDeleteAdhocs(void);
 extern int *AdhocMgrGetActiveFlag(int cq_id);

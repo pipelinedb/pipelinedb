@@ -22,7 +22,8 @@ typedef enum
 {
 	Combiner,
 	Worker,
-	Scheduler /* unused */
+	Scheduler, /* unused */
+	Adhoc
 } ContQueryProcType;
 
 typedef struct ContQueryProcGroup ContQueryProcGroup;
