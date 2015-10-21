@@ -1,6 +1,7 @@
 #include "postgres_fe.h"
 #include "rowmap.h"
 #include "adhoc_util.h"
+#include "bsd_rbtree.h"
 
 static size_t *g_row_key = 0;
 static size_t g_row_key_n = 0;
@@ -18,6 +19,24 @@ RowSize(Row *r)
 {
 	return r->n;
 }
+
+typedef struct TreeNode
+{
+	bsd_rb_node_t node;
+	Row row;
+} TreeNode;
+
+typedef struct Key
+{
+	Row *row;
+	int is_key;
+} Key;
+
+struct RowMap
+{
+	bsd_rb_tree_t tree;
+	bsd_rb_tree_ops_t ops;
+};
 
 void
 RowKeyReset()
@@ -41,8 +60,8 @@ RowFieldLength(Row *r, size_t i)
 	return r->fields[i].n;
 }
 
-Field
-*RowGetField(Row *r, size_t i)
+Field *
+RowGetField(Row *r, size_t i)
 {
 	return r->fields + i;
 }
@@ -124,31 +143,9 @@ RowGetKey(Row *r)
 	return row;
 }
 
-static void
-row_map_append(RowMap *m, Row *row)
-{
-	size_t ns = m->n + 1;
-
-	if (ns > m->cap)
-	{
-		size_t nc = m->cap ? m->cap : 1;
-
-		while (nc < ns)
-			nc *= 2;
-
-		m->rows = pg_realloc(m->rows, nc * sizeof(Row));
-		m->cap = nc;
-	}
-
-	m->rows[m->n++] = *row;
-}
-
 static int
-row_cmp_row_row(const void *p1, const void *p2)
+row_cmp_row_row(Row *r1, Row *r2)
 {
-	Row *r1 = (Row *) p1;
-	Row *r2 = (Row *) p2;
-
 	size_t i = 0;
 
 	for (i = 0; i < g_row_key_n; ++i)
@@ -156,7 +153,7 @@ row_cmp_row_row(const void *p1, const void *p2)
 		size_t col = g_row_key[i];
 
 		int c = field_cmp(RowGetField(r1, col),
-						 RowGetField(r2, col));
+						  RowGetField(r2, col));
 
 		if (c != 0)
 			return c;
@@ -166,11 +163,8 @@ row_cmp_row_row(const void *p1, const void *p2)
 }
 
 static int
-row_cmp_row_key(const void *p1, const void *p2)
+row_cmp_row_key(Row *r1, Row *r2)
 {
-	Row *r1 = (Row *) p1;
-	Row *r2 = (Row *) p2;
-
 	size_t i = 0;
 
 	if (RowSize(r2) == 0)
@@ -192,17 +186,38 @@ row_cmp_row_key(const void *p1, const void *p2)
 	return 0;
 }
 
-static void
-row_map_sort(RowMap *m)
+static int
+compare_key(void *ctx, const void *a, const void *b)
 {
-	qsort(m->rows, m->n, sizeof(Row), row_cmp_row_row);
+	const TreeNode *na = (const TreeNode *)(a);
+	const Key *nb = (const Key *)(b);
+
+	if (nb->is_key)
+		return row_cmp_row_key((Row *) &na->row, (Row *) nb->row);
+	else
+		return row_cmp_row_row((Row *) &na->row, (Row *) nb->row);
+}
+
+static int
+compare_nodes(void *ctx, const void *a, const void *b)
+{
+	const TreeNode *na = (const TreeNode *)(a);
+	const TreeNode *nb = (const TreeNode *)(b);
+
+	return row_cmp_row_row((Row *) &na->row, (Row *) &nb->row);
 }
 
 RowMap *
 RowMapInit()
 {
-	RowMap *m = pg_malloc(sizeof(RowMap));
-	memset(m, 0, sizeof(RowMap));
+	RowMap *m = pg_malloc0(sizeof(RowMap));
+
+	m->ops.bsd_rbto_compare_nodes = compare_nodes;
+	m->ops.bsd_rbto_compare_key = compare_key;
+	m->ops.bsd_rbto_node_offset = 0;
+	m->ops.bsd_rbto_context = 0;
+
+	bsd_rb_tree_init(&m->tree, &m->ops);
 
 	return m;
 }
@@ -211,109 +226,132 @@ RowMapInit()
 void
 RowMapDestroy(RowMap *m)
 {
-	size_t i = 0;
+	void *node = bsd_rb_tree_iterate(&m->tree, 0, 0);
 
-	for (i = 0; i < m->n; ++i)
-		RowCleanup(&m->rows[i]);
+	while(node != 0)
+	{
+		Row *row;
+		void *delnode;
 
-	pg_free(m->rows);
+		row = GetRow(node);
+		delnode = node;
+
+		node = bsd_rb_tree_iterate(&m->tree, node, 1);
+		bsd_rb_tree_remove_node(&m->tree, delnode);
+
+		RowCleanup(row);
+		pg_free(delnode);
+	}
 
 	memset(m, 0, sizeof(RowMap));
 	pg_free(m);
+}
+
+Row *
+GetRow(RowIterator iter)
+{
+	return &((TreeNode *)(iter))->row;
 }
 
 void
 RowMapErase(RowMap *m, Row *key)
 {
 	RowIterator iter = RowMapFindWithKey(m, key);
-	size_t rem = 0;
 
 	if (iter == RowMapEnd(m))
 		return;
 
-	RowCleanup(iter);
-
-	rem = RowMapEnd(m) - (iter + 1);
-
-	memmove(iter, iter + 1, rem * sizeof(Row));
-	m->n--;
+	RowCleanup(GetRow(iter));
+	bsd_rb_tree_remove_node(&m->tree, iter);
 }
 
 void
 RowMapUpdate(RowMap *m, Row *row)
 {
-	RowIterator iter = RowMapFindWithRow(m, row);
+	TreeNode *res = 0;
 
-	if (iter == RowMapEnd(m))
+	TreeNode *new_node = pg_malloc0(sizeof(TreeNode));
+	new_node->row = *row;
+
+	res = bsd_rb_tree_insert_node(&m->tree, new_node);
+
+	if (res != new_node)
 	{
-		row_map_append(m, row);
-		row_map_sort(m);
-	}
-	else
-	{
-		RowCleanup(iter);
-		*iter = *row;
+		/* replace old contents, free unneeded new node */
+		
+		RowCleanup(&res->row);
+
+		res->row = *row;
+		pg_free(new_node);
 	}
 }
 
 size_t
 RowMapSize(RowMap *m)
 {
-	return m->n;
+	return bsd_rb_tree_count(&m->tree);
 }
 
 RowIterator
 RowMapBegin(RowMap *m)
 {
-	return m->rows;
+	return bsd_rb_tree_iterate(&m->tree, 0, 0);
 }
 
 RowIterator
 RowMapEnd(RowMap *m)
 {
-	return m->rows + m->n;
+	return 0;
 }
 
 RowIterator
 RowMapFindWithRow(RowMap *m, Row *row)
 {
-	size_t i = 0;
+	Key k = { row, false };
+	void *node = bsd_rb_tree_find_node(&m->tree, &k);
 
-	for (; i < m->n; ++i)
-	{
-		if (row_cmp_row_row(&m->rows[i], row) == 0)
-			break;
-	}
-
-	return m->rows + i;
+	return node;
 }
 
 RowIterator
 RowMapFindWithKey(RowMap *m, Row *key)
 {
-	size_t i = 0;
-
-	for (; i < m->n; ++i)
-	{
-		if (row_cmp_row_key(&m->rows[i], key) == 0)
-			break;
-	}
-
-	return m->rows + i;
+	Key k = { key, true};
+	void *node = bsd_rb_tree_find_node(&m->tree, &k);
+	return node;
 }
 
 RowIterator
 RowMapLowerBound(RowMap *m, Row *key)
 {
-	size_t i = 0;
+	Key k = {key, true};
+	return bsd_rb_tree_find_node_geq(&m->tree, &k);
+}
 
-	for (; i < m->n; ++i)
+void
+RowMapDump(RowMap *m)
+{
+	void *node = bsd_rb_tree_iterate(&m->tree, 0, 0);
+
+	for(; node != 0; node = bsd_rb_tree_iterate(&m->tree, node, 1))
 	{
-		if (row_cmp_row_key(&m->rows[i], key) >= 0)
-			break;
+		RowDump(GetRow(node));
 	}
+}
 
-	return m->rows + i;
+bool RowIteratorEqual(RowIterator a, RowIterator b)
+{
+	return a == b;
+}
+
+RowIterator RowIteratorNext(RowMap *m, RowIterator a)
+{
+	return bsd_rb_tree_iterate(&m->tree, a, 1);
+}
+
+RowIterator RowIteratorPrev(RowMap *m, RowIterator a)
+{
+	return bsd_rb_tree_iterate(&m->tree, a, 0);
 }
 
 /* debugging funcs */
@@ -339,13 +377,4 @@ RowDumpToString(Row *row, PQExpBuffer buf)
 		appendBinaryPQExpBuffer(buf, f->data, f->n);
 		appendPQExpBuffer(buf, " ");
 	}
-}
-
-void
-RowMapDump(RowMap *m)
-{
-	size_t i = 0;
-
-	for (; i < m->n; ++i)
-		RowDump(m->rows + i);
 }

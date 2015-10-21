@@ -2,7 +2,7 @@
 #include "model.h"
 
 /* utility function for creating a row from a string */
-static Row
+Row
 make_row(const char *s)
 {
 	Row row = {0,0,0};
@@ -46,21 +46,6 @@ model_update_lens(Model *m, Row *r)
 
 	for (i = 0; i < m->nfields; ++i)
 		m->maxlens[i] = Max(m->maxlens[i], RowFieldLength(r, i));
-}
-
-/* scans each column in the row to look for s */
-static size_t
-find_in_row(Row *r, const char *s)
-{
-	size_t i = 0;
-
-	for (i = 0; i < RowSize(r); ++i)
-	{
-		if (strcmp(RowFieldValue(r,i), s) == 0)
-			break;
-	}
-
-	return i;
 }
 
 /* allocates and initializes the model. */
@@ -109,10 +94,7 @@ ModelKeyRow(Model *m, Row *r)
 
 	for (i = 0; i < RowSize(r); ++i)
 	{
-		size_t ki = find_in_row(&m->header, RowFieldValue(r, i));
-
-		if (ki == RowSize(&m->header))
-			FATAL_ERROR("key %s does not exist in header", RowFieldValue(r,i));
+		size_t ki = atoi(RowFieldValue(r,i)) - 1;
 
 		RowKeyAdd(ki);
 	}

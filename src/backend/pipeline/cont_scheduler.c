@@ -42,12 +42,12 @@
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
 #include "utils/timeout.h"
+#include "pipeline/cont_adhoc_mgr.h"
 
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
 #define INIT_PROC_TABLE_SZ 4
 #define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
 #define MIN_WAIT_TERMINATE_MS 250
-#define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
 typedef struct
 {
@@ -62,9 +62,11 @@ ContQueryProc *MyContQueryProc = NULL;
 static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
 static bool am_cont_combiner = false;
+static bool am_cont_adhoc = false;
 
 /* guc parameters */
 bool continuous_queries_enabled;
+bool continuous_queries_adhoc_enabled;
 bool continuous_query_crash_recovery;
 int continuous_query_num_combiners;
 int continuous_query_num_workers;
@@ -101,6 +103,12 @@ Size
 ContQuerySchedulerShmemSize(void)
 {
 	return MAXALIGN(sizeof(ContQuerySchedulerShmemStruct));
+}
+
+void
+SetAmContQueryAdhoc(bool s)
+{
+	am_cont_adhoc = s;
 }
 
 static void
@@ -156,6 +164,10 @@ GetContQueryProcName(ContQueryProc *proc)
 		break;
 	case Scheduler:
 		return "scheduler";
+		break;
+	case Adhoc:
+		return "adhoc";
+		break;
 	}
 
 	return buf;
@@ -172,6 +184,12 @@ bool
 IsContQueryWorkerProcess(void)
 {
 	return am_cont_worker;
+}
+
+bool
+IsContQueryAdhocProcess(void)
+{
+	return am_cont_adhoc;
 }
 
 bool
@@ -369,8 +387,6 @@ static void
 cq_bgproc_main(Datum arg)
 {
 	void (*run) (void);
-	int default_priority = getpriority(PRIO_PROCESS, MyProcPid);
-	int priority;
 
 	MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
@@ -393,13 +409,8 @@ cq_bgproc_main(Datum arg)
 	 */
 	MyContQueryProc->id = MyContQueryProc->handle.slot;
 
-	/*
-	 * Be nice!
-	 *
-	 * More is less here. A higher number indicates a lower scheduling priority.
-	 */
-	priority = Max(default_priority, MAX_PRIORITY - ceil(continuous_query_proc_priority * (MAX_PRIORITY - default_priority)));
-	priority = nice(priority);
+	/* Be nice! - give up some cpu */
+	SetNicePriority();
 
 	switch (MyContQueryProc->type)
 	{
@@ -409,6 +420,10 @@ cq_bgproc_main(Datum arg)
 		break;
 	case Worker:
 		am_cont_worker = true;
+
+		/* XXX - put this somewhere nicer */
+		AdhocMgrDeleteAdhocs();
+
 		run = &ContinuousQueryWorkerMain;
 		break;
 	default:
@@ -695,7 +710,6 @@ ContQuerySchedulerMain(int argc, char *argv[])
 			{
 				grp->db_oid = db_entry->oid;
 				namestrcpy(&grp->db_name, NameStr(db_entry->name));
-
 				start_group(grp);
 			}
 		}
@@ -707,11 +721,17 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		 * Wait until naptime expires or we get some type of signal (all the
 		 * signal handlers will wake us by calling SetLatch).
 		 */
-		rc = WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+		rc = WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, 1000);
 
 		ResetLatch(&MyProc->procLatch);
 
 		DisableCatchupInterrupt();
+
+		if (rc & WL_TIMEOUT)
+		{
+			/* XXX - put this in a nicer place. */
+			AdhocMgrPeriodicDrain();
+		}
 
 		/*
 		 * Emergency bailout if postmaster has died.  This is to avoid the

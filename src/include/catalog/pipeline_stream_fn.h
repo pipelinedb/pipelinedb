@@ -29,6 +29,7 @@
 extern void UpdatePipelineStreamCatalog(void);
 
 extern Bitmapset *GetAllStreamReaders(Oid relid);
+extern Bitmapset *GetAdhocContinuousViewIds(void);
 extern Bitmapset *GetLocalStreamReaders(Oid relid);
 extern TupleDesc GetInferredStreamTupleDesc(Oid relid, List *colnames);
 

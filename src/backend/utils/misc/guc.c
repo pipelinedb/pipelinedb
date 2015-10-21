@@ -1566,13 +1566,20 @@ static struct config_bool ConfigureNamesBool[] =
 		false,
 		NULL, NULL, NULL
 	},
-
+	{
+		{"continuous_queries_adhoc_enabled", PGC_POSTMASTER, DEVELOPER_OPTIONS,
+		 gettext_noop("Enable execution of adhoc continuous queries."),
+		 NULL,
+		},
+		&continuous_queries_adhoc_enabled,
+		false,
+		NULL, NULL, NULL
+	},
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, false, NULL, NULL, NULL
 	}
 };
-
 
 static struct config_int ConfigureNamesInt[] =
 {

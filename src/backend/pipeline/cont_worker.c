@@ -24,6 +24,7 @@
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
+#include "pipeline/cont_worker_util.h"
 #include "pipeline/tuplebuf.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"
@@ -57,27 +58,7 @@ typedef struct {
  *
  * Sets the TupleBufferBatchReader for any StreamScanState nodes in the PlanState.
  */
-static void
-set_reader(PlanState *planstate, TupleBufferBatchReader *reader)
-{
-	if (planstate == NULL)
-		return;
 
-	if (IsA(planstate, StreamScanState))
-	{
-		StreamScanState *scan = (StreamScanState *) planstate;
-		scan->reader = reader;
-		return;
-	}
-	else if (IsA(planstate, SubqueryScanState))
-	{
-		set_reader(((SubqueryScanState *) planstate)->subplan, reader);
-		return;
-	}
-
-	set_reader(planstate->lefttree, reader);
-	set_reader(planstate->righttree, reader);
-}
 
 static void
 init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, ResourceOwner owner, TupleBufferBatchReader *reader)
@@ -161,7 +142,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 		heap_close(matrel, NoLock);
 	}
 
-	set_reader(state->query_desc->planstate, reader);
+	SetReader(state->query_desc->planstate, reader);
 
 	state->query_desc->estate->es_lastoid = InvalidOid;
 
@@ -271,50 +252,10 @@ get_query_state(ContQueryWorkerState **states, Oid id, MemoryContext context, Re
 	return state;
 }
 
-static void
-set_snapshot(EState *estate, ResourceOwner owner)
-{
-	estate->es_snapshot = GetTransactionSnapshot();
-	estate->es_snapshot->active_count++;
-	estate->es_snapshot->copied = true;
-	PushActiveSnapshot(estate->es_snapshot);
-}
-
-static void
-unset_snapshot(EState *estate, ResourceOwner owner)
-{
-	PopActiveSnapshot();
-	estate->es_snapshot = NULL;
-}
-
 static bool
 has_queries_to_process(Bitmapset *queries)
 {
 	return !bms_is_empty(queries);
-}
-
-static EState *
-create_estate(QueryDesc *query_desc)
-{
-	EState *estate;
-
-	estate = CreateExecutorState();
-	estate->es_param_list_info = query_desc->params;
-	estate->es_snapshot = RegisterSnapshot(query_desc->snapshot);
-	estate->es_crosscheck_snapshot = RegisterSnapshot(query_desc->crosscheck_snapshot);
-	estate->es_instrument = query_desc->instrument_options;
-	estate->es_range_table = query_desc->plannedstmt->rtable;
-	estate->es_continuous = query_desc->plannedstmt->is_continuous;
-	estate->es_lastoid = InvalidOid;
-	estate->es_processed = estate->es_filtered = 0;
-
-	if (query_desc->plannedstmt->nParamExec > 0)
-		estate->es_param_exec_vals = (ParamExecData *)
-			palloc0(query_desc->plannedstmt->nParamExec * sizeof(ParamExecData));
-
-	estate->es_top_eflags |= EXEC_FLAG_SKIP_TRIGGERS;
-
-	return estate;
 }
 
 void
@@ -421,7 +362,7 @@ ContinuousQueryWorkerMain(void)
 				/* initialize the plan for execution within this xact */
 				plan = state->query_desc->plannedstmt->planTree;
 				state->query_desc->planstate = ExecInitNode(plan, state->query_desc->estate, 0);
-				set_reader(state->query_desc->planstate, reader);
+				SetReader(state->query_desc->planstate, reader);
 
 				/*
 				 * We pass a timeout of 0 because the underlying TupleBufferBatchReader takes care of

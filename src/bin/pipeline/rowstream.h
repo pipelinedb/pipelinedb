@@ -12,8 +12,6 @@
 #ifndef ROWSTREAM_H
 #define ROWSTREAM_H
 
-#include <stdbool.h>
-
 #include "rowmap.h"
 
 #include "postgres_fe.h"
@@ -28,9 +26,6 @@
  * Row data is allocated here, but expected to be freed elsewhere.
  * Currently the RowMap is responsible for that.
  */
-
-/* row callback - valid types are h,k,i,u,d */
-typedef void (*RowFunc) (void *ctx, int type, Row *row);
 
 typedef struct RowStream
 {

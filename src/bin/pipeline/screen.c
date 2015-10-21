@@ -1,6 +1,10 @@
 #include "postgres_fe.h"
 #include "screen.h"
 
+#define NCURSES_ENABLE_STDBOOL_H 0
+#include <ncurses.h>
+#undef bool
+
 /*
  * Allocates and initializes a new Screen.
  */
@@ -206,9 +210,10 @@ screen_render(Screen *s)
 	ctr++;
 
 	/* render visible set */
-	for (; iter != end && ctr < lines(s); iter++, ++ctr)
+	for (; !RowIteratorEqual(iter,end) && ctr < lines(s); 
+		 iter = RowIteratorNext(rowmap(s), iter), ++ctr)
 	{
-		render_row(s, iter, ' ');
+		render_row(s, GetRow(iter), ' ');
 	}
 
 	/* blank out any remaining rows below the last row */
@@ -247,10 +252,11 @@ screen_scroll_up(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 
-	if (iter != RowMapBegin(rowmap(s))) {
-		iter--;
+	if (!RowIteratorEqual(iter, RowMapBegin(rowmap(s)))) {
 
-		set_key(s, RowGetKey(iter));
+		iter = RowIteratorPrev(rowmap(s), iter);
+		set_key(s, RowGetKey(GetRow(iter)));
+
 	} else {
 		clear_key(s);
 	}
@@ -261,15 +267,14 @@ screen_scroll_down(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 
-	if (iter != RowMapEnd(rowmap(s)))
+	if (!RowIteratorEqual(iter, RowMapEnd(rowmap(s))))
 	{
-		iter++;
+		iter = RowIteratorNext(rowmap(s), iter);
 
-		if (iter != RowMapEnd(rowmap(s)))
-			set_key(s, RowGetKey(iter));
+		if (!RowIteratorEqual(iter, RowMapEnd(rowmap(s))))
+			set_key(s, RowGetKey(GetRow(iter)));
 	}
 }
-
 
 /*
  * Scroll left/right by adjusting both the current column and column offset

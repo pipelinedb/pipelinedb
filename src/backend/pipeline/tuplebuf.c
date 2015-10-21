@@ -51,6 +51,7 @@
 
 TupleBuffer *WorkerTupleBuffer = NULL;
 TupleBuffer *CombinerTupleBuffer = NULL;
+TupleBuffer *AdhocTupleBuffer = NULL;
 
 /* GUC parameters */
 int tuple_buffer_blocks;
@@ -412,7 +413,7 @@ static Size tuple_buffer_size()
 Size
 TupleBuffersShmemSize(void)
 {
-	return MAXALIGN(mul_size(add_size(tuple_buffer_size(), tuple_buffer_header_size()), 2));
+	return MAXALIGN(mul_size(add_size(tuple_buffer_size(), tuple_buffer_header_size()), 3));
 }
 
 /*
@@ -423,6 +424,7 @@ TupleBuffersShmemInit(void)
 {
 	WorkerTupleBuffer = TupleBufferInit("WorkerTupleBuffer", tuple_buffer_size(), WorkerBufferHeadLock, WorkerBufferTailLock);
 	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", tuple_buffer_size(), CombinerBufferHeadLock, CombinerBufferTailLock);
+	AdhocTupleBuffer = TupleBufferInit("AdhocTupleBuffer", tuple_buffer_size(), AdhocBufferHeadLock, AdhocBufferTailLock);
 }
 
 /*
@@ -618,6 +620,28 @@ TupleBufferTryWait(TupleBufferReader *reader)
 }
 
 /*
+ * TupleBufferTryWaitTimeout
+ */
+void
+TupleBufferTryWaitTimeout(TupleBufferReader *reader, int timeout)
+{
+	TupleBuffer *buf = reader->buf;
+	bool should_wait = false;
+
+	SpinLockAcquire(&buf->mutex);
+	if (!TupleBufferHasUnreadSlots(reader))
+	{
+		buf->waiters = bms_add_member(buf->waiters, reader->proc->id);
+		buf->readers[reader->proc->id] = reader;
+		should_wait = true;
+	}
+	SpinLockRelease(&buf->mutex);
+
+	if (should_wait)
+		WaitLatch(reader->proc->latch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, timeout);
+}
+
+/*
  * TupleBufferUnpinAllPinnedSlots
  */
 void
@@ -674,6 +698,29 @@ TupleBufferDrain(TupleBuffer *buf, Oid db_oid)
 	try_moving_tail(buf, slot);
 
 	LWLockRelease(buf->head_lock);
+}
+
+void
+TupleBufferDrainGeneric(TupleBuffer *buf, TupleBufferShouldDrainFunc fn, void *ctx)
+{
+	TupleBufferSlot *slot;
+	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
+
+	slot = buf->tail;
+
+	while (slot)
+	{
+		if (fn(slot, ctx))
+			slot->unread = false;
+
+		slot = slot->next;
+	}
+
+	slot = buf->tail;
+
+	LWLockRelease(buf->tail_lock);
+
+	try_moving_tail(buf, slot);
 }
 
 /*
@@ -895,6 +942,13 @@ TupleBufferBatchReaderReset(TupleBufferBatchReader *reader)
 void
 TupleBufferCloseBatchReader(TupleBufferBatchReader *reader)
 {
+	TupleBuffer *buf = reader->rdr->buf;
+
+	SpinLockAcquire(&buf->mutex);
+	buf->waiters = bms_del_member(buf->waiters, reader->rdr->proc->id);
+
+	SpinLockRelease(&buf->mutex);
+
 	TupleBufferCloseReader(reader->rdr);
 	pfree(reader);
 }
@@ -913,6 +967,25 @@ TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_
 
 		pgstat_report_activity(STATE_IDLE, GetContQueryProcName(reader->rdr->proc));
 		TupleBufferTryWait(reader->rdr);
+		pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(reader->rdr->proc));
+
+		ResetLatch(reader->rdr->proc->latch);
+	}
+}
+
+void
+TupleBufferBatchReaderTrySleepTimeout(TupleBufferBatchReader *reader,
+									  TimestampTz last_processed,
+									  int timeout)
+{
+	if (!TupleBufferHasUnreadSlots(reader->rdr) &&
+			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->max_wait) &&
+			!(!reader->rdr->proc->group->active || reader->rdr->proc->group->terminate))
+	{
+		cq_stat_report(true);
+
+		pgstat_report_activity(STATE_IDLE, GetContQueryProcName(reader->rdr->proc));
+		TupleBufferTryWaitTimeout(reader->rdr, timeout);
 		pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(reader->rdr->proc));
 
 		ResetLatch(reader->rdr->proc->latch);

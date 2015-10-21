@@ -12,6 +12,13 @@
 #include "port.h"
 #include "utils/datum.h"
 #include "utils/typcache.h"
+#include "miscadmin.h"
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <math.h>
+#include <unistd.h>
+
+extern double continuous_query_proc_priority;
 
 void
 append_suffix(char *str, char *suffix, int max_len)
@@ -290,4 +297,24 @@ SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringI
 		appendStringInfoChar(buf, '1');
 		DatumToBytes(d, typ, buf);
 	}
+}
+
+static int default_priority = 0;
+#define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
+
+void
+SetNicePriority()
+{
+	int priority = 0;
+	default_priority = getpriority(PRIO_PROCESS, MyProcPid);
+	priority = Max(default_priority, MAX_PRIORITY - 
+			ceil(continuous_query_proc_priority * (20 - default_priority)));
+
+	priority = nice(priority);
+}
+
+void
+SetDefaultPriority()
+{
+	nice(default_priority);
 }

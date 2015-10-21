@@ -24,4 +24,8 @@ extern int32_t JumpConsistentHash(uint64_t key, int32_t num_buckets);
 extern void SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf);
 extern void DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf);
 
+/* for backends / bg workers to yield cpu */
+extern void SetNicePriority(void);
+extern void SetDefaultPriority(void);
+
 #endif   /* MISCUTILS_H */

@@ -12,10 +12,9 @@
 #ifndef SCREEN_H
 #define SCREEN_H
 
+#include "postgres_fe.h"
 #include "model.h"
-
 #include <stdio.h>
-#include <ncurses.h>
 
 /*
  * This module is responsible for handling key presses, and displaying
@@ -28,7 +27,7 @@ typedef struct Screen
 	Row     key;  /* key refers to the top visible row on the screen */
 	FILE    *term_in;
 	int     fd;
-	SCREEN  *nterm;
+	void  	*nterm;
 	int     x_pos;
 	int     x_col;
 	int     pause;

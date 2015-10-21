@@ -9,10 +9,11 @@
 #include "postgres_fe.h"
 #include "rowmap.h"
 #include "rowstream.h"
+#include "pg_rowstream.h"
 #include "screen.h"
 #include "model.h"
+#include "adhoc_options.h"
 
-#include <curses.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
@@ -43,15 +44,21 @@ static void row_event_dispatcher(void *ctx, int type, Row *row);
  *
  * To ease debugging, the screen can be disabled (by leaving as NULL).
  */
-
 int
 main(int argc, char *argv[])
 {
+	bool ok;
+
+	adhoc_opts options;
+	memset(&options, 0, sizeof(adhoc_opts));
+
 	App app = {0,0};
 	Model *model = ModelInit();
 
 	Screen *screen = 0;
-	RowStream *stream = 0;
+	PGRowStream *stream = 0;
+
+	handle_options(argc, argv, &options);
 
 	/*
 	 * Setup a signal handler to break out of the loop upon ctrl-c. We must
@@ -59,6 +66,7 @@ main(int argc, char *argv[])
 	 * shutdown.
 	 */
 	signal(SIGINT, sighandle);
+	stream = PGRowStreamInit(options.db, options.action_string, row_event_dispatcher, &app);
 
 	/* Comment the next line out to ease debugging */
 	screen = ScreenInit(model);
@@ -66,8 +74,18 @@ main(int argc, char *argv[])
 	app.model = model;
 	app.screen = screen;
 
-	/* Setup the row_stream to callback to us when it has new rows */
-	stream = RowStreamInit(row_event_dispatcher, &app);
+	ok = PGRowStreamPostInit(stream);
+
+	if (!ok)
+	{
+		if (screen)
+		{
+			ScreenDestroy(screen);
+		}
+
+		fprintf(stderr, "could not execute query %s\n", argv[1]);
+		exit(1);
+	}
 
 	while (keep_running)
 	{
@@ -76,7 +94,7 @@ main(int argc, char *argv[])
 
 		memset(&pfd, 0, sizeof(pfd));
 
-		pfd[0].fd = RowStreamFd(stream);
+		pfd[0].fd = PGRowStreamFd(stream);
 		pfd[0].events = POLLIN;
 
 		if (screen)
@@ -106,7 +124,7 @@ main(int argc, char *argv[])
 			}
 			else
 			{
-				bool fin = RowStreamHandleInput(stream);
+				bool fin = PGRowStreamHandleInput(stream);
 
 				if (fin)
 					break;
@@ -124,7 +142,7 @@ main(int argc, char *argv[])
 	if (screen)
 		ScreenDestroy(screen);
 
-	RowStreamDestroy(stream);
+	PGRowStreamDestroy(stream);
 	ModelDestroy(model);
 
 	return 0;

@@ -28,7 +28,7 @@ typedef struct {
 	int32 hash;
 } ContinuousView;
 
-extern Oid DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc, Oid *pq_id);
+extern Oid DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc, bool adhoc, Oid *pq_id);
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern SelectStmt *GetContSelectStmt(RangeVar *rv);
 extern bool IsAContinuousView(RangeVar *name);

@@ -28,22 +28,35 @@ static bool TuplestoreRecheck(TuplestoreScanState * node, TupleTableSlot *slot);
 extern TuplestoreScanState *
 ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 {
-	TuplestoreScanState *tss = makeNode(TuplestoreScanState);
-	tss->ss.ps.plan = (Plan *) node;
-	tss->ss.ps.state = estate;
-	tss->ss.ps.ps_ExprContext = CreateExprContext(estate);
+	TuplestoreScanState *scanstate;
+	ScanState *nscan;
+	Scan *scan;
 
-	ExecInitResultTupleSlot(estate, &tss->ss.ps);
-	ExecInitScanTupleSlot(estate, &tss->ss);
+	scanstate = makeNode(TuplestoreScanState);
+	scanstate->ss.ps.plan = (Plan *) node;
+	scanstate->ss.ps.state = estate;
 
-	ExecSetSlotDescriptor(tss->ss.ss_ScanTupleSlot, node->desc);
-	ExecSetSlotDescriptor(tss->ss.ps.ps_ResultTupleSlot, node->desc);
+	ExecAssignExprContext(estate, &scanstate->ss.ps);
 
-	tss->ss.ps.targetlist = node->scan.plan.targetlist;
+	scanstate->ss.ps.targetlist = (List *)
+		ExecInitExpr((Expr *) node->scan.plan.targetlist,
+					 (PlanState *) scanstate);
+	scanstate->ss.ps.qual = (List *)
+		ExecInitExpr((Expr *) node->scan.plan.qual,
+					 (PlanState *) scanstate);
 
-	tuplestore_rescan(node->store);
+	nscan = (ScanState *) (scanstate);
+	scan = (Scan *) nscan->ps.plan;
+	scan->scanrelid = 1;
 
-	return tss;
+	ExecInitResultTupleSlot(estate, &scanstate->ss.ps);
+	ExecInitScanTupleSlot(estate, (ScanState *) scanstate);
+	ExecSetSlotDescriptor(((ScanState *) scanstate)->ss_ScanTupleSlot, node->desc);
+
+	ExecAssignResultTypeFromTL(&scanstate->ss.ps);
+	ExecAssignScanProjectionInfo((ScanState *) scanstate);
+
+	return scanstate;
 }
 
 static TupleTableSlot *

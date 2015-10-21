@@ -45,6 +45,7 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 #include "utils/typcache.h"
+#include "pipeline/cont_adhoc_mgr.h"
 
 #define SLEEP_MS 2
 
@@ -248,6 +249,92 @@ DropPreparedStreamInsert(const char *name)
 }
 
 /*
+ * Initialize data structures to support sending data to adhoc tuple buffer
+ */
+static void init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
+{
+	int num_adhoc = bms_num_members(adhoc_targets);
+	int ctr = 0;
+	int target = 0;
+	Bitmapset *tmp_targets;
+
+	memset(data, 0, sizeof(AdhocData));
+	data->num_adhoc = num_adhoc;
+
+	if (!data->num_adhoc)
+		return;
+
+	tmp_targets = bms_copy(adhoc_targets);
+	data->queries = palloc0(sizeof(AdhocQuery) * num_adhoc);
+
+	while ((target = bms_first_member(tmp_targets)) >= 0)
+	{
+		AdhocQuery *query = &data->queries[ctr++];
+
+		query->cq_id = target;
+		query->active_flag = AdhocMgrGetActiveFlag(target);
+		query->count = 0;
+
+		if (synchronous_stream_insert)
+		{
+			query->ack.batch = InsertBatchCreate();
+			query->ack.batch_id = query->ack.batch->id;
+			query->ack.count = 1;
+		}
+	}
+}
+
+/*
+ * Send a heap tuple to the adhoc buffer, by making a new stream tuple
+ * for each adhoc query that is listening
+ */
+int SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
+					Size *bytes)
+{
+	int i = 0;
+	int count = 0;
+	*bytes = 0;
+
+	for (i = 0; i < adhoc_data->num_adhoc; ++i)
+	{
+		AdhocQuery *query = &adhoc_data->queries[i];
+
+		StreamTuple *tuple = 
+			MakeStreamTuple(tup, desc, 1, &query->ack);
+		Bitmapset *single = bms_make_singleton(query->cq_id);
+
+		tuple->group_hash = query->cq_id;
+
+		if (TupleBufferInsert(AdhocTupleBuffer, tuple, single))
+		{
+			query->count++;
+
+			if (i == 0)
+			{
+				count++;
+				(*bytes) += tuple->heaptup->t_len + HEAPTUPLESIZE;
+			}
+		}
+	}
+
+	return count;
+}
+
+static void WaitForAdhoc(AdhocData *adhoc_data)
+{
+	int i = 0;
+	for (i = 0; i < adhoc_data->num_adhoc; ++i)
+	{
+		AdhocQuery *query = &adhoc_data->queries[i];
+
+		InsertBatchWaitAndRemoveActive(query->ack.batch,
+									   query->count,
+									   query->active_flag,
+									   query->cq_id);
+	}
+}
+
+/*
  * InsertIntoStreamPrepared
  *
  * Send Datum-encoded events to the given stream
@@ -257,20 +344,36 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
+
+	Bitmapset *all_targets = get_stream_readers(pstmt->relid);
+	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
+
+	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
+	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
+		bms_difference(all_targets, targets) : NULL;
+
+	AdhocData adhoc_data;
+
+	int num_worker = bms_num_members(targets);
+
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
 	Size size = 0;
-	Bitmapset *targets = get_stream_readers(pstmt->relid);
+
+	init_adhoc_data(&adhoc_data, adhoc_targets);
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate();
-		num_batches = 1;
+		if (num_worker)
+		{
+			batch = InsertBatchCreate();
+			num_batches = 1;
 
-		acks[0].batch_id = batch->id;
-		acks[0].batch = batch;
-		acks[0].count = 1;
+			acks[0].batch_id = batch->id;
+			acks[0].batch = batch;
+			acks[0].count = 1;
+		}
 	}
 
 	Assert(pstmt->desc);
@@ -303,11 +406,29 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			nulls[i] = params->params[i].isnull;
 		}
 
-		tuple = MakeStreamTuple(heap_form_tuple(pstmt->desc, values, nulls), pstmt->desc, num_batches, acks);
-		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+		if (num_worker)
+		{
+			tuple = MakeStreamTuple(heap_form_tuple(pstmt->desc, values, nulls), pstmt->desc, num_batches, acks);
+			TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
-		count++;
-		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+			count++;
+			size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+		}
+
+		if (adhoc_data.num_adhoc)
+		{
+			int acount = 0;
+			Size abytes = 0;
+
+			HeapTuple tup = heap_form_tuple(pstmt->desc, values, nulls);
+			acount = SendTupleToAdhoc(&adhoc_data, tup, pstmt->desc, &abytes);
+
+			if (!num_worker)
+			{
+				count += acount;
+				size += abytes;
+			}
+		}
 	}
 
 	pstmt->inserts = NIL;
@@ -315,7 +436,17 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	stream_stat_report(pstmt->relid, count, 1, size);
 
 	if (synchronous_stream_insert)
-		InsertBatchWaitAndRemove(batch, count);
+	{
+		if (num_worker)
+		{
+			InsertBatchWaitAndRemove(batch, count);
+		}
+
+		if (adhoc_data.num_adhoc)
+		{
+			WaitForAdhoc(&adhoc_data);
+		}
+	}
 
 	return count;
 }
@@ -333,11 +464,21 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	int count = 0;
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
+	AdhocData adhoc_data;
 	Oid relid = RangeVarGetRelid(ins->relation, NoLock, false);
-	Bitmapset *targets = get_stream_readers(relid);
+
+	Bitmapset *all_targets = get_stream_readers(relid);
+	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
+
+	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
+	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
+		bms_difference(all_targets, targets) : NULL;
+
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
+	int num_worker = bms_num_members(targets);
+
 	Size size = 0;
 	List *queries;
 	List *plans;
@@ -347,10 +488,12 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	Query *query;
 	SelectStmt *stmt;
 
+	init_adhoc_data(&adhoc_data, adhoc_targets);
+
 	Assert(IsA(ins->selectStmt, SelectStmt));
 	stmt = ((SelectStmt *) ins->selectStmt);
 
-	if (synchronous_stream_insert)
+	if (synchronous_stream_insert && num_worker)
 	{
 		batch = InsertBatchCreate();
 		num_batches = 1;
@@ -409,7 +552,8 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 	receiver = CreateDestReceiver(DestStream);
 	desc = get_desc(colnames, query);
-	SetStreamDestReceiverParams(receiver, targets, desc, num_batches, acks);
+
+	SetStreamDestReceiverParams(receiver, targets, desc, num_batches, acks, &adhoc_data);
 
 	portal = CreatePortal("__insert__", true, true);
 	portal->visible = false;
@@ -442,7 +586,17 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
-		InsertBatchWaitAndRemove(batch, count);
+	{
+		if (num_worker)
+		{
+			InsertBatchWaitAndRemove(batch, count);
+		}
+
+		if (adhoc_data.num_adhoc)
+		{
+			WaitForAdhoc(&adhoc_data);
+		}
+	}
 
 	return count;
 }
@@ -455,7 +609,6 @@ InsertIntoStream(InsertStmt *ins, List *params)
 uint64
 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	Bitmapset *targets;
 	uint64 count = 0;
 	int i;
 	InsertBatchAck acks[1];
@@ -464,9 +617,19 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	Size size = 0;
 	bool snap = ActiveSnapshotSet();
 
-	targets = get_stream_readers(RelationGetRelid(stream));
+	Bitmapset *all_targets = get_stream_readers(RelationGetRelid(stream));
+	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
 
-	if (synchronous_stream_insert)
+	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
+	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
+		bms_difference(all_targets, targets) : NULL;
+
+	int num_worker = bms_num_members(targets);
+
+	AdhocData adhoc_data;
+	init_adhoc_data(&adhoc_data, adhoc_targets);
+
+	if (synchronous_stream_insert && num_worker)
 	{
 		batch = InsertBatchCreate();
 		num_batches = 1;
@@ -484,11 +647,27 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 		HeapTuple htup = tuples[i];
 		StreamTuple *tuple;
 
-		tuple = MakeStreamTuple(htup, desc, num_batches, acks);
-		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+		if (num_worker)
+		{
+			tuple = MakeStreamTuple(htup, desc, num_batches, acks);
+			TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+			count++;
+			size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+		}
 
-		count++;
-		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+		if (adhoc_data.num_adhoc)
+		{
+			int acount = 0;
+			Size abytes = 0;
+
+			acount = SendTupleToAdhoc(&adhoc_data, htup, desc, &abytes);
+
+			if (!num_worker)
+			{
+				count += acount;
+				size += abytes;
+			}
+		}
 	}
 
 	stream_stat_report(RelationGetRelid(stream), count, 1, size);
@@ -497,7 +676,17 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
-		InsertBatchWaitAndRemove(batch, count);
+	{
+		if (num_worker)
+		{
+			InsertBatchWaitAndRemove(batch, count);
+		}
+
+		if (adhoc_data.num_adhoc)
+		{
+			WaitForAdhoc(&adhoc_data);
+		}
+	}
 
 	if (snap)
 		PushActiveSnapshot(GetTransactionSnapshot());
@@ -533,6 +722,28 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 	ShmemDynFree(batch);
 }
 
+/* 
+ * Waits for a batch to be acked, but breaks early if it 
+ * detects that the adhoc cq is no longer active. 
+ */
+void
+InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples, 
+							   int *active, int cq_id)
+{
+	if (num_tuples && active)
+	{
+		batch->num_wtups = num_tuples;
+
+		while (!StreamBatchAllAcked(batch) && (*active == cq_id))
+		{
+			pg_usleep(SLEEP_MS * 1000);
+			CHECK_FOR_INTERRUPTS();
+		}
+	}
+
+	ShmemDynFree(batch);
+}
+
 void
 InsertBatchIncrementNumCTuples(InsertBatch *batch)
 {
@@ -548,7 +759,7 @@ InsertBatchMarkAcked(InsertBatchAck *ack)
 		return;
 
 	SpinLockAcquire(&ack->batch->mutex);
-	if (IsContQueryWorkerProcess())
+	if (IsContQueryWorkerProcess() || IsContQueryAdhocProcess())
 		ack->batch->num_wacks += ack->count;
 	else if (IsContQueryCombinerProcess())
 		ack->batch->num_cacks += ack->count;

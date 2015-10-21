@@ -86,7 +86,7 @@ def main(args):
     sys.exit(1)
 
   cmd = [SERVER, '-D' , os.path.join(root, DATA_DIR), '-p', args.port,
-         '-c', 'synchronous_stream_insert=true', '-c', 'anonymous_update_checks=false']
+         '-c', 'synchronous_stream_insert=true', '-c', 'anonymous_update_checks=false', '-c', 'continuous_queries_adhoc_enabled=true']
 
   for guc in args.gucs:
     if len(guc.split('=')) != 2:

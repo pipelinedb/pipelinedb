@@ -48,4 +48,6 @@ extern void ModelDeleteRow(Model *m, Row *key);
 extern void ModelDump(Model *m);
 extern void ModelInsertRowFromString(Model *m, const char *s);
 
+extern Row make_row(const char *s);
+
 #endif

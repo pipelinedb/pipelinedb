@@ -76,6 +76,8 @@ typedef struct TupleBuffer
 
 typedef bool (*TupleBufferShouldReadFunc) (TupleBufferReader *rdr, TupleBufferSlot *slot);
 
+typedef bool (*TupleBufferShouldDrainFunc) (TupleBufferSlot *slot, void *ctx);
+
 /* Pointer into a stream buffer from the perspective of a continuous query */
 struct TupleBufferReader
 {
@@ -104,6 +106,7 @@ typedef struct TupleBufferBatchReader
 
 extern TupleBuffer *WorkerTupleBuffer;
 extern TupleBuffer *CombinerTupleBuffer;
+extern TupleBuffer *AdhocTupleBuffer;
 
 extern StreamTuple *MakeStreamTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, InsertBatchAck *acks);
 
@@ -116,6 +119,7 @@ extern bool TupleBufferIsEmpty(TupleBuffer *buf);
 
 extern void TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, Latch *proclatch);
 extern void TupleBufferTryWait(TupleBufferReader *reader);
+extern void TupleBufferTryWaitTimeout(TupleBufferReader *reader, int timeout);
 extern void TupleBufferNotifyAndClearWaiters(TupleBuffer *buf);
 
 /* low level API for reading/writing to a TupleBuffer */
@@ -136,7 +140,9 @@ extern TupleBufferSlot *TupleBufferBatchReaderNext(TupleBufferBatchReader *reade
 extern void TupleBufferBatchReaderRewind(TupleBufferBatchReader *reader);
 extern void TupleBufferBatchReaderReset(TupleBufferBatchReader *reader);
 extern void TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_processed);
+extern void TupleBufferBatchReaderTrySleepTimeout(TupleBufferBatchReader *reader, TimestampTz last_processed, int timeout);
 
 extern void TupleBufferDrain(TupleBuffer *buf, Oid db_oid);
+extern void TupleBufferDrainGeneric(TupleBuffer *buf, TupleBufferShouldDrainFunc fn, void *ctx);
 
 #endif

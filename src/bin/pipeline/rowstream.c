@@ -87,18 +87,18 @@ parse_text_row(const char *line)
 	memset(&msg, 0, sizeof(RowMessage));
 
 	msg.row.ptr = pg_strdup(line);
-	msg.row.n = spaces(line);
+	msg.row.n = tabs(line);
 	msg.row.fields = pg_malloc(sizeof(Field) * msg.row.n);
 
 	sptr = (char *) msg.row.ptr;
-	tok = strtok(sptr, " ");
+	tok = strtok(sptr, "\t");
 	sptr = 0;
 
 	msg.type = tok[0];
 
 	while (true)
 	{
-		tok = strtok(sptr, " ");
+		tok = strtok(sptr, "\t");
 
 		if (!tok)
 			break;
@@ -138,8 +138,6 @@ append_data(RowStream *stream, const char *buf, size_t nr)
 		}
 	}
 }
-
-
 
 /*
  * Loop over the input stream appending data until we hit EOF, or would block.

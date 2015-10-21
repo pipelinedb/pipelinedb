@@ -27,5 +27,8 @@ extern PlannedStmt *GetContPlan(ContinuousView *view, ContQueryProcType type);
 extern TuplestoreScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
 extern FuncExpr *GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri);
 extern PlannedStmt *GetCombinerLookupPlan(ContinuousView *view);
+extern PlannedStmt *GetContinuousViewOverlayPlan(ContinuousView *view);
+
+extern void SetReader(PlanState *planstate, TupleBufferBatchReader *reader);
 
 #endif

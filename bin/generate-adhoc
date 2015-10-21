@@ -43,13 +43,24 @@ keys = {}
 # i = insert
 # u = update
 # d = delete
-#
 # k = key
 
-puts "h name value volume foo ts"
-puts "k name value"
+DELIM = "\t"
 
-STDOUT.flush
+def escape(x)
+	# XXX - this is very basic
+	x.sub(/\n/, "\\n")
+end
+
+def output(a)
+	puts a.map{|x| escape(x.to_s)}.join(DELIM)
+	STDOUT.flush
+end
+
+output %w[header name value volume foo ts]
+output %w[key 1]
+
+# pq_flush
 
 while (true) do
 
@@ -58,10 +69,10 @@ while (true) do
 		k1 = randword
 		k2 = sprintf("%04d", rand(10))
 
-		k = [k1,k2];
-		t = keys.include?(k) ? 'u' : 'i'
-
-		puts "#{t} #{k1} #{k2} #{"x" * (rand(10) + 1)} #{rand(100)} #{Time.now.to_i}"
+		k = [k1 + "\n" + k2];
+#		k = [k1,k2];
+		t = keys.include?(k) ? 'update' : 'insert'
+		output([t,k[0],k2,"x" * (rand(10) + 1),rand(100),Time.now.to_i])
 
 		keys[k] = 1
 		STDOUT.flush
@@ -79,9 +90,8 @@ while (true) do
 
 		keys.delete(k)
 
-		puts "d #{k.join(' ')}"
+		output(["delete"] + k)
 		STDOUT.flush
 		sleep(0.01)
 	}
-
 end

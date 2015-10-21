@@ -22,7 +22,8 @@ typedef enum
 {
 	Combiner,
 	Worker,
-	Scheduler /* unused */
+	Scheduler, /* unused */
+	Adhoc
 } ContQueryProcType;
 
 typedef struct ContQueryProcGroup ContQueryProcGroup;
@@ -62,6 +63,7 @@ extern char *GetContQueryProcName(ContQueryProc *proc);
 /* guc parameters */
 extern bool continuous_queries_enabled;
 extern bool continuous_query_crash_recovery;
+extern bool continuous_queries_adhoc_enabled;
 extern int continuous_query_num_combiners;
 extern int continuous_query_num_workers;
 extern int continuous_query_batch_size;
@@ -82,9 +84,10 @@ extern ContQueryRunParams *GetContQueryRunParams(void);
 extern bool IsContQuerySchedulerProcess(void);
 extern bool IsContQueryWorkerProcess(void);
 extern bool IsContQueryCombinerProcess(void);
+extern bool IsContQueryAdhocProcess(void);
 
 #define IsContQueryProcess() \
-	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess())
+	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess())
 
 /* functions to start the scheduler process */
 extern pid_t StartContQueryScheduler(void);
@@ -98,5 +101,7 @@ extern void ContinuousQueryWorkerMain(void);
 
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
+
+extern void SetAmContQueryAdhoc(bool s);
 
 #endif   /* CONT_SCHEDULER_H */
