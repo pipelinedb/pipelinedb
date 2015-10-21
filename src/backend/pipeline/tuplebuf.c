@@ -642,6 +642,28 @@ TupleBufferTryWaitTimeout(TupleBufferReader *reader, int timeout)
 }
 
 /*
+ * TupleBufferTryWaitTimeout
+ */
+void
+TupleBufferTryWaitTimeout(TupleBufferReader *reader, int timeout)
+{
+	TupleBuffer *buf = reader->buf;
+	bool should_wait = false;
+
+	SpinLockAcquire(&buf->mutex);
+	if (!TupleBufferHasUnreadSlots(reader))
+	{
+		buf->waiters = bms_add_member(buf->waiters, reader->proc->id);
+		buf->readers[reader->proc->id] = reader;
+		should_wait = true;
+	}
+	SpinLockRelease(&buf->mutex);
+
+	if (should_wait)
+		WaitLatch(reader->proc->latch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, timeout);
+}
+
+/*
  * TupleBufferUnpinAllPinnedSlots
  */
 void
