@@ -62,6 +62,7 @@ extern char *GetContQueryProcName(ContQueryProc *proc);
 /* guc parameters */
 extern bool continuous_queries_enabled;
 extern bool continuous_query_crash_recovery;
+extern bool continuous_queries_adhoc_enabled;
 extern int continuous_query_num_combiners;
 extern int continuous_query_num_workers;
 extern int continuous_query_batch_size;

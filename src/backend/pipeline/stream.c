@@ -349,7 +349,9 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
 
 	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = bms_difference(all_targets, targets);
+	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
+		bms_difference(all_targets, targets) : NULL;
+
 	AdhocData adhoc_data;
 
 	int num_worker = bms_num_members(targets);
@@ -469,7 +471,8 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
 
 	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = bms_difference(all_targets, targets);
+	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
+		bms_difference(all_targets, targets) : NULL;
 
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
@@ -618,7 +621,8 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
 
 	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = bms_difference(all_targets, targets);
+	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
+		bms_difference(all_targets, targets) : NULL;
 
 	int num_worker = bms_num_members(targets);
 

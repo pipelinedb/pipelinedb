@@ -945,6 +945,9 @@ IsAdhocQuery(Node *node)
 	ResTarget *target = 0;
 	FuncCall *func = 0;
 
+	if (!continuous_queries_adhoc_enabled)
+		return false;
+
 	if (!IsA(node, SelectStmt))
 		return false;
 
@@ -980,6 +983,14 @@ IsAdhocQuery(Node *node)
 Datum
 pipeline_exec_adhoc_query(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "pipeline_exec_adhoc_query intercept failure");
+	if (!continuous_queries_adhoc_enabled)
+	{
+		elog(ERROR, "adhoc queries are not enabled");
+	}
+	else
+	{
+		elog(ERROR, "pipeline_exec_adhoc_query intercept failure");
+	}
+
 	PG_RETURN_TEXT_P(CStringGetTextDatum(""));
 }

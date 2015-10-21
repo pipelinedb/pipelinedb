@@ -67,6 +67,7 @@ static bool am_cont_adhoc = false;
 
 /* guc parameters */
 bool continuous_queries_enabled;
+bool continuous_queries_adhoc_enabled;
 bool continuous_query_crash_recovery;
 int continuous_query_num_combiners;
 int continuous_query_num_workers;
