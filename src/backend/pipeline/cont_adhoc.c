@@ -848,7 +848,8 @@ ExecAdhocQuery(Node *stmt, const char *s)
 		/* This must be set so that newly created views are tagged properly */
 		SetAmContQueryAdhoc(true);
 
-		set_nice_priority();
+		/* give up some cpu */
+		SetNicePriority();
 
 		/* At present, the queries always exit through the error path
 		 * The 'errors' are from query cancel, or the frontend not 
@@ -866,7 +867,7 @@ ExecAdhocQuery(Node *stmt, const char *s)
 		{
 			SetAmContQueryAdhoc(false);
 
-			set_default_priority();
+			SetDefaultPriority();
 			MemoryContextSwitchTo(oldcontext);
 			MemoryContextResetAndDeleteChildren(adhoc_cxt);
 			PG_RE_THROW();
