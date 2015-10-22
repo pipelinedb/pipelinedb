@@ -48,15 +48,15 @@ int
 main(int argc, char *argv[])
 {
 	bool ok;
-
 	adhoc_opts options;
-	memset(&options, 0, sizeof(adhoc_opts));
 
 	App app = {0,0};
 	Model *model = ModelInit();
 
 	Screen *screen = 0;
 	PGRowStream *stream = 0;
+
+	memset(&options, 0, sizeof(adhoc_opts));
 
 	handle_options(argc, argv, &options);
 

@@ -25,6 +25,7 @@
 #include "nodes/print.h"
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/miscutils.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
 #include "storage/ipc.h"

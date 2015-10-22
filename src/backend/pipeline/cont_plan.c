@@ -17,7 +17,9 @@
 #include "catalog/pipeline_combine.h"
 #include "catalog/pipeline_query_fn.h"
 #include "commands/pipelinecmds.h"
+#include "executor/executor.h"
 #include "funcapi.h"
+#include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/paths.h"
@@ -34,8 +36,8 @@
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
+#include "utils/snapmgr.h"
 #include "utils/syscache.h"
-
 
 /*
  * get_combiner_join_rel
@@ -201,7 +203,7 @@ get_combiner_plan(ContinuousView *view)
 
 /* util func to set reader on stream scan nodes */ 
 void
-SetReader(PlanState *planstate, TupleBufferBatchReader *reader)
+SetTupleBufferBatchReader(PlanState *planstate, TupleBufferBatchReader *reader)
 {
 	if (planstate == NULL)
 		return;
@@ -214,12 +216,12 @@ SetReader(PlanState *planstate, TupleBufferBatchReader *reader)
 	}
 	else if (IsA(planstate, SubqueryScanState))
 	{
-		SetReader(((SubqueryScanState *) planstate)->subplan, reader);
+		SetTupleBufferBatchReader(((SubqueryScanState *) planstate)->subplan, reader);
 		return;
 	}
 
-	SetReader(planstate->lefttree, reader);
-	SetReader(planstate->righttree, reader);
+	SetTupleBufferBatchReader(planstate->lefttree, reader);
+	SetTupleBufferBatchReader(planstate->righttree, reader);
 }
 
 PlannedStmt *
@@ -301,4 +303,47 @@ GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri)
 	}
 
 	return result;
+}
+
+
+EState *
+CreateEState(QueryDesc *query_desc)
+{
+	EState *estate;
+
+	estate = CreateExecutorState();
+	estate->es_param_list_info = query_desc->params;
+	estate->es_snapshot = RegisterSnapshot(query_desc->snapshot);
+	estate->es_crosscheck_snapshot =
+		RegisterSnapshot(query_desc->crosscheck_snapshot);
+	estate->es_instrument = query_desc->instrument_options;
+	estate->es_range_table = query_desc->plannedstmt->rtable;
+	estate->es_continuous = query_desc->plannedstmt->is_continuous;
+	estate->es_lastoid = InvalidOid;
+	estate->es_processed = estate->es_filtered = 0;
+
+	if (query_desc->plannedstmt->nParamExec > 0)
+		estate->es_param_exec_vals = (ParamExecData *)
+			palloc0(query_desc->plannedstmt->nParamExec *
+					sizeof(ParamExecData));
+
+	estate->es_top_eflags |= EXEC_FLAG_SKIP_TRIGGERS;
+
+	return estate;
+}
+
+void
+SetEStateSnapshot(EState *estate, ResourceOwner owner)
+{
+	estate->es_snapshot = GetTransactionSnapshot();
+	estate->es_snapshot->active_count++;
+	estate->es_snapshot->copied = true;
+	PushActiveSnapshot(estate->es_snapshot);
+}
+
+void
+UnsetEStateSnapshot(EState *estate, ResourceOwner owner)
+{
+	PopActiveSnapshot();
+	estate->es_snapshot = NULL;
 }

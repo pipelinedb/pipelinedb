@@ -12,10 +12,12 @@
 #ifndef CONT_PLAN_H
 #define CONT_PLAN_H
 
+#include "executor/execdesc.h"
 #include "nodes/execnodes.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 #include "pipeline/cont_scheduler.h"
+#include "utils/resowner.h"
 #include "utils/tuplestore.h"
 
 #define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
@@ -29,6 +31,9 @@ extern FuncExpr *GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri);
 extern PlannedStmt *GetCombinerLookupPlan(ContinuousView *view);
 extern PlannedStmt *GetContinuousViewOverlayPlan(ContinuousView *view);
 
-extern void SetReader(PlanState *planstate, TupleBufferBatchReader *reader);
+extern void SetTupleBufferBatchReader(PlanState *planstate, TupleBufferBatchReader *reader);
+extern EState *CreateEState(QueryDesc *query_desc);
+extern void SetEStateSnapshot(EState *estate, ResourceOwner owner);
+extern void UnsetEStateSnapshot(EState *estate, ResourceOwner owner);
 
 #endif

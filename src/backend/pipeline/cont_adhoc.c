@@ -10,7 +10,13 @@
  *-------------------------------------------------------------------------
  */
 
+#include <unistd.h>
+
+#include <sys/time.h>
+#include <sys/resource.h>
+
 #include "postgres.h"
+
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/namespace.h"
@@ -20,7 +26,6 @@
 #include "commands/pipelinecmds.h"
 #include "executor/execdesc.h"
 #include "executor/executor.h"
-#include "pipeline/cont_worker_util.h"
 #include "executor/tstoreReceiver.h"
 #include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
@@ -36,6 +41,7 @@
 #include "pipeline/cont_adhoc_mgr.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_plan.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/tuplebuf.h"
 #include "storage/ipc.h"
 #include "storage/proc.h"
@@ -48,10 +54,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/builtins.h"
-#include <unistd.h>
-
-#include <sys/time.h>
-#include <sys/resource.h>
 
 /* 
  * This module performs work analogous to the bg workers and combiners
@@ -262,7 +264,7 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, owner);
 	state->query_desc->snapshot = NULL;
 
-	SetReader(state->query_desc->planstate, state->reader);
+	SetTupleBufferBatchReader(state->query_desc->planstate, state->reader);
 
 	state->query_desc->estate->es_lastoid = InvalidOid;
 
@@ -386,18 +388,18 @@ exec_adhoc_worker(AdhocWorkerState * state)
 		return false;
 	}
 
-	state->query_desc->estate = create_estate(state->query_desc);
+	state->query_desc->estate = CreateEState(state->query_desc);
 	estate = state->query_desc->estate;
 
 	TupleBufferBatchReaderSetCQId(state->reader, state->view_id);
 
-	set_snapshot(estate, owner);
+	SetEStateSnapshot(estate, owner);
 	plan = state->query_desc->plannedstmt->planTree;
 
 	state->query_desc->planstate = 
 		ExecInitNode(plan, state->query_desc->estate, 0);
 
-	SetReader(state->query_desc->planstate, state->reader);
+	SetTupleBufferBatchReader(state->query_desc->planstate, state->reader);
 
 	ExecutePlan(estate, state->query_desc->planstate, 
 				state->query_desc->operation,
@@ -410,7 +412,7 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	if (num_processed)
 		state->last_processed = GetCurrentTimestamp();
 
-	unset_snapshot(estate, owner);
+	UnsetEStateSnapshot(estate, owner);
 
 	state->query_desc->estate = NULL;
 	estate = state->query_desc->estate;
@@ -462,10 +464,10 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 
 	/* run the combine plan */
 
-	state->query_desc->estate = create_estate(state->query_desc);
+	state->query_desc->estate = CreateEState(state->query_desc);
 	estate = state->query_desc->estate;
 
-	set_snapshot(estate, owner);
+	SetEStateSnapshot(estate, owner);
 
 	plan = state->query_desc->plannedstmt->planTree;
 
@@ -479,7 +481,7 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 	ExecEndNode(state->query_desc->planstate);
 	state->query_desc->planstate = NULL;
 
-	unset_snapshot(estate, owner);
+	UnsetEStateSnapshot(estate, owner);
 
 	state->query_desc->estate = NULL;
 	estate = state->query_desc->estate;
@@ -572,9 +574,9 @@ exec_adhoc_view(AdhocViewState *state)
 
 	tuplestore_rescan(state->batch);
 
-	state->query_desc->estate = create_estate(state->query_desc);
+	state->query_desc->estate = CreateEState(state->query_desc);
 	estate = state->query_desc->estate;
-	set_snapshot(estate, owner);
+	SetEStateSnapshot(estate, owner);
 
 	plan = state->query_desc->plannedstmt->planTree;
 
@@ -588,7 +590,7 @@ exec_adhoc_view(AdhocViewState *state)
 	ExecEndNode(state->query_desc->planstate);
 	state->query_desc->planstate = NULL;
 
-	unset_snapshot(estate, owner);
+	UnsetEStateSnapshot(estate, owner);
 
 	state->query_desc->estate = NULL;
 	estate = state->query_desc->estate;

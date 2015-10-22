@@ -24,7 +24,6 @@
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
-#include "pipeline/cont_worker_util.h"
 #include "pipeline/tuplebuf.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"
@@ -52,13 +51,6 @@ typedef struct {
 	AttrNumber *groupatts;
 	FuncExpr *hashfunc;
 } ContQueryWorkerState;
-
-/*
- * set_reader
- *
- * Sets the TupleBufferBatchReader for any StreamScanState nodes in the PlanState.
- */
-
 
 static void
 init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, ResourceOwner owner, TupleBufferBatchReader *reader)
@@ -142,7 +134,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 		heap_close(matrel, NoLock);
 	}
 
-	SetReader(state->query_desc->planstate, reader);
+	SetTupleBufferBatchReader(state->query_desc->planstate, reader);
 
 	state->query_desc->estate->es_lastoid = InvalidOid;
 
@@ -352,17 +344,17 @@ ContinuousQueryWorkerMain(void)
 
 				debug_query_string = NameStr(state->view->name);
 				MemoryContextSwitchTo(state->tmp_cxt);
-				state->query_desc->estate = estate = create_estate(state->query_desc);
+				state->query_desc->estate = estate = CreateEState(state->query_desc);
 
 				TupleBufferBatchReaderSetCQId(reader, id);
 
-				set_snapshot(estate, owner);
+				SetEStateSnapshot(estate, owner);
 				CurrentResourceOwner = owner;
 
 				/* initialize the plan for execution within this xact */
 				plan = state->query_desc->plannedstmt->planTree;
 				state->query_desc->planstate = ExecInitNode(plan, state->query_desc->estate, 0);
-				SetReader(state->query_desc->planstate, reader);
+				SetTupleBufferBatchReader(state->query_desc->planstate, reader);
 
 				/*
 				 * We pass a timeout of 0 because the underlying TupleBufferBatchReader takes care of
@@ -380,7 +372,7 @@ ContinuousQueryWorkerMain(void)
 				MemoryContextResetAndDeleteChildren(state->tmp_cxt);
 				MemoryContextSwitchTo(state->state_cxt);
 
-				unset_snapshot(estate, owner);
+				UnsetEStateSnapshot(estate, owner);
 				state->query_desc->estate = estate = NULL;
 
 				IncrementCQExecutions(1);
@@ -391,7 +383,7 @@ ContinuousQueryWorkerMain(void)
 				FlushErrorState();
 
 				if (estate && ActiveSnapshotSet())
-					unset_snapshot(estate, owner);
+					UnsetEStateSnapshot(estate, owner);
 
 				if (state)
 					cleanup_query_state(states, id);
@@ -474,7 +466,7 @@ next:
 			(*state->dest->rShutdown) (state->dest);
 
 			if (estate == NULL)
-				query_desc->estate = estate = create_estate(state->query_desc);
+				query_desc->estate = estate = CreateEState(state->query_desc);
 
 			/* The cleanup functions below expect these things to be registered. */
 			RegisterSnapshotOnOwner(estate->es_snapshot, owner);
