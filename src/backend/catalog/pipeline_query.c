@@ -456,7 +456,7 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
  *
  * Returns true if the given oid represents a materialization table
  */
-Oid
+bool
 RelIdIsAMatRel(Oid relid)
 {
 	Relation rel = heap_open(relid, NoLock);
