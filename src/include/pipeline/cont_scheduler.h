@@ -2,6 +2,8 @@
  *
  * cont_scheduler.h
  *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
  * IDENTIFICATION
  *    src/include/pipeline/cont_scheduler.h
  *

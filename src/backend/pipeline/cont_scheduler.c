@@ -5,7 +5,7 @@
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *    src/include/pipeline/cont_scheduler.c
+ *    src/backend/pipeline/cont_scheduler.c
  *
  *-------------------------------------------------------------------------
  */
