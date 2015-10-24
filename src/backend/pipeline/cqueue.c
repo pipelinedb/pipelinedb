@@ -13,6 +13,7 @@
 #include "postgres.h"
 
 #include "lib/stringinfo.h"
+#include "miscadmin.h"
 #include "pipeline/cqueue.h"
 #include "utils/memutils.h"
 #include "storage/proc.h"
@@ -226,6 +227,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	producer_latch = &MyProc->procLatch;
 	atomic_store(&cq->producer_latch, producer_latch);
 
+	/* FIXME(usmanm): On postmaster shutdown, this stays looping, we must break out. */
 	for (;;)
 	{
 		int space_used;
@@ -239,6 +241,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 			break;
 
 		WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+		CHECK_FOR_INTERRUPTS();
 	}
 
 	atomic_store(&cq->producer_latch, NULL);
@@ -279,7 +282,10 @@ dsm_cqueue_peek_next(dsm_cqueue *cq, int *len)
 
 	/* Are there any unread slots? */
 	if (!dsm_cqueue_has_unread(cq))
+	{
+		*len = 0;
 		return NULL;
+	}
 
 	slot = dsm_cqueue_slot_get(cq, atomic_load(&cq->cursor));
 
@@ -373,6 +379,7 @@ dsm_cqueue_sleep_if_empty(dsm_cqueue *cq)
 			break;
 
 		WaitLatch(consumer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+		CHECK_FOR_INTERRUPTS();
 	}
 }
 
@@ -471,43 +478,58 @@ dsm_cqueue_print(dsm_cqueue *cq)
 	return str;
 }
 
-void
-dsm_cqueue_test(void)
+static void
+dsm_cqueue_test_serial(void)
 {
 	dsm_segment *segment = dsm_create(8192);
 	dsm_handle handle = dsm_segment_handle(segment);
 	dsm_cqueue_handle *cq_handle;
 	dsm_cqueue *cq;
-	char *hw = "hello world";
 	int i;
-	int len;
-	char *bytes;
+
 
 	dsm_cqueue_init(handle);
 	cq_handle = dsm_cqueue_attach(handle);
 	cq = cq_handle->cqueue;
 
-	elog(LOG, "%s", dsm_cqueue_print(cq));
 	dsm_cqueue_check_consistency(cq);
 
-	for (i = 0; i < 223; i++)
+	for (i = 0; i < 1000; i++)
 	{
-		dsm_cqueue_push(cq, hw, strlen(hw) + 1);
-		elog(LOG, "%s", dsm_cqueue_print(cq));
-		dsm_cqueue_check_consistency(cq);
+		int nitems = rand() % 224; /* max items we can insert before the insert blocks */
+		int j;
+		char *hw = "hello world";
+		int len;
+		char *bytes;
+
+		for (j = 0; j < nitems; j++)
+		{
+			dsm_cqueue_push(cq, hw, strlen(hw) + 1);
+			dsm_cqueue_check_consistency(cq);
+		}
+
+		for (j = 0; j < nitems; j++)
+		{
+			bytes = dsm_cqueue_peek_next(cq, &len);
+			Assert(len == strlen(hw) + 1);
+			Assert(strcmp(bytes, hw) == 0);
+			dsm_cqueue_check_consistency(cq);
+		}
+
+		Assert(!dsm_cqueue_has_unread(cq));
+		bytes = dsm_cqueue_peek_next(cq, &len);
+		Assert(len == 0);
+		Assert(bytes == NULL);
+
+		dsm_cqueue_pop_seen(cq);
+		Assert(dsm_cqueue_is_empty(cq));
 	}
 
-	bytes = dsm_cqueue_peek_next(cq, &len);
-	Assert(len == strlen(hw) + 1);
-	Assert(strcmp(bytes, hw) == 0);
-	elog(LOG, "%s", dsm_cqueue_print(cq));
-	dsm_cqueue_check_consistency(cq);
-	dsm_cqueue_pop_seen(cq);
-
-	/* Now we should wrap around. */
-	dsm_cqueue_push(cq, hw, strlen(hw) + 1);
-	elog(LOG, "%s", dsm_cqueue_print(cq));
-	dsm_cqueue_check_consistency(cq);
-
 	dsm_cqueue_detach(cq_handle);
+}
+
+void
+dsm_cqueue_test(void)
+{
+	dsm_cqueue_test_serial();
 }
