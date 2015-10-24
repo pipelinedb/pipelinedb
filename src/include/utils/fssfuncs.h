@@ -26,5 +26,6 @@ extern Datum fss_topk_freqs(PG_FUNCTION_ARGS);
 extern Datum fss_empty(PG_FUNCTION_ARGS);
 extern Datum fss_emptyp(PG_FUNCTION_ARGS);
 extern Datum fss_increment(PG_FUNCTION_ARGS);
+extern Datum fss_increment_weighted(PG_FUNCTION_ARGS);
 
 #endif
