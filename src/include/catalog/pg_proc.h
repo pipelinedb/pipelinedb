@@ -5471,6 +5471,10 @@ DESCR("filtered space saving top-k function");
 DATA(insert OID = 4416 ( pipeline_exec_adhoc_query PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ pipeline_exec_adhoc_query _null_ _null_ _null_ ));
 DESCR("exec adhoc query");
 
+DATA(insert OID = 4417 ( pipeline_unittest PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 25 "" _null_ _null_ _null_ _null_ pipeline_unittest _null_ _null_ _null_ ));
+DESCR("pipeline unit tests");
+
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

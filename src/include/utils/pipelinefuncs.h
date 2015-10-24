@@ -46,4 +46,6 @@ extern Datum pipeline_get_combiner_querydef(PG_FUNCTION_ARGS);
 
 extern Datum pipeline_exec_adhoc_query(PG_FUNCTION_ARGS);
 
+extern Datum pipeline_unittest(PG_FUNCTION_ARGS);
+
 #endif
