@@ -1,16 +1,16 @@
 /*-------------------------------------------------------------------------
  *
- * cqueue.h
+ * dsm_cqueue.h
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *    src/include/pipeline/cqueue.h
+ *    src/include/pipeline/dsm_cqueue.h
  *
  *-------------------------------------------------------------------------
  */
-#ifndef CQUEUE_H
-#define CQUEUE_H
+#ifndef DSM_CQUEUE_H
+#define DSM_CQUEUE_H
 
 #include <stdatomic.h>
 
@@ -89,4 +89,4 @@ extern void dsm_cqueue_unlock_head(dsm_cqueue *cq);
 
 extern void dsm_cqueue_test(void);
 
-#endif   /* CQUEUE_H */
+#endif   /* DSM_CQUEUE_H */

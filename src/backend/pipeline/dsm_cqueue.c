@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cqueue.c
+ * dsm_cqueue.c
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *    src/backend/pipeline/cqueue.c
+ *    src/backend/pipeline/dsm_cqueue.c
  *
  *-------------------------------------------------------------------------
  */
@@ -14,7 +14,7 @@
 
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
-#include "pipeline/cqueue.h"
+#include "pipeline/dsm_cqueue.h"
 #include "utils/memutils.h"
 #include "storage/proc.h"
 
