@@ -221,8 +221,6 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	 * because the reader will always update the tail before reading the value for producer latch. So in case the
 	 * reader reads the value for producer_latch before the writer sets it, the writer is guaranteed to see the
 	 * updated value for tail and therefore the effect is the same as being woken up after that change was made.
-	 * A similar happens-before relation exists for resetting the latch, which must be done before reading the
-	 * tail.
 	 */
 	producer_latch = &MyProc->procLatch;
 	atomic_store(&cq->producer_latch, producer_latch);
@@ -231,8 +229,8 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	for (;;)
 	{
 		int space_used;
+		int r;
 
-		ResetLatch(producer_latch);
 		tail = atomic_load(&cq->tail);
 		space_used = head - tail;
 
@@ -242,6 +240,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 
 		WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
 		CHECK_FOR_INTERRUPTS();
+		ResetLatch(producer_latch);
 	}
 
 	atomic_store(&cq->producer_latch, NULL);
@@ -372,7 +371,6 @@ dsm_cqueue_sleep_if_empty(dsm_cqueue *cq)
 
 	for (;;)
 	{
-		ResetLatch(consumer_latch);
 		head = atomic_load(&cq->head);
 
 		if (head > tail)
@@ -380,6 +378,7 @@ dsm_cqueue_sleep_if_empty(dsm_cqueue *cq)
 
 		WaitLatch(consumer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
 		CHECK_FOR_INTERRUPTS();
+		ResetLatch(consumer_latch);
 	}
 }
 
