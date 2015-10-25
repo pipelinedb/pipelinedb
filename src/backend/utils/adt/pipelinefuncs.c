@@ -20,7 +20,7 @@
 #include "catalog/pipeline_stream.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "pipeline/cont_analyze.h"
-#include "pipeline/cqueue.h"
+#include "pipeline/dsm_cqueue.h"
 #include "miscadmin.h"
 #include "utils/array.h"
 #include "utils/builtins.h"

@@ -18,9 +18,12 @@
 #include "postmaster/bgworker.h"
 #include "utils/memutils.h"
 #include "utils/resowner.h"
+#include "utils/timestamp.h"
 #include "storage/proc.h"
 
-#define MAGIC 0x1CEB00DA
+#define MAGIC 0xDEADBABE /* x_x */
+#define WAIT_SLEEP_NS 250
+#define MAX_WAIT_SLEEP_NS 5000 /* 5ms */
 
 static dsm_segment *
 dsm_find_or_attach(dsm_handle handle)
@@ -382,6 +385,8 @@ dsm_cqueue_sleep_if_empty(dsm_cqueue *cq)
 		CHECK_FOR_INTERRUPTS();
 		ResetLatch(consumer_latch);
 	}
+
+	atomic_store(&cq->consumer_latch, NULL);
 }
 
 void
@@ -529,20 +534,33 @@ dsm_cqueue_test_serial(void)
 }
 
 static void
-writer_main(Datum arg)
+producer_main(Datum arg)
 {
 	dsm_handle handle = (dsm_handle) arg;
 	dsm_cqueue_handle *cq_handle;
 	dsm_cqueue *cq;
 	ResourceOwner res;
+	int i;
+	char data[1024];
 
-	res = ResourceOwnerCreate(NULL, "writer_main");
+	BackgroundWorkerUnblockSignals();
+
+	res = ResourceOwnerCreate(NULL, "producer_main");
 	CurrentResourceOwner = res;
 
 	cq_handle = dsm_cqueue_attach(handle);
 	cq = cq_handle->cqueue;
 
-	elog(LOG, "done");
+	for (i = 0; i < 1000000; i++)
+	{
+		int len = rand() % 1024 + 1;
+		dsm_cqueue_push(cq, data, len);
+
+		pg_usleep(rand() % 10);
+
+		if (i % 10000 == 0)
+			elog(LOG, "produced: %d", i);
+	}
 
 	dsm_cqueue_detach(cq_handle);
 
@@ -560,13 +578,15 @@ dsm_cqueue_test_concurrent(void)
 	dsm_handle seg_handle;
 	dsm_cqueue_handle *cq_handle;
 	dsm_cqueue *cq;
+	int nitems;
+	bool printed;
 
 	worker.bgw_flags = BGWORKER_BACKEND_DATABASE_CONNECTION | BGWORKER_SHMEM_ACCESS;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	worker.bgw_restart_time = BGW_NEVER_RESTART;
-	worker.bgw_main = writer_main;
+	worker.bgw_main = producer_main;
 	worker.bgw_notify_pid = MyProcPid;
-	sprintf(worker.bgw_name, "dsm_cqueue test writer process");
+	sprintf(worker.bgw_name, "dsm_cqueue test producer process");
 
 	segment = dsm_create(8192);
 	seg_handle = dsm_segment_handle(segment);
@@ -578,10 +598,31 @@ dsm_cqueue_test_concurrent(void)
 	Assert(RegisterDynamicBackgroundWorker(&worker, &bg_handle));
 	Assert(WaitForBackgroundWorkerStartup(bg_handle, &pid) == BGWH_STARTED);
 
-	elog(LOG, "me too");
+	for (nitems = 0; nitems < 1000000;)
+	{
+		int len;
+		char *bytes = dsm_cqueue_peek_next(cq, &len);
 
-	pg_usleep(1000 * 1000);
+		if (bytes == NULL)
+			dsm_cqueue_pop_seen(cq);
+		else
+			nitems++;
 
+		dsm_cqueue_sleep_if_empty(cq);
+
+		pg_usleep(rand() % 10);
+
+		if (nitems % 10000 == 0)
+		{
+			if (!printed)
+				elog(LOG, "consumed: %d", nitems);
+			printed = true;
+		}
+		else
+			printed = false;
+	}
+
+	dsm_cqueue_print(cq);
 	dsm_cqueue_detach(cq_handle);
 }
 
