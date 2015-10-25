@@ -101,7 +101,7 @@ def test_disk_spill(pipeline, clean_db):
   assert sorted(matrel_rows) != matrel_rows
 
   # TODO(usmanm): This check fails of CircleCI, so skip for now.
-  if os.environ.get('IAMCIRCLE') is None:
+  if os.environ.get('iamcircle') is None:
     # The number of disk pages should also go up and down
     disk_pages = map(lambda s: s.disk_pages, stats)
     assert sorted(disk_pages) != disk_pages

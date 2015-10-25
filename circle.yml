@@ -1,0 +1,34 @@
+machine:
+  pre:
+    # Use GCC and G++ 4.9
+    - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.9 20
+    - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.9 20
+
+  environment:
+    iamcircle: true
+
+dependencies:
+  pre:
+    - sudo apt-get update
+    - sudo apt-get install check
+    - sudo apt-get install libncurses-dev
+
+  post:
+    - ./configure CFLAGS="-O0" --prefix=/home/ubuntu/pdb --enable-cassert
+    - sudo pip install -r src/test/py/requirements.txt
+    - make
+    - make install
+    - (cd src/gis && ./autogen.sh)
+    - (cd src/gis && ./configure CFLAGS="-O0" --with-pgconfig=/home/ubuntu/pdb/bin/pipeline-config)
+    - (cd src/gis && make)
+    - (cd src/gis && make install)
+
+test:
+  override:
+    - make -s check
+
+  post:
+    - if [ -e "src/test/regress/regression.diffs" ]; then cat src/test/regress/regression.diffs; fi
+    - if [ -e "src/test/regress/regression.diffs" ]; then cat src/test/regress/log/postmaster.log; fi
+    - ! grep -A 100 -B 10 "segfault at:" src/test/regress/log/postmaster.log
+    - ! grep -A 100 -B 10 "assertion failure at:" src/test/regress/log/postmaster.log
