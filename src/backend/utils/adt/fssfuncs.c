@@ -308,3 +308,25 @@ fss_increment(PG_FUNCTION_ARGS)
 
 	PG_RETURN_POINTER(fss);
 }
+
+Datum
+fss_increment_weighted(PG_FUNCTION_ARGS)
+{
+	FSS *fss;
+	TypeCacheEntry *typ = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
+	int64 weight = PG_GETARG_INT64(2);
+
+	if (PG_ARGISNULL(0))
+		fss = FSSCreate(DEFAULT_K, typ);
+	else
+	{
+		fss = FSSFromBytes(PG_GETARG_VARLENA_P(0));
+
+		if (fss->typ.typoid != typ->type_id)
+			elog(ERROR, "type mismatch for incoming value");
+	}
+
+	fss = FSSIncrementWeighted(fss, PG_GETARG_DATUM(1), PG_ARGISNULL(1), weight);
+
+	PG_RETURN_POINTER(fss);
+}
