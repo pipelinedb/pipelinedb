@@ -15,6 +15,7 @@
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
 #include "pipeline/dsm_cqueue.h"
+#include "postmaster/bgworker.h"
 #include "utils/memutils.h"
 #include "storage/proc.h"
 
@@ -229,7 +230,6 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	for (;;)
 	{
 		int space_used;
-		int r;
 
 		tail = atomic_load(&cq->tail);
 		space_used = head - tail;
@@ -306,25 +306,26 @@ dsm_cqueue_pop_seen(dsm_cqueue *cq)
 	Latch *producer_latch;
 	uint64_t tail = atomic_load(&cq->tail);
 	uint64_t cur = atomic_load(&cq->cursor);
-	uint64_t start;
 
 	Assert(tail <= cur);
 
-	start = tail;
-	while (start < cur)
+	if (cq->pop_fn)
 	{
-		dsm_cqueue_slot *slot = dsm_cqueue_slot_get(cq, start);
-		char *pos;
+		uint64_t start = tail;
 
-		if (slot->wraps)
-			pos = cq->bytes;
-		else
-			pos = slot->bytes;
+		while (start < cur)
+		{
+			dsm_cqueue_slot *slot = dsm_cqueue_slot_get(cq, start);
+			char *pos;
 
-		if (cq->pop_fn)
+			if (slot->wraps)
+				pos = cq->bytes;
+			else
+				pos = slot->bytes;
+
 			cq->pop_fn(pos, slot->len);
-
-		start = slot->next;
+			start = slot->next;
+		}
 	}
 
 #ifdef CLOBBER_FREED_MEMORY
@@ -486,7 +487,6 @@ dsm_cqueue_test_serial(void)
 	dsm_cqueue *cq;
 	int i;
 
-
 	dsm_cqueue_init(handle);
 	cq_handle = dsm_cqueue_attach(handle);
 	cq = cq_handle->cqueue;
@@ -527,8 +527,56 @@ dsm_cqueue_test_serial(void)
 	dsm_cqueue_detach(cq_handle);
 }
 
+static void
+writer_main(Datum arg)
+{
+	dsm_handle handle = (dsm_handle) arg;
+	dsm_cqueue_handle *cq_handle = dsm_cqueue_attach(handle);
+	dsm_cqueue *cq = cq_handle->cqueue;
+
+	elog(LOG, "done");
+
+	dsm_cqueue_detach(cq_handle);
+}
+
+static void
+dsm_cqueue_test_concurrent(void)
+{
+	BackgroundWorker worker;
+	BackgroundWorkerHandle *bg_handle;
+	pid_t pid;
+	dsm_segment *segment;
+	dsm_handle seg_handle;
+	dsm_cqueue_handle *cq_handle;
+	dsm_cqueue *cq;
+
+	worker.bgw_flags = BGWORKER_BACKEND_DATABASE_CONNECTION | BGWORKER_SHMEM_ACCESS;
+	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
+	worker.bgw_restart_time = BGW_NEVER_RESTART;
+	worker.bgw_main = writer_main;
+	worker.bgw_notify_pid = MyProcPid;
+	sprintf(worker.bgw_name, "dsm_cqueue test writer process");
+
+	segment = dsm_create(8192);
+	seg_handle = dsm_segment_handle(segment);
+	dsm_cqueue_init(seg_handle);
+	cq_handle = dsm_cqueue_attach(seg_handle);
+	cq = cq_handle->cqueue;
+
+	worker.bgw_main_arg = seg_handle;
+	Assert(RegisterDynamicBackgroundWorker(&worker, &bg_handle));
+	Assert(WaitForBackgroundWorkerStartup(bg_handle, &pid) == BGWH_STARTED);
+
+	elog(LOG, "me too");
+
+	pg_usleep(1000 * 1000);
+
+	dsm_cqueue_detach(cq_handle);
+}
+
 void
 dsm_cqueue_test(void)
 {
 	dsm_cqueue_test_serial();
+	dsm_cqueue_test_concurrent();
 }
