@@ -17,6 +17,7 @@
 #include "pipeline/dsm_cqueue.h"
 #include "postmaster/bgworker.h"
 #include "utils/memutils.h"
+#include "utils/resowner.h"
 #include "storage/proc.h"
 
 #define MAGIC 0x1CEB00DA
@@ -531,12 +532,22 @@ static void
 writer_main(Datum arg)
 {
 	dsm_handle handle = (dsm_handle) arg;
-	dsm_cqueue_handle *cq_handle = dsm_cqueue_attach(handle);
-	dsm_cqueue *cq = cq_handle->cqueue;
+	dsm_cqueue_handle *cq_handle;
+	dsm_cqueue *cq;
+	ResourceOwner res;
+
+	res = ResourceOwnerCreate(NULL, "writer_main");
+	CurrentResourceOwner = res;
+
+	cq_handle = dsm_cqueue_attach(handle);
+	cq = cq_handle->cqueue;
 
 	elog(LOG, "done");
 
 	dsm_cqueue_detach(cq_handle);
+
+	CurrentResourceOwner = NULL;
+	ResourceOwnerDelete(res);
 }
 
 static void
