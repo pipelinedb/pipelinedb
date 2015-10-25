@@ -30,5 +30,5 @@ test:
   post:
     - if [ -e "src/test/regress/regression.diffs" ]; then cat src/test/regress/regression.diffs; fi
     - if [ -e "src/test/regress/regression.diffs" ]; then cat src/test/regress/log/postmaster.log; fi
-    - ! grep -A 100 -B 10 "segfault at:" src/test/regress/log/postmaster.log
-    - ! grep -A 100 -B 10 "assertion failure at:" src/test/regress/log/postmaster.log
+    - (! grep -A 100 -B 10 "segfault at:" src/test/regress/log/postmaster.log)
+    - (! grep -A 100 -B 10 "assertion failure at:" src/test/regress/log/postmaster.log)
