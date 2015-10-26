@@ -612,5 +612,5 @@ pipeline_streams(PG_FUNCTION_ARGS)
 Datum
 pipeline_version(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_TEXT_P(cstring_to_text( PIPELINE_VERSION_STR));
+	PG_RETURN_TEXT_P(cstring_to_text(PIPELINE_VERSION_STR));
 }
