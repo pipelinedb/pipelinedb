@@ -3890,14 +3890,15 @@ BackendStartup(Port *port)
 		/* Perform additional initialization and collect startup packet */
 		BackendInitialize(port);
 
+#ifdef USE_ASSERT_CHECKING
 		sprintf(msg, "backend pid is %d", MyProcPid);
-
 		if (strcmp("[local]", port->remote_host))
 		{
 			sprintf(remote, " (from %s:%s)", port->remote_host, port->remote_port);
 			strcat(msg, remote);
 		}
 		elog(LOG, "%s", msg);
+#endif
 
 		/* And run the backend */
 		BackendRun(port);
