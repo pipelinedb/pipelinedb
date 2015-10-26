@@ -37,7 +37,6 @@ typedef struct dsm_cqueue
 	int magic;
 
 	LWLock  lock;
-	LWLock  *ext_lock;
 
 	int        size; /* physical size of buffer */
 	dsm_handle handle;
@@ -68,20 +67,19 @@ typedef struct dsm_cqueue_handle
 } dsm_cqueue_handle;
 
 extern void dsm_cqueue_init(dsm_handle handle);
-extern void dsm_cqueue_init_with_ext_lock(dsm_handle handle, LWLock *lock);
-
-extern void dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_pop_fn pop_fn, dsm_cqueue_cpy_fn func);
+extern void dsm_cqueue_init_with_tranche_id(dsm_handle handle, int tranche_id);
+extern void dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_pop_fn pop_fn, dsm_cqueue_cpy_fn cpy_fn);
 
 extern dsm_cqueue_handle *dsm_cqueue_attach(dsm_handle handle);
 extern void dsm_cqueue_detach(dsm_cqueue_handle *cq_handle);
 
-extern void dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len);
+extern bool dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len, bool block);
+extern bool dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool block);
 extern void *dsm_cqueue_peek_next(dsm_cqueue *cq, int *len);
 extern void dsm_cqueue_pop_seen(dsm_cqueue *cq);
-extern void dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len);
 extern bool dsm_cqueue_is_empty(dsm_cqueue *cq);
 extern bool dsm_cqueue_has_unread(dsm_cqueue *cq);
-extern void dsm_cqueue_sleep_if_empty(dsm_cqueue *cq);
+extern void dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms);
 
 extern void dsm_cqueue_lock_head(dsm_cqueue *cq);
 extern bool dsm_cqueue_lock_head_nowait(dsm_cqueue *cq);

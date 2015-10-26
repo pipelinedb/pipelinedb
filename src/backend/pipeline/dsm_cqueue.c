@@ -34,8 +34,34 @@ dsm_find_or_attach(dsm_handle handle)
 	return segment;
 }
 
-static dsm_cqueue *
-dsm_cqueue_base_init(dsm_handle handle)
+static inline int
+dsm_cqueue_offset(dsm_cqueue *cq, int ptr)
+{
+	return ptr % cq->size;
+}
+
+
+static inline bool
+dsm_cqueue_needs_wrap(dsm_cqueue *cq, uint64_t start, int len)
+{
+	/* Is there enough space left or do we cross the physical boundary? */
+	return (start % cq->size) + len > cq->size;
+}
+
+static inline dsm_cqueue_slot *
+dsm_cqueue_slot_get(dsm_cqueue *cq, uint64_t ptr)
+{
+	return (dsm_cqueue_slot *) (cq->bytes + dsm_cqueue_offset(cq, ptr));
+}
+
+void
+dsm_cqueue_init(dsm_handle handle)
+{
+	dsm_cqueue_init_with_tranche_id(handle, 0);
+}
+
+void
+dsm_cqueue_init_with_tranche_id(dsm_handle handle, int tranche_id)
 {
 	dsm_segment *segment;
 	Size size;
@@ -66,55 +92,13 @@ dsm_cqueue_base_init(dsm_handle handle)
 	atomic_init(&cq->producer_latch, NULL);
 	atomic_init(&cq->consumer_latch, NULL);
 
+	/* Initialize producer lock. */
+	if (tranche_id == 0)
+		tranche_id = LWLockNewTrancheId();
+	LWLockInitialize(&cq->lock, tranche_id);
+
 	/* This marks the dsm_cqueue as initialized. */
 	cq->magic = MAGIC;
-
-	return cq;
-}
-
-static inline LWLock *
-dsm_cqueue_get_lock(dsm_cqueue *cq)
-{
-	if (cq->ext_lock)
-		return cq->ext_lock;
-	return &cq->lock;
-}
-
-static inline int
-dsm_cqueue_offset(dsm_cqueue *cq, int ptr)
-{
-	return ptr % cq->size;
-}
-
-
-static inline bool
-dsm_cqueue_needs_wrap(dsm_cqueue *cq, uint64_t start, int len)
-{
-	/* Is there enough space left or do we cross the physical boundary? */
-	return (start % cq->size) + len > cq->size;
-}
-
-static inline dsm_cqueue_slot *
-dsm_cqueue_slot_get(dsm_cqueue *cq, uint64_t ptr)
-{
-	return (dsm_cqueue_slot *) (cq->bytes + dsm_cqueue_offset(cq, ptr));
-}
-
-void
-dsm_cqueue_init(dsm_handle handle)
-{
-	dsm_cqueue *cq = dsm_cqueue_base_init(handle);
-	/* Obtain a new LWLock and initialize it. */
-	int tranche_id = LWLockNewTrancheId();
-	LWLockInitialize(&cq->lock, tranche_id);
-	cq->ext_lock = NULL;
-}
-
-void
-dsm_cqueue_init_with_ext_lock(dsm_handle handle, LWLock *lock)
-{
-	dsm_cqueue *cq = dsm_cqueue_base_init(handle);
-	cq->ext_lock = lock;
 }
 
 dsm_cqueue_handle *
@@ -152,7 +136,7 @@ dsm_cqueue_attach(dsm_handle handle)
 	cq_handle->tranche->array_base = &cq->lock;
 	cq_handle->tranche->array_stride = sizeof(LWLock);
 
-	LWLockRegisterTranche(dsm_cqueue_get_lock(cq)->tranche, cq_handle->tranche);
+	LWLockRegisterTranche(cq->lock.tranche, cq_handle->tranche);
 
 	MemoryContextSwitchTo(old);
 
@@ -178,16 +162,20 @@ dsm_cqueue_has_unread(dsm_cqueue *cq)
 	return atomic_load(&cq->head) > atomic_load(&cq->cursor);
 }
 
-void
-dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len)
+bool
+dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len, bool block)
 {
+	bool success;
+
 	dsm_cqueue_lock_head(cq);
-	dsm_cqueue_push_nolock(cq, ptr, len);
+	success = dsm_cqueue_push_nolock(cq, ptr, len, block);
 	dsm_cqueue_unlock_head(cq);
+
+	return success;
 }
 
-void
-dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
+bool
+dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool block)
 {
 	LWLock *lock;
 	uint64_t head;
@@ -199,8 +187,9 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	char *pos;
 	bool needs_wrap;
 
-	lock = dsm_cqueue_get_lock(cq);
+	Assert(cq->magic == MAGIC);
 
+	lock = &cq->lock;
 	Assert(LWLockHeldByMe(lock));
 
 	len_needed = sizeof(dsm_cqueue_slot) + len;
@@ -241,6 +230,8 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 		/* Is there enough space in the buffer? */
 		if (cq->size - space_used >= len_needed)
 			break;
+		else if (!block)
+			return false;
 
 		WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
 		CHECK_FOR_INTERRUPTS();
@@ -275,6 +266,8 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	consumer_latch = (Latch *) atomic_load(&cq->consumer_latch);
 	if (consumer_latch)
 		SetLatch(consumer_latch);
+
+	return true;
 }
 
 void *
@@ -282,6 +275,8 @@ dsm_cqueue_peek_next(dsm_cqueue *cq, int *len)
 {
 	dsm_cqueue_slot *slot;
 	char *pos;
+
+	Assert(cq->magic == MAGIC);
 
 	/* Are there any unread slots? */
 	if (!dsm_cqueue_has_unread(cq))
@@ -308,8 +303,13 @@ void
 dsm_cqueue_pop_seen(dsm_cqueue *cq)
 {
 	Latch *producer_latch;
-	uint64_t tail = atomic_load(&cq->tail);
-	uint64_t cur = atomic_load(&cq->cursor);
+	uint64_t tail;
+	uint64_t cur;
+
+	Assert(cq->magic == MAGIC);
+
+	tail = atomic_load(&cq->tail);
+	cur = atomic_load(&cq->cursor);
 
 	Assert(tail <= cur);
 
@@ -360,11 +360,17 @@ dsm_cqueue_pop_seen(dsm_cqueue *cq)
 }
 
 void
-dsm_cqueue_sleep_if_empty(dsm_cqueue *cq)
+dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
 {
 	Latch *consumer_latch;
-	uint64_t head = atomic_load(&cq->head);
-	uint64_t tail = atomic_load(&cq->tail);
+	uint64_t head;
+	uint64_t tail;
+	int flags;
+
+	Assert(cq->magic == MAGIC);
+
+	head = atomic_load(&cq->head);
+	tail = atomic_load(&cq->tail);
 
 	Assert(tail <= head);
 
@@ -374,6 +380,10 @@ dsm_cqueue_sleep_if_empty(dsm_cqueue *cq)
 	consumer_latch = &MyProc->procLatch;
 	atomic_store(&cq->consumer_latch, consumer_latch);
 
+	flags = WL_LATCH_SET | WL_POSTMASTER_DEATH;
+	if (timeoutms > 0)
+		flags |= WL_TIMEOUT;
+
 	for (;;)
 	{
 		head = atomic_load(&cq->head);
@@ -381,7 +391,7 @@ dsm_cqueue_sleep_if_empty(dsm_cqueue *cq)
 		if (head > tail)
 			break;
 
-		WaitLatch(consumer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+		WaitLatch(consumer_latch, flags, timeoutms);
 		CHECK_FOR_INTERRUPTS();
 		ResetLatch(consumer_latch);
 	}
@@ -399,19 +409,22 @@ dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_pop_fn pop_fn, dsm_cqueue_cpy
 void
 dsm_cqueue_lock_head(dsm_cqueue *cq)
 {
-	LWLockAcquire(dsm_cqueue_get_lock(cq), LW_EXCLUSIVE);
+	Assert(cq->magic == MAGIC);
+	LWLockAcquire(&cq->lock, LW_EXCLUSIVE);
 }
 
 void
 dsm_cqueue_unlock_head(dsm_cqueue *cq)
 {
-	LWLockRelease(dsm_cqueue_get_lock(cq));
+	Assert(cq->magic == MAGIC);
+	LWLockRelease(&cq->lock);
 }
 
 bool
 dsm_cqueue_lock_head_nowait(dsm_cqueue *cq)
 {
-	return LWLockConditionalAcquire(dsm_cqueue_get_lock(cq), LW_EXCLUSIVE);
+	Assert(cq->magic == MAGIC);
+	return LWLockConditionalAcquire(&cq->lock, LW_EXCLUSIVE);
 }
 
 static void
@@ -457,10 +470,16 @@ dsm_cqueue_print(dsm_cqueue *cq)
 {
 	StringInfo buf = makeStringInfo();
 	char *str;
-	uint64_t head = atomic_load(&cq->head);
-	uint64_t tail = atomic_load(&cq->tail);
+	uint64_t head;
+	uint64_t tail;
 	int nitems = 0;
-	uint64_t start = tail;
+	uint64_t start;
+
+	Assert(cq->magic == MAGIC);
+
+	head = atomic_load(&cq->head);
+	tail = atomic_load(&cq->tail);
+	start = tail;
 
 	while (start < head)
 	{
@@ -509,7 +528,7 @@ dsm_cqueue_test_serial(void)
 
 		for (j = 0; j < nitems; j++)
 		{
-			dsm_cqueue_push(cq, hw, strlen(hw) + 1);
+			dsm_cqueue_push(cq, hw, strlen(hw) + 1, true);
 			dsm_cqueue_check_consistency(cq);
 		}
 
@@ -554,7 +573,7 @@ producer_main(Datum arg)
 	for (i = 0; i < 1000000; i++)
 	{
 		int len = rand() % 1024 + 1;
-		dsm_cqueue_push(cq, data, len);
+		dsm_cqueue_push(cq, data, len, true);
 
 		pg_usleep(rand() % 10);
 
@@ -608,7 +627,7 @@ dsm_cqueue_test_concurrent(void)
 		else
 			nitems++;
 
-		dsm_cqueue_sleep_if_empty(cq);
+		dsm_cqueue_wait_non_empty(cq, 0);
 
 		pg_usleep(rand() % 10);
 
