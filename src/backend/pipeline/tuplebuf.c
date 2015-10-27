@@ -843,7 +843,7 @@ TupleBufferBatchReaderNext(TupleBufferBatchReader *reader)
 		 * break early here in case continuous queries were deactivated.
 		 */
 		if (TimestampDifferenceExceeds(reader->start_time, GetCurrentTimestamp(), reader->params->max_wait) ||
-				!reader->rdr->proc->group->active || reader->rdr->proc->group->terminate)
+				reader->rdr->proc->group->terminate)
 		{
 			reader->batch_done = true;
 			reader->depleted = true;
@@ -961,7 +961,7 @@ TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_
 {
 	if (!TupleBufferHasUnreadSlots(reader->rdr) &&
 			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->max_wait) &&
-			!(!reader->rdr->proc->group->active || reader->rdr->proc->group->terminate))
+			!reader->rdr->proc->group->terminate)
 	{
 		cq_stat_report(true);
 
@@ -980,7 +980,7 @@ TupleBufferBatchReaderTrySleepTimeout(TupleBufferBatchReader *reader,
 {
 	if (!TupleBufferHasUnreadSlots(reader->rdr) &&
 			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->max_wait) &&
-			!(!reader->rdr->proc->group->active || reader->rdr->proc->group->terminate))
+			!reader->rdr->proc->group->terminate)
 	{
 		cq_stat_report(true);
 

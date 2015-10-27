@@ -33,7 +33,7 @@
 typedef struct AdhocShmemStruct
 {
 	int counter; /* always incrementing */
-	ContQueryProcGroup groups[1]; /* dynamically allocated */
+	ContQueryDatabaseMetadata groups[1]; /* dynamically allocated */
 } AdhocShmemStruct;
 
 static AdhocShmemStruct *AdhocShmem;
@@ -43,7 +43,7 @@ adhoc_size_required()
 {
 	return MAXALIGN(add_size(sizeof(int), 
 					mul_size(max_worker_processes,
-								sizeof(ContQueryProcGroup))));
+								sizeof(ContQueryDatabaseMetadata))));
 }
 
 void
@@ -65,7 +65,7 @@ AdhocShmemInit(void)
 ContQueryProc *
 AdhocMgrGetProc()
 {
-	ContQueryProcGroup *grp = 0;
+	ContQueryDatabaseMetadata *grp = 0;
 	ContQueryProc *proc = 0;
 
 	int i = 0;
@@ -90,9 +90,8 @@ AdhocMgrGetProc()
 
 	if (grp)
 	{
-		MemSet(grp, 0, sizeof(ContQueryProcGroup));
+		MemSet(grp, 0, sizeof(ContQueryDatabaseMetadata));
 		grp->db_oid = MyDatabaseId;
-		grp->active = true;
 
 		proc = grp->procs;
 
@@ -100,7 +99,6 @@ AdhocMgrGetProc()
 		proc->id = ind;
 		proc->group_id = 0;
 		proc->latch = &MyProc->procLatch;
-		proc->active = true;
 		proc->group = grp;
 	}
 
@@ -115,10 +113,10 @@ AdhocMgrGetProc()
 void
 AdhocMgrReleaseProc(ContQueryProc *proc)
 {
-	ContQueryProcGroup *grp = proc->group;
+	ContQueryDatabaseMetadata *grp = proc->group;
 
 	LWLockAcquire(AdhocMgrLock, LW_EXCLUSIVE);
-	MemSet(grp, 0, sizeof(ContQueryProcGroup));
+	MemSet(grp, 0, sizeof(ContQueryDatabaseMetadata));
 	LWLockRelease(AdhocMgrLock);
 }
 

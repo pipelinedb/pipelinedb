@@ -134,7 +134,7 @@ ContQuerySchedulerShmemInit(void)
 		MemSet(ContQuerySchedulerShmem, 0, ContQuerySchedulerShmemSize());
 
 		info.keysize = sizeof(Oid);
-		info.entrysize = MAXALIGN(add_size(sizeof(ContQueryProcGroup), mul_size(sizeof(ContQueryProc), TOTAL_SLOTS)));
+		info.entrysize = MAXALIGN(add_size(sizeof(ContQueryDatabaseMetadata), mul_size(sizeof(ContQueryProc), TOTAL_SLOTS)));
 		info.hash = oid_hash;
 
 		ContQuerySchedulerShmem->proc_table = ShmemInitHash("ContQueryScheduler Proc Table", INIT_PROC_TABLE_SZ,
@@ -471,7 +471,7 @@ run_background_proc(ContQueryProc *proc)
 }
 
 static void
-start_group(ContQueryProcGroup *grp)
+start_group(ContQueryDatabaseMetadata *grp)
 {
 	int slot_idx;
 	int group_id;
@@ -479,7 +479,6 @@ start_group(ContQueryProcGroup *grp)
 	SpinLockInit(&grp->mutex);
 	SpinLockAcquire(&grp->mutex);
 
-	grp->active = true;
 	grp->terminate = false;
 
 	/* Start workers */
@@ -514,12 +513,10 @@ start_group(ContQueryProcGroup *grp)
 }
 
 static void
-terminate_group(ContQueryProcGroup *grp)
+terminate_group(ContQueryDatabaseMetadata *grp)
 {
 	bool found;
 	int i;
-
-	grp->active = true;
 
 	for (i = 0; i < TOTAL_SLOTS; i++)
 	{
@@ -704,7 +701,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		{
 			DatabaseEntry *db_entry = lfirst(lc);
 			bool found;
-			ContQueryProcGroup *grp = hash_search(ContQuerySchedulerShmem->proc_table, &db_entry->oid, HASH_ENTER, &found);
+			ContQueryDatabaseMetadata *grp = hash_search(ContQuerySchedulerShmem->proc_table, &db_entry->oid, HASH_ENTER, &found);
 
 			/* If we don't have an entry for this dboid, initialize a new one and fire off bg procs */
 			if (!found)
@@ -759,12 +756,12 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		if (got_SIGUSR2)
 		{
 			HASH_SEQ_STATUS status;
-			ContQueryProcGroup *grp;
+			ContQueryDatabaseMetadata *grp;
 
 			got_SIGUSR2 = false;
 
 			hash_seq_init(&status, ContQuerySchedulerShmem->proc_table);
-			while ((grp = (ContQueryProcGroup *) hash_seq_search(&status)) != NULL)
+			while ((grp = (ContQueryDatabaseMetadata *) hash_seq_search(&status)) != NULL)
 			{
 				ListCell *lc;
 
@@ -844,7 +841,7 @@ void
 SignalContQuerySchedulerTerminate(Oid db_oid)
 {
 	bool found;
-	ContQueryProcGroup *grp = (ContQueryProcGroup *) hash_search(ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, &found);
+	ContQueryDatabaseMetadata *grp = (ContQueryDatabaseMetadata *) hash_search(ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, &found);
 
 	if (found)
 	{

@@ -24,11 +24,11 @@ typedef enum
 {
 	Combiner,
 	Worker,
-	Scheduler, /* unused */
-	Adhoc
+	Adhoc,
+	Scheduler /* unused */
 } ContQueryProcType;
 
-typedef struct ContQueryProcGroup ContQueryProcGroup;
+typedef struct ContQueryDatabaseMetadata ContQueryDatabaseMetadata;
 
 typedef struct
 {
@@ -36,17 +36,15 @@ typedef struct
 	int id; /* unique across all cont query processes */
 	int group_id; /* unqiue [0, n) for each db_oid, type pair */
 	Latch *latch;
-	sig_atomic_t active;
 	BackgroundWorkerHandle handle;
-	ContQueryProcGroup *group;
+	ContQueryDatabaseMetadata *group;
 } ContQueryProc;
 
-struct ContQueryProcGroup
+struct ContQueryDatabaseMetadata
 {
-	Oid db_oid;
+	Oid      db_oid;
 	NameData db_name;
-	slock_t mutex;
-	sig_atomic_t active;
+	slock_t  mutex;
 	sig_atomic_t terminate;
 	ContQueryProc procs[1]; /* number of slots is equal to continuous_query_num_combiners + continuous_query_num_workers */
 };
