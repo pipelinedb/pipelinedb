@@ -39,6 +39,7 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "executor/nodeModifyTable.h"
@@ -89,7 +90,7 @@ ExecCheckPlanOutput(Relation resultRel, List *targetList)
 		if (!attr->attisdropped)
 		{
 			/* Normal case: demand type match */
-			if (exprType((Node *) tle->expr) != attr->atttypid)
+			if (exprType((Node *) tle->expr) != attr->atttypid && !is_inferred_stream_relation(resultRel))
 				ereport(ERROR,
 						(errcode(ERRCODE_DATATYPE_MISMATCH),
 						 errmsg("table row type and query-specified row type do not match"),

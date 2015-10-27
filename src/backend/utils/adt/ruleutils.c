@@ -3151,7 +3151,7 @@ set_relation_column_names(deparse_namespace *dpns, RangeTblEntry *rte,
 	 * get_rte_attribute_name, except that it's important to disregard dropped
 	 * columns.  We put NULL into the array for a dropped column.
 	 */
-	if (rte->rtekind == RTE_RELATION)
+	if (rte->rtekind == RTE_RELATION && !is_stream_rte(rte))
 	{
 		/* Relation --- look to the system catalogs for up-to-date info */
 		Relation	rel;
@@ -5951,7 +5951,6 @@ get_name_for_var_field(Var *var, int fieldno,
 	{
 		case RTE_RELATION:
 		case RTE_VALUES:
-		case RTE_STREAM:
 
 			/*
 			 * This case should not occur: a column of a table or values list
@@ -8439,7 +8438,6 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 		switch (rte->rtekind)
 		{
 			case RTE_RELATION:
-			case RTE_STREAM:
 				/* Normal relation RTE */
 				appendStringInfo(buf, "%s%s",
 								 only_marker(rte),

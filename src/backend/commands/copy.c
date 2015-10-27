@@ -910,7 +910,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	}
 	else
 	{
-		if (rel && rel->rd_rel->relkind == RELKIND_STREAM)
+		if (rel && is_stream_relation(rel))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("cannot COPY data out of streams")));
@@ -2150,7 +2150,7 @@ CopyFrom(CopyState cstate)
 
 	Assert(cstate->rel);
 
-	if (cstate->rel->rd_rel->relkind != RELKIND_RELATION && cstate->rel->rd_rel->relkind != RELKIND_STREAM)
+	if (cstate->rel->rd_rel->relkind != RELKIND_RELATION && !is_stream_relation(cstate->rel))
 	{
 		if (cstate->rel->rd_rel->relkind == RELKIND_VIEW)
 			ereport(ERROR,

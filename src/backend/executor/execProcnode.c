@@ -107,7 +107,6 @@
 #include "executor/nodeSeqscan.h"
 #include "executor/nodeSetOp.h"
 #include "executor/nodeSort.h"
-#include "executor/nodeStreamscan.h"
 #include "executor/nodeStreamTablejoin.h"
 #include "executor/nodeSubplan.h"
 #include "executor/nodeSubqueryscan.h"
@@ -200,11 +199,6 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 		case T_SeqScan:
 			result = (PlanState *) ExecInitSeqScan((SeqScan *) node,
 												   estate, eflags);
-			break;
-
-		case T_StreamScan:
-			result = (PlanState *) ExecInitStreamScan((StreamScan *) node,
-													 estate, eflags);
 			break;
 
 		case T_TuplestoreScan:
@@ -394,7 +388,6 @@ ExecEndBatch(PlanState *node)
 			break;
 
 		case T_StreamScanState:
-			ExecEndBatchStreamScan((StreamScanState *) node);
 			break;
 
 		case T_ContinuousUniqueState:
@@ -465,10 +458,6 @@ ExecProcNode(PlanState *node)
 			 */
 		case T_SeqScanState:
 			result = ExecSeqScan((SeqScanState *) node);
-			break;
-
-		case T_StreamScanState:
-			result = ExecStreamScan((StreamScanState *) node);
 			break;
 
 		case T_TuplestoreScanState:
@@ -722,10 +711,6 @@ ExecEndNode(PlanState *node)
 			 */
 		case T_SeqScanState:
 			ExecEndSeqScan((SeqScanState *) node);
-			break;
-
-		case T_StreamScanState:
-			ExecEndStreamScan((StreamScanState *) node);
 			break;
 
 		case T_IndexScanState:

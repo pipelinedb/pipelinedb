@@ -963,12 +963,14 @@ TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_
 			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->max_wait) &&
 			!(!reader->rdr->proc->group->active || reader->rdr->proc->group->terminate))
 	{
+		char *proc_name = GetContQueryProcName(reader->rdr->proc);
 		cq_stat_report(true);
 
-		pgstat_report_activity(STATE_IDLE, GetContQueryProcName(reader->rdr->proc));
+		pgstat_report_activity(STATE_IDLE, proc_name);
 		TupleBufferTryWait(reader->rdr);
-		pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(reader->rdr->proc));
+		pgstat_report_activity(STATE_RUNNING, proc_name);
 
+		pfree(proc_name);
 		ResetLatch(reader->rdr->proc->latch);
 	}
 }
@@ -982,12 +984,14 @@ TupleBufferBatchReaderTrySleepTimeout(TupleBufferBatchReader *reader,
 			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->max_wait) &&
 			!(!reader->rdr->proc->group->active || reader->rdr->proc->group->terminate))
 	{
+		char *proc_name = GetContQueryProcName(reader->rdr->proc);
 		cq_stat_report(true);
 
-		pgstat_report_activity(STATE_IDLE, GetContQueryProcName(reader->rdr->proc));
+		pgstat_report_activity(STATE_IDLE, proc_name);
 		TupleBufferTryWaitTimeout(reader->rdr, timeout);
-		pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(reader->rdr->proc));
+		pgstat_report_activity(STATE_RUNNING, proc_name);
 
+		pfree(proc_name);
 		ResetLatch(reader->rdr->proc->latch);
 	}
 }

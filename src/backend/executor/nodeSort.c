@@ -140,7 +140,7 @@ ExecSort(SortState *node)
 								  ScanDirectionIsForward(dir),
 								  slot);
 
-	if (TupIsNull(slot) && IS_STREAM_TREE(node->ss.ps.plan->lefttree))
+	if (TupIsNull(slot) && IS_STREAM_TREE(outerPlanState(node)))
 		node->sort_Done = false;
 
 	return slot;

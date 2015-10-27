@@ -259,7 +259,7 @@ ExecInitBitmapIndexScan(BitmapIndexScan *node, EState *estate, int eflags)
 	 * on the materialzation table and any indices that might be used while executing the
 	 * query. See cont_combiner.c:combine.
 	 */
-	if (eflags & EXEC_FLAG_COMBINE_LOOKUP)
+	if (eflags & EXEC_NO_MATREL_LOCKING)
 		lockmode = NoLock;
 	else if (relistarget)
 		lockmode = AccessShareLock;

@@ -27,6 +27,7 @@
 #include "access/xlog.h"
 #include "catalog/catalog.h"
 #include "catalog/heap.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "foreign/fdwapi.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -878,6 +879,34 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 			relation = heap_open(rte->relid, NoLock);
 			numattrs = RelationGetNumberOfAttributes(relation);
 
+			if (is_stream_rte(rte))
+			{
+				expandRTE(rte, varno, 0, -1, true /* include dropped */ ,
+						  NULL, &colvars);
+				foreach(l, colvars)
+				{
+					var = (Var *) lfirst(l);
+
+					/*
+					 * A non-Var in expandRTE's output means a dropped column;
+					 * must punt.
+					 */
+					if (!IsA(var, Var))
+					{
+						tlist = NIL;
+						break;
+					}
+
+					tlist = lappend(tlist,
+									makeTargetEntry((Expr *) var,
+													var->varattno,
+													NULL,
+													false));
+				}
+
+				heap_close(relation, NoLock);
+				break;
+			}
 			for (attrno = 1; attrno <= numattrs; attrno++)
 			{
 				Form_pg_attribute att_tup = relation->rd_att->attrs[attrno - 1];
@@ -926,7 +955,6 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 			}
 			break;
 
-		case RTE_STREAM:
 		case RTE_FUNCTION:
 		case RTE_VALUES:
 		case RTE_CTE:

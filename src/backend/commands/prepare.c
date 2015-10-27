@@ -151,16 +151,8 @@ PrepareQuery(PrepareStmt *stmt, const char *queryString)
 			break;
 	}
 
-	if (IsA(stmt->query, InsertStmt) && RangeVarIsForStream(((InsertStmt *) stmt->query)->relation, NULL))
-	{
-		InsertStmt *ins = (InsertStmt *) stmt->query;
-		StorePreparedStreamInsert(stmt->name, ins);
-	}
-	else
-	{
-		/* Rewrite the query. The result could be 0, 1, or many queries. */
-		query_list = QueryRewrite(query);
-	}
+	/* Rewrite the query. The result could be 0, 1, or many queries. */
+	query_list = QueryRewrite(query);
 
 
 	/* Finish filling in the CachedPlanSource */
@@ -210,18 +202,9 @@ ExecuteQuery(ExecuteStmt *stmt, IntoClause *intoClause,
 	char	   *query_string;
 	int			eflags;
 	long		count;
-	PreparedStreamInsertStmt *stream_insert_stmt = FetchPreparedStreamInsert(stmt->name);
 
 	/* Look it up in the hash table */
 	entry = FetchPreparedStatement(stmt->name, true);
-
-	if (stream_insert_stmt)
-	{
-		InsertStmt *ins = (InsertStmt *) entry->plansource->raw_parse_tree;
-		exec_stream_inserts(ins, NULL, list_make1(stmt->params));
-
-		return;
-	}
 
 	/* Shouldn't find a non-fixed-result cached plan */
 	if (!entry->plansource->fixed_result)
@@ -603,9 +586,6 @@ DropPreparedStatement(const char *stmt_name, bool showError)
 		/* Now we can remove the hash table entry */
 		hash_search(prepared_queries, entry->stmt_name, HASH_REMOVE, NULL);
 	}
-
-	/* just in case it's a prepared stream insert */
-	DropPreparedStreamInsert(stmt_name);
 }
 
 /*

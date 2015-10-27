@@ -43,6 +43,7 @@
 
 #include "postgres.h"
 
+#include "catalog/pipeline_stream_fn.h"
 #include "access/relscan.h"
 #include "access/transam.h"
 #include "catalog/index.h"
@@ -836,11 +837,20 @@ ExecOpenScanRelation(EState *estate, Index scanrelid, int eflags)
 	 * on the materialzation table and any indices that might be used while executing the
 	 * query. See cont_combiner.c:combine.
 	 */
-	if (eflags & EXEC_FLAG_COMBINE_LOOKUP)
+	if (eflags & EXEC_NO_MATREL_LOCKING)
 		lockmode = NoLock;
 
 	/* Open the relation and acquire lock as needed */
 	reloid = getrelid(scanrelid, estate->es_range_table);
+
+	/*
+	 * Streams are only scanned within CQ worker procs, so they're already
+	 * protected and locking them here would introduce deadlocks between stream
+	 * writers and CV droppers when synchronous stream inserts are enabled.
+	 */
+	if ((eflags & EXEC_NO_STREAM_LOCKING) && is_stream_relid(reloid))
+		lockmode = NoLock;
+
 	rel = heap_open(reloid, lockmode);
 
 	/*

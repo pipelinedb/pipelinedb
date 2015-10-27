@@ -54,6 +54,7 @@
 #include "catalog/namespace.h"
 #include "catalog/pg_trigger.h"
 #include "catalog/pipeline_query.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/defrem.h"
 #include "commands/trigger.h"
 #include "nodes/makefuncs.h"
@@ -2790,18 +2791,20 @@ ExplainContViewStmt:
 CreateStreamStmt:	CREATE STREAM qualified_name '(' OptTableElementList ')'
 				{
 					CreateStreamStmt *n = makeNode(CreateStreamStmt);
-					n->base.relation = $3;
-					n->base.tableElts = $5;
-					n->base.if_not_exists = false;
+					n->ft.base.relation = $3;
+					n->ft.base.tableElts = $5;
+					n->ft.base.if_not_exists = false;
+					n->ft.servername = PIPELINE_STREAM_SERVER;
 					n->is_inferred = false;
 					$$ = (Node *)n;
 				}
 		| CREATE STREAM IF_P NOT EXISTS qualified_name '(' OptTableElementList ')'
 				{
 					CreateStreamStmt *n = makeNode(CreateStreamStmt);
-					n->base.relation = $6;
-					n->base.tableElts = $8;
-					n->base.if_not_exists = true;
+					n->ft.base.relation = $6;
+					n->ft.base.tableElts = $8;
+					n->ft.base.if_not_exists = true;
+					n->ft.servername = PIPELINE_STREAM_SERVER;
 					n->is_inferred = false;
 					$$ = (Node *)n;
 				}

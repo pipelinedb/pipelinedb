@@ -164,10 +164,10 @@ GetContQueryProcName(ContQueryProc *proc)
 		sprintf(buf, "%s%d [%s]", "worker", proc->group_id, NameStr(proc->group->db_name));
 		break;
 	case Scheduler:
-		return "scheduler";
+		return pstrdup("scheduler");
 		break;
 	case Adhoc:
-		return "adhoc";
+		return pstrdup("adhoc");
 		break;
 	}
 

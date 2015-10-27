@@ -49,6 +49,7 @@
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/typcache.h"
@@ -1189,6 +1190,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 	}
 
 	/* Transform the fromClause because we do a little bit of expression type inference below */
+	context->pstate->p_no_locking = true;
 	transformFromClause(context->pstate, copyObject(select->fromClause));
 
 	/* Validate aggregate functions */
@@ -1308,6 +1310,7 @@ parserGetStreamDescr(Oid relid, ContAnalyzeContext *context)
 	Form_pg_attribute *attrsArray;
 	int i;
 	RangeVar *rv = (RangeVar *) linitial(context->streams); /* there is always one stream */
+	MemoryContext old;
 
 	foreach(lc, context->types)
 	{
@@ -1369,6 +1372,9 @@ parserGetStreamDescr(Oid relid, ContAnalyzeContext *context)
 		ReleaseSysCache((HeapTuple) type);
 	}
 
+	/* Relcache entries are expected to live in CacheMemoryContext */
+	old = MemoryContextSwitchTo(CacheMemoryContext);
+
 	if (!saw_atime)
 	{
 		Form_pg_attribute attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
@@ -1401,7 +1407,7 @@ parserGetStreamDescr(Oid relid, ContAnalyzeContext *context)
 				attr->atttypid, InvalidOid, attr->attndims);
 	}
 
-	pfree(attrsArray);
+	MemoryContextSwitchTo(old);
 
 	return tupdesc;
 }
@@ -1600,7 +1606,7 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 	ListCell *lc;
 	bool saw_atime = false;
 
-	foreach(lc, stmt->base.tableElts)
+	foreach(lc, stmt->ft.base.tableElts)
 	{
 		ColumnDef *coldef = (ColumnDef *) lfirst(lc);
 		if (pg_strcasecmp(coldef->colname, ARRIVAL_TIMESTAMP) == 0)
@@ -1629,7 +1635,7 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 		coldef->constraints = NIL;
 		coldef->typeName = typename;
 
-		stmt->base.tableElts = lappend(stmt->base.tableElts, coldef);
+		stmt->ft.base.tableElts = lappend(stmt->ft.base.tableElts, coldef);
 	}
 }
 

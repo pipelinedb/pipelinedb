@@ -313,10 +313,6 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 					set_plain_rel_size(root, rel, rte);
 				}
 				break;
-			case RTE_STREAM:
-				rel->tuples = continuous_query_batch_size;
-				set_baserel_size_estimates(root, rel);
-				break;
 			case RTE_SUBQUERY:
 
 				/*
@@ -384,11 +380,6 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 					set_plain_rel_pathlist(root, rel, rte);
 				}
 				break;
-			case RTE_STREAM:
-				/* if this is a stream, there's only one access path */
-				add_path(rel, create_streamscan_path(root, rel, false));
-				set_cheapest(rel);
-				return;
 			case RTE_SUBQUERY:
 				/* Subquery --- fully handled during set_rel_size */
 				break;

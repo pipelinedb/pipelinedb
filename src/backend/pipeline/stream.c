@@ -55,15 +55,11 @@
 bool synchronous_stream_insert;
 char *stream_targets = NULL;
 
-static HTAB *prepared_stream_inserts = NULL;
-
-static InsertStmt *extended_stream_insert = NULL;
-
 int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;
 void *copy_iter_arg = NULL;
 
-static Bitmapset *
-get_stream_readers(Oid relid)
+Bitmapset *
+GetStreamReaders(Oid relid)
 {
 	Bitmapset *targets = GetLocalStreamReaders(relid);
 	char *name = get_rel_name(relid);
@@ -86,172 +82,10 @@ get_stream_readers(Oid relid)
 }
 
 /*
- * get_desc
- *
- * Build a tuple descriptor from a query's target list
- */
-static TupleDesc
-get_desc(List *colnames, Query *q)
-{
-	ListCell *lc;
-	TupleDesc desc = CreateTemplateTupleDesc(list_length(q->targetList), false);
-	AttrNumber attno = 1;
-	AttrNumber count = 0;
-
-	foreach(lc, q->targetList)
-	{
-		TargetEntry *te = (TargetEntry *) lfirst(lc);
-		if (!te->resjunk)
-			count++;
-	}
-
-	if (!AttributeNumberIsValid(count))
-		elog(ERROR, "could not determine tuple descriptor from target list");
-
-	desc = CreateTemplateTupleDesc(count, false);
-	foreach(lc, q->targetList)
-	{
-		TargetEntry *te = (TargetEntry *) lfirst(lc);
-
-		if (te->resjunk)
-			continue;
-
-		TupleDescInitEntry(desc, attno,
-						   strVal(list_nth(colnames, attno - 1)),
-						   exprType((Node *) te->expr),
-						   -1,
-						   0);
-		TupleDescInitEntryCollation(desc,
-				attno, exprCollation((Node *) te->expr));
-		attno++;
-	}
-
-	return desc;
-}
-
-/*
- * StorePreparedStreamInsert
- *
- * Create a PreparedStreamInsertStmt with the given column names
- */
-PreparedStreamInsertStmt *
-StorePreparedStreamInsert(const char *name, InsertStmt *insert)
-{
-	PreparedStreamInsertStmt *result;
-	bool found;
-	ListCell *lc;
-	int i = 0;
-
-	if (prepared_stream_inserts == NULL)
-	{
-		HASHCTL ctl;
-
-		MemSet(&ctl, 0, sizeof(ctl));
-
-		ctl.keysize = NAMEDATALEN;
-		ctl.entrysize = sizeof(PreparedStreamInsertStmt);
-
-		prepared_stream_inserts = hash_create("Prepared Stream Inserts", 2, &ctl, HASH_ELEM);
-	}
-
-	result = (PreparedStreamInsertStmt *)
-			hash_search(prepared_stream_inserts, (void *) name, HASH_ENTER, &found);
-
-	result->inserts = NIL;
-	result->relid = RangeVarGetRelid(insert->relation, AccessShareLock, false);
-	result->desc = CreateTemplateTupleDesc(list_length(insert->cols), false);
-
-	foreach(lc, insert->cols)
-	{
-		ResTarget *rt;
-
-		Assert(IsA(lfirst(lc), ResTarget));
-		rt = (ResTarget *) lfirst(lc);
-
-		Assert(rt->name);
-		namestrcpy(&(result->desc->attrs[i++]->attname), rt->name);
-	}
-
-	return result;
-}
-
-/*
- * SetExtendedStreamInsert
- *
- * Set a stream insert that was added via PARSE for later reading by BIND/EXECUTE
- */
-void
-SetExtendedStreamInsert(Node *ins)
-{
-	Assert(IsA(ins, InsertStmt));
-
-	extended_stream_insert = (InsertStmt *) ins;
-}
-
-/*
- * GetExtendedStreamInsert
- *
- * Retrieve the stream insert that was added via PARSE
- */
-InsertStmt *
-GetExtendedStreamInsert(void)
-{
-	Assert(IsA(extended_stream_insert, InsertStmt));
-
-	return (InsertStmt *) extended_stream_insert;
-}
-
-/*
- * HaveExtendedStreamInserts
- */
-bool
-HaveExtendedStreamInsert(void)
-{
-	return (extended_stream_insert != NULL);
-}
-
-/*
- * AddPreparedStreamInsert
- *
- * Add a Datum tuple to the PreparedStreamInsertStmt
- */
-void
-AddPreparedStreamInsert(PreparedStreamInsertStmt *stmt, ParamListInfoData *params)
-{
-	stmt->inserts = lappend(stmt->inserts, params);
-}
-
-/*
- * FetchPreparedStreamInsert
- *
- * Retrieve the given PreparedStreamInsertStmt, or NULL of it doesn't exist
- */
-PreparedStreamInsertStmt *
-FetchPreparedStreamInsert(const char *name)
-{
-	if (prepared_stream_inserts == NULL)
-		return NULL;
-
-	return (PreparedStreamInsertStmt *)
-			hash_search(prepared_stream_inserts, (void *) name, HASH_FIND, NULL);
-}
-
-/*
- * DropPreparedStreamInsert
- *
- * Remove a PreparedStreamInsertStmt
- */
-void
-DropPreparedStreamInsert(const char *name)
-{
-	if (prepared_stream_inserts)
-		hash_search(prepared_stream_inserts, (void *) name, HASH_REMOVE, NULL);
-}
-
-/*
  * Initialize data structures to support sending data to adhoc tuple buffer
  */
-static void init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
+static void
+init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
 {
 	int num_adhoc = bms_num_members(adhoc_targets);
 	int ctr = 0;
@@ -288,7 +122,8 @@ static void init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
  * Send a heap tuple to the adhoc buffer, by making a new stream tuple
  * for each adhoc query that is listening
  */
-int SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
+int
+SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
 					Size *bytes)
 {
 	int i = 0;
@@ -320,7 +155,8 @@ int SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
 	return count;
 }
 
-static void WaitForAdhoc(AdhocData *adhoc_data)
+static void
+WaitForAdhoc(AdhocData *adhoc_data)
 {
 	int i = 0;
 	for (i = 0; i < adhoc_data->num_adhoc; ++i)
@@ -332,273 +168,6 @@ static void WaitForAdhoc(AdhocData *adhoc_data)
 									   query->active_flag,
 									   query->cq_id);
 	}
-}
-
-/*
- * InsertIntoStreamPrepared
- *
- * Send Datum-encoded events to the given stream
- */
-int
-InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
-{
-	ListCell *lc;
-	int count = 0;
-
-	Bitmapset *all_targets = get_stream_readers(pstmt->relid);
-	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
-
-	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
-		bms_difference(all_targets, targets) : NULL;
-
-	AdhocData adhoc_data;
-
-	int num_worker = bms_num_members(targets);
-
-	InsertBatchAck acks[1];
-	InsertBatch *batch = NULL;
-	int num_batches = 0;
-	Size size = 0;
-
-	init_adhoc_data(&adhoc_data, adhoc_targets);
-
-	if (synchronous_stream_insert)
-	{
-		if (num_worker)
-		{
-			batch = InsertBatchCreate();
-			num_batches = 1;
-
-			acks[0].batch_id = batch->id;
-			acks[0].batch = batch;
-			acks[0].count = 1;
-		}
-	}
-
-	Assert(pstmt->desc);
-
-	foreach(lc, pstmt->inserts)
-	{
-		int i;
-		ParamListInfoData *params = (ParamListInfoData *) lfirst(lc);
-		Datum *values = palloc0(params->numParams * sizeof(Datum));
-		bool *nulls = palloc0(params->numParams * sizeof(bool));
-		StreamTuple *tuple;
-
-		if (pstmt->desc->natts != params->numParams)
-			elog(ERROR, "expected %d prepared parameters but received %d", pstmt->desc->natts, params->numParams);
-
-		for (i=0; i<params->numParams; i++)
-		{
-			TypeCacheEntry *type = lookup_type_cache(params->params[i].ptype, 0);
-			/*
-			 * The incoming param may have a different but cast-compatible type with
-			 * the target, so we change the TupleDesc before it gets physically packed
-			 * in with the event. Eventually it will be casted to the correct type.
-			 */
-			pstmt->desc->attrs[i]->atttypid = params->params[i].ptype;
-			pstmt->desc->attrs[i]->attbyval = type->typbyval;
-			pstmt->desc->attrs[i]->attalign = type->typalign;
-			pstmt->desc->attrs[i]->attlen = type->typlen;
-
-			values[i] = params->params[i].value;
-			nulls[i] = params->params[i].isnull;
-		}
-
-		if (num_worker)
-		{
-			tuple = MakeStreamTuple(heap_form_tuple(pstmt->desc, values, nulls), pstmt->desc, num_batches, acks);
-			TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
-
-			count++;
-			size += tuple->heaptup->t_len + HEAPTUPLESIZE;
-		}
-
-		if (adhoc_data.num_adhoc)
-		{
-			int acount = 0;
-			Size abytes = 0;
-
-			HeapTuple tup = heap_form_tuple(pstmt->desc, values, nulls);
-			acount = SendTupleToAdhoc(&adhoc_data, tup, pstmt->desc, &abytes);
-
-			if (!num_worker)
-			{
-				count += acount;
-				size += abytes;
-			}
-		}
-	}
-
-	pstmt->inserts = NIL;
-
-	stream_stat_report(pstmt->relid, count, 1, size);
-
-	if (synchronous_stream_insert)
-	{
-		if (num_worker)
-		{
-			InsertBatchWaitAndRemove(batch, count);
-		}
-
-		if (adhoc_data.num_adhoc)
-		{
-			WaitForAdhoc(&adhoc_data);
-		}
-	}
-
-	return count;
-}
-
-/*
- * InsertIntoStream
- *
- * Send INSERT-encoded events to the given stream
- */
-int
-InsertIntoStream(InsertStmt *ins, List *params)
-{
-	int numcols = list_length(ins->cols);
-	int i;
-	int count = 0;
-	List *colnames = NIL;
-	TupleDesc desc = NULL;
-	AdhocData adhoc_data;
-	Oid relid = RangeVarGetRelid(ins->relation, NoLock, false);
-
-	Bitmapset *all_targets = get_stream_readers(relid);
-	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
-
-	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
-		bms_difference(all_targets, targets) : NULL;
-
-	InsertBatchAck acks[1];
-	InsertBatch *batch = NULL;
-	int num_batches = 0;
-	int num_worker = bms_num_members(targets);
-
-	Size size = 0;
-	List *queries;
-	List *plans;
-	PlannedStmt *pstmt;
-	DestReceiver *receiver;
-	Portal portal;
-	Query *query;
-	SelectStmt *stmt;
-
-	init_adhoc_data(&adhoc_data, adhoc_targets);
-
-	Assert(IsA(ins->selectStmt, SelectStmt));
-	stmt = ((SelectStmt *) ins->selectStmt);
-
-	if (synchronous_stream_insert && num_worker)
-	{
-		batch = InsertBatchCreate();
-		num_batches = 1;
-
-		acks[0].batch_id = batch->id;
-		acks[0].batch = batch;
-		acks[0].count = 1;
-	}
-
-	if (!numcols)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("stream inserts require a row descriptor"),
-				 errhint("For example, INSERT INTO %s (x, y, z) VALUES (0, 1, 2)", ins->relation->relname)));
-
-	/* build header of column names */
-	for (i = 0; i < numcols; i++)
-	{
-		ListCell *rtc;
-		ResTarget *res = (ResTarget *) list_nth(ins->cols, i);
-		int count = 0;
-
-		/* verify that each column only appears once */
-		foreach(rtc, ins->cols)
-		{
-			ResTarget *r = (ResTarget *) lfirst(rtc);
-			if (pg_strcasecmp(r->name, res->name) == 0)
-				count++;
-		}
-
-		if (count > 1)
-			elog(ERROR, "column \"%s\" appears more than once in columns list", res->name);
-
-		colnames = lappend(colnames, makeString(res->name));
-	}
-
-	/*
-	 * If we're doing a prepared insert on this path, then params is just an eval'd tuple of
-	 * values and the simplest thing to do is to just use it as the actual values list.
-	 * InsertIntoStreamPrepared handles more complex prepared inserts.
-	 */
-	if (params)
-		stmt->valuesLists = params;
-
-	/*
-	 * Plan and execute the query being used to generate rows (usually this will be a VALUES list)
-	 */
-	queries = pg_analyze_and_rewrite(ins->selectStmt, "INSERT", NULL, 0);
-	Assert(list_length(queries) == 1);
-	query = linitial(queries);
-
-	plans = pg_plan_queries(queries, 0, NULL);
-	Assert(list_length(plans) == 1);
-
-	pstmt = linitial(plans);
-
-	receiver = CreateDestReceiver(DestStream);
-	desc = get_desc(colnames, query);
-
-	SetStreamDestReceiverParams(receiver, targets, desc, num_batches, acks, &adhoc_data);
-
-	portal = CreatePortal("__insert__", true, true);
-	portal->visible = false;
-
-	PortalDefineQuery(portal,
-					  NULL,
-					  ins->relation->relname,
-					  "INSERT",
-					  list_make1(pstmt),
-					  NULL);
-
-	PortalStart(portal, NULL, 0, InvalidSnapshot);
-
-	(void) PortalRun(portal,
-					 FETCH_ALL,
-					 true,
-					 receiver,
-					 receiver,
-					 NULL);
-
-	count = ((StreamReceiver *) receiver)->count;
-	size = ((StreamReceiver *) receiver)->bytes;
-	(*receiver->rDestroy) (receiver);
-
-	PortalDrop(portal, false);
-
-	stream_stat_report(relid, count, 1, size);
-
-	/*
-	 * Wait till the last event has been consumed by a CV before returning.
-	 */
-	if (synchronous_stream_insert)
-	{
-		if (num_worker)
-		{
-			InsertBatchWaitAndRemove(batch, count);
-		}
-
-		if (adhoc_data.num_adhoc)
-		{
-			WaitForAdhoc(&adhoc_data);
-		}
-	}
-
-	return count;
 }
 
 /*
@@ -617,7 +186,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	Size size = 0;
 	bool snap = ActiveSnapshotSet();
 
-	Bitmapset *all_targets = get_stream_readers(RelationGetRelid(stream));
+	Bitmapset *all_targets = GetStreamReaders(RelationGetRelid(stream));
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
 
 	Bitmapset *targets = bms_difference(all_targets, all_adhoc);

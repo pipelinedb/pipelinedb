@@ -4,11 +4,10 @@ SET search_path TO test_typed_streams,public;
 CREATE STREAM s0 (x integer, y integer);
 DROP TABLE s0;
 ERROR:  "s0" is not a table
-HINT:  Use DROP STREAM to remove a stream.
+HINT:  Use DROP FOREIGN TABLE to remove a foreign table.
 CREATE TABLE t0 (x integer);
 DROP STREAM t0;
-ERROR:  cannot drop type t0 because table t0 requires it
-HINT:  You can drop table t0 instead.
+ERROR:  "t0" is not a stream
 -- It isn't possible for users to directly read a stream
 SELECT * FROM s0;
 ERROR:  "s0" is a stream
@@ -17,12 +16,13 @@ HINT:  Streams can only be read by a continuous view's FROM clause.
 CREATE STREAM l0 (x integer, y integer);
 CREATE STREAM l1 (LIKE l0);
 \d l1;
-         Stream "test_typed_streams.l1"
-      Column       |            Type             
--------------------+-----------------------------
- x                 | integer
- y                 | integer
- arrival_timestamp | timestamp(0) with time zone
+                   Foreign table "test_typed_streams.l1"
+      Column       |            Type             | Modifiers | FDW Options 
+-------------------+-----------------------------+-----------+-------------
+ x                 | integer                     |           | 
+ y                 | integer                     |           | 
+ arrival_timestamp | timestamp(0) with time zone |           | 
+Server: pipeline_streams
 
 CREATE CONTINUOUS VIEW v0 AS
 SELECT x, COUNT(*) FROM test_typed_streams.s0 GROUP BY x;
@@ -236,9 +236,9 @@ INSERT INTO stj_t3 (col0, col1, col2, col3) VALUES (0, 0, 0, 42);
 INSERT INTO stj_t3 (col0, col1, col2, col3) VALUES (0, 1, 1, 1000);
 CREATE CONTINUOUS VIEW stj6 AS SELECT t.col2, sum(s.col0 + t.col3) FROM test_typed_streams.stj_stream s JOIN test_typed_streams.stj_t3 t ON s.col1 = t.col1 GROUP BY t.col2;
 NOTICE:  consider creating an index on t.col1 for improved stream-table join performance
-INSERT INTO test_typed_streams.stj_stream (col0, col1, col2) VALUES (400, 1, 0);
-INSERT INTO test_typed_streams.stj_stream (col0, col1, col2) VALUES (0, 0, 0);
-INSERT INTO test_typed_streams.stj_stream (col0, col1, col2) VALUES (-1200, 1, 0);
+INSERT INTO test_typed_streams.stj_stream (col0, col1) VALUES (400, 1);
+INSERT INTO test_typed_streams.stj_stream (col0, col1) VALUES (0, 0);
+INSERT INTO test_typed_streams.stj_stream (col0, col1) VALUES (-1200, 1);
 SELECT * FROM stj6 ORDER BY col2;
  col2 | sum  
 ------+------
@@ -307,16 +307,16 @@ SELECT * FROM test_percent3 ORDER BY percent_rank;
 
 DROP SCHEMA test_typed_streams CASCADE;
 NOTICE:  drop cascades to 26 other objects
-DETAIL:  drop cascades to type s0
+DETAIL:  drop cascades to stream s0
 drop cascades to table t0
-drop cascades to type l0
-drop cascades to type l1
+drop cascades to stream l0
+drop cascades to stream l1
 drop cascades to continuous view v0
-drop cascades to type no_readers
+drop cascades to stream no_readers
 drop cascades to table t
 drop cascades to continuous view stj
 drop cascades to continuous view aliased
-drop cascades to type stj_stream
+drop cascades to stream stj_stream
 drop cascades to table stj_t0
 drop cascades to continuous view stj0
 drop cascades to continuous view stj1
@@ -328,7 +328,7 @@ drop cascades to table stj_t2
 drop cascades to continuous view stj5
 drop cascades to table stj_t3
 drop cascades to continuous view stj6
-drop cascades to type test_hs_stream
+drop cascades to stream test_hs_stream
 drop cascades to continuous view test_percent0
 drop cascades to continuous view test_percent1
 drop cascades to continuous view test_percent2

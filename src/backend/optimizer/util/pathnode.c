@@ -2085,26 +2085,6 @@ reparameterize_path(PlannerInfo *root, Path *path,
 }
 
 /*
- * create_streamscan_path
- *	  Creates a path corresponding to a stream scan, returning the
- *	  pathnode.
- */
-Path *
-create_streamscan_path(PlannerInfo *root, RelOptInfo *rel, Relids required_outer)
-{
-	Path	   *pathnode = makeNode(Path);
-
-	pathnode->pathtype = T_StreamScan;
-	pathnode->parent = rel;
-	pathnode->param_info = get_baserel_parampathinfo(root, rel,
-													 required_outer);
-
-	cost_streamscan(pathnode, root, rel, pathnode->param_info);
-
-	return pathnode;
-}
-
-/*
  * create_tuplestore_scan_path
  *	  Creates a path corresponding to a tuplestore scan, returning the
  *	  pathnode.

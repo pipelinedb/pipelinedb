@@ -21,10 +21,13 @@
 #include "parser/parse_node.h"
 #include "utils/relcache.h"
 
-#define is_stream_relation(rel) ((rel)->rd_rel->relkind == RELKIND_STREAM)
-#define is_stream_rte(rte) ((rte)->rtekind == RTE_STREAM)
-#define is_inferred_stream_relation(rel) (is_stream_relation(rel) && IsInferredStream((rel)->rd_id))
-#define is_inferred_stream_rte(rte) (is_stream_rte(rte) && IsInferredStream((rte)->relid))
+#define PIPELINE_STREAM_SERVER "pipeline_streams"
+
+extern bool is_stream_relid(Oid relid);
+extern bool is_stream_relation(Relation rel);
+extern bool is_stream_rte(RangeTblEntry *rte);
+extern bool is_inferred_stream_relation(Relation rel);
+extern bool is_inferred_stream_rte(RangeTblEntry *rte);
 
 extern void UpdatePipelineStreamCatalog(void);
 
@@ -45,6 +48,7 @@ extern void CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid);
 extern void RemovePipelineStreamById(Oid oid);
 
 extern Relation inferred_stream_open(ParseState *pstate, Relation rel);
+extern void prepare_inferred_stream_for_insert(Relation rel, Query *query);
 extern void inferred_stream_close(Relation rel);
 
 #endif

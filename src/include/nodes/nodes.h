@@ -437,7 +437,6 @@ typedef enum NodeTag
 	/*
 	 * TAGS FOR PIPELINEDB
 	 */
-	T_StreamScan = 5000,
 	T_TuplestoreScan,
 	T_StreamTableJoin,
 	T_PhysicalGroupLookup,

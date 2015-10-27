@@ -2815,17 +2815,6 @@ _copyCreateStmt(const CreateStmt *from)
 	return newnode;
 }
 
-static CreateStreamStmt *
-_copyCreateStreamStmt(const CreateStreamStmt *from)
-{
-	CreateStreamStmt *newnode = makeNode(CreateStreamStmt);
-
-	CopyCreateStmtFields(&from->base, &newnode->base);
-	COPY_SCALAR_FIELD(is_inferred);
-
-	return newnode;
-}
-
 static TableLikeClause *
 _copyTableLikeClause(const TableLikeClause *from)
 {
@@ -3599,6 +3588,20 @@ _copyCreateForeignTableStmt(const CreateForeignTableStmt *from)
 
 	return newnode;
 }
+
+static CreateStreamStmt *
+_copyCreateStreamStmt(const CreateStreamStmt *from)
+{
+	CreateStreamStmt *newnode = makeNode(CreateStreamStmt);
+	CreateForeignTableStmt *ft = _copyCreateForeignTableStmt(&from->ft);
+
+	memcpy(&newnode->ft, ft, sizeof(CreateForeignTableStmt));
+	COPY_SCALAR_FIELD(is_inferred);
+	((Node *) newnode)->type = T_CreateStreamStmt;
+
+	return newnode;
+}
+
 
 static CreateTrigStmt *
 _copyCreateTrigStmt(const CreateTrigStmt *from)
