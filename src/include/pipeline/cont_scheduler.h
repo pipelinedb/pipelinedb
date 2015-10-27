@@ -54,6 +54,8 @@ struct ContQueryDatabaseMetadata
 
 	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
 	ContQueryProc *db_procs;
+
+	int adhoc_counter;
 	/* Number of entries is equal to max_worker_processes. */
 	ContQueryProc *adhoc_procs;
 };
@@ -113,6 +115,9 @@ extern void ContinuousQueryWorkerMain(void);
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
 
+/* Adhoc Process Management */
 extern void SetAmContQueryAdhoc(bool value);
+extern ContQueryProc *AdhocContQueryProcGet(void);
+extern void AdhocContQueryProcRelease(ContQueryProc *proc);
 
 #endif   /* CONT_SCHEDULER_H */

@@ -109,12 +109,6 @@ ContQuerySchedulerShmemSize(void)
 	return MAXALIGN(sizeof(ContQuerySchedulerShmemStruct));
 }
 
-void
-SetAmContQueryAdhoc(bool value)
-{
-	am_cont_adhoc = value;
-}
-
 static void
 update_run_params(void)
 {
@@ -497,7 +491,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 {
 	int slot_idx;
 	int group_id;
-	ContQueryProc proc;
+	ContQueryProc *proc;
 
 	SpinLockAcquire(&db_meta->mutex);
 
@@ -506,8 +500,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	/* Start worker processes. */
 	for (slot_idx = 0, group_id = 0; slot_idx < continuous_query_num_workers; slot_idx++, group_id++)
 	{
-		ContQueryProc *proc = &db_meta->db_procs[slot_idx];
-
+		proc = &db_meta->db_procs[slot_idx];
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
 		proc->type = Worker;
@@ -520,8 +513,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	/* Start combiner processes. */
 	for (group_id = 0; slot_idx < TOTAL_SLOTS; slot_idx++, group_id++)
 	{
-		ContQueryProc *proc = &db_meta->db_procs[slot_idx];
-
+		proc = &db_meta->db_procs[slot_idx];
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
 		proc->type = Combiner;
@@ -532,13 +524,14 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	}
 
 	/* Start a single adhoc process for initial state clean up. */
-	MemSet(&proc, 0, sizeof(ContQueryProc));
+	proc = db_meta->adhoc_procs;
+	MemSet(proc, 0, sizeof(ContQueryProc));
 
-	proc.type = Adhoc;
-	proc.group_id = group_id;
-	proc.db_meta = db_meta;
+	proc->type = Adhoc;
+	proc->group_id = group_id;
+	proc->db_meta = db_meta;
 
-	run_cont_bgworker(&proc);
+	run_cont_bgworker(proc);
 
 	SpinLockRelease(&db_meta->mutex);
 }
@@ -903,4 +896,77 @@ void
 SignalContQuerySchedulerRefresh(void)
 {
 	signal_cont_query_scheduler(SIGINT);
+}
+
+void
+SetAmContQueryAdhoc(bool value)
+{
+	am_cont_adhoc = value;
+}
+
+ContQueryProc *
+AdhocContQueryProcGet(void)
+{
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+	int i;
+	int idx;
+	ContQueryProc *proc = NULL;
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		elog(ERROR, "failed to find database metadata for continuous queries");
+
+	SpinLockAcquire(&db_meta->mutex);
+
+	for (i = 0; i < max_worker_processes; ++i)
+	{
+		idx = (db_meta->adhoc_counter + i) % max_worker_processes;
+
+		/* We use group_idx > 0 as a slot occupied check. */
+		if (db_meta->adhoc_procs[idx].group_id == 0)
+		{
+			proc = &db_meta->adhoc_procs[idx];
+			db_meta->adhoc_counter++;
+			break;
+		}
+	}
+
+	SpinLockRelease(&db_meta->mutex);
+
+	if (proc)
+	{
+		MemSet(proc, 0, sizeof(ContQueryProc));
+
+		proc->type = Adhoc;
+		proc->group_id = idx;
+		proc->latch = &MyProc->procLatch;
+		proc->db_meta = db_meta;
+	}
+	else
+		elog(ERROR, "no free slot for running adhoc continuous query process");
+
+	return proc;
+}
+
+void
+AdhocContQueryProcRelease(ContQueryProc *proc)
+{
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+
+	Assert(proc->type == Adhoc);
+	Assert(proc->group_id > 0);
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	SpinLockAcquire(&db_meta->mutex);
+
+	/* Mark ContQueryProc struct as free. */
+	MemSet(proc, 0, sizeof(ContQueryProc));
+
+	SpinLockRelease(&db_meta->mutex);
 }
