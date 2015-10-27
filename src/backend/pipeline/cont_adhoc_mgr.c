@@ -99,7 +99,7 @@ AdhocMgrGetProc()
 		proc->id = ind;
 		proc->group_id = 0;
 		proc->latch = &MyProc->procLatch;
-		proc->group = grp;
+		proc->db_meta = grp;
 	}
 
 	return proc;
@@ -113,7 +113,7 @@ AdhocMgrGetProc()
 void
 AdhocMgrReleaseProc(ContQueryProc *proc)
 {
-	ContQueryDatabaseMetadata *grp = proc->group;
+	ContQueryDatabaseMetadata *grp = proc->db_meta;
 
 	LWLockAcquire(AdhocMgrLock, LW_EXCLUSIVE);
 	MemSet(grp, 0, sizeof(ContQueryDatabaseMetadata));

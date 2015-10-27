@@ -369,7 +369,7 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 			TupleBufferReader *reader = buf->readers[i];
 
 			/* can never wake up waiters that are not connected to the same database */
-			if (reader->proc->group->db_oid != slot->db_oid)
+			if (reader->proc->db_meta->db_oid != slot->db_oid)
 				continue;
 
 			/* wake up reader only if it will read this slot */
@@ -537,7 +537,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	while (true)
 	{
 		/* Is this a slot for me? */
-		if (reader->proc->group->db_oid == reader->slot->db_oid && reader->should_read_fn(reader, reader->slot))
+		if (reader->proc->db_meta->db_oid == reader->slot->db_oid && reader->should_read_fn(reader, reader->slot))
 			break;
 
 		if (NoUnreadSlots(reader))
@@ -843,7 +843,7 @@ TupleBufferBatchReaderNext(TupleBufferBatchReader *reader)
 		 * break early here in case continuous queries were deactivated.
 		 */
 		if (TimestampDifferenceExceeds(reader->start_time, GetCurrentTimestamp(), reader->params->max_wait) ||
-				reader->rdr->proc->group->terminate)
+				reader->rdr->proc->db_meta->terminate)
 		{
 			reader->batch_done = true;
 			reader->depleted = true;
@@ -961,7 +961,7 @@ TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_
 {
 	if (!TupleBufferHasUnreadSlots(reader->rdr) &&
 			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->max_wait) &&
-			!reader->rdr->proc->group->terminate)
+			!reader->rdr->proc->db_meta->terminate)
 	{
 		cq_stat_report(true);
 
@@ -980,7 +980,7 @@ TupleBufferBatchReaderTrySleepTimeout(TupleBufferBatchReader *reader,
 {
 	if (!TupleBufferHasUnreadSlots(reader->rdr) &&
 			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->max_wait) &&
-			!reader->rdr->proc->group->terminate)
+			!reader->rdr->proc->db_meta->terminate)
 	{
 		cq_stat_report(true);
 

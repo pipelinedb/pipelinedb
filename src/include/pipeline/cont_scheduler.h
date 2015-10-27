@@ -15,6 +15,7 @@
 
 #include "storage/latch.h"
 #include "postmaster/bgworker.h"
+#include "storage/dsm.h"
 #include "storage/spin.h"
 
 #define MAX_CQS 1024
@@ -33,11 +34,15 @@ typedef struct ContQueryDatabaseMetadata ContQueryDatabaseMetadata;
 typedef struct
 {
 	ContQueryProcType type;
-	int id; /* unique across all cont query processes */
-	int group_id; /* unqiue [0, n) for each db_oid, type pair */
+
+	int   id; /* unique across all cont query processes */
+	int   group_id; /* unqiue [0, n) for each db_oid, type pair */
 	Latch *latch;
-	BackgroundWorkerHandle handle;
-	ContQueryDatabaseMetadata *group;
+
+	dsm_handle dsm_handle;
+	BackgroundWorkerHandle *bgw_handle;
+
+	ContQueryDatabaseMetadata *db_meta;
 } ContQueryProc;
 
 struct ContQueryDatabaseMetadata
@@ -46,7 +51,11 @@ struct ContQueryDatabaseMetadata
 	NameData db_name;
 	slock_t  mutex;
 	sig_atomic_t terminate;
-	ContQueryProc procs[1]; /* number of slots is equal to continuous_query_num_combiners + continuous_query_num_workers */
+
+	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
+	ContQueryProc *db_procs;
+	/* Number of entries is equal to max_worker_processes. */
+	ContQueryProc *adhoc_procs;
 };
 
 typedef struct
@@ -64,13 +73,14 @@ extern char *GetContQueryProcName(ContQueryProc *proc);
 extern bool continuous_queries_enabled;
 extern bool continuous_query_crash_recovery;
 extern bool continuous_queries_adhoc_enabled;
-extern int continuous_query_num_combiners;
-extern int continuous_query_num_workers;
-extern int continuous_query_batch_size;
-extern int continuous_query_max_wait;
-extern int continuous_query_combiner_work_mem;
-extern int continuous_query_combiner_cache_mem;
-extern int continuous_query_combiner_synchronous_commit;
+extern int  continuous_query_num_combiners;
+extern int  continuous_query_num_workers;
+extern int  continuous_query_batch_size;
+extern int  continuous_query_max_wait;
+extern int  continuous_query_combiner_work_mem;
+extern int  continuous_query_combiner_cache_mem;
+extern int  continuous_query_combiner_synchronous_commit;
+extern int  continuous_query_ipc_shared_mem;
 extern double continuous_query_proc_priority;
 
 #define ContQueriesEnabled() (continuous_queries_enabled)
