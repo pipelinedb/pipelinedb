@@ -287,7 +287,6 @@ markTargetListOrigin(ParseState *pstate, TargetEntry *tle,
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
-		case RTE_STREAM:
 			/* It's a table or view, report it */
 			tle->resorigtbl = rte->relid;
 			tle->resorigcol = attnum;
@@ -1448,7 +1447,6 @@ expandRecordVariable(ParseState *pstate, Var *var, int levelsup)
 	{
 		case RTE_RELATION:
 		case RTE_VALUES:
-		case RTE_STREAM:
 
 			/*
 			 * This case should not occur: a column of a table or values list

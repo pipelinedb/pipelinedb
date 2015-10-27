@@ -285,7 +285,6 @@ heap_create(const char *relname,
 		case RELKIND_VIEW:
 		case RELKIND_COMPOSITE_TYPE:
 		case RELKIND_FOREIGN_TABLE:
-		case RELKIND_STREAM:
 		case RELKIND_CONTVIEW:
 			create_storage = false;
 
@@ -1186,7 +1185,6 @@ heap_create_with_catalog(const char *relname,
 							  relkind == RELKIND_MATVIEW ||
 							  relkind == RELKIND_FOREIGN_TABLE ||
 							  relkind == RELKIND_COMPOSITE_TYPE ||
-							  relkind == RELKIND_STREAM ||
 							  relkind == RELKIND_CONTVIEW))
 		new_array_oid = AssignTypeArrayOid();
 
@@ -1294,8 +1292,7 @@ heap_create_with_catalog(const char *relname,
 	 * Also, skip this in bootstrap mode, since we don't make dependencies
 	 * while bootstrapping.
 	 */
-	if (relkind != RELKIND_COMPOSITE_TYPE && relkind != RELKIND_STREAM &&
-		relkind != RELKIND_TOASTVALUE &&
+	if (relkind != RELKIND_COMPOSITE_TYPE && relkind != RELKIND_TOASTVALUE &&
 		!IsBootstrapProcessingMode())
 	{
 		ObjectAddress myself,
@@ -1808,7 +1805,6 @@ heap_drop_with_catalog(Oid relid)
 	if (rel->rd_rel->relkind != RELKIND_VIEW &&
 		rel->rd_rel->relkind != RELKIND_COMPOSITE_TYPE &&
 		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
-		rel->rd_rel->relkind != RELKIND_STREAM &&
 		rel->rd_rel->relkind != RELKIND_CONTVIEW)
 	{
 		RelationDropStorage(rel);

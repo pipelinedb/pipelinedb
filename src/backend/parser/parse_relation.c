@@ -991,7 +991,7 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 	}
 	cancel_parser_errposition_callback(&pcbstate);
 
-	if (rel->rd_rel->relkind == RELKIND_STREAM)
+	if (is_stream_relation(rel))
 	{
 		if (!pstate->p_allow_streams)
 			ereport(ERROR,
@@ -1012,8 +1012,6 @@ transformRelationRTEToStreamRTE(RangeTblEntry *rte, Relation rel)
 	int i;
 
 	Assert(rte->rtekind == RTE_RELATION);
-
-	rte->rtekind = RTE_STREAM;
 
 	/*
 	 * We cheat a little and use the CTE fields here, because they're exactly
@@ -1079,7 +1077,7 @@ addRangeTableEntry(ParseState *pstate,
 	rte->eref = makeAlias(refname, NIL);
 	buildRelationAliases(rel->rd_att, alias, rte->eref);
 
-	if (rte->relkind == RELKIND_STREAM)
+	if (is_stream_rte(rte))
 	{
 		inh = false;
 		transformRelationRTEToStreamRTE(rte, rel);
@@ -1148,7 +1146,7 @@ addRangeTableEntryForRelation(ParseState *pstate,
 	rte->eref = makeAlias(refname, NIL);
 	buildRelationAliases(rel->rd_att, alias, rte->eref);
 
-	if (rte->relkind == RELKIND_STREAM)
+	if (is_stream_rte(rte))
 	{
 		inh = false;
 		transformRelationRTEToStreamRTE(rte, rel);
@@ -1865,6 +1863,46 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 	if (colvars)
 		*colvars = NIL;
 
+	if (is_stream_rte(rte))
+	{
+		ListCell   *aliasp_item = list_head(rte->eref->colnames);
+		ListCell   *lct;
+		ListCell   *lcm;
+		ListCell   *lcc;
+
+		varattno = 0;
+		forthree(lct, rte->ctecoltypes,
+				 lcm, rte->ctecoltypmods,
+				 lcc, rte->ctecolcollations)
+		{
+			Oid			coltype = lfirst_oid(lct);
+			int32		coltypmod = lfirst_int(lcm);
+			Oid			colcoll = lfirst_oid(lcc);
+
+			varattno++;
+
+			if (colnames)
+			{
+				/* Assume there is one alias per output column */
+				char	   *label = strVal(lfirst(aliasp_item));
+
+				*colnames = lappend(*colnames, makeString(pstrdup(label)));
+				aliasp_item = lnext(aliasp_item);
+			}
+
+			if (colvars)
+			{
+				Var		   *varnode;
+
+				varnode = makeVar(rtindex, varattno,
+								  coltype, coltypmod, colcoll,
+								  sublevels_up);
+				*colvars = lappend(*colvars, varnode);
+			}
+		}
+		return;
+	}
+
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
@@ -2140,7 +2178,6 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 				}
 			}
 			break;
-		case RTE_STREAM:
 		case RTE_CTE:
 			{
 				ListCell   *aliasp_item = list_head(rte->eref->colnames);
@@ -2395,6 +2432,15 @@ void
 get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 					   Oid *vartype, int32 *vartypmod, Oid *varcollid)
 {
+	if (is_stream_rte(rte))
+	{
+		Assert(attnum > 0 && attnum <= list_length(rte->ctecoltypes));
+		*vartype = list_nth_oid(rte->ctecoltypes, attnum - 1);
+		*vartypmod = list_nth_int(rte->ctecoltypmods, attnum - 1);
+		*varcollid = list_nth_oid(rte->ctecolcollations, attnum - 1);
+		return;
+	}
+
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
@@ -2425,12 +2471,6 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 				*vartypmod = att_tup->atttypmod;
 				*varcollid = att_tup->attcollation;
 				ReleaseSysCache(tp);			}
-			break;
-		case RTE_STREAM:
-			Assert(attnum > 0 && attnum <= list_length(rte->ctecoltypes));
-			*vartype = list_nth_oid(rte->ctecoltypes, attnum - 1);
-			*vartypmod = list_nth_int(rte->ctecoltypmods, attnum - 1);
-			*varcollid = list_nth_oid(rte->ctecolcollations, attnum - 1);
 			break;
 		case RTE_SUBQUERY:
 			{
@@ -2592,6 +2632,9 @@ get_rte_attribute_is_dropped(RangeTblEntry *rte, AttrNumber attnum)
 {
 	bool		result;
 
+	if (is_stream_rte(rte))
+		return false;
+
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
@@ -2613,7 +2656,6 @@ get_rte_attribute_is_dropped(RangeTblEntry *rte, AttrNumber attnum)
 				ReleaseSysCache(tp);
 			}
 			break;
-		case RTE_STREAM:
 		case RTE_SUBQUERY:
 		case RTE_VALUES:
 		case RTE_CTE:

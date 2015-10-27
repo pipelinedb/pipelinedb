@@ -5477,6 +5477,10 @@ DESCR("exec adhoc query");
 DATA(insert OID = 4418 ( pipeline_unittest PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 25 "" _null_ _null_ _null_ _null_ pipeline_unittest _null_ _null_ _null_ ));
 DESCR("pipeline unit tests");
 
+/* stream FDW handler */
+DATA(insert OID = 4419 ( stream_fdw_handler	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 3115 "" _null_ _null_ _null_ _null_ stream_fdw_handler _null_ _null_ _null_ ));
+DESCR("stream FDW handler");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

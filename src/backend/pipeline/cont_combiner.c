@@ -396,7 +396,7 @@ select_existing_groups(ContQueryCombinerState *state, TupleHashTable existing)
 	dest = CreateDestReceiver(DestTupleTable);
 	SetTupleTableDestReceiverParams(dest, existing, state->tmp_cxt, true);
 
-	PortalStart(portal, NULL, EXEC_FLAG_COMBINE_LOOKUP, NULL);
+	PortalStart(portal, NULL, EXEC_NO_MATREL_LOCKING, NULL);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,
@@ -914,6 +914,8 @@ ContinuousQueryCombinerMain(void)
 					has_queries = has_queries_to_process(queries);
 					goto next;
 				}
+
+				CHECK_FOR_INTERRUPTS();
 
 				/* No need to process queries which we don't have tuples for. */
 				if (!TupleBufferBatchReaderHasTuplesForCQId(reader, id))

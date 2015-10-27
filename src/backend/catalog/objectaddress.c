@@ -53,6 +53,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
 #include "catalog/pipeline_query.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/dbcommands.h"
 #include "commands/defrem.h"
 #include "commands/event_trigger.h"
@@ -506,6 +507,7 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 			case OBJECT_VIEW:
 			case OBJECT_MATVIEW:
 			case OBJECT_FOREIGN_TABLE:
+			case OBJECT_STREAM:
 				address =
 					get_relation_by_qualified_name(objtype, objname,
 												   &relation, lockmode,
@@ -537,7 +539,6 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 				break;
 			case OBJECT_TYPE:
 			case OBJECT_DOMAIN:
-			case OBJECT_STREAM:
 				address = get_object_address_type(objtype, objname, missing_ok);
 				break;
 			case OBJECT_AGGREGATE:
@@ -902,7 +903,7 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 								RelationGetRelationName(relation))));
 			break;
 		case OBJECT_STREAM:
-			if (relation->rd_rel->relkind != RELKIND_STREAM)
+			if (!is_stream_relation(relation))
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a stream",
@@ -2286,15 +2287,15 @@ getRelationDescription(StringInfo buffer, Oid relid)
 							 relname);
 			break;
 		case RELKIND_FOREIGN_TABLE:
-			appendStringInfo(buffer, _("foreign table %s"),
+			if (is_stream_relid(relid))
+				appendStringInfo(buffer, _("stream %s"),
+								 relname);
+			else
+				appendStringInfo(buffer, _("foreign table %s"),
 							 relname);
 			break;
 		case RELKIND_CONTVIEW:
 			appendStringInfo(buffer, _("continuous view %s"),
-							 relname);
-			break;
-		case RELKIND_STREAM:
-			appendStringInfo(buffer, _("stream %s"),
 							 relname);
 			break;
 		default:
@@ -2674,13 +2675,13 @@ getRelationTypeDescription(StringInfo buffer, Oid relid, int32 objectSubId)
 			appendStringInfoString(buffer, "composite type");
 			break;
 		case RELKIND_FOREIGN_TABLE:
-			appendStringInfoString(buffer, "foreign table");
+			if (is_stream_relid(relid))
+				appendStringInfoString(buffer, "stream");
+			else
+				appendStringInfoString(buffer, "foreign table");
 			break;
 		case RELKIND_CONTVIEW:
 			appendStringInfoString(buffer, "continuous view");
-			break;
-		case RELKIND_STREAM:
-			appendStringInfoString(buffer, "stream");
 			break;
 		default:
 			/* shouldn't get here */

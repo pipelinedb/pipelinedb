@@ -727,8 +727,7 @@ typedef enum RTEKind
 	RTE_JOIN,					/* join */
 	RTE_FUNCTION,				/* function in FROM */
 	RTE_VALUES,					/* VALUES (<exprlist>), (<exprlist>), ... */
-	RTE_CTE,						/* common table expr (WITH list element) */
-	RTE_STREAM
+	RTE_CTE						/* common table expr (WITH list element) */
 } RTEKind;
 
 typedef struct RangeTblEntry
@@ -2811,7 +2810,7 @@ typedef struct ExplainContViewStmt
 
 typedef struct CreateStreamStmt
 {
-	CreateStmt	base;
+	CreateForeignTableStmt ft;
 	bool 		is_inferred;
 } CreateStreamStmt;
 

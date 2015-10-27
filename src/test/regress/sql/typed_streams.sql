@@ -140,9 +140,9 @@ INSERT INTO stj_t3 (col0, col1, col2, col3) VALUES (0, 1, 1, 1000);
 
 CREATE CONTINUOUS VIEW stj6 AS SELECT t.col2, sum(s.col0 + t.col3) FROM test_typed_streams.stj_stream s JOIN test_typed_streams.stj_t3 t ON s.col1 = t.col1 GROUP BY t.col2;
 
-INSERT INTO test_typed_streams.stj_stream (col0, col1, col2) VALUES (400, 1, 0);
-INSERT INTO test_typed_streams.stj_stream (col0, col1, col2) VALUES (0, 0, 0);
-INSERT INTO test_typed_streams.stj_stream (col0, col1, col2) VALUES (-1200, 1, 0);
+INSERT INTO test_typed_streams.stj_stream (col0, col1) VALUES (400, 1);
+INSERT INTO test_typed_streams.stj_stream (col0, col1) VALUES (0, 0);
+INSERT INTO test_typed_streams.stj_stream (col0, col1) VALUES (-1200, 1);
 
 SELECT * FROM stj6 ORDER BY col2;
 

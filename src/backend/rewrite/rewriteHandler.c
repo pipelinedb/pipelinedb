@@ -16,6 +16,7 @@
 
 #include "access/sysattr.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/trigger.h"
 #include "foreign/fdwapi.h"
 #include "nodes/makefuncs.h"
@@ -148,6 +149,9 @@ AcquireRewriteLocks(Query *parsetree,
 		switch (rte->rtekind)
 		{
 			case RTE_RELATION:
+
+				if (is_stream_rte(rte))
+					break;
 
 				/*
 				 * Grab the appropriate lock type for the relation, and do not
@@ -2404,7 +2408,7 @@ relation_is_updatable(Oid reloid,
 	}
 
 	/* No update events allowed for continuous views or streams */
-	if (rel->rd_rel->relkind == RELKIND_CONTVIEW || rel->rd_rel->relkind == RELKIND_STREAM)
+	if (rel->rd_rel->relkind == RELKIND_CONTVIEW)
 		return 0;
 
 	/* If we reach here, the relation may support some update commands */
@@ -3042,6 +3046,9 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 						values_rte = rte;
 				}
 			}
+
+			if (IsInferredStream(RelationGetRelid(rt_entry_relation)))
+				prepare_inferred_stream_for_insert(rt_entry_relation, parsetree);
 
 			if (values_rte)
 			{

@@ -27,6 +27,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_type_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/typecmds.h"
 #include "miscadmin.h"
 #include "parser/scansup.h"
@@ -540,7 +541,7 @@ GenerateTypeDependencies(Oid typeNamespace,
 	 * entry.  Likewise, skip for implicit arrays since we'll depend on them
 	 * through the element type.
 	 */
-	if ((!OidIsValid(relationOid) || relationKind == RELKIND_COMPOSITE_TYPE || relationKind == RELKIND_STREAM) &&
+	if ((!OidIsValid(relationOid) || relationKind == RELKIND_COMPOSITE_TYPE) &&
 		!isImplicitArray)
 	{
 		referenced.classId = NamespaceRelationId;
@@ -625,7 +626,7 @@ GenerateTypeDependencies(Oid typeNamespace,
 		referenced.objectId = relationOid;
 		referenced.objectSubId = 0;
 
-		if (relationKind != RELKIND_COMPOSITE_TYPE && relationKind != RELKIND_STREAM)
+		if (relationKind != RELKIND_COMPOSITE_TYPE)
 			recordDependencyOn(&myself, &referenced, DEPENDENCY_INTERNAL);
 		else
 			recordDependencyOn(&referenced, &myself, DEPENDENCY_INTERNAL);
