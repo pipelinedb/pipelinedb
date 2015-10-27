@@ -94,6 +94,7 @@ typedef struct
 {
 	pid_t pid;
 	HTAB  *proc_table;
+	int   tranche_id;
 
 	ContQueryRunParams params;
 } ContQuerySchedulerShmemStruct;
@@ -143,6 +144,8 @@ ContQuerySchedulerShmemInit(void)
 				MAX_PROC_TABLE_SZ, &info, HASH_ELEM | HASH_FUNCTION);
 
 		update_run_params();
+
+		ContQuerySchedulerShmem->tranche_id = LWLockNewTrancheId();
 	}
 }
 
@@ -390,7 +393,6 @@ static void
 cont_bgworker_main(Datum arg)
 {
 	void (*run) (void);
-	ResourceOwner res;
 	dsm_segment *segment;
 	dsm_handle handle;
 
@@ -429,13 +431,14 @@ cont_bgworker_main(Datum arg)
 			ereport(ERROR, (errmsg("continuous queries can only be run as worker or combiner processes")));
 	}
 
+	CurrentResourceOwner = ResourceOwnerCreate(NULL, "dsm_cqueue ResourceOwner");
+
 	/* Set up dsm_cqueue for IPC under a long-lived ResourceOwner. */
-	res = ResourceOwnerCreate(NULL, "dsm_cqueue ResourceOwner");
-	CurrentResourceOwner = res;
 	segment = dsm_create(continuous_query_ipc_shared_mem * 1024);
+	dsm_pin_mapping(segment);
 	handle = dsm_segment_handle(segment);
-	dsm_cqueue_init(handle);
-	CurrentResourceOwner = NULL;
+	dsm_cqueue_init_with_tranche_id(handle, ContQuerySchedulerShmem->tranche_id);
+	MyContQueryProc->dsm_handle = handle;
 
 	/* Initialize process level CQ stats. */
 	cq_stat_init(&MyProcCQStats, 0, MyProcPid);
@@ -446,11 +449,8 @@ cont_bgworker_main(Datum arg)
 	/* Purge process level CQ stats. */
 	cq_stat_send_purge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
 
-	/* Delete the ResourceOwner, which will detach the dsm_segment as well. */
-	CurrentResourceOwner = res;
+	/* Detach the dsm_segment. */
 	dsm_detach(segment);
-	CurrentResourceOwner = NULL;
-	ResourceOwnerDelete(res);
 }
 
 static bool
@@ -823,6 +823,8 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		/* refresh db list? */
 		if (got_SIGINT)
 		{
+			got_SIGINT = false;
+
 			list_free_deep(dbs);
 			dbs = get_database_list();
 		}
@@ -912,6 +914,8 @@ AdhocContQueryProcGet(void)
 	int i;
 	int idx;
 	ContQueryProc *proc = NULL;
+	dsm_segment *segment;
+	dsm_handle handle;
 
 	db_meta = (ContQueryDatabaseMetadata *) hash_search(
 				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
@@ -941,12 +945,23 @@ AdhocContQueryProcGet(void)
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
 		proc->type = Adhoc;
+		proc->id = rand();
 		proc->group_id = idx;
 		proc->latch = &MyProc->procLatch;
 		proc->db_meta = db_meta;
 	}
 	else
 		elog(ERROR, "no free slot for running adhoc continuous query process");
+
+	if (CurrentResourceOwner == NULL)
+		CurrentResourceOwner = ResourceOwnerCreate(NULL, "dsm_cqueue ResourceOwner");
+
+	/* Set up IPC shared memory */
+	segment = dsm_create(continuous_query_ipc_shared_mem * 1024);
+	dsm_pin_mapping(segment);
+	handle = dsm_segment_handle(segment);
+	dsm_cqueue_init_with_tranche_id(handle, ContQuerySchedulerShmem->tranche_id);
+	proc->dsm_handle = handle;
 
 	return proc;
 }
@@ -956,6 +971,7 @@ AdhocContQueryProcRelease(ContQueryProc *proc)
 {
 	bool found;
 	ContQueryDatabaseMetadata *db_meta;
+	dsm_segment *segment;
 
 	Assert(proc->type == Adhoc);
 	Assert(proc->group_id > 0);
@@ -965,8 +981,28 @@ AdhocContQueryProcRelease(ContQueryProc *proc)
 
 	SpinLockAcquire(&db_meta->mutex);
 
+	/* Deatch dsm_segment */
+	segment = dsm_find_mapping(proc->dsm_handle);
+	Assert(segment);
+	dsm_detach(segment);
+
 	/* Mark ContQueryProc struct as free. */
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
 	SpinLockRelease(&db_meta->mutex);
+}
+
+ContQueryDatabaseMetadata *
+GetContQueryDatabaseMetadata(void)
+{
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+			ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		elog(ERROR, "failed to find database metadata for continuous queries");
+
+	return db_meta;
 }

@@ -120,4 +120,6 @@ extern void SetAmContQueryAdhoc(bool value);
 extern ContQueryProc *AdhocContQueryProcGet(void);
 extern void AdhocContQueryProcRelease(ContQueryProc *proc);
 
+extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(void);
+
 #endif   /* CONT_SCHEDULER_H */
