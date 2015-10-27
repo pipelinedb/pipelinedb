@@ -861,7 +861,7 @@ ContinuousQueryCombinerMain(void)
 
 		TupleBufferBatchReaderTrySleep(reader, last_processed);
 
-		if (MyContQueryProc->group->terminate)
+		if (ShouldTerminateContQueryProcess())
 			break;
 
 		/* If necessary, reallocate resources that depend on runtime parameters that were changed */

@@ -84,6 +84,7 @@ extern int  continuous_query_ipc_shared_mem;
 extern double continuous_query_proc_priority;
 
 #define ContQueriesEnabled() (continuous_queries_enabled)
+#define ShouldTerminateContQueryProcess() (MyContQueryProc->db_meta->terminate)
 
 /* shared memory stuff */
 extern Size ContQuerySchedulerShmemSize(void);
@@ -112,6 +113,6 @@ extern void ContinuousQueryWorkerMain(void);
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
 
-extern void SetAmContQueryAdhoc(bool s);
+extern void SetAmContQueryAdhoc(bool value);
 
 #endif   /* CONT_SCHEDULER_H */

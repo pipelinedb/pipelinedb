@@ -93,7 +93,7 @@ AdhocMgrGetProc()
 		MemSet(grp, 0, sizeof(ContQueryDatabaseMetadata));
 		grp->db_oid = MyDatabaseId;
 
-		proc = grp->procs;
+		proc = grp->adhoc_procs;
 
 		proc->type = Adhoc;
 		proc->id = ind;
@@ -132,9 +132,9 @@ find_cq(Oid db_oid, int cq_id)
 	for (i = 0; i < max_worker_processes; ++i)
 	{
 		if (AdhocShmem->groups[i].db_oid == db_oid &&
-		    AdhocShmem->groups[i].procs[0].group_id == cq_id)
+				AdhocShmem->groups[i].adhoc_procs[0].group_id == cq_id)
 		{
-			return AdhocShmem->groups[i].procs;
+			return AdhocShmem->groups[i].adhoc_procs;
 		}
 	}
 

@@ -292,7 +292,7 @@ ContinuousQueryWorkerMain(void)
 
 		TupleBufferBatchReaderTrySleep(reader, last_processed);
 
-		if (MyContQueryProc->group->terminate)
+		if (ShouldTerminateContQueryProcess())
 			break;
 
 		/* If we had no queries, then rescan the catalog. */
