@@ -237,68 +237,30 @@ streams_to_meta(Relation pipeline_query)
 	return targets;
 }
 
-/*
- *
- */
 bool
 is_stream_relid(Oid relid)
 {
 	Relation rel = heap_open(relid, NoLock);
-	bool result = is_stream_relation(rel);
+	bool result = rel->rd_rel->relkind == RELKIND_STREAM;
 
 	heap_close(rel, NoLock);
 
 	return result;
 }
 
-/*
- *
- */
-bool
-is_stream_relation(Relation rel)
-{
-	ForeignTable *ft;
-	ForeignServer *fs;
-
-	if (rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE)
-		return false;
-
-	ft = GetForeignTable(RelationGetRelid(rel));
-	fs = GetForeignServer(ft->serverid);
-
-	return (pg_strcasecmp(fs->servername, PIPELINE_STREAM_SERVER) == 0);
-}
-
-/*
- *
- */
-bool
-is_stream_rte(RangeTblEntry *rte)
-{
-	if (rte->relkind != RELKIND_FOREIGN_TABLE)
-		return false;
-	return is_stream_relid(rte->relid);
-}
-
-/*
- *
- */
 bool
 is_inferred_stream_relation(Relation rel)
 {
-	return is_stream_relation(rel) && IsInferredStream((rel)->rd_id);
+	return rel->rd_rel->relkind == RELKIND_STREAM && IsInferredStream((rel)->rd_id);
 }
 
-/*
- *
- */
 bool
 is_inferred_stream_rte(RangeTblEntry *rte)
 {
 	Relation rel;
 	bool result;
 
-	if (rte->rtekind != RTE_RELATION || rte->relkind != RELKIND_FOREIGN_TABLE)
+	if (rte->relkind != RELKIND_STREAM)
 		return false;
 
 	rel = heap_open(rte->relid, NoLock);
@@ -766,7 +728,7 @@ RangeVarIsForStream(RangeVar *rv, bool *is_inferred)
 
 	relid = rel->rd_id;
 
-	is_stream = is_stream_relation(rel);
+	is_stream = rel->rd_rel->relkind == RELKIND_STREAM;
 	heap_close(rel, NoLock);
 
 	if (!is_stream)
@@ -815,7 +777,7 @@ bool IsStream(Oid relid)
 	if (rel == NULL)
 		return false;
 
-	result = is_stream_relation(rel);
+	result = rel->rd_rel->relkind == RELKIND_STREAM;
 	heap_close(rel, NoLock);
 
 	return result;
@@ -840,7 +802,7 @@ CreateInferredStream(RangeVar *rv)
 	transformCreateStreamStmt(stmt);
 
 	relid = DefineRelation((CreateStmt *) stmt,
-							RELKIND_FOREIGN_TABLE,
+							RELKIND_STREAM,
 							InvalidOid);
 
 	CreateForeignTable((CreateForeignTableStmt *) stmt, relid);
@@ -979,7 +941,6 @@ inferred_stream_open(ParseState *pstate, Relation rel)
 	TupleDesc desc = NULL;
 	Relation stream_rel;
 
-	Assert(pstate->p_allow_streams);
 	Assert(is_inferred_stream_relation(rel));
 
 	if (pstate->p_cont_view_context)
@@ -995,7 +956,7 @@ inferred_stream_open(ParseState *pstate, Relation rel)
 	stream_rel->rd_rel = palloc0(sizeof(FormData_pg_class));
 	stream_rel->rd_rel->relnatts = stream_rel->rd_att->natts;
 	namestrcpy(&stream_rel->rd_rel->relname, NameStr(rel->rd_rel->relname));
-	stream_rel->rd_rel->relkind = RELKIND_FOREIGN_TABLE;
+	stream_rel->rd_rel->relkind = RELKIND_STREAM;
 	stream_rel->rd_id = rel->rd_id;
 	stream_rel->rd_rel->relnamespace = rel->rd_rel->relnamespace;
 	stream_rel->rd_refcnt = 1; /* needs for copy */

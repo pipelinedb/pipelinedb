@@ -25,6 +25,7 @@
 #include <ctype.h>
 
 #include "catalog/pipeline_stream_fn.h"
+#include "catalog/pg_class.h"
 #include "lib/stringinfo.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
@@ -2423,7 +2424,7 @@ _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 		case RTE_RELATION:
 			WRITE_OID_FIELD(relid);
 			WRITE_CHAR_FIELD(relkind);
-			if (is_stream_rte((RangeTblEntry *) node))
+			if (node->relkind == RELKIND_STREAM)
 			{
 				WRITE_NODE_FIELD(ctecoltypes);
 				WRITE_NODE_FIELD(ctecoltypmods);

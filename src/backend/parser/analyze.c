@@ -446,7 +446,6 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	ListCell   *lc;
 
 	/* Allow inserting into streams */
-	pstate->p_allow_streams = true;
 	pstate->p_ins_cols = stmt->cols;
 
 	/* There can't be any outer WITH to worry about */

@@ -852,7 +852,6 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
 
 			pstate = make_parsestate(NULL);
-			pstate->p_allow_streams = true;
 			pstate->p_ins_cols = stmt->attlist;
 			rel = inferred_stream_open(pstate, rel);
 			free_parsestate(pstate);
@@ -871,7 +870,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
 
 		/* if it's an actual relation, we need to check permissions */
-		if (!is_stream_relation(rel))
+		if (rel->rd_rel->relkind != RELKIND_STREAM)
 		{
 			foreach(cur, attnums)
 			{
@@ -910,11 +909,6 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	}
 	else
 	{
-		if (rel && is_stream_relation(rel))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("cannot COPY data out of streams")));
-
 		cstate = BeginCopyTo(rel, stmt->query, queryString,
 							 stmt->filename, stmt->is_program,
 							 stmt->attlist, stmt->options);
@@ -1319,7 +1313,7 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = rel && is_stream_relation(rel);
+	cstate->to_stream = rel && rel->rd_rel->relkind == RELKIND_STREAM;
 	cstate->to_inferred_stream = rel && is_inferred_stream_relation(rel);
 	cstate->attnamelist = attnamelist;
 
@@ -1645,6 +1639,12 @@ BeginCopyTo(Relation rel,
 					 errmsg("cannot copy from continuous view \"%s\"",
 							RelationGetRelationName(rel)),
 					 errhint("Try the COPY (SELECT ...) TO variant.")));
+		else if (rel->rd_rel->relkind == RELKIND_STREAM)
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("cannot copy from stream \"%s\"",
+							RelationGetRelationName(rel)),
+					 errhint("Streams can only be read by continuous views.")));
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -2150,7 +2150,8 @@ CopyFrom(CopyState cstate)
 
 	Assert(cstate->rel);
 
-	if (cstate->rel->rd_rel->relkind != RELKIND_RELATION && !is_stream_relation(cstate->rel))
+	if (cstate->rel->rd_rel->relkind != RELKIND_RELATION &&
+			cstate->rel->rd_rel->relkind != RELKIND_STREAM)
 	{
 		if (cstate->rel->rd_rel->relkind == RELKIND_VIEW)
 			ereport(ERROR,
@@ -4387,7 +4388,8 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
 					errmsg("column \"%s\" of %s \"%s\" does not exist",
-						   name, is_stream_relation(rel) ? "stream" : "relation", RelationGetRelationName(rel))));
+						   name, rel->rd_rel->relkind == RELKIND_STREAM ? "stream" : "relation",
+								   RelationGetRelationName(rel))));
 				else
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),

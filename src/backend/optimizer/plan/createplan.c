@@ -4981,7 +4981,8 @@ make_modifytable(PlannerInfo *root,
 			RangeTblEntry *rte = planner_rt_fetch(rti, root);
 
 			Assert(rte->rtekind == RTE_RELATION);
-			if (rte->relkind == RELKIND_FOREIGN_TABLE)
+			if (rte->relkind == RELKIND_FOREIGN_TABLE ||
+					rte->relkind == RELKIND_STREAM)
 				fdwroutine = GetFdwRoutineByRelId(rte->relid);
 			else
 				fdwroutine = NULL;
