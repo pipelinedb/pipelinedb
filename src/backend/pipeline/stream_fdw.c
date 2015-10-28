@@ -405,8 +405,7 @@ ExecStreamProject(StreamTuple *event, StreamScanState *node)
 List *
 PlanStreamModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int subplan_index)
 {
-	TupleDesc desc = ExecTypeFromTL(root->parse->targetList, false);
-	return list_make1(desc);
+	return list_make1(root->parse->targetList);
 }
 
 
@@ -514,7 +513,8 @@ void
 BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 						   List *fdw_private, int subplan_index, int eflags)
 {
-	Oid streamid = RelationGetRelid(result_info->ri_RelationDesc);
+	Relation stream = result_info->ri_RelationDesc;
+	Oid streamid = RelationGetRelid(stream);
 	StreamInsertState *sis = palloc0(sizeof(StreamInsertState));
 	Bitmapset *all_targets = GetStreamReaders(streamid);
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
@@ -525,6 +525,10 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	int num_batches = 0;
 	int num_worker = bms_num_members(targets);
 	AdhocData *adhoc_data = palloc0(sizeof(AdhocData));
+	List *insert_tl;
+
+	Assert(fdw_private);
+	insert_tl = linitial(fdw_private);
 
 	init_adhoc_data(adhoc_data, adhoc_targets);
 
@@ -545,7 +549,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	sis->batch = batch;
 	sis->count = 0;
 	sis->bytes = 0;
-	sis->desc = linitial(fdw_private);
+	sis->desc = is_inferred_stream_relation(stream) ? ExecTypeFromTL(insert_tl, false) : RelationGetDescr(stream);
 
 	result_info->ri_FdwState = sis;
 }
