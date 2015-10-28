@@ -201,4 +201,8 @@ DATA(insert (0 fss_agg_trans  0 0 fss_merge_agg_trans 5041));
 DATA(insert (0 fss_agg_transp 0 0 fss_merge_agg_trans 5041));
 DATA(insert (0 fss_agg_weighted_trans 0 0 fss_merge_agg_trans 5041));
 
+/* keyed min/max */
+DATA(insert (keyed_min_max_finalize keyed_min_trans  0 0 keyed_min_combine 5043));
+DATA(insert (keyed_min_max_finalize keyed_max_trans  0 0 keyed_min_combine 5043));
+
 #endif
