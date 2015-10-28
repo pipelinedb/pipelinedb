@@ -346,6 +346,47 @@ DATA(insert ( 4397	n 0 fss_agg_transp			-	-				-				-				f f 0	5041	0	0		0	_null
 DATA(insert ( 4400	n 0 fss_merge_agg_trans		-	-				-				-				f f 0	5041	0	0		0	_null_ _null_ ));
 DATA(insert ( 4412	n 0 fss_agg_weighted_trans		-	-				-				-				f f 0	5041	0	0		0	_null_ _null_ ));
 
+/* keyed min/max aggregates */
+DATA(insert ( 4420	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 413		20		0	0		0	_null_ _null_ ));
+DATA(insert ( 4421	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 521		23		0	0		0	_null_ _null_ ));
+DATA(insert ( 4422	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 520		21		0	0		0	_null_ _null_ ));
+DATA(insert ( 4423	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 610		26		0	0		0	_null_ _null_ ));
+DATA(insert ( 4424	n 0 keyed_min_trans		keyed_min_max_finalize			-				-				-				f f 623		700		0	0		0	_null_ _null_ ));
+DATA(insert ( 4425	n 0 keyed_min_trans		keyed_min_max_finalize		-				-				-				f f 674		701		0	0		0	_null_ _null_ ));
+DATA(insert ( 4426	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 563		702		0	0		0	_null_ _null_ ));
+DATA(insert ( 4427	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 1097	1082	0	0		0	_null_ _null_ ));
+DATA(insert ( 4428	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 1112	1083	0	0		0	_null_ _null_ ));
+DATA(insert ( 4429	n 0 keyed_min_trans		keyed_min_max_finalize		-				-				-				f f 1554	1266	0	0		0	_null_ _null_ ));
+DATA(insert ( 4430	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 903		790		0	0		0	_null_ _null_ ));
+DATA(insert ( 4431	n 0 keyed_min_trans		keyed_min_max_finalize	-				-				-				f f 2064	1114	0	0		0	_null_ _null_ ));
+DATA(insert ( 4432	n 0 keyed_min_trans		keyed_min_max_finalize			-				-				-				f f 1324	1184	0	0		0	_null_ _null_ ));
+DATA(insert ( 4433	n 0 keyed_min_trans 	keyed_min_max_finalize				-				-				-				f f 1334	1186	0	0		0	_null_ _null_ ));
+DATA(insert ( 4434	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 666		25		0	0		0	_null_ _null_ ));
+DATA(insert ( 4435	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 1756	1700	0	0		0	_null_ _null_ ));
+DATA(insert ( 4436	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 1060	1042	0	0		0	_null_ _null_ ));
+DATA(insert ( 4437	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 2800	27		0	0		0	_null_ _null_ ));
+DATA(insert ( 4438	n 0 keyed_min_trans		keyed_min_max_finalize				-				-				-				f f 3519	3500	0	0		0	_null_ _null_ ));
+
+DATA(insert ( 4439	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 521		23		0	0		0	_null_ _null_ ));
+DATA(insert ( 4440	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 520		21		0	0		0	_null_ _null_ ));
+DATA(insert ( 4441	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 610		26		0	0		0	_null_ _null_ ));
+DATA(insert ( 4442	n 0 keyed_max_trans		keyed_min_max_finalize			-				-				-				f f 623		700		0	0		0	_null_ _null_ ));
+DATA(insert ( 4443	n 0 keyed_max_trans		keyed_min_max_finalize		-				-				-				f f 674		701		0	0		0	_null_ _null_ ));
+DATA(insert ( 4444	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 563		702		0	0		0	_null_ _null_ ));
+DATA(insert ( 4445	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 1097	1082	0	0		0	_null_ _null_ ));
+DATA(insert ( 4446	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 1112	1083	0	0		0	_null_ _null_ ));
+DATA(insert ( 4447	n 0 keyed_max_trans		keyed_min_max_finalize		-				-				-				f f 1554	1266	0	0		0	_null_ _null_ ));
+DATA(insert ( 4448	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 903		790		0	0		0	_null_ _null_ ));
+DATA(insert ( 4449	n 0 keyed_max_trans		keyed_min_max_finalize	-				-				-				f f 2064	1114	0	0		0	_null_ _null_ ));
+DATA(insert ( 4450	n 0 keyed_max_trans		keyed_min_max_finalize			-				-				-				f f 1324	1184	0	0		0	_null_ _null_ ));
+DATA(insert ( 4451	n 0 keyed_max_trans 	keyed_min_max_finalize				-				-				-				f f 1334	1186	0	0		0	_null_ _null_ ));
+DATA(insert ( 4452	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 666		25		0	0		0	_null_ _null_ ));
+DATA(insert ( 4453	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 1756	1700	0	0		0	_null_ _null_ ));
+DATA(insert ( 4454	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 1060	1042	0	0		0	_null_ _null_ ));
+DATA(insert ( 4455	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 2800	27		0	0		0	_null_ _null_ ));
+DATA(insert ( 4456	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 413		20		0	0		0	_null_ _null_ ));
+DATA(insert ( 4457	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 3519	3500	0	0		0	_null_ _null_ ));
+
 /*
  * prototypes for functions in pg_aggregate.c
  */
