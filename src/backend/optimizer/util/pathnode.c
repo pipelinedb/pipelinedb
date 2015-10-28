@@ -17,7 +17,6 @@
 
 #include <math.h>
 
-#include "catalog/pg_class.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/clauses.h"
