@@ -880,7 +880,7 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 			relation = heap_open(rte->relid, NoLock);
 			numattrs = RelationGetNumberOfAttributes(relation);
 
-			if (is_stream_rte(rte))
+			if (rte->relkind == RELKIND_STREAM)
 			{
 				expandRTE(rte, varno, 0, -1, true /* include dropped */ ,
 						  NULL, &colvars);

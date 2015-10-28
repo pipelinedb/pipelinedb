@@ -15,6 +15,7 @@
  */
 #include "postgres.h"
 
+#include "catalog/pg_class.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "optimizer/cost.h"
 #include "optimizer/pathnode.h"
@@ -138,7 +139,7 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptKind reloptkind)
 		case RTE_RELATION:
 			/* Table --- retrieve statistics from the system catalogs */
 			get_relation_info(root, rte->relid, rte->inh, rel);
-			if (is_stream_rte(rte))
+			if (rte->relkind == RELKIND_STREAM)
 			{
 				rel->min_attr = 0;
 				rel->max_attr = list_length(rte->eref->colnames);

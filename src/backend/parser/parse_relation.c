@@ -1077,7 +1077,7 @@ addRangeTableEntry(ParseState *pstate,
 	rte->eref = makeAlias(refname, NIL);
 	buildRelationAliases(rel->rd_att, alias, rte->eref);
 
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 	{
 		inh = false;
 		transformRelationRTEToStreamRTE(rte, rel);
@@ -1146,7 +1146,7 @@ addRangeTableEntryForRelation(ParseState *pstate,
 	rte->eref = makeAlias(refname, NIL);
 	buildRelationAliases(rel->rd_att, alias, rte->eref);
 
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 	{
 		inh = false;
 		transformRelationRTEToStreamRTE(rte, rel);
@@ -1863,7 +1863,7 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 	if (colvars)
 		*colvars = NIL;
 
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 	{
 		ListCell   *aliasp_item = list_head(rte->eref->colnames);
 		ListCell   *lct;
@@ -2432,7 +2432,7 @@ void
 get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 					   Oid *vartype, int32 *vartypmod, Oid *varcollid)
 {
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 	{
 		Assert(attnum > 0 && attnum <= list_length(rte->ctecoltypes));
 		*vartype = list_nth_oid(rte->ctecoltypes, attnum - 1);
@@ -2632,7 +2632,7 @@ get_rte_attribute_is_dropped(RangeTblEntry *rte, AttrNumber attnum)
 {
 	bool		result;
 
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 		return false;
 
 	switch (rte->rtekind)

@@ -264,15 +264,6 @@ is_stream_relation(Relation rel)
  *
  */
 bool
-is_stream_rte(RangeTblEntry *rte)
-{
-	return rte->relkind == RELKIND_STREAM;
-}
-
-/*
- *
- */
-bool
 is_inferred_stream_relation(Relation rel)
 {
 	return is_stream_relation(rel) && IsInferredStream((rel)->rd_id);

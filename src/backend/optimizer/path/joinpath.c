@@ -17,6 +17,7 @@
 
 #include <math.h>
 
+#include "catalog/pg_class.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"

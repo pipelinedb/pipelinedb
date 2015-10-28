@@ -22,7 +22,7 @@
 #include "utils/tuplestore.h"
 
 #define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
-	(is_stream_rte(planner_rt_fetch(relid, root))))
+	((planner_rt_fetch(relid, root))->relkind == RELKIND_STREAM))
 
 #define IS_STREAM_TREE(node) ((IsA((node), ForeignScanState) && (is_stream_relation((((ForeignScanState *) NULL)->ss.ss_currentRelation)))) || \
 		IsA((node), StreamTableJoinState))

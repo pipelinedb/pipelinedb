@@ -15,6 +15,7 @@
  */
 #include "postgres.h"
 
+#include "catalog/pg_class.h"
 #include "optimizer/joininfo.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
