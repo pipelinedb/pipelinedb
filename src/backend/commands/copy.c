@@ -852,7 +852,6 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
 
 			pstate = make_parsestate(NULL);
-			pstate->p_allow_streams = true;
 			pstate->p_ins_cols = stmt->attlist;
 			rel = inferred_stream_open(pstate, rel);
 			free_parsestate(pstate);

@@ -992,17 +992,8 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 	}
 	cancel_parser_errposition_callback(&pcbstate);
 
-	if (rel->rd_rel->relkind == RELKIND_STREAM)
-	{
-//		if (!pstate->p_allow_streams)
-//			ereport(ERROR,
-//					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-//					 errmsg("\"%s\" is a stream", relation->relname),
-//					 errhint("Streams can only be read by a continuous view's FROM clause.")));
-
-		if (is_inferred_stream_relation(rel))
-			rel = inferred_stream_open(pstate, rel);
-	}
+	if (is_inferred_stream_relation(rel))
+		rel = inferred_stream_open(pstate, rel);
 
 	return rel;
 }
