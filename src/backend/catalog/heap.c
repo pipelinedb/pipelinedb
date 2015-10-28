@@ -286,6 +286,7 @@ heap_create(const char *relname,
 		case RELKIND_COMPOSITE_TYPE:
 		case RELKIND_FOREIGN_TABLE:
 		case RELKIND_CONTVIEW:
+		case RELKIND_STREAM:
 			create_storage = false;
 
 			/*
@@ -1805,7 +1806,8 @@ heap_drop_with_catalog(Oid relid)
 	if (rel->rd_rel->relkind != RELKIND_VIEW &&
 		rel->rd_rel->relkind != RELKIND_COMPOSITE_TYPE &&
 		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
-		rel->rd_rel->relkind != RELKIND_CONTVIEW)
+		rel->rd_rel->relkind != RELKIND_CONTVIEW &&
+		rel->rd_rel->relkind != RELKIND_STREAM)
 	{
 		RelationDropStorage(rel);
 	}

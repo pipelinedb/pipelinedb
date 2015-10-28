@@ -257,16 +257,7 @@ is_stream_relid(Oid relid)
 bool
 is_stream_relation(Relation rel)
 {
-	ForeignTable *ft;
-	ForeignServer *fs;
-
-	if (rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE)
-		return false;
-
-	ft = GetForeignTable(RelationGetRelid(rel));
-	fs = GetForeignServer(ft->serverid);
-
-	return (pg_strcasecmp(fs->servername, PIPELINE_STREAM_SERVER) == 0);
+	return rel->rd_rel->relkind == RELKIND_STREAM;
 }
 
 /*
@@ -275,9 +266,7 @@ is_stream_relation(Relation rel)
 bool
 is_stream_rte(RangeTblEntry *rte)
 {
-	if (rte->relkind != RELKIND_FOREIGN_TABLE)
-		return false;
-	return is_stream_relid(rte->relid);
+	return rte->relkind == RELKIND_STREAM;
 }
 
 /*
@@ -298,7 +287,7 @@ is_inferred_stream_rte(RangeTblEntry *rte)
 	Relation rel;
 	bool result;
 
-	if (rte->rtekind != RTE_RELATION || rte->relkind != RELKIND_FOREIGN_TABLE)
+	if (rte->relkind != RELKIND_STREAM)
 		return false;
 
 	rel = heap_open(rte->relid, NoLock);
@@ -979,7 +968,6 @@ inferred_stream_open(ParseState *pstate, Relation rel)
 	TupleDesc desc = NULL;
 	Relation stream_rel;
 
-	Assert(pstate->p_allow_streams);
 	Assert(is_inferred_stream_relation(rel));
 
 	if (pstate->p_cont_view_context)

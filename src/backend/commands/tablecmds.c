@@ -253,6 +253,12 @@ static const struct dropmsgstrings dropmsgstringarray[] = {
 		gettext_noop("continuous view  \"%s\" does not exist, skipping"),
 		gettext_noop("\"%s\" is not a continuous view "),
 	gettext_noop("Use DROP CONTINUOUS VIEW to remove a continuous view.")},
+	{RELKIND_STREAM,
+		ERRCODE_UNDEFINED_OBJECT,
+		gettext_noop("stream \"%s\" does not exist"),
+		gettext_noop("stream\"%s\" does not exist, skipping"),
+		gettext_noop("\"%s\" is not a stream"),
+	gettext_noop("Use DROP STREAM to remove a stream.")},
 	{'\0', 0, NULL, NULL, NULL, NULL}
 };
 
@@ -2146,7 +2152,8 @@ renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 		relkind != RELKIND_COMPOSITE_TYPE &&
 		relkind != RELKIND_INDEX &&
 		relkind != RELKIND_FOREIGN_TABLE &&
-		relkind != RELKIND_CONTVIEW)
+		relkind != RELKIND_CONTVIEW &&
+		relkind != RELKIND_STREAM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, view, materialized view, composite type, index, or foreign table",
