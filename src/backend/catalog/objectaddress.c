@@ -903,7 +903,7 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 								RelationGetRelationName(relation))));
 			break;
 		case OBJECT_STREAM:
-			if (!is_stream_relation(relation))
+			if (relation->rd_rel->relkind != RELKIND_STREAM)
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a stream",

@@ -269,6 +269,8 @@ ContinuousQueryWorkerMain(void)
 	/* Workers never perform any writes, so only need read only transactions. */
 	XactReadOnly = true;
 
+	pg_usleep(12 * 1000 * 1000);
+
 	ContQueryBatchContext = AllocSetContextCreate(run_cxt, "ContQueryBatchContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,

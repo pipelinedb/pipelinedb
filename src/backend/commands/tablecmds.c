@@ -487,6 +487,10 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("constraints are not supported on foreign tables")));
+	if (stmt->constraints != NIL && relkind == RELKIND_STREAM)
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("constraints are not supported on streams")));
 
 	/*
 	 * Look up the namespace in which we are supposed to create the relation,
@@ -844,6 +848,10 @@ RemoveRelations(DropStmt *drop)
 
 		case OBJECT_CONTINUOUS_VIEW:
 			relkind = RELKIND_CONTVIEW;
+			break;
+
+		case OBJECT_STREAM:
+			relkind = RELKIND_STREAM;
 			break;
 
 		default:
@@ -3624,7 +3632,8 @@ ATRewriteTables(List **wqueue, LOCKMODE lockmode)
 		AlteredTableInfo *tab = (AlteredTableInfo *) lfirst(ltab);
 
 		/* Foreign tables have no storage. */
-		if (tab->relkind == RELKIND_FOREIGN_TABLE)
+		if (tab->relkind == RELKIND_FOREIGN_TABLE ||
+				tab->relkind == RELKIND_STREAM)
 			continue;
 
 		/*
@@ -4161,6 +4170,9 @@ ATSimplePermissions(Relation rel, int allowed_targets)
 			break;
 		case RELKIND_CONTVIEW:
 			actual_target = ATT_VIEW;
+			break;
+		case RELKIND_STREAM:
+			actual_target = ATT_FOREIGN_TABLE;
 			break;
 		default:
 			actual_target = 0;
@@ -4770,7 +4782,8 @@ ATExecAddColumn(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	 * have no storage.
 	 */
 	if (relkind != RELKIND_VIEW && relkind != RELKIND_COMPOSITE_TYPE
-		&& relkind != RELKIND_FOREIGN_TABLE && relkind != RELKIND_CONTVIEW && attribute.attnum > 0)
+		&& relkind != RELKIND_FOREIGN_TABLE && relkind != RELKIND_CONTVIEW
+		&& relkind != RELKIND_STREAM && attribute.attnum > 0)
 	{
 		defval = (Expr *) build_column_default(rel, attribute.attnum);
 
@@ -5206,7 +5219,9 @@ ATPrepSetStatistics(Relation rel, const char *colName, Node *newValue, LOCKMODE 
 	if (rel->rd_rel->relkind != RELKIND_RELATION &&
 		rel->rd_rel->relkind != RELKIND_MATVIEW &&
 		rel->rd_rel->relkind != RELKIND_INDEX &&
-		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE)
+		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
+		rel->rd_rel->relkind != RELKIND_CONTVIEW &&
+		rel->rd_rel->relkind != RELKIND_STREAM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, materialized view, index, or foreign table",
@@ -7688,7 +7703,8 @@ ATPrepAlterColumnType(List **wqueue,
 						RelationGetRelationName(rel))));
 
 	if (tab->relkind == RELKIND_COMPOSITE_TYPE ||
-		tab->relkind == RELKIND_FOREIGN_TABLE)
+		tab->relkind == RELKIND_FOREIGN_TABLE ||
+		tab->relkind == RELKIND_STREAM)
 	{
 		/*
 		 * For composite types, do this check now.  Tables will check it later
@@ -8535,6 +8551,7 @@ ATExecChangeOwner(Oid relationOid, Oid newOwnerId, bool recursing, LOCKMODE lock
 		case RELKIND_MATVIEW:
 		case RELKIND_FOREIGN_TABLE:
 		case RELKIND_CONTVIEW:
+		case RELKIND_STREAM:
 			/* ok to change owner */
 			break;
 		case RELKIND_INDEX:
@@ -11358,6 +11375,11 @@ RangeVarCallbackForAlterRelation(const RangeVar *rv, Oid relid, Oid oldrelid,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not an index", rv->relname)));
 
+	if (reltype == OBJECT_STREAM && relkind != RELKIND_STREAM)
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("\"%s\" is not a stream", rv->relname)));
+
 	if (relkind == RELKIND_CONTVIEW)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -11382,7 +11404,9 @@ RangeVarCallbackForAlterRelation(const RangeVar *rv, Oid relid, Oid oldrelid,
 		relkind != RELKIND_VIEW &&
 		relkind != RELKIND_MATVIEW &&
 		relkind != RELKIND_SEQUENCE &&
-		relkind != RELKIND_FOREIGN_TABLE)
+		relkind != RELKIND_FOREIGN_TABLE &&
+		relkind != RELKIND_CONTVIEW &&
+		relkind != RELKIND_STREAM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, view, materialized view, sequence, or foreign table",
