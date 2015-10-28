@@ -568,37 +568,6 @@ GetAllStreamReaders(Oid relid)
 	return result;
 }
 
-/* 
- * GetAdhocContinuousViewIds
- * 
- * Returns a bitmapset of all the continuous views that 
- * are marked as adhoc.
- */  
-Bitmapset *
-GetAdhocContinuousViewIds(void)
-{
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
-	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
-	HeapTuple tup;
-	Bitmapset *result = NULL;
-
-	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
-	{
-		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		Oid id = row->id;
-
-		if (!row->adhoc)
-			continue;
-
-		result = bms_add_member(result, id);
-	}
-
-	heap_endscan(scan_desc);
-	heap_close(pipeline_query, AccessShareLock);
-
-	return result;
-}
-
 Bitmapset *
 GetLocalStreamReaders(Oid relid)
 {

@@ -42,5 +42,6 @@ extern void RemoveContinuousViewById(Oid oid);
 
 extern ContinuousView *GetContinuousView(Oid id);
 extern Bitmapset *GetAllContinuousViewIds(void);
+extern Bitmapset *GetAdhocContinuousViewIds(void);
 
 #endif

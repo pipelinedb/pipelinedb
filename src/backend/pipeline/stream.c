@@ -65,12 +65,10 @@ GetStreamReaders(Oid relid)
 	char *name = get_rel_name(relid);
 
 	if (targets == NULL)
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("no continuous views are currently reading from stream %s", name),
 				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", name)));
-	}
 
 	if (!continuous_queries_enabled)
 		ereport(ERROR,

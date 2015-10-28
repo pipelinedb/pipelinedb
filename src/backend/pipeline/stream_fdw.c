@@ -26,13 +26,13 @@
 #include "parser/parsetree.h"
 #include "pgstat.h"
 #include "pipeline/cont_adhoc_mgr.h"
+#include "pipeline/dsm_cqueue.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/typcache.h"
-
 
 typedef struct StreamFdwInfo
 {

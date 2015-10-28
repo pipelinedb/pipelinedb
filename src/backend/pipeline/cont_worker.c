@@ -24,6 +24,7 @@
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
+#include "pipeline/stream_fdw.h"
 #include "pipeline/tuplebuf.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"

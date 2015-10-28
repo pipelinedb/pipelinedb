@@ -14,6 +14,7 @@
 #define CONT_SCHEDULER_H
 
 #include "storage/latch.h"
+#include "pipeline/dsm_cqueue.h"
 #include "postmaster/bgworker.h"
 #include "storage/dsm.h"
 #include "storage/spin.h"
@@ -40,6 +41,7 @@ typedef struct
 	Latch *latch;
 
 	dsm_handle dsm_handle;
+	dsm_cqueue_handle *cq_handle;
 	BackgroundWorkerHandle *bgw_handle;
 
 	ContQueryDatabaseMetadata *db_meta;
@@ -87,6 +89,7 @@ extern double continuous_query_proc_priority;
 
 #define ContQueriesEnabled() (continuous_queries_enabled)
 #define ShouldTerminateContQueryProcess() (MyContQueryProc->db_meta->terminate)
+#define MyDSMCQueue (MyContQueryProc->cq_handle->cqueue)
 
 /* shared memory stuff */
 extern Size ContQuerySchedulerShmemSize(void);
