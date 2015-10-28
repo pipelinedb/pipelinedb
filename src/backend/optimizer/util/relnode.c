@@ -15,6 +15,7 @@
  */
 #include "postgres.h"
 
+#include "catalog/pipeline_stream_fn.h"
 #include "optimizer/cost.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
@@ -137,8 +138,16 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptKind reloptkind)
 		case RTE_RELATION:
 			/* Table --- retrieve statistics from the system catalogs */
 			get_relation_info(root, rte->relid, rte->inh, rel);
+			if (is_stream_rte(rte))
+			{
+				rel->min_attr = 0;
+				rel->max_attr = list_length(rte->eref->colnames);
+				rel->attr_needed = (Relids *)
+					palloc0((rel->max_attr - rel->min_attr + 1) * sizeof(Relids));
+				rel->attr_widths = (int32 *)
+					palloc0((rel->max_attr - rel->min_attr + 1) * sizeof(int32));
+			}
 			break;
-		case RTE_STREAM:
 		case RTE_SUBQUERY:
 		case RTE_FUNCTION:
 		case RTE_VALUES:

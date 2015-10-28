@@ -1,3 +1,6 @@
+DROP SERVER pipeline_streams;
+DROP FOREIGN DATA WRAPPER stream_fdw;
+
 CREATE CONTINUOUS VIEW test_avg AS SELECT key::text, avg(value::float8) FROM sanity_stream GROUP BY key;
 
 INSERT INTO sanity_stream (key, value) VALUES ('x', 1), ('x', 2), ('y', 100);

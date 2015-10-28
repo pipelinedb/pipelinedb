@@ -18,6 +18,7 @@
 #include "catalog/pipeline_query_fn.h"
 #include "commands/pipelinecmds.h"
 #include "executor/executor.h"
+#include "foreign/foreign.h"
 #include "funcapi.h"
 #include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
@@ -208,10 +209,15 @@ SetTupleBufferBatchReader(PlanState *planstate, TupleBufferBatchReader *reader)
 	if (planstate == NULL)
 		return;
 
-	if (IsA(planstate, StreamScanState))
+	if (IsA(planstate, ForeignScanState))
 	{
-		StreamScanState *scan = (StreamScanState *) planstate;
-		scan->reader = reader;
+		ForeignScanState *fss = (ForeignScanState *) planstate;
+		if (IsStream(RelationGetRelid(fss->ss.ss_currentRelation)))
+		{
+			StreamScanState *scan = (StreamScanState *) fss->fdw_state;
+			scan->reader = reader;
+		}
+
 		return;
 	}
 	else if (IsA(planstate, SubqueryScanState))

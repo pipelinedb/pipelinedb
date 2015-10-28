@@ -17,12 +17,14 @@
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/objectaddress.h"
+#include "catalog/pg_foreign_table.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "commands/defrem.h"
 #include "commands/tablecmds.h"
 #include "fmgr.h"
+#include "foreign/foreign.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
 #include "nodes/makefuncs.h"
@@ -35,6 +37,7 @@
 #include "tcop/tcopprot.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/typcache.h"
@@ -232,6 +235,78 @@ streams_to_meta(Relation pipeline_query)
 	}
 
 	return targets;
+}
+
+/*
+ *
+ */
+bool
+is_stream_relid(Oid relid)
+{
+	Relation rel = heap_open(relid, NoLock);
+	bool result = is_stream_relation(rel);
+
+	heap_close(rel, NoLock);
+
+	return result;
+}
+
+/*
+ *
+ */
+bool
+is_stream_relation(Relation rel)
+{
+	ForeignTable *ft;
+	ForeignServer *fs;
+
+	if (rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE)
+		return false;
+
+	ft = GetForeignTable(RelationGetRelid(rel));
+	fs = GetForeignServer(ft->serverid);
+
+	return (pg_strcasecmp(fs->servername, PIPELINE_STREAM_SERVER) == 0);
+}
+
+/*
+ *
+ */
+bool
+is_stream_rte(RangeTblEntry *rte)
+{
+	if (rte->relkind != RELKIND_FOREIGN_TABLE)
+		return false;
+	return is_stream_relid(rte->relid);
+}
+
+/*
+ *
+ */
+bool
+is_inferred_stream_relation(Relation rel)
+{
+	return is_stream_relation(rel) && IsInferredStream((rel)->rd_id);
+}
+
+/*
+ *
+ */
+bool
+is_inferred_stream_rte(RangeTblEntry *rte)
+{
+	Relation rel;
+	bool result;
+
+	if (rte->rtekind != RTE_RELATION || rte->relkind != RELKIND_FOREIGN_TABLE)
+		return false;
+
+	rel = heap_open(rte->relid, NoLock);
+	result = is_inferred_stream_relation(rel);
+
+	heap_close(rel, NoLock);
+
+	return result;
 }
 
 /*
@@ -604,6 +679,8 @@ GetInferredStreamTupleDesc(Oid relid, List *colnames)
 	AttrNumber attno = InvalidAttrNumber;
 	int i;
 	Form_pipeline_stream row;
+	MemoryContext old;
+	TupleDesc result;
 
 	Assert (HeapTupleIsValid(tup));
 
@@ -618,6 +695,9 @@ GetInferredStreamTupleDesc(Oid relid, List *colnames)
 		return NULL;
 	}
 
+	/* Relcache entries are expected to live in CacheMemoryContext */
+	old = MemoryContextSwitchTo(CacheMemoryContext);
+
 	bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(raw));
 	desc = UnpackTupleDesc(bytes);
 
@@ -630,15 +710,23 @@ GetInferredStreamTupleDesc(Oid relid, List *colnames)
 	attno = 1;
 	foreach(lc, colnames)
 	{
-		Value *colname = (Value *) lfirst(lc);
+		char *colname;
 		int i;
+
+		if (IsA(lfirst(lc), ResTarget))
+			colname = ((ResTarget *) lfirst(lc))->name;
+		else if (IsA(lfirst(lc), String))
+			colname = strVal((Value *) lfirst(lc));
+		else
+			elog(ERROR, "unexpected node found in insert columns list: %d", nodeTag(lfirst(lc)));
+
 		for (i=0; i<desc->natts; i++)
 		{
 			/*
 			 * It's ok if no matching column was found in the all-streams TupleDesc,
 			 * it just means nothing is reading that column and we can ignore it
 			 */
-			if (pg_strcasecmp(strVal(colname), NameStr(desc->attrs[i]->attname)) == 0)
+			if (pg_strcasecmp(colname, NameStr(desc->attrs[i]->attname)) == 0)
 			{
 				Form_pg_attribute att = (Form_pg_attribute) desc->attrs[i];
 				att->attnum = attno++;
@@ -653,7 +741,12 @@ GetInferredStreamTupleDesc(Oid relid, List *colnames)
 	foreach(lc, attlist)
 		attrs[i++] = (Form_pg_attribute) lfirst(lc);
 
-	return CreateTupleDesc(list_length(attlist), false, attrs);
+	result = CreateTupleDesc(list_length(attlist), false, attrs);
+	result->tdrefcount = 1;
+
+	MemoryContextSwitchTo(old);
+
+	return result;
 }
 
 /*
@@ -663,19 +756,20 @@ bool
 RangeVarIsForStream(RangeVar *rv, bool *is_inferred)
 {
 	Relation rel = heap_openrv_extended(rv, NoLock, true);
-	char relkind;
 	Oid relid;
 	HeapTuple tup;
 	Form_pipeline_stream row;
+	bool is_stream = false;
 
 	if (rel == NULL)
 		return false;
 
-	relkind = rel->rd_rel->relkind;
 	relid = rel->rd_id;
+
+	is_stream = is_stream_relation(rel);
 	heap_close(rel, NoLock);
 
-	if (relkind != RELKIND_STREAM)
+	if (!is_stream)
 		return false;
 
 	if (is_inferred != NULL)
@@ -716,15 +810,15 @@ IsInferredStream(Oid relid)
 bool IsStream(Oid relid)
 {
 	Relation rel = try_relation_open(relid, NoLock);
-	char relkind;
+	bool result;
 
 	if (rel == NULL)
 		return false;
 
-	relkind = rel->rd_rel->relkind;
+	result = is_stream_relation(rel);
 	heap_close(rel, NoLock);
 
-	return relkind == RELKIND_STREAM;
+	return result;
 }
 
 /*
@@ -737,16 +831,19 @@ CreateInferredStream(RangeVar *rv)
 	CreateStreamStmt *stmt;
 
 	stmt = makeNode(CreateStreamStmt);
-	stmt->base.relation = rv;
-	stmt->base.tableElts = NIL;
-	stmt->base.if_not_exists = false;
+	stmt->ft.base.relation = rv;
+	stmt->ft.base.tableElts = NIL;
+	stmt->ft.base.if_not_exists = false;
 	stmt->is_inferred = true;
+	stmt->ft.servername = PIPELINE_STREAM_SERVER;
 
 	transformCreateStreamStmt(stmt);
 
 	relid = DefineRelation((CreateStmt *) stmt,
-							RELKIND_STREAM,
+							RELKIND_FOREIGN_TABLE,
 							InvalidOid);
+
+	CreateForeignTable((CreateForeignTableStmt *) stmt, relid);
 	CreatePipelineStreamEntry(stmt, relid);
 }
 
@@ -783,6 +880,7 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	dependent.classId = PipelineStreamRelationId;
 	dependent.objectId = entry_oid;
 	dependent.objectSubId = 0;
+
 	referenced.classId = RelationRelationId;
 	referenced.objectId = relid;
 	referenced.objectSubId = 0;
@@ -818,6 +916,61 @@ RemovePipelineStreamById(Oid oid)
 }
 
 /*
+ * prepare_inferred_stream_for_insert
+ */
+void
+prepare_inferred_stream_for_insert(Relation rel, Query *query)
+{
+	List *colnames = NIL;
+	ListCell *lc;
+	AttrNumber att = 1;
+	TupleDesc desc;
+
+	foreach(lc, query->targetList)
+	{
+		TargetEntry *te;
+
+		if (!IsA(lfirst(lc), TargetEntry))
+			elog(ERROR, "unexpected node type found in insert target list: %d", nodeTag(lfirst(lc)));
+
+		te = (TargetEntry *) lfirst(lc);
+
+		if (!te->resname)
+			elog(ERROR, "no column name given for attribute %d", att);
+
+		colnames = lappend(colnames, makeString(te->resname));
+		att++;
+	}
+
+	if (!colnames || list_length(colnames) != list_length(query->targetList))
+		elog(ERROR, "unable to infer schema from the insert target list");
+
+	desc = GetInferredStreamTupleDesc(rel->rd_id, colnames);
+	rel->rd_att = desc;
+	rel->rd_rel->relnatts = desc->natts;
+
+	/* We need to mark any columns that nothing is read as junk */
+	foreach(lc, query->targetList)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+		int i;
+		bool found = false;
+
+		for (i = 0; i < desc->natts; i++)
+		{
+			if (pg_strcasecmp(te->resname, NameStr(desc->attrs[i]->attname)) == 0)
+			{
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+			te->resjunk = true;
+	}
+}
+
+/*
  * inferred_stream_open
  */
 Relation
@@ -842,7 +995,7 @@ inferred_stream_open(ParseState *pstate, Relation rel)
 	stream_rel->rd_rel = palloc0(sizeof(FormData_pg_class));
 	stream_rel->rd_rel->relnatts = stream_rel->rd_att->natts;
 	namestrcpy(&stream_rel->rd_rel->relname, NameStr(rel->rd_rel->relname));
-	stream_rel->rd_rel->relkind = RELKIND_STREAM;
+	stream_rel->rd_rel->relkind = RELKIND_FOREIGN_TABLE;
 	stream_rel->rd_id = rel->rd_id;
 	stream_rel->rd_rel->relnamespace = rel->rd_rel->relnamespace;
 	stream_rel->rd_refcnt = 1; /* needs for copy */
@@ -860,6 +1013,8 @@ inferred_stream_close(Relation rel)
 {
 	Assert(is_inferred_stream_relation(rel));
 
+	rel->rd_att->tdrefcount = 0;
+	FreeTupleDesc(RelationGetDescr(rel));
 	pfree(rel->rd_rel);
 	pfree(rel);
 }

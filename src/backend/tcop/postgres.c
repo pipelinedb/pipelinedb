@@ -872,36 +872,6 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	return stmt_list;
 }
 
-void
-exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *params)
-{
-	CommandDest dest = whereToSendOutput;
-	MemoryContext oldcontext;
-	int count = 0;
-	char buf[32];
-
-	oldcontext = MemoryContextSwitchTo(EventContext);
-
-	BeginCommand("INSERT", dest);
-
-	PushActiveSnapshot(GetTransactionSnapshot());
-	if (pstmt)
-	{
-		count = InsertIntoStreamPrepared(pstmt);
-	}
-	else
-	{
-		count = InsertIntoStream(ins, params);
-	}
-	PopActiveSnapshot();
-
-	sprintf(buf, "INSERT 0 %d", count);
-	EndCommand(buf, dest);
-
-	MemoryContextSwitchTo(oldcontext);
-	MemoryContextReset(EventContext);
-}
-
 /*
  * exec_simple_query
  *
@@ -990,16 +960,7 @@ exec_simple_query(const char *query_string)
 			break;
 		}
 
-		if (IsA(parsetree, InsertStmt))
-		{
-			InsertStmt *ins = (InsertStmt *) parsetree;
-			if (RangeVarIsForStream(ins->relation, NULL))
-			{
-				exec_stream_inserts(ins, NULL, NIL);
-				continue;
-			}
-		}
-		else if (IsAdhocQuery(parsetree))
+		if (IsAdhocQuery(parsetree))
 		{
 			ExecAdhocQuery(parsetree, query_string);
 			continue;
@@ -1274,7 +1235,6 @@ exec_parse_message(const char *query_string,	/* string to execute */
 	bool		is_named;
 	bool		save_log_statement_stats = log_statement_stats;
 	char		msec_str[32];
-	bool is_stream_insert = false;
 
 	/*
 	 * Report query to various monitoring facilities.
@@ -1351,12 +1311,6 @@ exec_parse_message(const char *query_string,	/* string to execute */
 
 	if (parsetree_list != NIL)
 	{
-		raw_parse_tree = (Node *) linitial(parsetree_list);
-		is_stream_insert = IsA(raw_parse_tree, InsertStmt) && RangeVarIsForStream(((InsertStmt *) raw_parse_tree)->relation, NULL);
-	}
-
-	if (parsetree_list != NIL)
-	{
 		Query	   *query;
 		bool		snapshot_set = false;
 		int			i;
@@ -1429,10 +1383,7 @@ exec_parse_message(const char *query_string,	/* string to execute */
 		if (log_parser_stats)
 			ShowUsage("PARSE ANALYSIS STATISTICS");
 
-		if (!is_stream_insert)
-			querytree_list = pg_rewrite_query(query);
-		else
-			querytree_list = NIL;
+		querytree_list = pg_rewrite_query(query);
 
 		/* Done with the snapshot used for parsing */
 		if (snapshot_set)
@@ -1445,15 +1396,6 @@ exec_parse_message(const char *query_string,	/* string to execute */
 		commandTag = NULL;
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, commandTag);
 		querytree_list = NIL;
-	}
-
-	/* it's just a regular, literal insert using the extended protocol */
-	if (is_stream_insert && numParams == 0)
-	{
-		MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
-
-		SetExtendedStreamInsert(copyObject(raw_parse_tree));
-		MemoryContextSwitchTo(old);
 	}
 
 	/*
@@ -1493,15 +1435,6 @@ exec_parse_message(const char *query_string,	/* string to execute */
 		 */
 		SaveCachedPlan(psrc);
 		unnamed_stmt_psrc = psrc;
-	}
-
-	if (is_stream_insert && numParams > 0)
-	{
-		InsertStmt *ins = (InsertStmt *) raw_parse_tree;
-		MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
-
-		StorePreparedStreamInsert(stmt_name, ins);
-		MemoryContextSwitchTo(old);
 	}
 
 	MemoryContextSwitchTo(oldcontext);
@@ -1570,15 +1503,6 @@ exec_bind_message(StringInfo input_message)
 	bool		save_log_statement_stats = log_statement_stats;
 	bool		snapshot_set = false;
 	char		msec_str[32];
-	MemoryContext param_context;
-	PreparedStreamInsertStmt *stream_insert_stmt = NULL;
-
-	if (HaveExtendedStreamInsert())
-	{
-		if (whereToSendOutput == DestRemote)
-			pq_putemptymessage('2');
-		return;
-	}
 
 	/* Get the fixed part of the message */
 	portal_name = pq_getmsgstring(input_message);
@@ -1605,17 +1529,6 @@ exec_bind_message(StringInfo input_message)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_PSTATEMENT),
 					 errmsg("unnamed prepared statement does not exist")));
-	}
-
-	if (psrc && psrc->raw_parse_tree && IsA(psrc->raw_parse_tree, InsertStmt))
-	{
-		/*
-		 * It's possible to have unnamed prepared stream and table inserts during
-		 * the same session, so make sure we're actually looking for a prepared stream insert.
-		 */
-		InsertStmt *ins = (InsertStmt *) psrc->raw_parse_tree;
-		if (RangeVarIsForStream(ins->relation, NULL))
-			stream_insert_stmt = FetchPreparedStreamInsert(stmt_name);
 	}
 
 	/*
@@ -1699,9 +1612,7 @@ exec_bind_message(StringInfo input_message)
 	 * don't want a failure to occur between GetCachedPlan and
 	 * PortalDefineQuery; that would result in leaking our plancache refcount.
 	 */
-	param_context = stream_insert_stmt ? EventContext : PortalGetHeapMemory(portal);
-
-	oldContext = MemoryContextSwitchTo(param_context);
+	oldContext = MemoryContextSwitchTo(PortalGetHeapMemory(portal));
 
 	/* Copy the plan's query string into the portal */
 	query_string = pstrdup(psrc->query_string);
@@ -1719,9 +1630,9 @@ exec_bind_message(StringInfo input_message)
 	 * snapshot active till we're done, so that plancache.c doesn't have to
 	 * take new ones.
 	 */
-	if (!stream_insert_stmt && (numParams > 0 ||
+	if (numParams > 0 ||
 		(psrc->raw_parse_tree &&
-		 analyze_requires_snapshot(psrc->raw_parse_tree))))
+		 analyze_requires_snapshot(psrc->raw_parse_tree)))
 	{
 		PushActiveSnapshot(GetTransactionSnapshot());
 		snapshot_set = true;
@@ -1906,13 +1817,6 @@ exec_bind_message(StringInfo input_message)
 	if (snapshot_set)
 		PopActiveSnapshot();
 
-	if (stream_insert_stmt)
-	{
-		oldContext = MemoryContextSwitchTo(param_context);
-		AddPreparedStreamInsert(stream_insert_stmt, params);
-		MemoryContextSwitchTo(oldContext);
-	}
-
 	/*
 	 * And we're ready to start portal execution.
 	 */
@@ -1979,46 +1883,17 @@ exec_execute_message(const char *portal_name, long max_rows)
 	bool		execute_is_fetch;
 	bool		was_logged = false;
 	char		msec_str[32];
-	PreparedStreamInsertStmt *stream_insert_stmt;
 
 	/* Adjust destination to tell printtup.c what to do */
 	dest = whereToSendOutput;
 	if (dest == DestRemote)
 		dest = DestRemoteExecute;
 
-	/*
-	 * If we're INSERTing into a stream, short circuit everything
-	 */
-	if (HaveExtendedStreamInsert())
-	{
-		InsertStmt *insert = GetExtendedStreamInsert();
-
-		start_xact_command();
-		exec_stream_inserts(insert, NULL, NIL);
-		finish_xact_command();
-
-		return;
-	}
-
 	portal = GetPortalByName(portal_name);
 	if (!PortalIsValid(portal))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_CURSOR),
 				 errmsg("portal \"%s\" does not exist", portal_name)));
-
-	stream_insert_stmt = FetchPreparedStreamInsert(portal->prepStmtName ? portal->prepStmtName : "");
-
-	if (HasPendingInserts(stream_insert_stmt))
-	{
-		start_xact_command();
-
-		/* we already have the eval'd values */
-		exec_stream_inserts(NULL, stream_insert_stmt, NIL);
-
-		finish_xact_command();
-
-		return;
-	}
 
 	/*
 	 * If the original query was a null string, just return
@@ -2538,13 +2413,6 @@ static void
 exec_describe_portal_message(const char *portal_name)
 {
 	Portal		portal;
-
-	if (HaveExtendedStreamInsert() || HasPendingInserts(FetchPreparedStreamInsert(portal_name)))
-	{
-		portal = GetPortalByName(portal_name);
-		pq_putemptymessage('n');	/* NoData */
-		return;
-	}
 
 	/*
 	 * Start up a transaction command. (Note that this will normally change

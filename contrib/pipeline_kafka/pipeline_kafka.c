@@ -509,7 +509,7 @@ get_copy_statement(KafkaConsumer *consumer)
 		 * sure we exclude it from the copy attr list
 		 */
 		char *name = NameStr(desc->attrs[i]->attname);
-		if (rel->rd_rel->relkind == RELKIND_STREAM && pg_strcasecmp(name, ARRIVAL_TIMESTAMP) == 0)
+		if (is_stream_relation(rel) && pg_strcasecmp(name, ARRIVAL_TIMESTAMP) == 0)
 			continue;
 		stmt->attlist = lappend(stmt->attlist, makeString(name));
 	}

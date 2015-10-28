@@ -253,12 +253,6 @@ static const struct dropmsgstrings dropmsgstringarray[] = {
 		gettext_noop("continuous view  \"%s\" does not exist, skipping"),
 		gettext_noop("\"%s\" is not a continuous view "),
 	gettext_noop("Use DROP CONTINUOUS VIEW to remove a continuous view.")},
-	{RELKIND_STREAM,
-		ERRCODE_UNDEFINED_OBJECT,
-		gettext_noop("stream \"%s\" does not exist"),
-		gettext_noop("stream\"%s\" does not exist, skipping"),
-		gettext_noop("\"%s\" is not a stream"),
-	gettext_noop("Use DROP STREAM to remove a stream.")},
 	{'\0', 0, NULL, NULL, NULL, NULL}
 };
 
@@ -2152,7 +2146,6 @@ renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 		relkind != RELKIND_COMPOSITE_TYPE &&
 		relkind != RELKIND_INDEX &&
 		relkind != RELKIND_FOREIGN_TABLE &&
-		relkind != RELKIND_STREAM &&
 		relkind != RELKIND_CONTVIEW)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -3061,7 +3054,7 @@ ATController(Relation rel, List *cmds, bool recurse, LOCKMODE lockmode)
 	{
 		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lcmd);
 
-		if (rel->rd_rel->relkind == RELKIND_STREAM && cmd->subtype != AT_AddColumn)
+		if (is_stream_relation(rel) && cmd->subtype != AT_AddColumn)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					(errmsg("streams only support ADD COLUMN commands"))));
@@ -4141,7 +4134,6 @@ ATSimplePermissions(Relation rel, int allowed_targets)
 
 	switch (rel->rd_rel->relkind)
 	{
-		case RELKIND_STREAM:
 		case RELKIND_RELATION:
 			actual_target = ATT_TABLE;
 			break;

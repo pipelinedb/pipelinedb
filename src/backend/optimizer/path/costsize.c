@@ -232,9 +232,6 @@ cost_streamscan(Path *path, PlannerInfo *root,
 	QualCost	qpqual_cost;
 	Cost		cpu_per_tuple;
 
-	/* Should only be applied to streams */
-	Assert(baserel->rtekind == RTE_STREAM);
-
 	/* Mark the path with the row estimate to be the same as batch_size */
 	path->rows = continuous_query_batch_size;
 

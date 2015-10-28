@@ -90,7 +90,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 
 	RegisterSnapshotOnOwner(state->query_desc->snapshot, owner);
 
-	ExecutorStart(state->query_desc, 0);
+	ExecutorStart(state->query_desc, EXEC_NO_STREAM_LOCKING);
 
 	state->query_desc->snapshot->active_count++;
 	UnregisterSnapshotFromOwner(state->query_desc->snapshot, owner);
@@ -338,6 +338,8 @@ ContinuousQueryWorkerMain(void)
 					goto next;
 				}
 
+				CHECK_FOR_INTERRUPTS();
+
 				/* No need to process queries which we don't have tuples for. */
 				if (!TupleBufferBatchReaderHasTuplesForCQId(reader, id))
 					goto next;
@@ -353,7 +355,7 @@ ContinuousQueryWorkerMain(void)
 
 				/* initialize the plan for execution within this xact */
 				plan = state->query_desc->plannedstmt->planTree;
-				state->query_desc->planstate = ExecInitNode(plan, state->query_desc->estate, 0);
+				state->query_desc->planstate = ExecInitNode(plan, state->query_desc->estate, EXEC_NO_STREAM_LOCKING);
 				SetTupleBufferBatchReader(state->query_desc->planstate, reader);
 
 				/*
@@ -478,7 +480,7 @@ next:
 				InstrStopNode(query_desc->totaltime, estate->es_processed);
 
 			if (query_desc->planstate == NULL)
-				query_desc->planstate = ExecInitNode(query_desc->plannedstmt->planTree, state->query_desc->estate, 0);
+				query_desc->planstate = ExecInitNode(query_desc->plannedstmt->planTree, state->query_desc->estate, EXEC_NO_STREAM_LOCKING);
 
 			/* Clean up. */
 			ExecutorFinish(query_desc);
@@ -490,7 +492,12 @@ next:
 		}
 		PG_CATCH();
 		{
-			EmitErrorReport();
+			/*
+			 * If this happens, it almost certainly means that a stream or table has been dropped
+			 * and no longer exists, even though the ended plan may have references to them. We're
+			 * not doing anything particularly critical in the above TRY block, so just consume these
+			 * harmless errors.
+			 */
 			FlushErrorState();
 		}
 		PG_END_TRY();

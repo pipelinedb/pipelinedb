@@ -24,6 +24,7 @@
 
 #include <ctype.h>
 
+#include "catalog/pipeline_stream_fn.h"
 #include "lib/stringinfo.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
@@ -436,14 +437,6 @@ static void
 _outSeqScan(StringInfo str, const SeqScan *node)
 {
 	WRITE_NODE_TYPE("SEQSCAN");
-
-	_outScanInfo(str, (const Scan *) node);
-}
-
-static void
-_outStreamScan(StringInfo str, const SeqScan *node)
-{
-	WRITE_NODE_TYPE("STREAMSCAN");
 
 	_outScanInfo(str, (const Scan *) node);
 }
@@ -2430,13 +2423,12 @@ _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 		case RTE_RELATION:
 			WRITE_OID_FIELD(relid);
 			WRITE_CHAR_FIELD(relkind);
-			break;
-		case RTE_STREAM:
-			WRITE_OID_FIELD(relid);
-			WRITE_CHAR_FIELD(relkind);
-			WRITE_NODE_FIELD(ctecoltypes);
-			WRITE_NODE_FIELD(ctecoltypmods);
-			WRITE_NODE_FIELD(ctecolcollations);
+			if (is_stream_rte((RangeTblEntry *) node))
+			{
+				WRITE_NODE_FIELD(ctecoltypes);
+				WRITE_NODE_FIELD(ctecoltypmods);
+				WRITE_NODE_FIELD(ctecolcollations);
+			}
 			break;
 		case RTE_SUBQUERY:
 			WRITE_NODE_FIELD(subquery);
@@ -2866,9 +2858,6 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_SeqScan:
 				_outSeqScan(str, obj);
-				break;
-			case T_StreamScan:
-				_outStreamScan(str, obj);
 				break;
 			case T_TuplestoreScan:
 				_outTuplestoreScan(str, obj);

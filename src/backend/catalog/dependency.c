@@ -844,7 +844,7 @@ findDependentObjects(const ObjectAddress *object,
 		ScanKeyInit(&key[0],
 					Anum_pg_depend_classid,
 					BTEqualStrategyNumber, F_OIDEQ,
-					ObjectIdGetDatum(TypeRelationId));
+					ObjectIdGetDatum(RelationRelationId));
 		ScanKeyInit(&key[1],
 					Anum_pg_depend_objid,
 					BTEqualStrategyNumber, F_OIDEQ,
@@ -890,7 +890,7 @@ findDependentObjects(const ObjectAddress *object,
 			 */
 			ObjectAddress otherObject;
 
-			otherObject.classId = TypeRelationId;
+			otherObject.classId = RelationRelationId;
 			otherObject.objectId = stream_dep_oid;
 			otherObject.objectSubId = 0;
 

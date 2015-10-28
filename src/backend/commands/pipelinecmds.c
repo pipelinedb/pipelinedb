@@ -323,21 +323,16 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid,
 			continue;
 
 		rv = (RangeVar *) lfirst(lc);
-		relid = RangeVarGetRelid(rv, AccessShareLock, false);
+		relid = RangeVarGetRelid(rv, NoLock, false);
 
 		if (IsInferredStream(relid))
 		{
-			Relation rel = relation_open(relid, NoLock);
-			Oid typid = rel->rd_att->tdtypeid;
-
-			relation_close(rel, NoLock);
-
 			referenced.classId = RelationRelationId;
 			referenced.objectId = viewoid;
 			referenced.objectSubId = 0;
 
-			dependent.classId = TypeRelationId;
-			dependent.objectId = typid;
+			dependent.classId = RelationRelationId;
+			dependent.objectId = relid;
 			dependent.objectSubId = 0;
 
 			recordDependencyOn(&dependent, &referenced, DEPENDENCY_STREAM);

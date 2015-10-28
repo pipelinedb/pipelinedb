@@ -29,6 +29,7 @@
 
 #include <math.h>
 
+#include "catalog/pipeline_stream_fn.h"
 #include "nodes/parsenodes.h"
 #include "nodes/readfuncs.h"
 
@@ -1220,13 +1221,12 @@ _readRangeTblEntry(void)
 		case RTE_RELATION:
 			READ_OID_FIELD(relid);
 			READ_CHAR_FIELD(relkind);
-			break;
-		case RTE_STREAM:
-			READ_OID_FIELD(relid);
-			READ_CHAR_FIELD(relkind);
-			READ_NODE_FIELD(ctecoltypes);
-			READ_NODE_FIELD(ctecoltypmods);
-			READ_NODE_FIELD(ctecolcollations);
+			if (is_stream_rte(local_node))
+			{
+				READ_NODE_FIELD(ctecoltypes);
+				READ_NODE_FIELD(ctecoltypmods);
+				READ_NODE_FIELD(ctecolcollations);
+			}
 			break;
 		case RTE_SUBQUERY:
 			READ_NODE_FIELD(subquery);

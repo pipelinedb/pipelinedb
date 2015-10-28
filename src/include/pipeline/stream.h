@@ -32,34 +32,15 @@ extern void *copy_iter_arg;
 #define PlanIsStreaming(stmt) ((stmt)->is_continuous)
 #define ARRIVAL_TIMESTAMP "arrival_timestamp"
 
-/* returns true if the given PreparedStreamInsertStmt has pending inserts */
-#define HasPendingInserts(pstmt) (pstmt && (pstmt)->inserts)
-
-typedef struct PreparedStreamInsertStmt
-{
-	char name[NAMEDATALEN];
-	Oid relid; /* stream relid */
-	List *inserts; /* list of ParamListInfoData for the INSERT */
-	TupleDesc desc; /* parameters descriptor */
-} PreparedStreamInsertStmt;
-
 /* Whether or not to wait on the inserted event to be consumed by the CV*/
 extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
-extern PreparedStreamInsertStmt *StorePreparedStreamInsert(const char *name, InsertStmt *insert);
-extern void AddPreparedStreamInsert(PreparedStreamInsertStmt *stmt, ParamListInfoData *params);
-extern void SetExtendedStreamInsert(Node *ins);
-extern InsertStmt *GetExtendedStreamInsert(void);
-extern bool HaveExtendedStreamInsert(void);
-extern PreparedStreamInsertStmt *FetchPreparedStreamInsert(const char *name);
-extern void DropPreparedStreamInsert(const char *name);
-extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
-extern int InsertIntoStream(InsertStmt *ins, List *params);
 extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 /* Represents a single batch of inserts made into a stream. */
-typedef struct InsertBatch {
+typedef struct InsertBatch
+{
 	int id;
 	/* Number of acks from workers */
 	int num_wacks;
@@ -73,7 +54,8 @@ typedef struct InsertBatch {
 } InsertBatch;
 
 /* Represents the number of tuples processed for the stream batch. */
-typedef struct InsertBatchAck {
+typedef struct InsertBatchAck
+{
 	int batch_id;
 	InsertBatch *batch;
 	int count;
@@ -94,6 +76,7 @@ typedef struct AdhocData
 
 } AdhocData;
 
+extern Bitmapset *GetStreamReaders(Oid relid);
 extern InsertBatch *InsertBatchCreate(void);
 extern void InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples);
 

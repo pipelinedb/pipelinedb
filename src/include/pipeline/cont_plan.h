@@ -12,6 +12,7 @@
 #ifndef CONT_PLAN_H
 #define CONT_PLAN_H
 
+#include "catalog/pipeline_stream_fn.h"
 #include "executor/execdesc.h"
 #include "nodes/execnodes.h"
 #include "nodes/plannodes.h"
@@ -21,9 +22,10 @@
 #include "utils/tuplestore.h"
 
 #define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
-	((planner_rt_fetch(relid, root))->rtekind == RTE_STREAM))
-#define IS_STREAM_TREE(plan) (IsA((plan), StreamScan) || \
-		IsA((plan), StreamTableJoin))
+	(is_stream_rte(planner_rt_fetch(relid, root))))
+
+#define IS_STREAM_TREE(node) ((IsA((node), ForeignScanState) && (is_stream_relation((((ForeignScanState *) NULL)->ss.ss_currentRelation)))) || \
+		IsA((node), StreamTableJoinState))
 
 extern PlannedStmt *GetContPlan(ContinuousView *view, ContQueryProcType type);
 extern TuplestoreScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);

@@ -918,9 +918,6 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		case T_SeqScan:
 			pname = sname = "Seq Scan";
 			break;
-		case T_StreamScan:
-			pname = sname = "Stream Scan";
-			break;
 		case T_TuplestoreScan:
 			pname = sname = "Tuplestore Scan";
 			break;
@@ -1074,7 +1071,6 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		case T_CteScan:
 		case T_WorkTableScan:
 		case T_ForeignScan:
-		case T_StreamScan:
 			ExplainScanTarget((Scan *) plan, es);
 			break;
 		case T_IndexScan:
@@ -2159,14 +2155,6 @@ ExplainTargetRel(Plan *plan, Index rti, ExplainState *es)
 			if (es->verbose)
 				namespace = get_namespace_name(get_rel_namespace(rte->relid));
 			objecttag = "Relation Name";
-			break;
-		case T_StreamScan:
-			/* Assert it's on a stream */
-			Assert(rte->rtekind == RTE_STREAM);
-			objectname = get_rel_name(rte->relid);
-			if (es->verbose)
-				namespace = get_namespace_name(get_rel_namespace(rte->relid));
-			objecttag = "Stream Name";
 			break;
 		case T_FunctionScan:
 			{

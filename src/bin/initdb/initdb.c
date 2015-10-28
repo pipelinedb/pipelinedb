@@ -2300,6 +2300,11 @@ load_pipeline_extensions(void)
 	PG_CMD_PUTS("CREATE EXTENSION postgis;\n");
 	PG_CMD_PUTS("CREATE EXTENSION postgis_topology;\n");
 
+	PG_CMD_PUTS("CREATE FOREIGN DATA WRAPPER stream_fdw HANDLER stream_fdw_handler;\n");
+	PG_CMD_PUTS("CREATE SERVER pipeline_streams FOREIGN DATA WRAPPER stream_fdw;\n");
+	PG_CMD_PUTS("INSERT INTO pg_depend SELECT 0,0,0,tableoid,oid,0,'p' FROM pg_foreign_server WHERE srvname = 'pipeline_streams';\n");
+	PG_CMD_PUTS("INSERT INTO pg_depend SELECT 0,0,0,tableoid,oid,0,'p' FROM pg_foreign_data_wrapper WHERE fdwname = 'stream_fdw';\n");
+
 	PG_CMD_CLOSE;
 
 	check_ok();

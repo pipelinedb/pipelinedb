@@ -106,7 +106,7 @@ parse_analyze(Node *parseTree, const char *sourceText,
 	if (IsA(parseTree, SelectStmt))
 	{
 		SelectStmt *stmt = (SelectStmt *) parseTree;
-		pstate->p_no_locking = stmt->forCombineLookup;
+		pstate->p_no_locking = IsContQueryProcess() || stmt->forContinuousView;
 	}
 
 	pstate->p_sourcetext = sourceText;

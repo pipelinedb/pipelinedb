@@ -257,7 +257,7 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 
 	RegisterSnapshotOnOwner(state->query_desc->snapshot, owner);
 
-	ExecutorStart(state->query_desc, 0);
+	ExecutorStart(state->query_desc, EXEC_NO_STREAM_LOCKING);
 
 	state->query_desc->snapshot->active_count++;
 	UnregisterSnapshotFromOwner(state->query_desc->snapshot, owner);
@@ -347,7 +347,7 @@ init_adhoc_combiner(ContinuousViewData data,
 										  agg->grpColIdx);
 	}
 
-	ExecutorStart(state->query_desc, 0);
+	ExecutorStart(state->query_desc, EXEC_NO_STREAM_LOCKING);
 	state->query_desc->estate->es_lastoid = InvalidOid;
 
 	(*state->dest->rStartup) (state->dest, 
@@ -379,6 +379,8 @@ exec_adhoc_worker(AdhocWorkerState * state)
 									      state->last_processed,
 										  ADHOC_TIMEOUT_MS);
 
+	CHECK_FOR_INTERRUPTS();
+
 	has_tup = 
 		TupleBufferBatchReaderHasTuplesForCQId(state->reader, state->view_id);
 
@@ -397,7 +399,7 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	plan = state->query_desc->plannedstmt->planTree;
 
 	state->query_desc->planstate = 
-		ExecInitNode(plan, state->query_desc->estate, 0);
+		ExecInitNode(plan, state->query_desc->estate, EXEC_NO_STREAM_LOCKING);
 
 	SetTupleBufferBatchReader(state->query_desc->planstate, state->reader);
 
