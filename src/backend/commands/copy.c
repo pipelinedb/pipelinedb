@@ -910,11 +910,6 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	}
 	else
 	{
-		if (rel && rel->rd_rel->relkind == RELKIND_STREAM)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("cannot COPY data out of streams")));
-
 		cstate = BeginCopyTo(rel, stmt->query, queryString,
 							 stmt->filename, stmt->is_program,
 							 stmt->attlist, stmt->options);
@@ -1650,7 +1645,7 @@ BeginCopyTo(Relation rel,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy from stream \"%s\"",
 							RelationGetRelationName(rel)),
-					 errhint("Try the COPY (SELECT ...) TO variant.")));
+					 errhint("Streams can only be read by continuous views.")));
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
