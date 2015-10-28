@@ -871,7 +871,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
 
 		/* if it's an actual relation, we need to check permissions */
-		if (!is_stream_relation(rel))
+		if (rel->rd_rel->relkind != RELKIND_STREAM)
 		{
 			foreach(cur, attnums)
 			{
@@ -910,7 +910,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	}
 	else
 	{
-		if (rel && is_stream_relation(rel))
+		if (rel && rel->rd_rel->relkind == RELKIND_STREAM)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("cannot COPY data out of streams")));
@@ -1319,7 +1319,7 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = rel && is_stream_relation(rel);
+	cstate->to_stream = rel && rel->rd_rel->relkind == RELKIND_STREAM;
 	cstate->to_inferred_stream = rel && is_inferred_stream_relation(rel);
 	cstate->attnamelist = attnamelist;
 
@@ -4394,7 +4394,8 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
 					errmsg("column \"%s\" of %s \"%s\" does not exist",
-						   name, is_stream_relation(rel) ? "stream" : "relation", RelationGetRelationName(rel))));
+						   name, rel->rd_rel->relkind == RELKIND_STREAM ? "stream" : "relation",
+								   RelationGetRelationName(rel))));
 				else
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),

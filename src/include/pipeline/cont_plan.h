@@ -18,13 +18,16 @@
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 #include "pipeline/cont_scheduler.h"
+#include "utils/rel.h"
+#include "utils/relcache.h"
 #include "utils/resowner.h"
 #include "utils/tuplestore.h"
 
 #define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
 	((planner_rt_fetch(relid, root))->relkind == RELKIND_STREAM))
 
-#define IS_STREAM_TREE(node) ((IsA((node), ForeignScanState) && (is_stream_relation((((ForeignScanState *) NULL)->ss.ss_currentRelation)))) || \
+#define IS_STREAM_TREE(node) ((IsA((node), ForeignScanState) && \
+		(((ForeignScanState *) (node))->ss.ss_currentRelation->rd_rel->relkind == RELKIND_STREAM)) || \
 		IsA((node), StreamTableJoinState))
 
 extern PlannedStmt *GetContPlan(ContinuousView *view, ContQueryProcType type);

@@ -237,41 +237,23 @@ streams_to_meta(Relation pipeline_query)
 	return targets;
 }
 
-/*
- *
- */
 bool
 is_stream_relid(Oid relid)
 {
 	Relation rel = heap_open(relid, NoLock);
-	bool result = is_stream_relation(rel);
+	bool result = rel->rd_rel->relkind == RELKIND_STREAM;
 
 	heap_close(rel, NoLock);
 
 	return result;
 }
 
-/*
- *
- */
-bool
-is_stream_relation(Relation rel)
-{
-	return rel->rd_rel->relkind == RELKIND_STREAM;
-}
-
-/*
- *
- */
 bool
 is_inferred_stream_relation(Relation rel)
 {
-	return is_stream_relation(rel) && IsInferredStream((rel)->rd_id);
+	return rel->rd_rel->relkind == RELKIND_STREAM && IsInferredStream((rel)->rd_id);
 }
 
-/*
- *
- */
 bool
 is_inferred_stream_rte(RangeTblEntry *rte)
 {
@@ -746,7 +728,7 @@ RangeVarIsForStream(RangeVar *rv, bool *is_inferred)
 
 	relid = rel->rd_id;
 
-	is_stream = is_stream_relation(rel);
+	is_stream = rel->rd_rel->relkind == RELKIND_STREAM;
 	heap_close(rel, NoLock);
 
 	if (!is_stream)
@@ -795,7 +777,7 @@ bool IsStream(Oid relid)
 	if (rel == NULL)
 		return false;
 
-	result = is_stream_relation(rel);
+	result = rel->rd_rel->relkind == RELKIND_STREAM;
 	heap_close(rel, NoLock);
 
 	return result;

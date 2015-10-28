@@ -3069,7 +3069,8 @@ ATController(Relation rel, List *cmds, bool recurse, LOCKMODE lockmode)
 	{
 		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lcmd);
 
-		if (is_stream_relation(rel) && cmd->subtype != AT_AddColumn)
+		if (rel->rd_rel->relkind == RELKIND_STREAM &&
+				cmd->subtype != AT_AddColumn)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					(errmsg("streams only support ADD COLUMN commands"))));

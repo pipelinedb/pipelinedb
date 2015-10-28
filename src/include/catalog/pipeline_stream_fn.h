@@ -24,7 +24,6 @@
 #define PIPELINE_STREAM_SERVER "pipeline_streams"
 
 extern bool is_stream_relid(Oid relid);
-extern bool is_stream_relation(Relation rel);
 extern bool is_inferred_stream_relation(Relation rel);
 extern bool is_inferred_stream_rte(RangeTblEntry *rte);
 

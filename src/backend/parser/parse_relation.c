@@ -21,6 +21,7 @@
 #include "access/sysattr.h"
 #include "catalog/heap.h"
 #include "catalog/namespace.h"
+#include "catalog/pg_class.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "funcapi.h"
@@ -991,7 +992,7 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 	}
 	cancel_parser_errposition_callback(&pcbstate);
 
-	if (is_stream_relation(rel))
+	if (rel->rd_rel->relkind == RELKIND_STREAM)
 	{
 //		if (!pstate->p_allow_streams)
 //			ereport(ERROR,
