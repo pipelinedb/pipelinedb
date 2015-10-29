@@ -540,4 +540,3 @@ WHERE pronargs != 2
  rngtypid | rngsubtype | proname 
 ----------+------------+---------
 (0 rows)
-
