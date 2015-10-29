@@ -14,6 +14,7 @@
 #ifndef CQSTATFUNCS_H
 #define CQSTATFUNCS_H
 
+
 #define DISPLAY_OVERLAY_VIEW -2
 
 /* continuous query process stats */
