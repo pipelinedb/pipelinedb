@@ -12,9 +12,14 @@
 #ifndef DSM_CQUEUE_H
 #define DSM_CQUEUE_H
 
-#include <stdatomic.h>
-
 #include "postgres.h"
+#include "pg_config.h"
+
+#ifdef HAVE_STDATOMIC_H
+#include <stdatomic.h>
+#else
+#include "stdatomic.h"
+#endif
 
 #include "storage/dsm.h"
 #include "storage/latch.h"
