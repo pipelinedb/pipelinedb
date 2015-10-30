@@ -2027,6 +2027,10 @@ tr '.' '	' |
 $AWK '{printf "%d%02d%02d", $1, $2, (NF >= 3) ? $3 : 0}'`"]
 AC_DEFINE_UNQUOTED(PG_VERSION_NUM, $PG_VERSION_NUM, [PostgreSQL version as a number])
 
+#
+# stdatomic.h
+#
+AC_CHECK_HEADERS(stdatomic.h, [], [], [])
 
 # Begin output steps
 

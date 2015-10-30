@@ -63,8 +63,8 @@ dsm_cqueue_base_init(dsm_handle handle)
 	atomic_init(&cq->head, 0);
 	atomic_init(&cq->tail, 0);
 	atomic_init(&cq->cursor, 0);
-	atomic_init(&cq->producer_latch, NULL);
-	atomic_init(&cq->consumer_latch, NULL);
+	atomic_init(&cq->producer_latch, 0);
+	atomic_init(&cq->consumer_latch, 0);
 
 	/* This marks the dsm_cqueue as initialized. */
 	cq->magic = MAGIC;
