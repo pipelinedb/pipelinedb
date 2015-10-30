@@ -947,9 +947,6 @@ exec_simple_query(const char *query_string)
 
 	parsetree_list_empty = list_length(parsetree_list) == 0;
 
-	/*
-	 * Short circuit any InsertStmt node that is inserting into a stream.
-	 */
 	foreach(parsetree_item, parsetree_list)
 	{
 		Node *parsetree = (Node *) lfirst(parsetree_item);

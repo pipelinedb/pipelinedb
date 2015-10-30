@@ -819,7 +819,7 @@ has_queries_to_process(Bitmapset *queries)
 void
 ContinuousQueryCombinerMain(void)
 {
-	TupleBufferBatchReader *reader = TupleBufferOpenBatchReader(CombinerTupleBuffer, &should_read_fn);
+	TupleBufferBatchReader *reader;
 	MemoryContext run_cxt = AllocSetContextCreate(TopMemoryContext, "CombinerRunCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
@@ -839,6 +839,8 @@ ContinuousQueryCombinerMain(void)
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
+
+	reader = TupleBufferOpenBatchReader(CombinerTupleBuffer, &should_read_fn, ContQueryBatchContext);
 
 	/* Bootstrap the query ids we should process. */
 	StartTransactionCommand();

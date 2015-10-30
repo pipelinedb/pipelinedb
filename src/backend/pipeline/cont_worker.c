@@ -253,7 +253,7 @@ has_queries_to_process(Bitmapset *queries)
 void
 ContinuousQueryWorkerMain(void)
 {
-	TupleBufferBatchReader *reader = TupleBufferOpenBatchReader(WorkerTupleBuffer, &should_read_fn);
+	TupleBufferBatchReader *reader;
 	ResourceOwner owner = ResourceOwnerCreate(NULL, "WorkerResourceOwner");
 	MemoryContext run_cxt = AllocSetContextCreate(TopMemoryContext, "WorkerRunCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
@@ -273,6 +273,8 @@ ContinuousQueryWorkerMain(void)
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
+
+	reader = TupleBufferOpenBatchReader(WorkerTupleBuffer, &should_read_fn, ContQueryBatchContext);
 
 	/* Bootstrap the query ids we should process. */
 	StartTransactionCommand();
