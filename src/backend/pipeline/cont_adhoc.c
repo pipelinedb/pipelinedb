@@ -237,7 +237,7 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	init_cont_query_batch_context();
 
 	state->reader = 
-		TupleBufferOpenBatchReader(AdhocTupleBuffer, &should_read_fn);
+		TupleBufferOpenBatchReader(AdhocTupleBuffer, &should_read_fn, ContQueryBatchContext);
 
 	state->view_id = data.view_id;
 	state->view = data.view;
