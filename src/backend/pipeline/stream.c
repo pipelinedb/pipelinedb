@@ -31,7 +31,6 @@
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
-#include "pipeline/streamReceiver.h"
 #include "storage/shm_alloc.h"
 #include "storage/ipc.h"
 #include "tcop/pquery.h"
@@ -53,7 +52,7 @@
 
 /* guc parameters */
 bool synchronous_stream_insert;
-char *stream_targets = NULL;
+char *stream_targets;
 
 int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;
 void *copy_iter_arg = NULL;
@@ -111,7 +110,6 @@ init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
 		{
 			query->ack.batch = InsertBatchCreate();
 			query->ack.batch_id = query->ack.batch->id;
-			query->ack.count = 1;
 		}
 	}
 }
@@ -203,7 +201,6 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 		acks[0].batch_id = batch->id;
 		acks[0].batch = batch;
-		acks[0].count = 1;
 	}
 
 	if (snap)
@@ -320,15 +317,15 @@ InsertBatchIncrementNumCTuples(InsertBatch *batch)
 }
 
 void
-InsertBatchMarkAcked(InsertBatchAck *ack)
+InsertBatchAckTuple(InsertBatchAck *ack)
 {
 	if (ack->batch_id != ack->batch->id)
 		return;
 
 	SpinLockAcquire(&ack->batch->mutex);
 	if (IsContQueryWorkerProcess() || IsContQueryAdhocProcess())
-		ack->batch->num_wacks += ack->count;
+		ack->batch->num_wacks++;
 	else if (IsContQueryCombinerProcess())
-		ack->batch->num_cacks += ack->count;
+		ack->batch->num_cacks++;
 	SpinLockRelease(&ack->batch->mutex);
 }

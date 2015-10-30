@@ -13,6 +13,9 @@
 #include "lib/stringinfo.h"
 #include "utils/typcache.h"
 
+#define ptr_difference(begin, end) ((void *) (((char *) end) - ((char *) begin)))
+#define ptr_offset(begin, offset) ((void *) (((char *) begin) + ((uintptr_t) offset)))
+
 extern void append_suffix(char *str, char *suffix, int max_len);
 extern int skip_token(const char *str, char* substr, int start);
 extern char *random_hex(int len);

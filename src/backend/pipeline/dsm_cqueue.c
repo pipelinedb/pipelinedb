@@ -254,8 +254,8 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool block)
 		pos = slot->bytes;
 
 	/* Copy over data. */
-	if (cq->cpy_fn)
-		cq->cpy_fn(pos, ptr, len);
+	if (cq->copy_fn)
+		cq->copy_fn(pos, ptr, len);
 	else
 		memcpy(pos, ptr, len);
 
@@ -292,11 +292,20 @@ dsm_cqueue_peek_next(dsm_cqueue *cq, int *len)
 	else
 		pos = slot->bytes;
 
-	*len = slot->len;
-
 	atomic_store(&cq->cursor, slot->next);
 
+	*len = slot->len;
+
+	if (cq->peek_fn)
+		return cq->peek_fn(pos, slot->len);
 	return pos;
+}
+
+bool
+dsm_cqueue_has_unpopped(dsm_cqueue *cq)
+{
+	Assert(cq->magic == MAGIC);
+	return atomic_load(&cq->tail) == atomic_load(&cq->cursor);
 }
 
 void
@@ -400,10 +409,12 @@ dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
 }
 
 void
-dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_pop_fn pop_fn, dsm_cqueue_cpy_fn cpy_fn)
+dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_peek_fn peek_fn,
+		dsm_cqueue_pop_fn pop_fn, dsm_cqueue_copy_fn cpy_fn)
 {
+	cq->peek_fn = peek_fn;
 	cq->pop_fn = pop_fn;
-	cq->cpy_fn = cpy_fn;
+	cq->copy_fn = cpy_fn;
 }
 
 void

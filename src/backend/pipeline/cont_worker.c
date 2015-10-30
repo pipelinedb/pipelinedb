@@ -377,8 +377,6 @@ ContinuousQueryWorkerMain(void)
 
 				UnsetEStateSnapshot(estate, owner);
 				state->query_desc->estate = estate = NULL;
-
-				IncrementCQExecutions(1);
 			}
 			PG_CATCH();
 			{
@@ -404,6 +402,7 @@ ContinuousQueryWorkerMain(void)
 			PG_END_TRY();
 
 next:
+			IncrementCQExecutions(1);
 			TupleBufferBatchReaderRewind(reader);
 
 			/* after reading a full batch, update query bitset with any new queries seen */

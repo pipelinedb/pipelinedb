@@ -942,8 +942,6 @@ ContinuousQueryCombinerMain(void)
 				}
 
 				MemoryContextResetAndDeleteChildren(state->tmp_cxt);
-
-				IncrementCQExecutions(1);
 			}
 			PG_CATCH();
 			{
@@ -966,6 +964,7 @@ ContinuousQueryCombinerMain(void)
 			PG_END_TRY();
 
 next:
+			IncrementCQExecutions(1);
 			TupleBufferBatchReaderRewind(reader);
 
 			/* after reading a full batch, update query bitset with any new queries seen */

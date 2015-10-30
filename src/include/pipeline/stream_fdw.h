@@ -17,6 +17,10 @@
 #include "nodes/relation.h"
 #include "utils/rel.h"
 
+extern void *stream_fdw_peek_fn(void *ptr, int len);
+extern void stream_fdw_pop_fn(void *ptr, int len);
+extern void stream_fdw_copy_fn(void *dest, void *src, int len);
+
 extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);
 
 extern void GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid);
@@ -24,7 +28,6 @@ extern void GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 extern ForeignScan *GetStreamScanPlan(PlannerInfo *root, RelOptInfo *baserel,
 		Oid streamid, ForeignPath *best_path, List *tlist, List *scan_clauses);
 extern void BeginStreamScan(ForeignScanState *node, int eflags);
-extern HeapTuple ExecStreamProject(StreamTuple *event, StreamScanState *node);
 extern List *PlanStreamModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int subplan_index);
 extern TupleTableSlot *IterateStreamScan(ForeignScanState *node);
 extern void ReScanStreamScan(ForeignScanState *node);

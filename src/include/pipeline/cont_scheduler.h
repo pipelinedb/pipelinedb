@@ -40,7 +40,7 @@ typedef struct
 	int   group_id; /* unqiue [0, n) for each db_oid, type pair */
 	Latch *latch;
 
-	dsm_handle dsm_handle;
+	volatile dsm_handle dsm_handle;
 	dsm_cqueue_handle *cq_handle;
 	BackgroundWorkerHandle *bgw_handle;
 
@@ -123,6 +123,6 @@ extern void SetAmContQueryAdhoc(bool value);
 extern ContQueryProc *AdhocContQueryProcGet(void);
 extern void AdhocContQueryProcRelease(ContQueryProc *proc);
 
-extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(void);
+extern ContQueryProc *GetContQueryWorkerProcs(void);
 
 #endif   /* CONT_SCHEDULER_H */

@@ -58,7 +58,6 @@ typedef struct InsertBatchAck
 {
 	int batch_id;
 	InsertBatch *batch;
-	int count;
 } InsertBatchAck;
 
 typedef struct AdhocQuery
@@ -84,7 +83,7 @@ extern void InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples,
 							   int *active, int cq_id);
 
 extern void InsertBatchIncrementNumCTuples(InsertBatch *batch);
-extern void InsertBatchMarkAcked(InsertBatchAck *ack);
+extern void InsertBatchAckTuple(InsertBatchAck *ack);
 extern int SendTupleToAdhoc(AdhocData *data,
 							HeapTuple tup,
 							TupleDesc desc,

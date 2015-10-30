@@ -24,9 +24,11 @@
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "pgstat.h"
+#include "pipeline/combinerReceiver.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/dsm_cqueue.h"
 #include "pipeline/miscutils.h"
+#include "pipeline/stream_fdw.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
 #include "storage/ipc.h"
@@ -393,10 +395,12 @@ static void
 cont_bgworker_main(Datum arg)
 {
 	void (*run) (void);
-	dsm_segment *segment;
-	dsm_handle handle;
+	dsm_cqueue_peek_fn peek_fn;
+	dsm_cqueue_pop_fn pop_fn;
+	dsm_cqueue_copy_fn cpy_fn;
+	ContQueryProc *proc;
 
-	MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
+	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
 	BackgroundWorkerUnblockSignals();
 	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_meta->db_name), NULL);
@@ -404,24 +408,30 @@ cont_bgworker_main(Datum arg)
 	/* if we got a cancel signal in prior command, quit */
 	CHECK_FOR_INTERRUPTS();
 
-	MyContQueryProc->latch = &MyProc->procLatch;
+	proc->latch = &MyProc->procLatch;
 
 	ereport(LOG, (errmsg("continuous query process \"%s\" running with pid %d",
-			GetContQueryProcName(MyContQueryProc), MyProcPid)));
-	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(MyContQueryProc));
+			GetContQueryProcName(proc), MyProcPid)));
+	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(proc));
 
 	/* Be nice! - give up some cpu */
 	SetNicePriority();
 
-	switch (MyContQueryProc->type)
+	switch (proc->type)
 	{
 		case Combiner:
 			am_cont_combiner = true;
 			run = &ContinuousQueryCombinerMain;
+			peek_fn = &combiner_receiver_peek_fn;
+			pop_fn = &combiner_receiver_pop_fn;
+			cpy_fn = &combiner_receiver_copy_fn;
 			break;
 		case Worker:
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
+			peek_fn = &stream_fdw_peek_fn;
+			pop_fn = &stream_fdw_pop_fn;
+			cpy_fn = &stream_fdw_copy_fn;
 			break;
 		case Adhoc:
 			/* Adhoc background process only performs clean up and then dies. */
@@ -434,12 +444,10 @@ cont_bgworker_main(Datum arg)
 	CurrentResourceOwner = ResourceOwnerCreate(NULL, "dsm_cqueue ResourceOwner");
 
 	/* Set up dsm_cqueue for IPC under a long-lived ResourceOwner. */
-	segment = dsm_create(continuous_query_ipc_shared_mem * 1024);
-	dsm_pin_mapping(segment);
-	handle = dsm_segment_handle(segment);
-	dsm_cqueue_init_with_tranche_id(handle, ContQuerySchedulerShmem->tranche_id);
-	MyContQueryProc->dsm_handle = handle;
-	MyContQueryProc->cq_handle = dsm_cqueue_attach(handle);
+	dsm_cqueue_init_with_tranche_id(proc->dsm_handle, ContQuerySchedulerShmem->tranche_id);
+	proc->cq_handle = dsm_cqueue_attach(proc->dsm_handle);
+	dsm_cqueue_set_handlers(proc->cq_handle->cqueue, peek_fn, pop_fn, cpy_fn);
+	dsm_pin_mapping(proc->cq_handle->segment);
 
 	/* Initialize process level CQ stats. */
 	cq_stat_init(&MyProcCQStats, 0, MyProcPid);
@@ -460,6 +468,7 @@ run_cont_bgworker(ContQueryProc *proc)
 	BackgroundWorker worker;
 	BackgroundWorkerHandle *handle;
 	bool success;
+	dsm_segment *segment = NULL;
 
 	strcpy(worker.bgw_name, GetContQueryProcName(proc));
 
@@ -472,6 +481,14 @@ run_cont_bgworker(ContQueryProc *proc)
 	worker.bgw_let_crash = false;
 	worker.bgw_main_arg = PointerGetDatum(proc);
 
+	/* Create dsm_segment for IPC with process. */
+	if (proc->type == Worker || proc->type == Combiner)
+	{
+		segment = dsm_create(continuous_query_ipc_shared_mem * 1024);
+		dsm_pin_mapping(segment);
+		proc->dsm_handle = dsm_segment_handle(segment);
+	}
+
 	success = RegisterDynamicBackgroundWorker(&worker, &handle);
 
 	/*
@@ -482,7 +499,15 @@ run_cont_bgworker(ContQueryProc *proc)
 	if (success)
 		proc->bgw_handle = handle;
 	else
-		elog(WARNING, "failed to start cont_bgworker");
+	{
+		if (segment)
+		{
+			dsm_detach(segment);
+			proc->dsm_handle = 0;
+		}
+
+		elog(WARNING, "failed to start continuous query background worker");
+	}
 
 	return success;
 }
@@ -493,6 +518,9 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	int slot_idx;
 	int group_id;
 	ContQueryProc *proc;
+	ResourceOwner res;
+
+	CurrentResourceOwner = ResourceOwnerCreate(NULL, "dsm_cqueue ResourceOwner");
 
 	SpinLockAcquire(&db_meta->mutex);
 
@@ -523,6 +551,10 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 		run_cont_bgworker(proc);
 	}
+
+	res = CurrentResourceOwner;
+	CurrentResourceOwner = NULL;
+	ResourceOwnerDelete(res);
 
 	/* Start a single adhoc process for initial state clean up. */
 	proc = db_meta->adhoc_procs;
@@ -560,8 +592,19 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	for (i = 0; i < NUM_BG_WORKERS; i++)
 	{
 		ContQueryProc *proc = &db_meta->db_procs[i];
+		dsm_segment *segment;
+
 		TerminateBackgroundWorker(proc->bgw_handle);
 		pfree(proc->bgw_handle);
+
+		if (proc->dsm_handle > 0)
+		{
+			segment = dsm_find_mapping(proc->dsm_handle);
+			Assert(segment);
+			dsm_detach(segment);
+		}
+
+		/* TODO(usmanm): Force delete dsm_segment? */
 	}
 
 	hash_search(ContQuerySchedulerShmem->proc_table, &db_meta->db_oid, HASH_REMOVE, &found);
@@ -992,8 +1035,8 @@ AdhocContQueryProcRelease(ContQueryProc *proc)
 	SpinLockRelease(&db_meta->mutex);
 }
 
-ContQueryDatabaseMetadata *
-GetContQueryDatabaseMetadata(void)
+ContQueryProc *
+GetContQueryWorkerProcs(void)
 {
 	bool found;
 	ContQueryDatabaseMetadata *db_meta;
@@ -1004,5 +1047,5 @@ GetContQueryDatabaseMetadata(void)
 	if (!found)
 		elog(ERROR, "failed to find database metadata for continuous queries");
 
-	return db_meta;
+	return db_meta->db_procs;
 }

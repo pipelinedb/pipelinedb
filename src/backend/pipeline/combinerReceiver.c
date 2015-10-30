@@ -10,10 +10,6 @@
  *	  src/backend/pipeline/combinerReceiver.c
  *
  */
-#include <unistd.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-
 #include "postgres.h"
 #include "pgstat.h"
 
@@ -23,7 +19,7 @@
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
 #include "pipeline/combinerReceiver.h"
-#include "pipeline/tuplebuf.h"
+#include "pipeline/miscutils.h"
 #include "miscadmin.h"
 #include "storage/shm_alloc.h"
 #include "utils/memutils.h"
@@ -34,10 +30,69 @@ typedef struct
 	DestReceiver pub;
 	TupleBufferBatchReader *reader;
 	Bitmapset *queries;
-	Oid cq_id;
+	Oid query_id;
 	FunctionCallInfo hash_fcinfo;
 	FuncExpr *hash;
 } CombinerState;
+
+typedef struct PartialTupleState
+{
+	HeapTuple tup;
+
+	int nacks;
+	InsertBatchAck *acks;
+
+	uint64 hash;
+	Oid    query_id;
+} PartialTupleState;
+
+void
+combiner_receiver_pop_fn(void *ptr, int len)
+{
+	PartialTupleState *pts = (PartialTupleState *) ptr;
+	InsertBatchAck *acks = ptr_offset(pts, pts->acks);
+	int i;
+
+	for (i = 0; i < pts->nacks; i++)
+		InsertBatchAckTuple(&acks[i]);
+}
+
+void
+combiner_receiver_copy_fn(void *dest, void *src, int len)
+{
+	PartialTupleState *pts = (PartialTupleState *) src;
+	PartialTupleState *cpypts = (PartialTupleState *) dest;
+	char *pos = (char *) dest;
+
+	memcpy(pos, pts, sizeof(PartialTupleState));
+	pos += sizeof(PartialTupleState);
+
+	cpypts->tup = ptr_difference(dest, pos);
+	memcpy(pos, pts->tup, HEAPTUPLESIZE);
+	pos += HEAPTUPLESIZE;
+	memcpy(pos, pts->tup->t_data, pts->tup->t_len);
+	pos += pts->tup->t_len;
+
+	if (synchronous_stream_insert)
+	{
+		cpypts->acks = ptr_difference(dest, pos);
+		memcpy(pos, pts->acks, sizeof(InsertBatchAck) * pts->nacks);
+		pos += sizeof(InsertBatchAck) * pts->nacks;
+	}
+
+	Assert((uintptr_t) ptr_difference(dest, pos) == len);
+}
+
+void *
+combiner_receiver_peek_fn(void *ptr, int len)
+{
+	PartialTupleState *pts = (PartialTupleState *) ptr;
+	pts->acks = ptr_offset(pts, pts->acks);
+	pts->tup = ptr_offset(pts, pts->tup);
+	pts->tup->t_data = (HeapTupleHeader) (((char *) pts->tup) + HEAPTUPLESIZE);
+
+	return pts;
+}
 
 static void
 combiner_shutdown(DestReceiver *self)
@@ -52,7 +107,7 @@ combiner_startup(DestReceiver *self, int operation,
 
 }
 
-static int64
+static uint64
 hash_group(TupleTableSlot *slot, CombinerState *state)
 {
 	ListCell *lc;
@@ -81,88 +136,51 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
 	MemoryContext old = MemoryContextSwitchTo(ContQueryBatchContext);
-	TupleBufferSlot *tbs;
-	StreamTuple *tup;
+	PartialTupleState pts;
 	InsertBatchAck *acks = NULL;
-	int num_acks = 0;
+	int nacks = 0;
+	int len;
 
 	if (synchronous_stream_insert)
 	{
 		List *acks_list = NIL;
-		ListCell *lc_slot;
-		ListCell *lc_ack;
+		ListCell *lc;
 		int i = 0;
 
-		foreach(lc_slot, c->reader->yielded)
+		/* Generate acks list from yielded tuples */
+
+		acks = (InsertBatchAck *) palloc(sizeof(InsertBatchAck) * nacks);
+		foreach(lc, acks_list)
 		{
-			TupleBufferSlot *tbs = lfirst(lc_slot);
-			int i;
+			InsertBatchAck *ack = lfirst(lc);
 
-			for (i = 0; i < tbs->tuple->num_acks; i++)
-			{
-				InsertBatchAck *ack = &tbs->tuple->acks[i];
-				bool found = false;
+			InsertBatchIncrementNumCTuples(ack->batch);
 
-				if (!ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
-					continue;
-
-				foreach(lc_ack, acks_list)
-				{
-					InsertBatchAck *ack2 = lfirst(lc_ack);
-
-					if (ack->batch_id == ack2->batch_id)
-						found = true;
-				}
-
-				if (!found)
-				{
-					InsertBatchAck *ack2 = (InsertBatchAck *) palloc(sizeof(InsertBatchAck));
-					memcpy(ack2, ack, sizeof(InsertBatchAck));
-					acks_list = lappend(acks_list, ack2);
-				}
-			}
+			acks[i].batch_id = ack->batch_id;
+			acks[i].batch = ack->batch;
+			i++;
 		}
 
-		num_acks = list_length(acks_list);
-
-		if (num_acks)
-		{
-			acks = (InsertBatchAck *) palloc(sizeof(InsertBatchAck) * num_acks);
-
-			foreach(lc_ack, acks_list)
-			{
-				InsertBatchAck *ack = lfirst(lc_ack);
-
-				InsertBatchIncrementNumCTuples(ack->batch);
-
-				acks[i].batch_id = ack->batch_id;
-				acks[i].batch = ack->batch;
-				acks[i].count = 1;
-				i++;
-			}
-
-			list_free_deep(acks_list);
-		}
+		list_free_deep(acks_list);
 	}
 
-	tup = MakeStreamTuple(ExecMaterializeSlot(slot), NULL, num_acks, acks);
+	len = sizeof(PartialTupleState) + (nacks * sizeof(InsertBatchAck));
 
+	pts.tup = ExecMaterializeSlot(slot);
+	pts.nacks = nacks;
+	pts.acks = acks;
+
+	/* Shard by groups or id if no grouping. */
 	if (c->hash_fcinfo)
-	{
-		/* shard by groups */
-		tup->group_hash = hash_group(slot, c);
-	}
+		pts.hash = hash_group(slot, c);
 	else
-	{
-		/* shard by query id */
-		tup->group_hash = bms_singleton_member(c->queries);
-	}
+		pts.hash = c->query_id;
 
-	tbs = TupleBufferInsert(CombinerTupleBuffer, tup, c->queries);
+	// insert to dsm_queue
 
-	IncrementCQWrite(1, tbs->size);
+	IncrementCQWrite(1, len);
 
-	if (num_acks)
+	if (nacks)
 		pfree(acks);
 
 	MemoryContextSwitchTo(old);
@@ -171,8 +189,8 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 static void combiner_destroy(DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
-
-	bms_free(c->queries);
+	if (c->hash_fcinfo)
+		pfree(c->hash_fcinfo);
 	pfree(c);
 }
 
@@ -181,7 +199,7 @@ CreateCombinerDestReceiver(void)
 {
 	CombinerState *self = (CombinerState *) palloc0(sizeof(CombinerState));
 
-	self->pub.receiveSlot = combiner_receive; /* might get changed later */
+	self->pub.receiveSlot = combiner_receive;
 	self->pub.rStartup = combiner_startup;
 	self->pub.rShutdown = combiner_shutdown;
 	self->pub.rDestroy = combiner_destroy;
@@ -200,8 +218,7 @@ SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader
 {
 	CombinerState *c = (CombinerState *) self;
 	c->reader = reader;
-	c->cq_id = cq_id;
-	c->queries = bms_add_member(c->queries, cq_id);
+	c->query_id = cq_id;
 }
 
 /*

@@ -41,7 +41,6 @@
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "pipeline/combinerReceiver.h"
-#include "pipeline/streamReceiver.h"
 #include "utils/portal.h"
 
 
@@ -140,9 +139,6 @@ CreateDestReceiver(CommandDest dest)
 
 		case DestCombiner:
 			return CreateCombinerDestReceiver();
-
-		case DestStream:
-			return CreateStreamDestReceiver();
 	}
 
 	/* should never get here */
@@ -178,7 +174,6 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestTransientRel:
 		case DestTupleTable:
 		case DestCombiner:
-		case DestStream:
 			break;
 	}
 }
@@ -223,7 +218,6 @@ NullCommand(CommandDest dest)
 		case DestTupleTable:
 		case DestTransientRel:
 		case DestCombiner:
-		case DestStream:
 			break;
 	}
 }
@@ -270,7 +264,6 @@ ReadyForQuery(CommandDest dest)
 		case DestTransientRel:
 		case DestTupleTable:
 		case DestCombiner:
-		case DestStream:
 			break;
 	}
 }

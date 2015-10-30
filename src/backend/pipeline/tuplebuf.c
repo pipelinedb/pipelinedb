@@ -919,7 +919,7 @@ TupleBufferBatchReaderReset(TupleBufferBatchReader *reader)
 			int i;
 
 			for (i = 0; i < slot->tuple->num_acks; i++)
-				InsertBatchMarkAcked(&slot->tuple->acks[i]);
+				InsertBatchAckTuple(&slot->tuple->acks[i]);
 		}
 	}
 

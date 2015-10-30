@@ -13,6 +13,7 @@
 #include "postgres.h"
 
 #include "access/htup_details.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "executor/executor.h"
 #include "foreign/fdwapi.h"
@@ -26,7 +27,9 @@
 #include "parser/parsetree.h"
 #include "pgstat.h"
 #include "pipeline/cont_adhoc_mgr.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/dsm_cqueue.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
 #include "utils/builtins.h"
@@ -42,14 +45,237 @@ typedef struct StreamFdwInfo
 typedef struct StreamInsertState
 {
 	Bitmapset *targets;
-	InsertBatchAck *acks;
-	int nacks;
 	AdhocData *adhoc_data;
+
 	long count;
 	long bytes;
+
 	InsertBatch *batch;
+	InsertBatchAck *ack;
+
 	TupleDesc desc;
+	bytea *packed_desc;
+
+	dsm_cqueue *cqueue;
 } StreamInsertState;
+
+typedef struct StreamTupleState
+{
+	TimestampTz arrival_time;
+
+	bytea *desc;
+	HeapTuple tup;
+
+	InsertBatchAck *ack; /* the ack this tuple is responsible for */
+
+	int num_record_descs; /* number of tuple descriptors for RECORD types */
+	RecordTupleDesc *record_descs; /* RECORD type cached tuple descriptors */
+
+	Bitmapset *queries;
+} StreamTupleState;
+
+typedef struct WorkerIPCState
+{
+	bool connected;
+	ContQueryProc *proc;
+	dsm_cqueue_handle *cq_handle;
+} WorkerIPCState;
+
+static WorkerIPCState *WorkerIPCStates = NULL;
+
+static void
+attach_to_worker(WorkerIPCState *wstate)
+{
+	ContQueryProc *proc;
+
+	if (wstate->connected)
+		return;
+
+	proc = wstate->proc;
+	if (proc->dsm_handle == 0)
+		return;
+
+	wstate->cq_handle = dsm_cqueue_attach(proc->dsm_handle);
+	dsm_pin_mapping(wstate->cq_handle->segment);
+	wstate->connected = true;
+}
+
+static void
+attach_to_workers(void)
+{
+	int i;
+	ContQueryProc *procs;
+
+	if (WorkerIPCStates == NULL)
+	{
+		MemoryContext old = MemoryContextSwitchTo(TopMemoryContext);
+		WorkerIPCStates = palloc0(sizeof(WorkerIPCState) * continuous_query_num_workers);
+		MemoryContextSwitchTo(old);
+	}
+	else
+		return;
+
+	procs = GetContQueryWorkerProcs();
+
+	for (i = 0; i < continuous_query_num_workers; i++)
+	{
+		ContQueryProc *proc = &procs[i];
+		WorkerIPCState *wstate = &WorkerIPCStates[i];
+
+		wstate->proc = proc;
+		attach_to_worker(wstate);
+	}
+}
+
+static dsm_cqueue *
+get_worker_queue()
+{
+	static long idx = -1;
+	WorkerIPCState *wstate;
+	int ntries = 0;
+	dsm_cqueue *cq = NULL;
+
+	if (idx == -1)
+		idx = rand() % continuous_query_num_workers;
+
+	idx = (idx + 1) % continuous_query_num_workers;
+
+	for (;;)
+	{
+		wstate = &WorkerIPCStates[idx];
+
+		if (!wstate->connected)
+			attach_to_worker(wstate);
+
+		if (wstate->connected)
+		{
+			cq = wstate->cq_handle->cqueue;
+
+			if (ntries < continuous_query_num_workers)
+			{
+				if (dsm_cqueue_lock_head_nowait(cq))
+					break;
+			}
+			else
+			{
+				dsm_cqueue_lock_head(cq);
+				break;
+			}
+		}
+
+		/* Couldn't connect to any worker? */
+		if (ntries > continuous_query_num_workers && cq == NULL)
+			break;
+
+		ntries++;
+		idx = (idx + 1) % continuous_query_num_workers;
+	}
+
+	Assert(cq);
+	Assert(LWLockHeldByMe(&cq->lock));
+
+	return cq;
+}
+
+static inline void
+release_worker_queue(dsm_cqueue *cq)
+{
+	dsm_cqueue_unlock_head(cq);
+}
+
+void
+stream_fdw_pop_fn(void *ptr, int len)
+{
+	StreamTupleState *sts = (StreamTupleState *) ptr;
+	InsertBatchAck *ack = ptr_offset(sts, sts->ack);
+	InsertBatchAckTuple(ack);
+}
+
+void
+stream_fdw_copy_fn(void *dest, void *src, int len)
+{
+	StreamTupleState *sts = (StreamTupleState *) src;
+	StreamTupleState *cpysts = (StreamTupleState *) dest;
+	char *pos = (char *) dest;
+
+	memcpy(pos, sts, sizeof(StreamTupleState));
+	pos += sizeof(StreamTupleState);
+
+	cpysts->desc = ptr_difference(dest, pos);
+	memcpy(pos, sts->desc, VARSIZE(sts->desc));
+	pos += VARSIZE(sts->desc);
+
+	cpysts->tup = ptr_difference(dest, pos);
+	memcpy(pos, sts->tup, HEAPTUPLESIZE);
+	pos += HEAPTUPLESIZE;
+	memcpy(pos, sts->tup->t_data, sts->tup->t_len);
+	pos += sts->tup->t_len;
+
+	if (synchronous_stream_insert)
+	{
+		cpysts->ack = ptr_difference(dest, pos);
+		memcpy(pos, sts->ack, sizeof(InsertBatchAck));
+		pos += sizeof(InsertBatchAck);
+	}
+
+	if (sts->num_record_descs)
+	{
+		int i;
+
+		Assert(!IsContQueryProcess());
+
+		cpysts->record_descs = ptr_difference(dest, pos);
+
+		for (i = 0; i < sts->num_record_descs; i++)
+		{
+			RecordTupleDesc *rdesc = &sts->record_descs[i];
+			memcpy(pos, rdesc, sizeof(RecordTupleDesc));
+			pos += sizeof(RecordTupleDesc);
+			memcpy(pos, rdesc->desc, VARSIZE(rdesc->desc));
+			pos += VARSIZE(rdesc->desc);
+		}
+	}
+
+	cpysts->queries = ptr_difference(dest, pos);
+	memcpy(pos, sts->queries, BITMAPSET_SIZE(sts->queries->nwords));
+	pos += BITMAPSET_SIZE(sts->queries->nwords);
+
+	Assert((uintptr_t) ptr_difference(dest, pos) == len);
+}
+
+void *
+stream_fdw_peek_fn(void *ptr, int len)
+{
+	StreamTupleState *sts = (StreamTupleState *) ptr;
+	sts->ack = ptr_offset(sts, sts->ack);
+	sts->desc =  ptr_offset(sts, sts->desc);
+	sts->queries = ptr_offset(sts, sts->queries);
+	sts->record_descs = ptr_offset(sts, sts->record_descs);
+	sts->tup = ptr_offset(sts, sts->tup);
+	sts->tup->t_data = (HeapTupleHeader) (((char *) sts->tup) + HEAPTUPLESIZE);
+
+	return sts;
+}
+
+static char *
+print_stream_tuple_state(StreamTupleState *sts)
+{
+	StringInfo buf = makeStringInfo();
+	char *str;
+
+	TupleDesc desc = UnpackTupleDesc(sts->desc);
+	appendStringInfo(buf, "StreamTupleState:\n");
+	appendStringInfo(buf, "  arrival_time: %ld\n", sts->arrival_time);
+	appendStringInfo(buf, "  batch: %d\n", sts->ack->batch->id);
+	appendStringInfo(buf, "  queries: %s\n", bms_print(sts->queries));
+	appendStringInfo(buf, "  desc natts: %d\n", desc->natts);
+	appendStringInfo(buf, "  htup len: %d", sts->tup->t_len);
+
+	str = buf->data;
+	pfree(buf);
+
+	return str;
+}
 
 /*
  * stream_fdw_handler
@@ -303,11 +529,8 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype)
 	return result;
 }
 
-/*
- * ExecStreamProject
- */
-HeapTuple
-ExecStreamProject(StreamTuple *event, StreamScanState *node)
+static HeapTuple
+exec_stream_project(StreamTuple *event, StreamScanState *node)
 {
 	HeapTuple decoded;
 	MemoryContext oldcontext;
@@ -415,7 +638,8 @@ PlanStreamModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int
 TupleTableSlot *
 IterateStreamScan(ForeignScanState *node)
 {
-	TupleBufferSlot *tbs;
+	StreamTupleState *sts;
+	int len;
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	StreamScanState *state = (StreamScanState *) node->fdw_state;
 
@@ -423,32 +647,28 @@ IterateStreamScan(ForeignScanState *node)
 	bytea *piraw;
 	bytea *tupraw;
 
-	/*
-	 * The TupleBuffer needs this slot until it gets unpinned, which we don't
-	 * know when will happen so we need to keep it around for a full CQ execution.
-	 */
-	tbs = TupleBufferBatchReaderNext(state->reader);
+	/* TODO (batch reader) */
 
-	if (tbs == NULL)
+	if (sts == NULL)
 		return NULL;
 
-	IncrementCQRead(1, tbs->size);
+	IncrementCQRead(1, len);
 
 	/*
 	 * Check if the incoming event descriptor is different from the one we're
 	 * currently using before fully unpacking it.
 	 */
 	piraw = state->pi->raweventdesc;
-	tupraw = tbs->tuple->desc;
-
-	if (piraw == NULL || VARSIZE(piraw) != VARSIZE(tupraw) ||
-			memcmp(VARDATA(piraw), VARDATA(tupraw), VARSIZE(piraw)))
-	{
-		init_proj_info(state->pi, tbs->tuple);
-	}
-
-	tup = ExecStreamProject(tbs->tuple, state);
-	ExecStoreTuple(tup, slot, InvalidBuffer, false);
+//	tupraw = tbs->tuple->desc;
+//
+//	if (piraw == NULL || VARSIZE(piraw) != VARSIZE(tupraw) ||
+//			memcmp(VARDATA(piraw), VARDATA(tupraw), VARSIZE(piraw)))
+//	{
+//		init_proj_info(state->pi, tbs->tuple);
+//	}
+//
+//	tup = exec_stream_project(tbs->tuple, state);
+//	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	return slot;
 }
@@ -480,29 +700,6 @@ init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
 		query->cq_id = target;
 		query->active_flag = AdhocMgrGetActiveFlag(target);
 		query->count = 0;
-
-		if (synchronous_stream_insert)
-		{
-			query->ack.batch = InsertBatchCreate();
-			query->ack.batch_id = query->ack.batch->id;
-			query->ack.count = 1;
-		}
-	}
-}
-
-/*
- * WaitForAdhoc
- */
-static void
-WaitForAdhoc(AdhocData *adhoc_data)
-{
-	int i = 0;
-	for (i = 0; i < adhoc_data->num_adhoc; ++i)
-	{
-		AdhocQuery *query = &adhoc_data->queries[i];
-
-		InsertBatchWaitAndRemoveActive(query->ack.batch, query->count,
-									   query->active_flag, query->cq_id);
 	}
 }
 
@@ -520,36 +717,41 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
 	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
 	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? bms_difference(all_targets, targets) : NULL;
-	InsertBatchAck *acks = palloc0(sizeof(InsertBatchAck));
+	InsertBatchAck *ack = NULL;
 	InsertBatch *batch = NULL;
-	int num_batches = 0;
-	int num_worker = bms_num_members(targets);
 	AdhocData *adhoc_data = palloc0(sizeof(AdhocData));
 	List *insert_tl;
+
+	attach_to_workers();
 
 	Assert(fdw_private);
 	insert_tl = linitial(fdw_private);
 
 	init_adhoc_data(adhoc_data, adhoc_targets);
 
-	if (synchronous_stream_insert && num_worker)
+	if (!bms_is_empty(targets))
 	{
-		batch = InsertBatchCreate();
-		num_batches = 1;
+		if (synchronous_stream_insert)
+		{
+			batch = InsertBatchCreate();
+			ack = palloc0(sizeof(InsertBatchAck));
 
-		acks[0].batch_id = batch->id;
-		acks[0].batch = batch;
-		acks[0].count = 1;
+			ack->batch_id = batch->id;
+			ack->batch = batch;
+		}
+
+		sis->cqueue = get_worker_queue();
+		Assert(sis->cqueue);
 	}
 
 	sis->targets = targets;
-	sis->acks = acks;
-	sis->nacks = num_batches;
-	sis->adhoc_data = adhoc_data;
+	sis->ack = ack;
 	sis->batch = batch;
+	sis->adhoc_data = adhoc_data;
 	sis->count = 0;
 	sis->bytes = 0;
 	sis->desc = is_inferred_stream_relation(stream) ? ExecTypeFromTL(insert_tl, false) : RelationGetDescr(stream);
+	sis->packed_desc = PackTupleDesc(sis->desc);
 
 	result_info->ri_FdwState = sis;
 }
@@ -561,37 +763,97 @@ TupleTableSlot *
 ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 						  TupleTableSlot *slot, TupleTableSlot *planSlot)
 {
-	StreamInsertState *stream = (StreamInsertState *) result_info->ri_FdwState;
-	int num_targets = bms_num_members(stream->targets);
-	int count = 0;
-	Size bytes = 0;
+	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
 	HeapTuple tup = ExecMaterializeSlot(slot);
+	StreamTupleState tupstate;
+	int len;
+	int i;
+	int nrdescs = 0;
+	RecordTupleDesc *rdescs;
+	int ntries = 0;
 
-	if (num_targets)
+	len =  sizeof(StreamTupleState);
+	len += VARSIZE(sis->packed_desc);
+	len += HEAPTUPLESIZE + tup->t_len;
+	len += sizeof(InsertBatchAck);
+	len += BITMAPSET_SIZE(sis->targets->nwords);
+
+	tupstate.ack = sis->ack;
+	tupstate.arrival_time = GetCurrentTimestamp();
+	tupstate.desc = sis->packed_desc;
+
+	for (i = 0; i < sis->desc->natts; i++)
 	{
-		StreamTuple *tuple =
-			MakeStreamTuple(tup, stream->desc, stream->nacks, stream->acks);
+		Form_pg_attribute attr = sis->desc->attrs[i];
+		RecordTupleDesc *rdesc;
+		Datum v;
+		bool isnull;
+		HeapTupleHeader rec;
+		int32 tupTypmod;
+		TupleDesc attdesc;
 
-		if (TupleBufferInsert(WorkerTupleBuffer, tuple, stream->targets))
+		if (attr->atttypid != RECORDOID)
+			continue;
+
+		v = heap_getattr(tup, i + 1, sis->desc, &isnull);
+
+		if (isnull)
+			continue;
+
+		if (rdescs == NULL)
+			rdescs = palloc0(sizeof(RecordTupleDesc) * sis->desc->natts);
+
+		rec = DatumGetHeapTupleHeader(v);
+		Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
+		tupTypmod = HeapTupleHeaderGetTypMod(rec);
+
+		rdesc = &rdescs[nrdescs++];
+		rdesc->typmod = tupTypmod;
+		attdesc = lookup_rowtype_tupdesc(RECORDOID, tupTypmod);
+		rdesc->desc = PackTupleDesc(attdesc);
+		ReleaseTupleDesc(attdesc);
+
+		len += sizeof(RecordTupleDesc);
+		len += VARSIZE(rdesc->desc);
+	}
+
+	tupstate.num_record_descs = nrdescs;
+	tupstate.record_descs = rdescs;
+	tupstate.queries = sis->targets;
+	tupstate.tup = tup;
+
+	if (!bms_is_empty(sis->targets))
+	{
+		/*
+		 * If we've written a batch to a worker process, start writing to
+		 * the next worker process.
+		 */
+		if (sis->count && (sis->count % continuous_query_batch_size == 0))
 		{
-			count++;
-			bytes += tuple->heaptup->t_len + HEAPTUPLESIZE;
+			release_worker_queue(sis->cqueue);
+			sis->cqueue = get_worker_queue();
 		}
+
+		/*
+		 * Try to write to the first worker that has enough space in its queue,
+		 * except if all worker queues are full. In that case, we just wait.
+		 */
+		while (!dsm_cqueue_push_nolock(sis->cqueue, &tupstate, len,
+				ntries == continuous_query_num_workers))
+		{
+			release_worker_queue(sis->cqueue);
+			sis->cqueue = get_worker_queue();
+			ntries++;
+		}
+
+		elog(LOG, "%s \n %s", print_stream_tuple_state(&tupstate),
+				print_stream_tuple_state(dsm_cqueue_peek_next(sis->cqueue, &len)));
 	}
 
-	if (stream->adhoc_data->num_adhoc)
-	{
-		Size abytes = 0;
-		long acount;
+	/* TODO: adhoc sending */
 
-		acount = SendTupleToAdhoc(stream->adhoc_data, tup, stream->desc, &abytes);
-
-		count = Max(count, acount);
-		bytes = Max(bytes, abytes);
-	}
-
-	stream->count += count;
-	stream->bytes += bytes;
+	sis->count++;
+	sis->bytes += tup->t_len + HEAPTUPLESIZE;
 
 	return slot;
 }
@@ -606,12 +868,10 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 
 	stream_stat_report(RelationGetRelid(result_info->ri_RelationDesc), sis->count, 1, sis->bytes);
 
-	if (synchronous_stream_insert)
+	if (!bms_is_empty(sis->targets))
 	{
-		if (bms_num_members(sis->targets))
+		release_worker_queue(sis->cqueue);
+		if (synchronous_stream_insert)
 			InsertBatchWaitAndRemove(sis->batch, sis->count);
-
-		if (sis->adhoc_data->num_adhoc)
-			WaitForAdhoc(sis->adhoc_data);
 	}
 }
