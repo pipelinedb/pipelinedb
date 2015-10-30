@@ -175,28 +175,6 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 	ShmemDynFree(batch);
 }
 
-/*
- * Waits for a batch to be acked, but breaks early if it
- * detects that the adhoc cq is no longer active.
- */
-void
-InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples,
-							   int *active, int cq_id)
-{
-	if (num_tuples && active)
-	{
-		batch->num_wtups = num_tuples;
-
-		while (!InsertBatchAllAcked(batch) && (*active == cq_id))
-		{
-			pg_usleep(SLEEP_MS * 1000);
-			CHECK_FOR_INTERRUPTS();
-		}
-	}
-
-	ShmemDynFree(batch);
-}
-
 void
 InsertBatchIncrementNumCTuples(InsertBatch *batch)
 {

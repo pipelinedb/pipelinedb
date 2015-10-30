@@ -48,8 +48,6 @@ typedef struct InsertBatchAck
 
 extern InsertBatch *InsertBatchCreate(void);
 extern void InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples);
-extern void InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples,
-							   int *active, int cq_id);
 extern void InsertBatchIncrementNumCTuples(InsertBatch *batch);
 extern void InsertBatchAckTuple(InsertBatchAck *ack);
 
