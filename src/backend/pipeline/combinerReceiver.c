@@ -19,11 +19,14 @@
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
 #include "pipeline/combinerReceiver.h"
+#include "pipeline/cont_execute.h"
 #include "pipeline/miscutils.h"
 #include "miscadmin.h"
 #include "storage/shm_alloc.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
+
+#define MURMUR_SEED 0x155517D2
 
 typedef struct
 {
@@ -34,65 +37,6 @@ typedef struct
 	FunctionCallInfo hash_fcinfo;
 	FuncExpr *hash;
 } CombinerState;
-
-typedef struct PartialTupleState
-{
-	HeapTuple tup;
-
-	int nacks;
-	InsertBatchAck *acks;
-
-	uint64 hash;
-	Oid    query_id;
-} PartialTupleState;
-
-void
-combiner_receiver_pop_fn(void *ptr, int len)
-{
-	PartialTupleState *pts = (PartialTupleState *) ptr;
-	InsertBatchAck *acks = ptr_offset(pts, pts->acks);
-	int i;
-
-	for (i = 0; i < pts->nacks; i++)
-		InsertBatchAckTuple(&acks[i]);
-}
-
-void
-combiner_receiver_copy_fn(void *dest, void *src, int len)
-{
-	PartialTupleState *pts = (PartialTupleState *) src;
-	PartialTupleState *cpypts = (PartialTupleState *) dest;
-	char *pos = (char *) dest;
-
-	memcpy(pos, pts, sizeof(PartialTupleState));
-	pos += sizeof(PartialTupleState);
-
-	cpypts->tup = ptr_difference(dest, pos);
-	memcpy(pos, pts->tup, HEAPTUPLESIZE);
-	pos += HEAPTUPLESIZE;
-	memcpy(pos, pts->tup->t_data, pts->tup->t_len);
-	pos += pts->tup->t_len;
-
-	if (synchronous_stream_insert)
-	{
-		cpypts->acks = ptr_difference(dest, pos);
-		memcpy(pos, pts->acks, sizeof(InsertBatchAck) * pts->nacks);
-		pos += sizeof(InsertBatchAck) * pts->nacks;
-	}
-
-	Assert((uintptr_t) ptr_difference(dest, pos) == len);
-}
-
-void *
-combiner_receiver_peek_fn(void *ptr, int len)
-{
-	PartialTupleState *pts = (PartialTupleState *) ptr;
-	pts->acks = ptr_offset(pts, pts->acks);
-	pts->tup = ptr_offset(pts, pts->tup);
-	pts->tup->t_data = (HeapTupleHeader) (((char *) pts->tup) + HEAPTUPLESIZE);
-
-	return pts;
-}
 
 static void
 combiner_shutdown(DestReceiver *self)
@@ -174,7 +118,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	if (c->hash_fcinfo)
 		pts.hash = hash_group(slot, c);
 	else
-		pts.hash = c->query_id;
+		pts.hash = MurmurHash3_64(&c->query_id, sizeof(Oid), MURMUR_SEED);
 
 	// insert to dsm_queue
 

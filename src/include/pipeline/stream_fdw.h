@@ -17,10 +17,6 @@
 #include "nodes/relation.h"
 #include "utils/rel.h"
 
-extern void *stream_fdw_peek_fn(void *ptr, int len);
-extern void stream_fdw_pop_fn(void *ptr, int len);
-extern void stream_fdw_copy_fn(void *dest, void *src, int len);
-
 extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);
 
 extern void GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid);

@@ -23,7 +23,6 @@ extern char *random_hex(int len);
 /* hash functions */
 extern void MurmurHash3_128(const void *key, const Size len, const uint64_t seed, void *out);
 extern uint64_t MurmurHash3_64(const void *key, const Size len, const uint64_t seed);
-extern int32_t JumpConsistentHash(uint64_t key, int32_t num_buckets);
 extern void SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf);
 extern void DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf);
 

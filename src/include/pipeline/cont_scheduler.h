@@ -124,5 +124,6 @@ extern ContQueryProc *AdhocContQueryProcGet(void);
 extern void AdhocContQueryProcRelease(ContQueryProc *proc);
 
 extern ContQueryProc *GetContQueryWorkerProcs(void);
+extern ContQueryProc *GetContQueryCombinerProcs(void);
 
 #endif   /* CONT_SCHEDULER_H */

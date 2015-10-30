@@ -46,10 +46,6 @@
 #include "utils/typcache.h"
 #include "pipeline/cont_adhoc_mgr.h"
 
-#define SLEEP_MS 2
-
-#define StreamBatchAllAcked(batch) ((batch)->num_wacks >= (batch)->num_wtups && (batch)->num_cacks >= (batch)->num_ctups)
-
 /* guc parameters */
 bool synchronous_stream_insert;
 char *stream_targets;
@@ -105,12 +101,6 @@ init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
 		query->cq_id = target;
 		query->active_flag = AdhocMgrGetActiveFlag(target);
 		query->count = 0;
-
-		if (synchronous_stream_insert)
-		{
-			query->ack.batch = InsertBatchCreate();
-			query->ack.batch_id = query->ack.batch->id;
-		}
 	}
 }
 
@@ -131,7 +121,7 @@ SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
 		AdhocQuery *query = &adhoc_data->queries[i];
 
 		StreamTuple *tuple = 
-			MakeStreamTuple(tup, desc, 1, &query->ack);
+			MakeStreamTuple(tup, desc, 1, NULL);
 		Bitmapset *single = bms_make_singleton(query->cq_id);
 
 		tuple->group_hash = query->cq_id;
@@ -159,10 +149,7 @@ WaitForAdhoc(AdhocData *adhoc_data)
 	{
 		AdhocQuery *query = &adhoc_data->queries[i];
 
-		InsertBatchWaitAndRemoveActive(query->ack.batch,
-									   query->count,
-									   query->active_flag,
-									   query->cq_id);
+
 	}
 }
 
@@ -256,76 +243,4 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 		PushActiveSnapshot(GetTransactionSnapshot());
 
 	return count;
-}
-
-InsertBatch *
-InsertBatchCreate(void)
-{
-	char *ptr = ShmemDynAlloc0(sizeof(InsertBatch));
-	InsertBatch *batch = (InsertBatch *) ptr;
-
-	batch->id = rand() ^ (int) MyProcPid;
-	SpinLockInit(&batch->mutex);
-
-	return batch;
-}
-
-void
-InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
-{
-	if (num_tuples)
-	{
-		batch->num_wtups = num_tuples;
-		while (!StreamBatchAllAcked(batch))
-		{
-			pg_usleep(SLEEP_MS * 1000);
-			CHECK_FOR_INTERRUPTS();
-		}
-	}
-
-	ShmemDynFree(batch);
-}
-
-/* 
- * Waits for a batch to be acked, but breaks early if it 
- * detects that the adhoc cq is no longer active. 
- */
-void
-InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples, 
-							   int *active, int cq_id)
-{
-	if (num_tuples && active)
-	{
-		batch->num_wtups = num_tuples;
-
-		while (!StreamBatchAllAcked(batch) && (*active == cq_id))
-		{
-			pg_usleep(SLEEP_MS * 1000);
-			CHECK_FOR_INTERRUPTS();
-		}
-	}
-
-	ShmemDynFree(batch);
-}
-
-void
-InsertBatchIncrementNumCTuples(InsertBatch *batch)
-{
-	SpinLockAcquire(&batch->mutex);
-	batch->num_ctups++;
-	SpinLockRelease(&batch->mutex);
-}
-
-void
-InsertBatchAckTuple(InsertBatchAck *ack)
-{
-	if (ack->batch_id != ack->batch->id)
-		return;
-
-	SpinLockAcquire(&ack->batch->mutex);
-	if (IsContQueryWorkerProcess() || IsContQueryAdhocProcess())
-		ack->batch->num_wacks++;
-	else if (IsContQueryCombinerProcess())
-		ack->batch->num_cacks++;
-	SpinLockRelease(&ack->batch->mutex);
 }

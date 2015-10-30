@@ -121,6 +121,7 @@ dsm_cqueue_attach(dsm_handle handle)
 	segment = dsm_find_or_attach(handle);
 	if (segment == NULL)
 		elog(ERROR, "dsm segment missing");
+	dsm_pin_mapping(segment);
 
 	cq = (dsm_cqueue *) dsm_segment_address(segment);
 	if (cq->magic != MAGIC)

@@ -16,10 +16,6 @@
 #include "pipeline/tuplebuf.h"
 #include "tcop/dest.h"
 
-extern void *combiner_receiver_peek_fn(void *ptr, int len);
-extern void combiner_receiver_pop_fn(void *ptr, int len);
-extern void combiner_receiver_copy_fn(void *dest, void *src, int len);
-
 extern DestReceiver *CreateCombinerDestReceiver(void);
 extern void SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader, Oid cq_id);
 extern void SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash, MemoryContext context);

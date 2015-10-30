@@ -13,6 +13,7 @@
 
 #include "postgres.h"
 #include "nodes/bitmapset.h"
+#include "cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
 #include "storage/s_lock.h"
@@ -22,12 +23,6 @@
 
 /* GUC parameters */
 extern int tuple_buffer_blocks;
-
-typedef struct RecordTupleDesc
-{
-	int32 typmod;
-	bytea *desc;
-} RecordTupleDesc;
 
 typedef struct StreamTuple
 {
