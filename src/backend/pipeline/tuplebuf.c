@@ -56,6 +56,9 @@ TupleBuffer *AdhocTupleBuffer = NULL;
 /* GUC parameters */
 int tuple_buffer_blocks;
 
+/* Handler for writing to the combiner's TupleBuffer  */
+ContCombinerWriteFunc ContCombinerWriteHook = NULL;
+
 /*
  * MakeStreamTuple
  */
@@ -469,7 +472,7 @@ TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock)
  * Opens a reader into the given stream buffer for a given continuous query
  */
 TupleBufferReader *
-TupleBufferOpenReader(TupleBuffer *buf, TupleBufferShouldReadFunc should_read_fn)
+TupleBufferOpenReader(TupleBuffer *buf, TupleBufferShouldReadFunc should_read_fn, MemoryContext context)
 {
 	TupleBufferReader *reader;
 
@@ -483,6 +486,7 @@ TupleBufferOpenReader(TupleBuffer *buf, TupleBufferShouldReadFunc should_read_fn
 	reader->slot_id = 0;
 	reader->should_read_fn = should_read_fn;
 	reader->pinned = NIL;
+	reader->context = context;
 
 	return reader;
 }
@@ -555,7 +559,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 
 	Assert(SlotIsValid(reader->slot));
 
-	oldcontext = MemoryContextSwitchTo(ContQueryBatchContext);
+	oldcontext = MemoryContextSwitchTo(reader->context);
 
 	reader->pinned = lappend(reader->pinned, reader->slot);
 
@@ -727,11 +731,11 @@ TupleBufferDrainGeneric(TupleBuffer *buf, TupleBufferShouldDrainFunc fn, void *c
  * TupleBufferOpenBatchReader
  */
 TupleBufferBatchReader *
-TupleBufferOpenBatchReader(TupleBuffer *buf, TupleBufferShouldReadFunc read_func)
+TupleBufferOpenBatchReader(TupleBuffer *buf, TupleBufferShouldReadFunc read_func, MemoryContext context)
 {
 	TupleBufferBatchReader *reader = palloc0(sizeof(TupleBufferBatchReader));
 
-	reader->rdr = TupleBufferOpenReader(buf, read_func);
+	reader->rdr = TupleBufferOpenReader(buf, read_func, context);
 	reader->cq_id = InvalidOid;
 	reader->started = false;
 	reader->depleted = false;
@@ -859,7 +863,7 @@ TupleBufferBatchReaderNext(TupleBufferBatchReader *reader)
 		}
 
 		/* keep track of all the queries seen, so we can quickly skip execution for ones which we have no tuples for */
-		old_cxt = MemoryContextSwitchTo(ContQueryBatchContext);
+		old_cxt = MemoryContextSwitchTo(reader->rdr->context);
 		reader->queries_seen = bms_add_members(reader->queries_seen, slot->queries);
 		MemoryContextSwitchTo(old_cxt);
 
@@ -871,7 +875,7 @@ yield:
 	Assert(slot);
 	Assert(slot->magic == MAGIC);
 
-	old_cxt = MemoryContextSwitchTo(ContQueryBatchContext);
+	old_cxt = MemoryContextSwitchTo(reader->rdr->context);
 	reader->yielded = lappend(reader->yielded, slot);
 	MemoryContextSwitchTo(old_cxt);
 
@@ -907,7 +911,7 @@ void
 TupleBufferBatchReaderReset(TupleBufferBatchReader *reader)
 {
 	/* free everything that keeps track of a single batch */
-	MemoryContext old_ctx = MemoryContextSwitchTo(ContQueryBatchContext);
+	MemoryContext old_ctx = MemoryContextSwitchTo(reader->rdr->context);
 
 	if (synchronous_stream_insert)
 	{

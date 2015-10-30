@@ -903,7 +903,7 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 								RelationGetRelationName(relation))));
 			break;
 		case OBJECT_STREAM:
-			if (!is_stream_relation(relation))
+			if (relation->rd_rel->relkind != RELKIND_STREAM)
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a stream",
@@ -2287,15 +2287,15 @@ getRelationDescription(StringInfo buffer, Oid relid)
 							 relname);
 			break;
 		case RELKIND_FOREIGN_TABLE:
-			if (is_stream_relid(relid))
-				appendStringInfo(buffer, _("stream %s"),
-								 relname);
-			else
-				appendStringInfo(buffer, _("foreign table %s"),
+			appendStringInfo(buffer, _("foreign table %s"),
 							 relname);
 			break;
 		case RELKIND_CONTVIEW:
 			appendStringInfo(buffer, _("continuous view %s"),
+							 relname);
+			break;
+		case RELKIND_STREAM:
+			appendStringInfo(buffer, _("stream %s"),
 							 relname);
 			break;
 		default:
@@ -2675,13 +2675,13 @@ getRelationTypeDescription(StringInfo buffer, Oid relid, int32 objectSubId)
 			appendStringInfoString(buffer, "composite type");
 			break;
 		case RELKIND_FOREIGN_TABLE:
-			if (is_stream_relid(relid))
-				appendStringInfoString(buffer, "stream");
-			else
-				appendStringInfoString(buffer, "foreign table");
+			appendStringInfoString(buffer, "foreign table");
 			break;
 		case RELKIND_CONTVIEW:
 			appendStringInfoString(buffer, "continuous view");
+			break;
+		case RELKIND_STREAM:
+			appendStringInfoString(buffer, "stream");
 			break;
 		default:
 			/* shouldn't get here */

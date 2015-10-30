@@ -89,8 +89,8 @@ dsm_cqueue_init_with_tranche_id(dsm_handle handle, int tranche_id)
 	atomic_init(&cq->head, 0);
 	atomic_init(&cq->tail, 0);
 	atomic_init(&cq->cursor, 0);
-	atomic_init(&cq->producer_latch, NULL);
-	atomic_init(&cq->consumer_latch, NULL);
+	atomic_init(&cq->producer_latch, 0);
+	atomic_init(&cq->consumer_latch, 0);
 
 	/* Initialize producer lock. */
 	if (tranche_id == 0)

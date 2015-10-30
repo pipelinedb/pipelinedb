@@ -12,6 +12,13 @@
 #define CONT_EXECUTE_H
 
 #include "postgres.h"
+#include "pg_config.h"
+
+#ifdef HAVE_STDATOMIC_H
+#include <stdatomic.h>
+#else
+#include "stdatomic.h"
+#endif
 
 #include "access/htup.h"
 #include "nodes/bitmapset.h"
@@ -23,14 +30,13 @@ typedef struct InsertBatch
 {
 	int id;
 	/* Number of acks from workers */
-	int num_wacks;
+	atomic_int num_wacks;
 	/* Number of acks from combiners */
-	int num_cacks;
+	atomic_int num_cacks;
 	/* Total number of tuples sent to workers */
 	int num_wtups;
 	/* Total number of tuples sent to combiners */
-	int num_ctups;
-	slock_t mutex;
+	atomic_int num_ctups;
 } InsertBatch;
 
 /* Represents the number of tuples processed for the stream batch. */

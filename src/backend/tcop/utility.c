@@ -967,7 +967,7 @@ ProcessUtilitySlow(Node *parsetree,
 							transformCreateStreamStmt((CreateStreamStmt *) stmt);
 							/* Create the table itself */
 							relOid = DefineRelation((CreateStmt *) stmt,
-													RELKIND_FOREIGN_TABLE,
+													RELKIND_STREAM,
 													InvalidOid);
 							CreateForeignTable((CreateForeignTableStmt *) stmt,
 											   relOid);

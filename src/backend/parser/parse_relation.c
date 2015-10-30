@@ -21,6 +21,7 @@
 #include "access/sysattr.h"
 #include "catalog/heap.h"
 #include "catalog/namespace.h"
+#include "catalog/pg_class.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "funcapi.h"
@@ -991,17 +992,8 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 	}
 	cancel_parser_errposition_callback(&pcbstate);
 
-	if (is_stream_relation(rel))
-	{
-		if (!pstate->p_allow_streams)
-			ereport(ERROR,
-					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("\"%s\" is a stream", relation->relname),
-					 errhint("Streams can only be read by a continuous view's FROM clause.")));
-
-		if (is_inferred_stream_relation(rel))
-			rel = inferred_stream_open(pstate, rel);
-	}
+	if (is_inferred_stream_relation(rel))
+		rel = inferred_stream_open(pstate, rel);
 
 	return rel;
 }
@@ -1077,7 +1069,7 @@ addRangeTableEntry(ParseState *pstate,
 	rte->eref = makeAlias(refname, NIL);
 	buildRelationAliases(rel->rd_att, alias, rte->eref);
 
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 	{
 		inh = false;
 		transformRelationRTEToStreamRTE(rte, rel);
@@ -1146,7 +1138,7 @@ addRangeTableEntryForRelation(ParseState *pstate,
 	rte->eref = makeAlias(refname, NIL);
 	buildRelationAliases(rel->rd_att, alias, rte->eref);
 
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 	{
 		inh = false;
 		transformRelationRTEToStreamRTE(rte, rel);
@@ -1863,7 +1855,7 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 	if (colvars)
 		*colvars = NIL;
 
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 	{
 		ListCell   *aliasp_item = list_head(rte->eref->colnames);
 		ListCell   *lct;
@@ -2432,7 +2424,7 @@ void
 get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 					   Oid *vartype, int32 *vartypmod, Oid *varcollid)
 {
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 	{
 		Assert(attnum > 0 && attnum <= list_length(rte->ctecoltypes));
 		*vartype = list_nth_oid(rte->ctecoltypes, attnum - 1);
@@ -2632,7 +2624,7 @@ get_rte_attribute_is_dropped(RangeTblEntry *rte, AttrNumber attnum)
 {
 	bool		result;
 
-	if (is_stream_rte(rte))
+	if (rte->relkind == RELKIND_STREAM)
 		return false;
 
 	switch (rte->rtekind)

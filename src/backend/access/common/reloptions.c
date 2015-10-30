@@ -845,6 +845,7 @@ extractRelOptions(HeapTuple tuple, TupleDesc tupdesc, Oid amoptions)
 			options = index_reloptions(amoptions, datum, false);
 			break;
 		case RELKIND_FOREIGN_TABLE:
+		case RELKIND_STREAM:
 			options = NULL;
 			break;
 		default:

@@ -150,7 +150,7 @@ AcquireRewriteLocks(Query *parsetree,
 		{
 			case RTE_RELATION:
 
-				if (is_stream_rte(rte))
+				if (rte->relkind == RELKIND_STREAM)
 					break;
 
 				/*

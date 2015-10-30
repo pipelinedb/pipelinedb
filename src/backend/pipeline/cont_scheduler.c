@@ -58,6 +58,9 @@ typedef struct
 	NameData name;
 } DatabaseEntry;
 
+/* scheduler per-database startup hook */
+ContSchedulerStartupFunc ContSchedulerStartupHook = NULL;
+
 /* per proc structures */
 ContQueryProc *MyContQueryProc = NULL;
 
@@ -641,6 +644,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 {
 	sigjmp_buf local_sigjmp_buf;
 	List *dbs = NIL;
+	ListCell *lc;
 
 	/* we are a postmaster subprocess now */
 	IsUnderPostmaster = true;
@@ -782,10 +786,18 @@ ContQuerySchedulerMain(int argc, char *argv[])
 				(errmsg("%d background worker slots are required but there are only %d available", list_length(dbs) * NUM_BG_WORKERS, max_worker_processes),
 						errhint("Each database requires %d background worker slots. Increase max_worker_processes to enable more capacity.", NUM_BG_WORKERS)));
 
+	if (ContSchedulerStartupHook != NULL)
+	{
+		foreach(lc, dbs)
+		{
+			DatabaseEntry *db_entry = lfirst(lc);
+			ContSchedulerStartupHook(db_entry->oid, db_entry->name);
+		}
+	}
+
 	/* Loop forever */
 	for (;;)
 	{
-		ListCell *lc;
 		int rc;
 
 		foreach(lc, dbs)

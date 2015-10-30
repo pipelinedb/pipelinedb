@@ -1051,6 +1051,29 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 					errmsg("cannot change continuous view \"%s\"",
 							RelationGetRelationName(resultRel))));
 			break;
+		case RELKIND_STREAM:
+			switch (operation)
+			{
+				case CMD_INSERT:
+					/* Only allow INSERTs. */
+					break;
+				case CMD_UPDATE:
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("cannot update stream \"%s\"", RelationGetRelationName(resultRel)),
+							errhint("Streams only support INSERTs.")));
+					break;
+				case CMD_DELETE:
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("cannot delete from stream \"%s\"", RelationGetRelationName(resultRel)),
+							errhint("Streams only support INSERTs.")));
+					break;
+				default:
+					elog(ERROR, "unrecognized CmdType: %d", (int) operation);
+					break;
+			}
+			break;
 		case RELKIND_FOREIGN_TABLE:
 			/* Okay only if the FDW supports it */
 			fdwroutine = GetFdwRoutineForRelation(resultRel, false);
@@ -1214,7 +1237,8 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
 		resultRelInfo->ri_TrigWhenExprs = NULL;
 		resultRelInfo->ri_TrigInstrument = NULL;
 	}
-	if (resultRelationDesc->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
+	if (resultRelationDesc->rd_rel->relkind == RELKIND_FOREIGN_TABLE ||
+			resultRelationDesc->rd_rel->relkind == RELKIND_STREAM)
 		resultRelInfo->ri_FdwRoutine = GetFdwRoutineForRelation(resultRelationDesc, true);
 	else
 		resultRelInfo->ri_FdwRoutine = NULL;

@@ -243,10 +243,7 @@ MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType
 	context->pstate = pstate;
 
 	if (context->pstate)
-	{
-		context->pstate->p_allow_streams = true;
 		context->pstate->p_cont_view_context = context;
-	}
 
 	/*
 	 * Collect any column names being used, so we don't clobber them when generating
@@ -1425,7 +1422,6 @@ transformContSelectStmt(ParseState *pstate, SelectStmt *select)
 	collect_types_and_cols((Node *) select, context);
 
 	pstate->p_cont_view_context = context;
-	pstate->p_allow_streams = true;
 }
 
 /*

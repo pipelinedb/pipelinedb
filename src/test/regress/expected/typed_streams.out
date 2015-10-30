@@ -4,7 +4,7 @@ SET search_path TO test_typed_streams,public;
 CREATE STREAM s0 (x integer, y integer);
 DROP TABLE s0;
 ERROR:  "s0" is not a table
-HINT:  Use DROP FOREIGN TABLE to remove a foreign table.
+HINT:  Use DROP STREAM to remove a stream.
 CREATE TABLE t0 (x integer);
 DROP STREAM t0;
 ERROR:  "t0" is not a stream
@@ -16,13 +16,12 @@ HINT:  Streams can only be read by a continuous view's FROM clause.
 CREATE STREAM l0 (x integer, y integer);
 CREATE STREAM l1 (LIKE l0);
 \d l1;
-                   Foreign table "test_typed_streams.l1"
-      Column       |            Type             | Modifiers | FDW Options 
--------------------+-----------------------------+-----------+-------------
- x                 | integer                     |           | 
- y                 | integer                     |           | 
- arrival_timestamp | timestamp(0) with time zone |           | 
-Server: pipeline_streams
+         Stream "test_typed_streams.l1"
+      Column       |            Type             
+-------------------+-----------------------------
+ x                 | integer
+ y                 | integer
+ arrival_timestamp | timestamp(0) with time zone
 
 CREATE CONTINUOUS VIEW v0 AS
 SELECT x, COUNT(*) FROM test_typed_streams.s0 GROUP BY x;

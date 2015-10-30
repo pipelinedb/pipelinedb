@@ -391,7 +391,8 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	rel->indexlist = indexinfos;
 
 	/* Grab the fdwroutine info using the relcache, while we have it */
-	if (relation->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
+	if (relation->rd_rel->relkind == RELKIND_FOREIGN_TABLE ||
+			relation->rd_rel->relkind == RELKIND_STREAM)
 		rel->fdwroutine = GetFdwRoutineForRelation(relation, true);
 	else
 		rel->fdwroutine = NULL;
@@ -879,7 +880,7 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 			relation = heap_open(rte->relid, NoLock);
 			numattrs = RelationGetNumberOfAttributes(relation);
 
-			if (is_stream_rte(rte))
+			if (rte->relkind == RELKIND_STREAM)
 			{
 				expandRTE(rte, varno, 0, -1, true /* include dropped */ ,
 						  NULL, &colvars);

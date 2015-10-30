@@ -83,6 +83,7 @@ struct TupleBufferReader
 	TupleBufferSlot *slot;
 	List *pinned;
 	List *acks;
+	MemoryContext context;
 };
 
 typedef struct TupleBufferBatchReader
@@ -103,6 +104,10 @@ extern TupleBuffer *WorkerTupleBuffer;
 extern TupleBuffer *CombinerTupleBuffer;
 extern TupleBuffer *AdhocTupleBuffer;
 
+/* Handler for writing to the combiner's TupleBuffer  */
+typedef TupleBufferSlot *(*ContCombinerWriteFunc) (StreamTuple *tuple, Bitmapset *queries);
+extern ContCombinerWriteFunc ContCombinerWriteHook;
+
 extern StreamTuple *MakeStreamTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, InsertBatchAck *acks);
 
 extern void TupleBuffersShmemInit(void);
@@ -118,7 +123,7 @@ extern void TupleBufferTryWaitTimeout(TupleBufferReader *reader, int timeout);
 extern void TupleBufferNotifyAndClearWaiters(TupleBuffer *buf);
 
 /* low level API for reading/writing to a TupleBuffer */
-extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, TupleBufferShouldReadFunc read_func);
+extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, TupleBufferShouldReadFunc read_func, MemoryContext context);
 extern void TupleBufferCloseReader(TupleBufferReader *reader);
 extern TupleBufferSlot *TupleBufferPinNextSlot(TupleBufferReader *reader);
 extern void TupleBufferUnpinSlot(TupleBufferSlot *slot);
@@ -127,7 +132,7 @@ extern void TupleBufferUnpinAllPinnedSlots(TupleBufferReader *reader);
 extern bool TupleBufferHasUnreadSlots(TupleBufferReader *reader);
 
 /* high level API for reading/writing to a TupleBuffer */
-extern TupleBufferBatchReader *TupleBufferOpenBatchReader(TupleBuffer *buf, TupleBufferShouldReadFunc read_func);
+extern TupleBufferBatchReader *TupleBufferOpenBatchReader(TupleBuffer *buf, TupleBufferShouldReadFunc read_func, MemoryContext context);
 extern void TupleBufferCloseBatchReader(TupleBufferBatchReader *reader);
 extern void TupleBufferBatchReaderSetCQId(TupleBufferBatchReader *reader, Oid cq_id);
 extern bool TupleBufferBatchReaderHasTuplesForCQId(TupleBufferBatchReader *reader, Oid cq_id);

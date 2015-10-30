@@ -21,9 +21,6 @@
 
 #define SLEEP_MS 1
 
-#define StreamBatchAllAcked(batch) ((batch)->num_wacks >= (batch)->num_wtups && (batch)->num_cacks >= (batch)->num_ctups)
-
-
 void
 PartialTupleStateCopyFn(void *dest, void *src, int len)
 {
@@ -150,13 +147,16 @@ StreamTupleStatePopFn(void *ptr, int len)
 InsertBatch *
 InsertBatchCreate(void)
 {
-	char *ptr = ShmemDynAlloc0(sizeof(InsertBatch));
-	InsertBatch *batch = (InsertBatch *) ptr;
-
+	InsertBatch *batch = (InsertBatch *) ShmemDynAlloc0(sizeof(InsertBatch));
 	batch->id = rand() ^ (int) MyProcPid;
-	SpinLockInit(&batch->mutex);
-
 	return batch;
+}
+
+static inline bool
+InsertBatchAllAcked(InsertBatch *batch)
+{
+	return (atomic_load(&batch->num_wacks) >= batch->num_wtups &&
+			atomic_load(&batch->num_cacks) >= atomic_load(&batch->num_ctups));
 }
 
 void
@@ -165,7 +165,7 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 	if (num_tuples)
 	{
 		batch->num_wtups = num_tuples;
-		while (!StreamBatchAllAcked(batch))
+		while (!InsertBatchAllAcked(batch))
 		{
 			pg_usleep(SLEEP_MS * 1000);
 			CHECK_FOR_INTERRUPTS();
@@ -187,7 +187,7 @@ InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples,
 	{
 		batch->num_wtups = num_tuples;
 
-		while (!StreamBatchAllAcked(batch) && (*active == cq_id))
+		while (!InsertBatchAllAcked(batch) && (*active == cq_id))
 		{
 			pg_usleep(SLEEP_MS * 1000);
 			CHECK_FOR_INTERRUPTS();
@@ -200,9 +200,7 @@ InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples,
 void
 InsertBatchIncrementNumCTuples(InsertBatch *batch)
 {
-	SpinLockAcquire(&batch->mutex);
-	batch->num_ctups++;
-	SpinLockRelease(&batch->mutex);
+	atomic_fetch_add(&batch->num_ctups, 1);
 }
 
 void
@@ -211,10 +209,8 @@ InsertBatchAckTuple(InsertBatchAck *ack)
 	if (ack->batch_id != ack->batch->id)
 		return;
 
-	SpinLockAcquire(&ack->batch->mutex);
-	if (IsContQueryWorkerProcess() || IsContQueryAdhocProcess())
-		ack->batch->num_wacks++;
+	if (IsContQueryWorkerProcess())
+		atomic_fetch_add(&ack->batch->num_wacks, 1);
 	else if (IsContQueryCombinerProcess())
-		ack->batch->num_cacks++;
-	SpinLockRelease(&ack->batch->mutex);
+		atomic_fetch_add(&ack->batch->num_cacks, 1);
 }

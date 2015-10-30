@@ -5481,6 +5481,97 @@ DESCR("pipeline unit tests");
 DATA(insert OID = 4419 ( stream_fdw_handler	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 3115 "" _null_ _null_ _null_ _null_ stream_fdw_handler _null_ _null_ _null_ ));
 DESCR("stream FDW handler");
 
+/* keyed min/max aggregate */
+DATA(insert OID = 4420 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 20 "2276 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all bigint input values");
+DATA(insert OID = 4421 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 23 "2276 23" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all integer input values");
+DATA(insert OID = 4422 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 21 "2276 21" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all smallint input values");
+DATA(insert OID = 4423 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 26 "2276 26" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all oid input values");
+DATA(insert OID = 4424 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 700 "2276 700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all float4 input values");
+DATA(insert OID = 4425 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "2276 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all float8 input values");
+DATA(insert OID = 4426 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 702 "2276 702" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all abstime input values");
+DATA(insert OID = 4427 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1082 "2276 1082" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all date input values");
+DATA(insert OID = 4428 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1083 "2276 1083" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all time input values");
+DATA(insert OID = 4429 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1266 "2276 1266" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all time with time zone input values");
+DATA(insert OID = 4430 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 790 "2276 790" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all money input values");
+DATA(insert OID = 4431 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1114 "2276 1114" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all timestamp input values");
+DATA(insert OID = 4432 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1184 "2276 1184" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all timestamp with time zone input values");
+DATA(insert OID = 4433 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1186 "2276 1186" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all interval input values");
+DATA(insert OID = 4434 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 25 "2276 25" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all text input values");
+DATA(insert OID = 4435 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "2276 1700" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all numeric input values");
+DATA(insert OID = 4436 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1042 "2276 1042" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all bpchar input values");
+DATA(insert OID = 4437 (  keyed_min				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 27 "2276 27" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all tid input values");
+DATA(insert OID = 4438 (  keyed_min			PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 3500 "2276 3500" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed minimum value of all enum input values");
+
+DATA(insert OID = 4439 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 23 "2276 23" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all integer input values");
+DATA(insert OID = 4440 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 21 "2276 21" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all smallint input values");
+DATA(insert OID = 4441 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 26 "2276 26" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all oid input values");
+DATA(insert OID = 4442 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 700 "2276 700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all float4 input values");
+DATA(insert OID = 4443 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "2276 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all float8 input values");
+DATA(insert OID = 4444 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 702 "2276 702" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all abstime input values");
+DATA(insert OID = 4445 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1082 "2276 1082" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all date input values");
+DATA(insert OID = 4446 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1083 "2276 1083" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all time input values");
+DATA(insert OID = 4447 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1266 "2276 1266" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all time with time zone input values");
+DATA(insert OID = 4448 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 790 "2276 790" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all money input values");
+DATA(insert OID = 4449 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1114 "2276 1114" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all timestamp input values");
+DATA(insert OID = 4450 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1184 "2276 1184" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all timestamp with time zone input values");
+DATA(insert OID = 4451 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1186 "2276 1186" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all interval input values");
+DATA(insert OID = 4452 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 25 "2276 25" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all text input values");
+DATA(insert OID = 4453 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "2276 1700" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all numeric input values");
+DATA(insert OID = 4454 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1042 "2276 1042" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all bpchar input values");
+DATA(insert OID = 4455 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 27 "2276 27" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all tid input values");
+DATA(insert OID = 4456 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 20 "2276 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all bigint input values");
+DATA(insert OID = 4457 (  keyed_max				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 3500 "2276 3500" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("keyed maximum value of all enum input values");
+
+DATA(insert OID = 4458 ( keyed_min_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 17 "17 2276 2276" _null_ _null_ _null_ _null_ keyed_min_trans _null_ _null_ _null_ ));
+DESCR("keyed min aggregate transition function");
+DATA(insert OID = 4459 ( keyed_max_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 17 "17 2276 2276" _null_ _null_ _null_ _null_ keyed_max_trans _null_ _null_ _null_ ));
+DESCR("keyed min aggregate transition function");
+DATA(insert OID = 4460 ( keyed_min_max_finalize	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2283 "17" _null_ _null_ _null_ _null_ keyed_min_max_finalize _null_ _null_ _null_ ));
+DESCR("keyed min/max aggregate final function");
+
+DATA(insert OID = 4461 ( keyed_min_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 17 "17 17" _null_ _null_ _null_ _null_ keyed_min_combine _null_ _null_ _null_ ));
+DESCR("keyed min combine function");
+DATA(insert OID = 4462 ( keyed_max_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 17 "17 17" _null_ _null_ _null_ _null_ keyed_max_combine _null_ _null_ _null_ ));
+DESCR("keyed max combine function");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
