@@ -203,7 +203,7 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 		size += sizeof(RecordTupleDesc) + VARSIZE(tuple->record_descs[i].desc);
 
 	if (size > buf->size)
-		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, WorkerTupleBuffer->size);
+		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, buf->size);
 
 	LWLockAcquire(buf->head_lock, LW_EXCLUSIVE);
 	LWLockAcquire(buf->tail_lock, LW_SHARED);
