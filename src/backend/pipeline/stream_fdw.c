@@ -60,115 +60,6 @@ typedef struct StreamInsertState
 	dsm_cqueue *cqueue;
 } StreamInsertState;
 
-typedef struct WorkerIPCState
-{
-	bool connected;
-	ContQueryProc *proc;
-	dsm_cqueue_handle *cq_handle;
-} WorkerIPCState;
-
-static WorkerIPCState *WorkerIPCStates = NULL;
-
-static void
-attach_to_worker(WorkerIPCState *wstate)
-{
-	ContQueryProc *proc;
-
-	if (wstate->connected)
-		return;
-
-	proc = wstate->proc;
-	if (proc->dsm_handle == 0)
-		return;
-
-	wstate->cq_handle = dsm_cqueue_attach(proc->dsm_handle);
-	dsm_pin_mapping(wstate->cq_handle->segment);
-	wstate->connected = true;
-}
-
-static void
-attach_to_workers(void)
-{
-	int i;
-	ContQueryProc *procs;
-
-	if (WorkerIPCStates == NULL)
-	{
-		MemoryContext old = MemoryContextSwitchTo(TopMemoryContext);
-		WorkerIPCStates = palloc0(sizeof(WorkerIPCState) * continuous_query_num_workers);
-		MemoryContextSwitchTo(old);
-	}
-	else
-		return;
-
-	procs = GetContQueryWorkerProcs();
-
-	for (i = 0; i < continuous_query_num_workers; i++)
-	{
-		ContQueryProc *proc = &procs[i];
-		WorkerIPCState *wstate = &WorkerIPCStates[i];
-
-		wstate->proc = proc;
-		attach_to_worker(wstate);
-	}
-}
-
-static dsm_cqueue *
-get_worker_queue()
-{
-	static long idx = -1;
-	WorkerIPCState *wstate;
-	int ntries = 0;
-	dsm_cqueue *cq = NULL;
-
-	if (idx == -1)
-		idx = rand() % continuous_query_num_workers;
-
-	idx = (idx + 1) % continuous_query_num_workers;
-
-	for (;;)
-	{
-		wstate = &WorkerIPCStates[idx];
-
-		if (!wstate->connected)
-			attach_to_worker(wstate);
-
-		if (wstate->connected)
-		{
-			cq = wstate->cq_handle->cqueue;
-
-			if (ntries < continuous_query_num_workers)
-			{
-				if (dsm_cqueue_lock_head_nowait(cq))
-					break;
-			}
-			else
-			{
-				dsm_cqueue_lock_head(cq);
-				break;
-			}
-		}
-
-		/* Couldn't connect to any worker? */
-		if (ntries > continuous_query_num_workers && cq == NULL)
-			break;
-
-		ntries++;
-		idx = (idx + 1) % continuous_query_num_workers;
-	}
-
-	Assert(cq);
-	Assert(LWLockHeldByMe(&cq->lock));
-
-	return cq;
-}
-
-static inline void
-release_worker_queue(dsm_cqueue *cq)
-{
-	dsm_cqueue_unlock_head(cq);
-}
-
 static char *
 print_stream_tuple_state(StreamTupleState *sts)
 {
@@ -293,6 +184,9 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 	List *physical_tlist = (List *) lsecond(plan->fdw_private);
 	int i = 0;
 
+	if (!IsContQueryWorkerProcess() || !IsContQueryAdhocProcess())
+		elog(ERROR, "streams can only be read from worker or adhoc continuous query processes");
+
 	state = makeNode(StreamScanState);
 	state->ss.ps.plan = (Plan *) node;
 
@@ -388,29 +282,29 @@ map_field_positions(TupleDesc evdesc, TupleDesc desc)
  * may only change after many event projections.
  */
 static void
-init_proj_info(StreamProjectionInfo *pi, StreamTuple *tuple)
+init_proj_info(StreamProjectionInfo *pi, StreamTupleState *sts)
 {
 	MemoryContext old;
 
 	old = MemoryContextSwitchTo(pi->ctxt);
 
-	pi->eventdesc = UnpackTupleDesc(tuple->desc);
+	pi->eventdesc = UnpackTupleDesc(sts->desc);
 	pi->attrmap = map_field_positions(pi->eventdesc, pi->resultdesc);
 	pi->curslot = MakeSingleTupleTableSlot(pi->eventdesc);
 
-	pi->raweventdesc = palloc0(VARSIZE(tuple->desc) + VARHDRSZ);
-	memcpy(pi->raweventdesc, tuple->desc, VARSIZE(tuple->desc) + VARHDRSZ);
+	pi->raweventdesc = palloc0(VARSIZE(sts->desc) + VARHDRSZ);
+	memcpy(pi->raweventdesc, sts->desc, VARSIZE(sts->desc) + VARHDRSZ);
 
 	/*
 	 * Load RECORDOID tuple descriptors in the cache.
 	 */
-	if (tuple->num_record_descs)
+	if (sts->num_record_descs)
 	{
 		int i;
 
-		for (i = 0; i < tuple->num_record_descs; i++)
+		for (i = 0; i < sts->num_record_descs; i++)
 		{
-			RecordTupleDesc *rdesc = &tuple->record_descs[i];
+			RecordTupleDesc *rdesc = &sts->record_descs[i];
 			set_record_type_typemod(rdesc->typmod, UnpackTupleDesc(rdesc->desc));
 		}
 	}
@@ -442,7 +336,7 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype)
 }
 
 static HeapTuple
-exec_stream_project(StreamTuple *event, StreamScanState *node)
+exec_stream_project(StreamTupleState *sts, StreamScanState *node)
 {
 	HeapTuple decoded;
 	MemoryContext oldcontext;
@@ -459,7 +353,7 @@ exec_stream_project(StreamTuple *event, StreamScanState *node)
 	/* assume every element in the output tuple is null until we actually see values */
 	MemSet(nulls, true, desc->natts);
 
-	ExecStoreTuple(event->heaptup, pi->curslot, InvalidBuffer, false);
+	ExecStoreTuple(sts->tup, pi->curslot, InvalidBuffer, false);
 
 	/*
 	 * For each field in the event, place it in the corresponding field in the
@@ -518,7 +412,7 @@ exec_stream_project(StreamTuple *event, StreamScanState *node)
 	{
 		if (pg_strcasecmp(NameStr(desc->attrs[i]->attname), ARRIVAL_TIMESTAMP) == 0)
 		{
-			values[i] = TimestampGetDatum(event->arrival_time);
+			values[i] = TimestampGetDatum(sts->arrival_time);
 			nulls[i] = false;
 			break;
 		}
@@ -571,16 +465,14 @@ IterateStreamScan(ForeignScanState *node)
 	 * currently using before fully unpacking it.
 	 */
 	piraw = state->pi->raweventdesc;
-//	tupraw = tbs->tuple->desc;
-//
-//	if (piraw == NULL || VARSIZE(piraw) != VARSIZE(tupraw) ||
-//			memcmp(VARDATA(piraw), VARDATA(tupraw), VARSIZE(piraw)))
-//	{
-//		init_proj_info(state->pi, tbs->tuple);
-//	}
-//
-//	tup = exec_stream_project(tbs->tuple, state);
-//	ExecStoreTuple(tup, slot, InvalidBuffer, false);
+	tupraw = sts->desc;
+
+	if (piraw == NULL || VARSIZE(piraw) != VARSIZE(tupraw) ||
+			memcmp(VARDATA(piraw), VARDATA(tupraw), VARSIZE(piraw)))
+		init_proj_info(state->pi, sts);
+
+	tup = exec_stream_project(sts, state);
+	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	return slot;
 }
@@ -634,8 +526,6 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	AdhocData *adhoc_data = palloc0(sizeof(AdhocData));
 	List *insert_tl;
 
-	attach_to_workers();
-
 	Assert(fdw_private);
 	insert_tl = linitial(fdw_private);
 
@@ -652,7 +542,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 			ack->batch = batch;
 		}
 
-		sis->cqueue = get_worker_queue();
+		sis->cqueue = GetWorkerDSMCQueue();
 		Assert(sis->cqueue);
 	}
 
@@ -742,8 +632,8 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 		 */
 		if (sis->count && (sis->count % continuous_query_batch_size == 0))
 		{
-			release_worker_queue(sis->cqueue);
-			sis->cqueue = get_worker_queue();
+			dsm_cqueue_unlock(sis->cqueue);
+			sis->cqueue = GetWorkerDSMCQueue();
 		}
 
 		/*
@@ -753,8 +643,8 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 		while (!dsm_cqueue_push_nolock(sis->cqueue, &tupstate, len,
 				ntries == continuous_query_num_workers))
 		{
-			release_worker_queue(sis->cqueue);
-			sis->cqueue = get_worker_queue();
+			dsm_cqueue_unlock(sis->cqueue);
+			sis->cqueue = GetWorkerDSMCQueue();
 			ntries++;
 		}
 
@@ -782,7 +672,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 
 	if (!bms_is_empty(sis->targets))
 	{
-		release_worker_queue(sis->cqueue);
+		dsm_cqueue_unlock(sis->cqueue);
 		if (synchronous_stream_insert)
 			InsertBatchWaitAndRemove(sis->batch, sis->count);
 	}

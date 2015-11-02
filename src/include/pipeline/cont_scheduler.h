@@ -41,7 +41,6 @@ typedef struct
 	Latch *latch;
 
 	volatile dsm_handle dsm_handle;
-	dsm_cqueue_handle *cq_handle;
 	BackgroundWorkerHandle *bgw_handle;
 
 	ContQueryDatabaseMetadata *db_meta;

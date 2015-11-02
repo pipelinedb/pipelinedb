@@ -84,6 +84,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	InsertBatchAck *acks = NULL;
 	int nacks = 0;
 	int len;
+	dsm_cqueue *cq;
 
 	if (synchronous_stream_insert)
 	{
@@ -120,7 +121,9 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	else
 		pts.hash = MurmurHash3_64(&c->query_id, sizeof(Oid), MURMUR_SEED);
 
-	// insert to dsm_queue
+	cq = GetCombinerDSMCQueue(&pts);
+	dsm_cqueue_push_nolock(cq, &pts, len, true);
+	dsm_cqueue_unlock(cq);
 
 	IncrementCQWrite(1, len);
 

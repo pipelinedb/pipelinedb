@@ -434,11 +434,6 @@ cont_bgworker_main(Datum arg)
 	/* Be nice! - give up some CPU. */
 	SetNicePriority();
 
-	StartTransactionCommand();
-	proc->cq_handle = dsm_cqueue_attach(proc->dsm_handle);
-	dsm_cqueue_pop_seen(proc->cq_handle->cqueue);
-	CommitTransactionCommand();
-
 	/* Initialize process level CQ stats. */
 	cq_stat_init(&MyProcCQStats, 0, MyProcPid);
 
@@ -447,9 +442,6 @@ cont_bgworker_main(Datum arg)
 
 	/* Purge process level CQ stats. */
 	cq_stat_send_purge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
-
-	/* Detach the dsm_segment. */
-	dsm_cqueue_detach(MyContQueryProc->cq_handle);
 }
 
 static dsm_segment *
@@ -485,7 +477,7 @@ create_dsm_cqueue(ContQueryProc *proc)
 
 	/* Initialize dsm_cqueue. */
 	dsm_cqueue_init_with_tranche_id(handle, ContQuerySchedulerShmem->tranche_id);
-	dsm_cqueue_set_handlers(proc->cq_handle->cqueue, peek_fn, pop_fn, cpy_fn);
+	dsm_cqueue_set_handlers((dsm_cqueue *) dsm_segment_address(segment), peek_fn, pop_fn, cpy_fn);
 
 	/* Set the handle so the background process can use it. */
 	proc->dsm_handle = handle;
@@ -1034,14 +1026,6 @@ AdhocContQueryProcGet(void)
 	if (CurrentResourceOwner == NULL)
 		CurrentResourceOwner = ResourceOwnerCreate(NULL, "dsm_cqueue ResourceOwner");
 
-	/* Set up IPC dsm_cqueue. */
-	segment = dsm_create(continuous_query_ipc_shared_mem * 1024);
-	dsm_pin_mapping(segment);
-	handle = dsm_segment_handle(segment);
-	dsm_cqueue_init_with_tranche_id(handle, ContQuerySchedulerShmem->tranche_id);
-	proc->dsm_handle = handle;
-	proc->cq_handle = dsm_cqueue_attach(handle);
-
 	return proc;
 }
 
@@ -1058,9 +1042,6 @@ AdhocContQueryProcRelease(ContQueryProc *proc)
 				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
 
 	SpinLockAcquire(&db_meta->mutex);
-
-	/* Deatch dsm_cqueue. */
-	dsm_cqueue_detach(proc->cq_handle);
 
 	/* Mark ContQueryProc struct as free. */
 	MemSet(proc, 0, sizeof(ContQueryProc));

@@ -12,12 +12,16 @@
 #include "postgres.h"
 
 #include "access/htup.h"
+#include "access/xact.h"
+#include "catalog/pipeline_query_fn.h"
 #include "miscadmin.h"
+#include "pgstat.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "storage/shm_alloc.h"
+#include "utils/memutils.h"
 
 #define SLEEP_MS 1
 
@@ -139,8 +143,11 @@ void
 StreamTupleStatePopFn(void *ptr, int len)
 {
 	StreamTupleState *sts = (StreamTupleState *) ptr;
-	InsertBatchAck *ack = ptr_offset(sts, sts->ack);
-	InsertBatchAckTuple(ack);
+	if (sts->ack)
+	{
+		InsertBatchAck *ack = ptr_offset(sts, sts->ack);
+		InsertBatchAckTuple(ack);
+	}
 }
 
 
@@ -149,6 +156,9 @@ InsertBatchCreate(void)
 {
 	InsertBatch *batch = (InsertBatch *) ShmemDynAlloc0(sizeof(InsertBatch));
 	batch->id = rand() ^ (int) MyProcPid;
+	atomic_init(&batch->num_cacks, 0);
+	atomic_init(&batch->num_ctups, 0);
+	atomic_init(&batch->num_wacks, 0);
 	return batch;
 }
 
@@ -191,4 +201,388 @@ InsertBatchAckTuple(InsertBatchAck *ack)
 		atomic_fetch_add(&ack->batch->num_wacks, 1);
 	else if (IsContQueryCombinerProcess())
 		atomic_fetch_add(&ack->batch->num_cacks, 1);
+}
+
+typedef struct ContQueryProcIPCState
+{
+	bool connected;
+	ContQueryProc *proc;
+	dsm_cqueue_handle *cq_handle;
+} ContQueryProcIPCState;
+
+static ContQueryProcIPCState *WorkerIPCStates = NULL;
+static ContQueryProcIPCState *CombinerIPCStates = NULL;
+
+static void
+attach_to_cont_proc(ContQueryProcIPCState *cpstate)
+{
+	ContQueryProc *proc;
+
+	if (cpstate->connected)
+		return;
+
+	proc = cpstate->proc;
+	if (proc->dsm_handle == 0)
+		return;
+
+	cpstate->cq_handle = dsm_cqueue_attach(proc->dsm_handle);
+	dsm_pin_mapping(cpstate->cq_handle->segment);
+	cpstate->connected = true;
+}
+
+static void
+attach_to_cont_procs(ContQueryProcType type)
+{
+	int i;
+	ContQueryProcIPCState **states;
+	int nprocs;
+	ContQueryProc *procs;
+
+	if (type == Worker)
+	{
+		states = &WorkerIPCStates;
+		procs = GetContQueryWorkerProcs();
+		nprocs = continuous_query_num_workers;
+	}
+	else if (type == Combiner)
+	{
+		states = &CombinerIPCStates;
+		procs = GetContQueryCombinerProcs();
+		nprocs = continuous_query_num_combiners;
+	}
+	else
+	{
+		elog(ERROR, "can only attach to workers or combiners");
+		return; /* keep compiler quiet */
+	}
+
+	if (*states == NULL)
+	{
+		MemoryContext old = MemoryContextSwitchTo(TopMemoryContext);
+		*states = palloc0(sizeof(ContQueryProcIPCState) * nprocs);
+		MemoryContextSwitchTo(old);
+	}
+	else
+		return;
+
+	for (i = 0; i < nprocs; i++)
+	{
+		ContQueryProc *proc = &procs[i];
+		ContQueryProcIPCState *cpstate = &(*states)[i];
+
+		cpstate->proc = proc;
+		attach_to_cont_proc(cpstate);
+	}
+}
+
+dsm_cqueue *
+GetWorkerDSMCQueue(void)
+{
+	static long idx = -1;
+	ContQueryProcIPCState *cpstate;
+	int ntries = 0;
+	dsm_cqueue *cq = NULL;
+
+	attach_to_cont_procs(Worker);
+	Assert(WorkerIPCStates);
+
+	if (idx == -1)
+		idx = rand() % continuous_query_num_workers;
+
+	idx = (idx + 1) % continuous_query_num_workers;
+
+	for (;;)
+	{
+		cpstate = &WorkerIPCStates[idx];
+
+		if (!cpstate->connected)
+			attach_to_cont_proc(cpstate);
+
+		if (cpstate->connected)
+		{
+			cq = cpstate->cq_handle->cqueue;
+
+			/*
+			 * Try to lock dsm_cqueue of any worker that is not already locked in
+			 * a round robin fashion.
+			 */
+			if (ntries < continuous_query_num_workers)
+			{
+				if (dsm_cqueue_lock_nowait(cq))
+					break;
+			}
+			else
+			{
+				/* If all workers are locked, then just wait for the lock. */
+				dsm_cqueue_lock(cq);
+				break;
+			}
+		}
+
+		/* Couldn't connect to any worker? */
+		if (ntries > continuous_query_num_workers && cq == NULL)
+			break;
+
+		ntries++;
+		idx = (idx + 1) % continuous_query_num_workers;
+	}
+
+	if (cq)
+		Assert(LWLockHeldByMe(&cq->lock));
+
+	return cq;
+}
+
+dsm_cqueue *
+GetCombinerDSMCQueue(PartialTupleState *pts)
+{
+	int idx;
+	ContQueryProcIPCState *cpstate;
+
+	attach_to_cont_procs(Combiner);
+	Assert(CombinerIPCStates);
+
+	idx = pts->hash % continuous_query_num_combiners;
+	cpstate = &CombinerIPCStates[idx];
+
+	if (!cpstate->connected)
+		attach_to_cont_proc(cpstate);
+
+	if (!cpstate->connected)
+		return NULL;
+
+	dsm_cqueue_lock(cpstate->cq_handle->cqueue);
+	return cpstate->cq_handle->cqueue;
+}
+
+ContExecutor *
+ContinuousExecutorNew(ContQueryProcType type)
+{
+	ContExecutor *exec;
+	MemoryContext cxt;
+	MemoryContext old;
+
+	/* Allocate continuous query execution state in a long-lived memory context. */
+	cxt = AllocSetContextCreate(TopMemoryContext, "ContQueryEState MemoryContext",
+				ALLOCSET_DEFAULT_MINSIZE,
+				ALLOCSET_DEFAULT_INITSIZE,
+				ALLOCSET_DEFAULT_MAXSIZE);
+
+	old = MemoryContextSwitchTo(cxt);
+
+	exec = palloc0(sizeof(ContExecutor));
+	exec->cxt = cxt;
+	exec->exec_cxt = AllocSetContextCreate(cxt, "ContQueryEState Exec MemoryCContinuousExecutorontext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	Assert(MyContQueryProc->type == type);
+
+	exec->ptype = type;
+	exec->cur_query = InvalidOid;
+
+	StartTransactionCommand();
+	exec->cq_handle = dsm_cqueue_attach(MyContQueryProc->dsm_handle);
+	dsm_cqueue_pop_peeked(exec->cq_handle->cqueue);
+	CommitTransactionCommand();
+
+	MemoryContextSwitchTo(old);
+
+	return exec;
+}
+
+void
+ContExecutorDestroy(ContExecutor *exec)
+{
+	MemoryContextDelete(exec->cxt);
+
+	dsm_cqueue_pop_peeked(exec->cq_handle->cqueue);
+	dsm_cqueue_detach(exec->cq_handle);
+
+	pfree(exec);
+}
+
+void
+ContExecutorStartBatch(ContExecutor *exec)
+{
+	dsm_cqueue_wait_non_empty(exec->cq_handle->cqueue, 0);
+
+	if (bms_is_empty(exec->queries))
+	{
+		MemoryContext old = CurrentMemoryContext;
+
+		StartTransactionCommand();
+		MemoryContextSwitchTo(exec->cxt);
+		exec->queries = GetAllContinuousViewIds();
+		CommitTransactionCommand();
+
+		MemoryContextSwitchTo(old);
+	}
+
+	StartTransactionCommand();
+
+	MemoryContextSwitchTo(exec->exec_cxt);
+	ContQueryBatchContext = exec->exec_cxt;
+
+	exec->update_queries = true;
+}
+
+bool
+ContExecutorStartQuery(ContExecutor *exec, Oid cq_id)
+{
+	exec->cur_query = cq_id;
+
+	if (!exec->timedout)
+		return true;
+
+	return bms_is_member(cq_id, exec->queries_seen);
+}
+
+static inline bool
+should_yield_item(ContExecutor *exec, uintptr_t ptr)
+{
+	if (exec->ptype == Worker)
+	{
+		StreamTupleState *sts = (StreamTupleState *) ptr;
+		return bms_is_member(exec->cur_query, sts->queries);
+	}
+	else
+	{
+		PartialTupleState *pts = (PartialTupleState *) ptr;
+		return exec->cur_query == pts->query_id;
+	}
+}
+
+void *
+ContExecutorNextItem(ContExecutor *exec)
+{
+	ContQueryRunParams *params = GetContQueryRunParams();
+	int len;
+
+	/*
+	 * If we've read a full batch, mark exec state as timed out so that we don't read more tuples from the
+	 * underlying dsm_cqueue.
+	 */
+	if (!exec->timedout && exec->nitems == params->batch_size)
+	{
+		exec->timedout = true;
+		exec->depleted = true;
+		return NULL;
+	}
+
+	/* We've yielded all items belonging to the CQ in this batch? */
+	if (exec->depleted)
+		return NULL;
+
+	if (exec->timedout)
+	{
+		if (exec->nitems == 0)
+			return NULL;
+
+		for (;;)
+		{
+			uintptr_t ptr;
+
+			if (exec->depleted)
+				return NULL;
+
+			ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, &len);
+			Assert(ptr);
+
+			if (ptr == exec->cursor)
+				exec->depleted = true;
+
+			if (should_yield_item(exec, ptr))
+				return (void *) ptr;
+		}
+	}
+
+	if (!exec->started)
+	{
+		exec->started = true;
+		exec->start_time = GetCurrentTimestamp();
+	}
+
+	for (;;)
+	{
+		uintptr_t ptr;
+
+		/* We've waited long enough to read a full batch? */
+		if (TimestampDifferenceExceeds(exec->start_time, GetCurrentTimestamp(), params->max_wait) ||
+				MyContQueryProc->db_meta->terminate)
+		{
+			exec->timedout = true;
+			exec->depleted = true;
+			return NULL;
+		}
+
+		ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, &len);
+
+		if (ptr)
+		{
+			MemoryContext old;
+			exec->cursor = ptr;
+			exec->nitems++;
+
+			old = MemoryContextSwitchTo(exec->exec_cxt);
+
+			if (exec->ptype == Worker)
+			{
+				StreamTupleState *sts = (StreamTupleState *) ptr;
+				exec->queries_seen = bms_add_members(exec->queries_seen, sts->queries);
+			}
+			else
+			{
+				PartialTupleState *pts = (PartialTupleState *) ptr;
+				exec->queries_seen = bms_add_member(exec->queries_seen, pts->query_id);
+			}
+
+			MemoryContextSwitchTo(old);
+
+			if (should_yield_item(exec, ptr))
+				return (void *) ptr;
+		}
+		else
+			pg_usleep(SLEEP_MS * 1000);
+	}
+}
+
+void
+ContExecutorEndQuery(ContExecutor *exec)
+{
+	IncrementCQExecutions(1);
+
+	if (!exec->started)
+		return;
+
+	exec->cur_query = InvalidOid;
+	exec->depleted = false;
+
+	dsm_cqueue_unpeek(exec->cq_handle->cqueue);
+
+	if (!bms_is_empty(exec->queries_seen) && exec->update_queries)
+	{
+		MemoryContext old = MemoryContextSwitchTo(exec->cxt);
+		exec->queries_seen = bms_add_members(exec->queries, exec->queries_seen);
+		MemoryContextSwitchTo(old);
+
+		exec->update_queries = false;
+	}
+}
+
+void
+ContExecutorEndBatch(ContExecutor *exec)
+{
+	CommitTransactionCommand();
+	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
+
+	dsm_cqueue_pop_peeked(exec->cq_handle->cqueue);
+
+	exec->cursor = 0;
+	exec->nitems = 0;
+	exec->started = false;
+	exec->timedout = false;
+	exec->depleted = false;
+	exec->queries_seen = NULL;
 }

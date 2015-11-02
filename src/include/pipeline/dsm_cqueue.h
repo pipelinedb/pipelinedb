@@ -84,15 +84,16 @@ extern void dsm_cqueue_detach(dsm_cqueue_handle *cq_handle);
 extern bool dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len, bool block);
 extern bool dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool block);
 extern void *dsm_cqueue_peek_next(dsm_cqueue *cq, int *len);
-extern void dsm_cqueue_pop_seen(dsm_cqueue *cq);
+extern void dsm_cqueue_unpeek(dsm_cqueue *cq);
+extern void dsm_cqueue_pop_peeked(dsm_cqueue *cq);
 extern bool dsm_cqueue_is_empty(dsm_cqueue *cq);
 extern bool dsm_cqueue_has_unpopped(dsm_cqueue *cq);
 extern bool dsm_cqueue_has_unread(dsm_cqueue *cq);
 extern void dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms);
 
-extern void dsm_cqueue_lock_head(dsm_cqueue *cq);
-extern bool dsm_cqueue_lock_head_nowait(dsm_cqueue *cq);
-extern void dsm_cqueue_unlock_head(dsm_cqueue *cq);
+extern void dsm_cqueue_lock(dsm_cqueue *cq);
+extern bool dsm_cqueue_lock_nowait(dsm_cqueue *cq);
+extern void dsm_cqueue_unlock(dsm_cqueue *cq);
 
 extern void dsm_cqueue_test(void);
 

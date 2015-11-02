@@ -168,9 +168,9 @@ dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len, bool block)
 {
 	bool success;
 
-	dsm_cqueue_lock_head(cq);
+	dsm_cqueue_lock(cq);
 	success = dsm_cqueue_push_nolock(cq, ptr, len, block);
-	dsm_cqueue_unlock_head(cq);
+	dsm_cqueue_unlock(cq);
 
 	return success;
 }
@@ -302,6 +302,13 @@ dsm_cqueue_peek_next(dsm_cqueue *cq, int *len)
 	return pos;
 }
 
+void
+dsm_cqueue_unpeek(dsm_cqueue *cq)
+{
+	Assert(cq->magic == MAGIC);
+	atomic_store(&cq->cursor, atomic_load(&cq->tail));
+}
+
 bool
 dsm_cqueue_has_unpopped(dsm_cqueue *cq)
 {
@@ -310,7 +317,7 @@ dsm_cqueue_has_unpopped(dsm_cqueue *cq)
 }
 
 void
-dsm_cqueue_pop_seen(dsm_cqueue *cq)
+dsm_cqueue_pop_peeked(dsm_cqueue *cq)
 {
 	Latch *producer_latch;
 	uint64_t tail;
@@ -419,21 +426,21 @@ dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_peek_fn peek_fn,
 }
 
 void
-dsm_cqueue_lock_head(dsm_cqueue *cq)
+dsm_cqueue_lock(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
 	LWLockAcquire(&cq->lock, LW_EXCLUSIVE);
 }
 
 void
-dsm_cqueue_unlock_head(dsm_cqueue *cq)
+dsm_cqueue_unlock(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
 	LWLockRelease(&cq->lock);
 }
 
 bool
-dsm_cqueue_lock_head_nowait(dsm_cqueue *cq)
+dsm_cqueue_lock_nowait(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
 	return LWLockConditionalAcquire(&cq->lock, LW_EXCLUSIVE);
@@ -557,7 +564,7 @@ dsm_cqueue_test_serial(void)
 		Assert(len == 0);
 		Assert(bytes == NULL);
 
-		dsm_cqueue_pop_seen(cq);
+		dsm_cqueue_pop_peeked(cq);
 		Assert(dsm_cqueue_is_empty(cq));
 	}
 
@@ -635,7 +642,7 @@ dsm_cqueue_test_concurrent(void)
 		char *bytes = dsm_cqueue_peek_next(cq, &len);
 
 		if (bytes == NULL)
-			dsm_cqueue_pop_seen(cq);
+			dsm_cqueue_pop_peeked(cq);
 		else
 			nitems++;
 

@@ -22,6 +22,9 @@
 
 #include "access/htup.h"
 #include "nodes/bitmapset.h"
+#include "nodes/pg_list.h"
+#include "pipeline/cont_scheduler.h"
+#include "pipeline/dsm_cqueue.h"
 #include "storage/spin.h"
 #include "utils/timestamp.h"
 
@@ -90,5 +93,39 @@ typedef struct PartialTupleState
 extern void PartialTupleStatePopFn(void *ptr, int len);
 extern void *PartialTupleStatePeekFn(void *ptr, int len);
 extern void PartialTupleStateCopyFn(void *dest, void *src, int len);
+
+extern dsm_cqueue *GetWorkerDSMCQueue(void);
+extern dsm_cqueue *GetCombinerDSMCQueue(PartialTupleState *pts);
+
+typedef struct ContExecutor
+{
+	MemoryContext cxt;
+	MemoryContext exec_cxt;
+
+	ContQueryProcType ptype;
+
+	dsm_cqueue_handle *cq_handle;
+	Bitmapset *queries;
+	bool update_queries;
+
+	Oid cur_query;
+
+	uintptr_t cursor;
+	int nitems;
+
+	Timestamp start_time;
+	bool started;
+	bool timedout;
+	bool depleted;
+	Bitmapset *queries_seen;
+} ContExecutor;
+
+extern ContExecutor *ContinuousExecutorNew(ContQueryProcType type);
+extern void ContExecutorDestroy(ContExecutor *exec);
+extern void ContExecutorStartBatch(ContExecutor *exec);
+extern bool ContExecutorStartQuery(ContExecutor *exec, Oid cq_id);
+extern void *ContExecutorNextItem(ContExecutor *exec);
+extern void ContExecutorEndQuery(ContExecutor *exec);
+extern void ContExecutorEndBatch(ContExecutor *exec);
 
 #endif
