@@ -15,5 +15,3 @@ if [ ! -d "/mnt/pipelinedb/data" ]; then
 fi
 
 su - pipeline -c "pipeline-server -D /mnt/pipelinedb/data"
-
-

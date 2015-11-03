@@ -14,7 +14,7 @@ cd /usr/local/src/
 wget -q http://api.pgxn.org/dist/cstore_fdw/${CSTOREVER}/cstore_fdw-${CSTOREVER}.zip
 wget -q  https://ftp.postgresql.org/pub/source/v${PGVER}/postgresql-${PGVER}.tar.gz
 unzip cstore_fdw-${CSTOREVER}.zip
-tar -xzf postgresql-${PGVER}.tar.gz 
+tar -xzf postgresql-${PGVER}.tar.gz
 
 # build cstore
 cd cstore_fdw-${CSTOREVER}
@@ -52,4 +52,3 @@ apt-get remove gcc make unzip g++
 apt-get autoremove
 cd /
 rm -rf /usr/local/src/*
-
