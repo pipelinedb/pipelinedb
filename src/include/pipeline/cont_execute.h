@@ -117,6 +117,7 @@ typedef struct ContExecutor
 	bool started;
 	bool timedout;
 	bool depleted;
+	List *yielded;
 
 	Bitmapset *queries_seen;
 } ContExecutor;

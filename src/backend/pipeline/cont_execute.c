@@ -66,7 +66,7 @@ void
 PartialTupleStatePopFn(void *ptr, int len)
 {
 	PartialTupleState *pts = (PartialTupleState *) ptr;
-	InsertBatchAck *acks = ptr_offset(pts, pts->acks);
+	InsertBatchAck *acks = pts->acks;
 	int i;
 
 	for (i = 0; i < pts->nacks; i++)
@@ -426,7 +426,9 @@ ContExecutorStartBatch(ContExecutor *exec)
 	MemoryContextSwitchTo(exec->exec_cxt);
 	ContQueryBatchContext = exec->exec_cxt;
 
-	exec->exec_queries = bms_copy(exec->queries);
+	if (!bms_is_empty(exec->queries))
+		exec->exec_queries = bms_copy(exec->queries);
+
 	exec->update_queries = true;
 }
 
@@ -478,7 +480,16 @@ should_yield_item(ContExecutor *exec, uintptr_t ptr)
 	if (exec->ptype == Worker)
 	{
 		StreamTupleState *sts = (StreamTupleState *) ptr;
-		return bms_is_member(exec->cur_query_id, sts->queries);
+		bool succ = bms_is_member(exec->cur_query_id, sts->queries);
+
+		if (synchronous_stream_insert && succ)
+		{
+			MemoryContext old = MemoryContextSwitchTo(exec->exec_cxt);
+			exec->yielded = lappend(exec->yielded, sts);
+			MemoryContextSwitchTo(old);
+		}
+
+		return succ;
 	}
 	else
 	{
@@ -609,6 +620,8 @@ ContExecutorEndQuery(ContExecutor *exec)
 
 	exec->cur_query_id = InvalidOid;
 	exec->depleted = false;
+	list_free(exec->yielded);
+	exec->yielded = NIL;
 }
 
 void
@@ -636,4 +649,5 @@ ContExecutorEndBatch(ContExecutor *exec)
 	exec->timedout = false;
 	exec->depleted = false;
 	exec->queries_seen = NULL;
+	exec->exec_queries = NULL;
 }

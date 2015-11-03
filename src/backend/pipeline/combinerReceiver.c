@@ -92,6 +92,35 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 		int i = 0;
 
 		/* Generate acks list from yielded tuples */
+		foreach(lc, c->cont_executor->yielded)
+		{
+			StreamTupleState *sts = lfirst(lc);
+			InsertBatchAck *ack = sts->ack;
+			ListCell *lc2;
+			bool found = false;
+
+			if (!ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
+				continue;
+
+			foreach(lc2, acks_list)
+			{
+				InsertBatchAck *ack2 = lfirst(lc2);
+
+				if (ack->batch_id == ack2->batch_id)
+				{
+					found = true;
+					break;
+				}
+			}
+
+			if (!found)
+			{
+				InsertBatchAck *ack2 = (InsertBatchAck *) palloc(sizeof(InsertBatchAck));
+				memcpy(ack2, ack, sizeof(InsertBatchAck));
+				acks_list = lappend(acks_list, ack2);
+				nacks++;
+			}
+		}
 
 		acks = (InsertBatchAck *) palloc(sizeof(InsertBatchAck) * nacks);
 		foreach(lc, acks_list)
