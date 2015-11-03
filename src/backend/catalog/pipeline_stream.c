@@ -305,6 +305,8 @@ UnpackTupleDesc(bytea *bytes)
 		collations = lappend_int(collations, collation);
 	}
 
+	pfree(buf.data);
+
 	return BuildDescFromLists(names, types, mods, collations);
 }
 
@@ -341,6 +343,8 @@ PackTupleDesc(TupleDesc desc)
 	SET_VARSIZE(result, nbytes + VARHDRSZ);
 
 	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
+
+	pfree(buf.data);
 
 	return result;
 }

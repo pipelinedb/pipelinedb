@@ -264,8 +264,6 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, owner);
 	state->query_desc->snapshot = NULL;
 
-	SetTupleBufferBatchReader(state->query_desc->planstate, state->reader);
-
 	state->query_desc->estate->es_lastoid = InvalidOid;
 
 	(*state->dest->rStartup) (state->dest, 
@@ -400,8 +398,6 @@ exec_adhoc_worker(AdhocWorkerState * state)
 
 	state->query_desc->planstate = 
 		ExecInitNode(plan, state->query_desc->estate, EXEC_NO_STREAM_LOCKING);
-
-	SetTupleBufferBatchReader(state->query_desc->planstate, state->reader);
 
 	ExecutePlan(estate, state->query_desc->planstate, 
 				state->query_desc->operation,

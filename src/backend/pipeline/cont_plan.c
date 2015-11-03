@@ -202,34 +202,6 @@ get_combiner_plan(ContinuousView *view)
 	return result;
 }
 
-/* util func to set reader on stream scan nodes */ 
-void
-SetTupleBufferBatchReader(PlanState *planstate, TupleBufferBatchReader *reader)
-{
-	if (planstate == NULL)
-		return;
-
-	if (IsA(planstate, ForeignScanState))
-	{
-		ForeignScanState *fss = (ForeignScanState *) planstate;
-		if (IsStream(RelationGetRelid(fss->ss.ss_currentRelation)))
-		{
-			StreamScanState *scan = (StreamScanState *) fss->fdw_state;
-//			scan->reader = reader;
-		}
-
-		return;
-	}
-	else if (IsA(planstate, SubqueryScanState))
-	{
-		SetTupleBufferBatchReader(((SubqueryScanState *) planstate)->subplan, reader);
-		return;
-	}
-
-	SetTupleBufferBatchReader(planstate->lefttree, reader);
-	SetTupleBufferBatchReader(planstate->righttree, reader);
-}
-
 PlannedStmt *
 GetContPlan(ContinuousView *view, ContQueryProcType type)
 {

@@ -142,24 +142,12 @@ SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
 	return count;
 }
 
-static void
-WaitForAdhoc(AdhocData *adhoc_data)
-{
-	int i = 0;
-	for (i = 0; i < adhoc_data->num_adhoc; ++i)
-	{
-		AdhocQuery *query = &adhoc_data->queries[i];
-
-
-	}
-}
-
 /*
  * CopyIntoStream
  *
  * COPY events to a stream from an input source
  */
-uint64
+void
 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
 	uint64 count = 0;
@@ -194,7 +182,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 			ack->batch = batch;
 		}
 
-		cq = GetWorkerDSMCQueue();
+		cq = GetWorkerQueue();
 	}
 
 	for (i=0; i<ntuples; i++)
@@ -207,37 +195,30 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 		if (cq)
 		{
-			dsm_cqueue_push_nolock(cq, sts, len, true);
-			count++;
+			dsm_cqueue_push_nolock(cq, sts, len);
 			size += len;
 		}
 
 		if (adhoc_data.num_adhoc)
 		{
-			int acount = 0;
 			Size abytes = 0;
-
-			acount = SendTupleToAdhoc(&adhoc_data, tup, desc, &abytes);
+			SendTupleToAdhoc(&adhoc_data, tup, desc, &abytes);
 		}
 	}
 
+	pfree(packed_desc);
+
 	if (cq)
-	{
 		dsm_cqueue_unlock(cq);
-		if (ack)
-			pfree(ack);
-	}
 
-	stream_stat_report(RelationGetRelid(stream), count, 1, size);
+	stream_stat_report(RelationGetRelid(stream), ntuples, 1, size);
 
-	/*
-	 * Wait till the last event has been consumed by a CV before returning.
-	 */
-	if (synchronous_stream_insert && !bms_is_empty(targets))
+	if (batch)
+	{
+		pfree(ack);
 		InsertBatchWaitAndRemove(batch, count);
+	}
 
 	if (snap)
 		PushActiveSnapshot(GetTransactionSnapshot());
-
-	return count;
 }

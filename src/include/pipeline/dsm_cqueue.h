@@ -82,8 +82,8 @@ extern void dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_peek_fn peek_fn,
 extern dsm_cqueue_handle *dsm_cqueue_attach(dsm_handle handle);
 extern void dsm_cqueue_detach(dsm_cqueue_handle *cq_handle);
 
-extern bool dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len, bool block);
-extern bool dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool block);
+extern void dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len);
+extern void dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len);
 extern void *dsm_cqueue_peek_next(dsm_cqueue *cq, int *len);
 extern void dsm_cqueue_unpeek(dsm_cqueue *cq);
 extern void dsm_cqueue_pop_peeked(dsm_cqueue *cq);
