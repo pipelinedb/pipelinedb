@@ -110,8 +110,12 @@ extern TupleBuffer *CombinerTupleBuffer;
 extern TupleBuffer *AdhocTupleBuffer;
 
 /* Handler for writing to the combiner's TupleBuffer  */
-typedef TupleBufferSlot *(*ContCombinerWriteFunc) (StreamTuple *tuple, Bitmapset *queries);
-extern ContCombinerWriteFunc ContCombinerWriteHook;
+typedef TupleBufferSlot *(*CombinerWriteFunc) (StreamTuple *tuple, Bitmapset *queries);
+extern CombinerWriteFunc CombinerWriteHook;
+
+/* Shim for assigning any metadata to a TupleBufferSlot just before it is read */
+typedef void (*PrepareTupleBufferSlotShimFunc) (TupleBufferSlot *slot);
+extern PrepareTupleBufferSlotShimFunc PrepareTupleBufferSlotShim;
 
 extern StreamTuple *MakeStreamTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, InsertBatchAck *acks);
 
