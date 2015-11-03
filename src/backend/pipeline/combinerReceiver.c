@@ -158,8 +158,8 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 		tup->group_hash = bms_singleton_member(c->queries);
 	}
 
-	if (ContCombinerWriteHook != NULL)
-		tbs = ContCombinerWriteHook(tup, c->queries);
+	if (CombinerWriteHook != NULL)
+		tbs = CombinerWriteHook(tup, c->queries);
 	else
 		tbs = TupleBufferInsert(CombinerTupleBuffer, tup, c->queries);
 

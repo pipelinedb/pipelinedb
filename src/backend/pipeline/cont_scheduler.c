@@ -699,13 +699,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 						errhint("Each database requires %d background worker slots. Increase max_worker_processes to enable more capacity.", TOTAL_SLOTS)));
 
 	if (ContSchedulerStartupHook != NULL)
-	{
-		foreach(lc, dbs)
-		{
-			DatabaseEntry *db_entry = lfirst(lc);
-			ContSchedulerStartupHook(db_entry->oid, db_entry->name);
-		}
-	}
+		ContSchedulerStartupHook();
 
 	/* Loop forever */
 	for (;;)
