@@ -163,20 +163,16 @@ dsm_cqueue_has_unread(dsm_cqueue *cq)
 	return atomic_load(&cq->head) > atomic_load(&cq->cursor);
 }
 
-bool
-dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len, bool block)
+void
+dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len)
 {
-	bool success;
-
 	dsm_cqueue_lock(cq);
-	success = dsm_cqueue_push_nolock(cq, ptr, len, block);
+	dsm_cqueue_push_nolock(cq, ptr, len);
 	dsm_cqueue_unlock(cq);
-
-	return success;
 }
 
-bool
-dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool block)
+void
+dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 {
 	LWLock *lock;
 	uint64_t head;
@@ -231,8 +227,6 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool block)
 		/* Is there enough space in the buffer? */
 		if (cq->size - space_used >= len_needed)
 			break;
-		else if (!block)
-			return false;
 
 		WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
 		CHECK_FOR_INTERRUPTS();
@@ -268,8 +262,6 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool block)
 	consumer_latch = (Latch *) atomic_load(&cq->consumer_latch);
 	if (consumer_latch)
 		SetLatch(consumer_latch);
-
-	return true;
 }
 
 void *
@@ -552,7 +544,7 @@ dsm_cqueue_test_serial(void)
 
 		for (j = 0; j < nitems; j++)
 		{
-			dsm_cqueue_push(cq, hw, strlen(hw) + 1, true);
+			dsm_cqueue_push(cq, hw, strlen(hw) + 1);
 			dsm_cqueue_check_consistency(cq);
 		}
 
@@ -597,7 +589,7 @@ producer_main(Datum arg)
 	for (i = 0; i < 1000000; i++)
 	{
 		int len = rand() % 1024 + 1;
-		dsm_cqueue_push(cq, data, len, true);
+		dsm_cqueue_push(cq, data, len);
 
 		pg_usleep(rand() % 10);
 

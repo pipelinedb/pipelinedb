@@ -339,7 +339,7 @@ attach_to_cont_procs(ContQueryProcType type)
 }
 
 dsm_cqueue *
-GetWorkerDSMCQueue(void)
+GetWorkerQueue(void)
 {
 	static long idx = -1;
 	ContQueryProcIPCState *cpstate;
@@ -397,7 +397,7 @@ GetWorkerDSMCQueue(void)
 }
 
 dsm_cqueue *
-GetCombinerDSMCQueue(PartialTupleState *pts)
+GetCombinerQueue(PartialTupleState *pts)
 {
 	int idx;
 	ContQueryProcIPCState *cpstate;

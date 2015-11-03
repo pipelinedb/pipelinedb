@@ -21,6 +21,7 @@
 #endif
 
 #include "access/htup.h"
+#include "access/tupdesc.h"
 #include "nodes/bitmapset.h"
 #include "nodes/pg_list.h"
 #include "pipeline/cont_scheduler.h"
@@ -96,8 +97,8 @@ extern void PartialTupleStatePopFn(void *ptr, int len);
 extern void PartialTupleStatePeekFn(void *ptr, int len);
 extern void PartialTupleStateCopyFn(void *dest, void *src, int len);
 
-extern dsm_cqueue *GetWorkerDSMCQueue(void);
-extern dsm_cqueue *GetCombinerDSMCQueue(PartialTupleState *pts);
+extern dsm_cqueue *GetWorkerQueue(void);
+extern dsm_cqueue *GetCombinerQueue(PartialTupleState *pts);
 
 typedef struct ContExecutor
 {

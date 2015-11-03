@@ -57,28 +57,8 @@ typedef struct StreamInsertState
 	TupleDesc desc;
 	bytea *packed_desc;
 
-	dsm_cqueue *cqueue;
+	dsm_cqueue *worker_queue;
 } StreamInsertState;
-
-static char *
-print_stream_tuple_state(StreamTupleState *sts)
-{
-	StringInfo buf = makeStringInfo();
-	char *str;
-
-	TupleDesc desc = UnpackTupleDesc(sts->desc);
-	appendStringInfo(buf, "StreamTupleState:\n");
-	appendStringInfo(buf, "  arrival_time: %ld\n", sts->arrival_time);
-	appendStringInfo(buf, "  batch: %d\n", sts->ack->batch->id);
-	appendStringInfo(buf, "  queries: %s\n", bms_print(sts->queries));
-	appendStringInfo(buf, "  desc natts: %d\n", desc->natts);
-	appendStringInfo(buf, "  htup len: %d", sts->tup->t_len);
-
-	str = buf->data;
-	pfree(buf);
-
-	return str;
-}
 
 /*
  * stream_fdw_handler
@@ -538,8 +518,8 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 			ack->batch = batch;
 		}
 
-		sis->cqueue = GetWorkerDSMCQueue();
-		Assert(sis->cqueue);
+		sis->worker_queue = GetWorkerQueue();
+		Assert(sis->worker_queue);
 	}
 
 	sis->targets = targets;
@@ -569,7 +549,7 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 
 	sts = StreamTupleStateCreate(tup, sis->desc, sis->packed_desc, sis->targets, sis->ack, &len);
 
-	if (!bms_is_empty(sis->targets))
+	if (sis->worker_queue)
 	{
 		/*
 		 * If we've written a batch to a worker process, start writing to
@@ -577,21 +557,11 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 		 */
 		if (sis->count && (sis->count % continuous_query_batch_size == 0))
 		{
-			dsm_cqueue_unlock(sis->cqueue);
-			sis->cqueue = GetWorkerDSMCQueue();
+			dsm_cqueue_unlock(sis->worker_queue);
+			sis->worker_queue = GetWorkerQueue();
 		}
 
-		/*
-		 * Try to write to the first worker that has enough space in its queue,
-		 * except if all worker queues are full. In that case, we just wait.
-		 */
-		while (!dsm_cqueue_push_nolock(sis->cqueue, sts, len,
-				ntries == continuous_query_num_workers))
-		{
-			dsm_cqueue_unlock(sis->cqueue);
-			sis->cqueue = GetWorkerDSMCQueue();
-			ntries++;
-		}
+		dsm_cqueue_push_nolock(sis->worker_queue, sts, len);
 	}
 
 	/* TODO: adhoc sending */
@@ -614,9 +584,9 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 
 	stream_stat_report(RelationGetRelid(result_info->ri_RelationDesc), sis->count, 1, sis->bytes);
 
-	if (!bms_is_empty(sis->targets))
+	if (sis->worker_queue)
 	{
-		dsm_cqueue_unlock(sis->cqueue);
+		dsm_cqueue_unlock(sis->worker_queue);
 		if (synchronous_stream_insert)
 			InsertBatchWaitAndRemove(sis->batch, sis->count);
 	}

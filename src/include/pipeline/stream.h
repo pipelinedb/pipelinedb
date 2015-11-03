@@ -36,7 +36,7 @@ extern void *copy_iter_arg;
 extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
-extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
+extern void CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 typedef struct AdhocQuery
 {
