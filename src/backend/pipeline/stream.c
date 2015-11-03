@@ -164,47 +164,50 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
 	uint64 count = 0;
 	int i;
-	InsertBatchAck acks[1];
+	InsertBatchAck *ack = NULL;
 	InsertBatch *batch = NULL;
-	int num_batches = 0;
 	Size size = 0;
 	bool snap = ActiveSnapshotSet();
-
 	Bitmapset *all_targets = GetStreamReaders(RelationGetRelid(stream));
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
-
 	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
 	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
 		bms_difference(all_targets, targets) : NULL;
-
-	int num_worker = bms_num_members(targets);
-
+	dsm_cqueue *cq = NULL;
+	bytea *packed_desc;
 	AdhocData adhoc_data;
+
 	init_adhoc_data(&adhoc_data, adhoc_targets);
 
-	if (synchronous_stream_insert && num_worker)
+	if (synchronous_stream_insert && !bms_is_empty(targets))
 	{
 		batch = InsertBatchCreate();
-		num_batches = 1;
-
-		acks[0].batch_id = batch->id;
-		acks[0].batch = batch;
+		ack = palloc0(sizeof(InsertBatchAck));
+		ack->batch_id = batch->id;
+		ack->batch = batch;
 	}
 
 	if (snap)
 		PopActiveSnapshot();
 
+	packed_desc = PackTupleDesc(desc);
+
+	if (!bms_is_empty(targets))
+		cq = GetWorkerDSMCQueue();
+
 	for (i=0; i<ntuples; i++)
 	{
-		HeapTuple htup = tuples[i];
-		StreamTuple *tuple;
+		StreamTupleState *sts;
+		HeapTuple tup = tuples[i];
+		int len;
 
-		if (num_worker)
+		sts = StreamTupleStateCreate(tup, desc, packed_desc, targets, ack, &len);
+
+		if (cq)
 		{
-			tuple = MakeStreamTuple(htup, desc, num_batches, acks);
-			TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+			dsm_cqueue_push_nolock(cq, sts, len, true);
 			count++;
-			size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+			size += len;
 		}
 
 		if (adhoc_data.num_adhoc)
@@ -212,33 +215,20 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 			int acount = 0;
 			Size abytes = 0;
 
-			acount = SendTupleToAdhoc(&adhoc_data, htup, desc, &abytes);
-
-			if (!num_worker)
-			{
-				count += acount;
-				size += abytes;
-			}
+			acount = SendTupleToAdhoc(&adhoc_data, tup, desc, &abytes);
 		}
 	}
+
+	if (cq)
+		dsm_cqueue_unlock(cq);
 
 	stream_stat_report(RelationGetRelid(stream), count, 1, size);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
-	if (synchronous_stream_insert)
-	{
-		if (num_worker)
-		{
-			InsertBatchWaitAndRemove(batch, count);
-		}
-
-		if (adhoc_data.num_adhoc)
-		{
-			WaitForAdhoc(&adhoc_data);
-		}
-	}
+	if (synchronous_stream_insert && !bms_is_empty(targets))
+		InsertBatchWaitAndRemove(batch, count);
 
 	if (snap)
 		PushActiveSnapshot(GetTransactionSnapshot());

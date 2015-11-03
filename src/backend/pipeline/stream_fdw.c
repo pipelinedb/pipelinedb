@@ -563,62 +563,11 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 {
 	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
 	HeapTuple tup = ExecMaterializeSlot(slot);
-	StreamTupleState tupstate;
+	StreamTupleState *sts;
 	int len;
-	int i;
-	int nrdescs = 0;
-	RecordTupleDesc *rdescs;
 	int ntries = 0;
 
-	len =  sizeof(StreamTupleState);
-	len += VARSIZE(sis->packed_desc);
-	len += HEAPTUPLESIZE + tup->t_len;
-	len += sizeof(InsertBatchAck);
-	len += BITMAPSET_SIZE(sis->targets->nwords);
-
-	tupstate.ack = sis->ack;
-	tupstate.arrival_time = GetCurrentTimestamp();
-	tupstate.desc = sis->packed_desc;
-
-	for (i = 0; i < sis->desc->natts; i++)
-	{
-		Form_pg_attribute attr = sis->desc->attrs[i];
-		RecordTupleDesc *rdesc;
-		Datum v;
-		bool isnull;
-		HeapTupleHeader rec;
-		int32 tupTypmod;
-		TupleDesc attdesc;
-
-		if (attr->atttypid != RECORDOID)
-			continue;
-
-		v = heap_getattr(tup, i + 1, sis->desc, &isnull);
-
-		if (isnull)
-			continue;
-
-		if (rdescs == NULL)
-			rdescs = palloc0(sizeof(RecordTupleDesc) * sis->desc->natts);
-
-		rec = DatumGetHeapTupleHeader(v);
-		Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
-		tupTypmod = HeapTupleHeaderGetTypMod(rec);
-
-		rdesc = &rdescs[nrdescs++];
-		rdesc->typmod = tupTypmod;
-		attdesc = lookup_rowtype_tupdesc(RECORDOID, tupTypmod);
-		rdesc->desc = PackTupleDesc(attdesc);
-		ReleaseTupleDesc(attdesc);
-
-		len += sizeof(RecordTupleDesc);
-		len += VARSIZE(rdesc->desc);
-	}
-
-	tupstate.num_record_descs = nrdescs;
-	tupstate.record_descs = rdescs;
-	tupstate.queries = sis->targets;
-	tupstate.tup = tup;
+	sts = StreamTupleStateCreate(tup, sis->desc, sis->packed_desc, sis->targets, sis->ack, &len);
 
 	if (!bms_is_empty(sis->targets))
 	{
@@ -636,7 +585,7 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 		 * Try to write to the first worker that has enough space in its queue,
 		 * except if all worker queues are full. In that case, we just wait.
 		 */
-		while (!dsm_cqueue_push_nolock(sis->cqueue, &tupstate, len,
+		while (!dsm_cqueue_push_nolock(sis->cqueue, sts, len,
 				ntries == continuous_query_num_workers))
 		{
 			dsm_cqueue_unlock(sis->cqueue);
@@ -646,6 +595,8 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 	}
 
 	/* TODO: adhoc sending */
+
+	pfree(sts);
 
 	sis->count++;
 	sis->bytes += tup->t_len + HEAPTUPLESIZE;

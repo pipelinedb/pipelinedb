@@ -12,8 +12,11 @@
 #include "postgres.h"
 
 #include "access/htup.h"
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream_fn.h"
+#include "catalog/pg_type.h"
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "pipeline/cont_execute.h"
@@ -150,6 +153,66 @@ StreamTupleStatePopFn(void *ptr, int len)
 		InsertBatchAckTuple(sts->ack);
 }
 
+StreamTupleState *
+StreamTupleStateCreate(HeapTuple tup, TupleDesc desc, bytea *packed_desc, Bitmapset *queries, InsertBatchAck *ack, int *len)
+{
+	StreamTupleState *tupstate = palloc0(sizeof(StreamTupleState));
+	int i;
+	int nrdescs = 0;
+	RecordTupleDesc *rdescs;
+
+	*len =  sizeof(StreamTupleState);
+	*len += VARSIZE(packed_desc);
+	*len += HEAPTUPLESIZE + tup->t_len;
+	*len += sizeof(InsertBatchAck);
+	*len += BITMAPSET_SIZE(queries->nwords);
+
+	tupstate->ack = ack;
+	tupstate->arrival_time = GetCurrentTimestamp();
+	tupstate->desc = packed_desc;
+
+	for (i = 0; i < desc->natts; i++)
+	{
+		Form_pg_attribute attr = desc->attrs[i];
+		RecordTupleDesc *rdesc;
+		Datum v;
+		bool isnull;
+		HeapTupleHeader rec;
+		int32 tupTypmod;
+		TupleDesc attdesc;
+
+		if (attr->atttypid != RECORDOID)
+			continue;
+
+		v = heap_getattr(tup, i + 1, desc, &isnull);
+
+		if (isnull)
+			continue;
+
+		if (rdescs == NULL)
+			rdescs = palloc0(sizeof(RecordTupleDesc) * desc->natts);
+
+		rec = DatumGetHeapTupleHeader(v);
+		Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
+		tupTypmod = HeapTupleHeaderGetTypMod(rec);
+
+		rdesc = &rdescs[nrdescs++];
+		rdesc->typmod = tupTypmod;
+		attdesc = lookup_rowtype_tupdesc(RECORDOID, tupTypmod);
+		rdesc->desc = PackTupleDesc(attdesc);
+		ReleaseTupleDesc(attdesc);
+
+		len += sizeof(RecordTupleDesc);
+		len += VARSIZE(rdesc->desc);
+	}
+
+	tupstate->num_record_descs = nrdescs;
+	tupstate->record_descs = rdescs;
+	tupstate->queries = queries;
+	tupstate->tup = tup;
+
+	return tupstate;
+}
 
 InsertBatch *
 InsertBatchCreate(void)
