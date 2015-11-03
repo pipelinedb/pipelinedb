@@ -496,16 +496,23 @@ ContExecutorStartBatch(ContExecutor *exec)
 	MemoryContextSwitchTo(exec->exec_cxt);
 	ContQueryBatchContext = exec->exec_cxt;
 
-	if (!bms_is_empty(exec->queries))
-		exec->exec_queries = bms_copy(exec->queries);
-
+	exec->exec_queries = bms_copy(exec->queries);
+	exec->queries_seen = NULL;
 	exec->update_queries = true;
+
+	if (IsContQueryCombinerProcess())
+		elog(LOG, "start batch %p", exec->queries_seen);
 }
 
 Oid
 ContExecutorStartNextQuery(ContExecutor *exec)
 {
 	MemoryContextSwitchTo(exec->exec_cxt);
+
+	if (IsContQueryCombinerProcess())
+		elog(LOG, "start query %p", exec->queries_seen);
+
+	exec->cur_query_id = InvalidOid;
 
 	for (;;)
 	{
@@ -532,6 +539,9 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 	MemoryContext old = MemoryContextSwitchTo(exec->cxt);
 	exec->queries = bms_del_member(exec->queries, exec->cur_query_id);
 	MemoryContextSwitchTo(old);
+
+	if (IsContQueryCombinerProcess())
+		elog(LOG, "purge query %p", exec->queries_seen);
 }
 
 static inline bool
@@ -637,6 +647,8 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			}
 			else
 			{
+				if (IsContQueryCombinerProcess())
+						elog(LOG, "start query %p", exec->queries_seen);
 				PartialTupleState *pts = (PartialTupleState *) ptr;
 				exec->queries_seen = bms_add_member(exec->queries_seen, pts->query_id);
 			}
@@ -655,6 +667,9 @@ void
 ContExecutorEndQuery(ContExecutor *exec)
 {
 	IncrementCQExecutions(1);
+
+	if (IsContQueryCombinerProcess())
+		elog(LOG, "end query %p", exec->queries_seen);
 
 	if (!exec->started)
 		return;
@@ -704,4 +719,7 @@ ContExecutorEndBatch(ContExecutor *exec)
 	exec->depleted = false;
 	exec->queries_seen = NULL;
 	exec->exec_queries = NULL;
+
+	if (IsContQueryCombinerProcess())
+		elog(LOG, "end batch %p", exec->queries_seen);
 }
