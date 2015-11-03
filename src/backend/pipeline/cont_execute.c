@@ -406,9 +406,6 @@ ContExecutorStartBatch(ContExecutor *exec)
 {
 	dsm_cqueue_wait_non_empty(exec->cq_handle->cqueue, 0);
 
-	if (IsContQueryWorkerProcess())
-		elog(LOG, "start batch", exec->cur_query_id);
-
 	if (bms_is_empty(exec->queries))
 	{
 		MemoryContext old = CurrentMemoryContext;
@@ -447,18 +444,10 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 		exec->cur_query_id = id;
 
 		if (!exec->timedout)
-		{
-			if (IsContQueryWorkerProcess())
-				elog(LOG, "start query (n'to) %d", exec->cur_query_id);
 			return exec->cur_query_id;
-		}
 
 		if (bms_is_member(exec->cur_query_id, exec->queries_seen))
-		{
-			if (IsContQueryWorkerProcess())
-				elog(LOG, "start query (to) %d", exec->cur_query_id);
 			return exec->cur_query_id;
-		}
 	}
 
 	return InvalidOid;
@@ -467,8 +456,6 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 void
 ContExecutorPurgeQuery(ContExecutor *exec)
 {
-	if (IsContQueryWorkerProcess())
-		elog(LOG, "purge query %d", exec->cur_query_id);
 	MemoryContext old = MemoryContextSwitchTo(exec->cxt);
 	exec->queries = bms_del_member(exec->queries, exec->cur_query_id);
 	MemoryContextSwitchTo(old);
@@ -594,9 +581,6 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 void
 ContExecutorEndQuery(ContExecutor *exec)
 {
-	if (IsContQueryWorkerProcess())
-		elog(LOG, "end query %d", exec->cur_query_id);
-
 	IncrementCQExecutions(1);
 
 	if (!exec->started)
@@ -607,7 +591,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 	if (!bms_is_empty(exec->queries_seen) && exec->update_queries)
 	{
 		MemoryContext old = MemoryContextSwitchTo(exec->cxt);
-		exec->queries_seen = bms_add_members(exec->queries, exec->queries_seen);
+		exec->queries = bms_add_members(exec->queries, exec->queries_seen);
 
 		MemoryContextSwitchTo(exec->exec_cxt);
 		exec->exec_queries = bms_add_members(exec->exec_queries, exec->queries_seen);
@@ -627,9 +611,6 @@ ContExecutorEndQuery(ContExecutor *exec)
 void
 ContExecutorEndBatch(ContExecutor *exec)
 {
-	if (IsContQueryWorkerProcess())
-		elog(LOG, "end batch");
-
 	uint64_t ptr = 0;
 
 	CommitTransactionCommand();

@@ -184,9 +184,6 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 	List *physical_tlist = (List *) lsecond(plan->fdw_private);
 	int i = 0;
 
-	if (!IsContQueryWorkerProcess() && !IsContQueryAdhocProcess())
-		elog(ERROR, "streams can only be read from worker or adhoc continuous query processes");
-
 	state = makeNode(StreamScanState);
 	state->ss.ps.plan = (Plan *) node;
 
