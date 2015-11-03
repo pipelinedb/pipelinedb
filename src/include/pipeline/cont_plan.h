@@ -18,6 +18,7 @@
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/tuplebuf.h"
 #include "utils/rel.h"
 #include "utils/relcache.h"
 #include "utils/resowner.h"

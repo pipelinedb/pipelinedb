@@ -215,7 +215,7 @@ SetTupleBufferBatchReader(PlanState *planstate, TupleBufferBatchReader *reader)
 		if (IsStream(RelationGetRelid(fss->ss.ss_currentRelation)))
 		{
 			StreamScanState *scan = (StreamScanState *) fss->fdw_state;
-			scan->reader = reader;
+//			scan->reader = reader;
 		}
 
 		return;

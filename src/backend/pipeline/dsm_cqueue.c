@@ -244,6 +244,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool block)
 	slot = dsm_cqueue_slot_get(cq, head);
 	slot->len = len;
 	slot->wraps = needs_wrap;
+	slot->peeked = false;
 
 	/*
 	 * If we're wrapping around, copy into the start of buffer, otherwise copy
@@ -297,8 +298,12 @@ dsm_cqueue_peek_next(dsm_cqueue *cq, int *len)
 
 	*len = slot->len;
 
-	if (cq->peek_fn)
-		return cq->peek_fn(pos, slot->len);
+	if (cq->peek_fn && !slot->peeked)
+	{
+		cq->peek_fn(pos, slot->len);
+		slot->peeked = true;
+	}
+
 	return pos;
 }
 

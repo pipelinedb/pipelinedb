@@ -47,19 +47,19 @@ PartialTupleStateCopyFn(void *dest, void *src, int len)
 		memcpy(pos, pts->acks, sizeof(InsertBatchAck) * pts->nacks);
 		pos += sizeof(InsertBatchAck) * pts->nacks;
 	}
+	else
+		cpypts->acks = NULL;
 
 	Assert((uintptr_t) ptr_difference(dest, pos) == len);
 }
 
-void *
+void
 PartialTupleStatePeekFn(void *ptr, int len)
 {
 	PartialTupleState *pts = (PartialTupleState *) ptr;
 	pts->acks = ptr_offset(pts, pts->acks);
 	pts->tup = ptr_offset(pts, pts->tup);
 	pts->tup->t_data = (HeapTupleHeader) (((char *) pts->tup) + HEAPTUPLESIZE);
-
-	return pts;
 }
 
 void
@@ -99,6 +99,8 @@ StreamTupleStateCopyFn(void *dest, void *src, int len)
 		memcpy(pos, sts->ack, sizeof(InsertBatchAck));
 		pos += sizeof(InsertBatchAck);
 	}
+	else
+		cpysts->ack = NULL;
 
 	if (sts->num_record_descs)
 	{
@@ -125,18 +127,19 @@ StreamTupleStateCopyFn(void *dest, void *src, int len)
 	Assert((uintptr_t) ptr_difference(dest, pos) == len);
 }
 
-void *
+void
 StreamTupleStatePeekFn(void *ptr, int len)
 {
 	StreamTupleState *sts = (StreamTupleState *) ptr;
-	sts->ack = ptr_offset(sts, sts->ack);
+	if (sts->ack)
+		sts->ack = ptr_offset(sts, sts->ack);
+	else
+		sts->ack = NULL;
 	sts->desc =  ptr_offset(sts, sts->desc);
 	sts->queries = ptr_offset(sts, sts->queries);
 	sts->record_descs = ptr_offset(sts, sts->record_descs);
 	sts->tup = ptr_offset(sts, sts->tup);
 	sts->tup->t_data = (HeapTupleHeader) (((char *) sts->tup) + HEAPTUPLESIZE);
-
-	return sts;
 }
 
 void
@@ -144,10 +147,7 @@ StreamTupleStatePopFn(void *ptr, int len)
 {
 	StreamTupleState *sts = (StreamTupleState *) ptr;
 	if (sts->ack)
-	{
-		InsertBatchAck *ack = ptr_offset(sts, sts->ack);
-		InsertBatchAckTuple(ack);
-	}
+		InsertBatchAckTuple(sts->ack);
 }
 
 
@@ -356,7 +356,7 @@ GetCombinerDSMCQueue(PartialTupleState *pts)
 }
 
 ContExecutor *
-ContinuousExecutorNew(ContQueryProcType type)
+ContExecutorNew(ContQueryProcType type)
 {
 	ContExecutor *exec;
 	MemoryContext cxt;
@@ -377,10 +377,8 @@ ContinuousExecutorNew(ContQueryProcType type)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	Assert(MyContQueryProc->type == type);
-
 	exec->ptype = type;
-	exec->cur_query = InvalidOid;
+	exec->cur_query_id = InvalidOid;
 
 	StartTransactionCommand();
 	exec->cq_handle = dsm_cqueue_attach(MyContQueryProc->dsm_handle);
@@ -408,6 +406,9 @@ ContExecutorStartBatch(ContExecutor *exec)
 {
 	dsm_cqueue_wait_non_empty(exec->cq_handle->cqueue, 0);
 
+	if (IsContQueryWorkerProcess())
+		elog(LOG, "start batch", exec->cur_query_id);
+
 	if (bms_is_empty(exec->queries))
 	{
 		MemoryContext old = CurrentMemoryContext;
@@ -425,18 +426,50 @@ ContExecutorStartBatch(ContExecutor *exec)
 	MemoryContextSwitchTo(exec->exec_cxt);
 	ContQueryBatchContext = exec->exec_cxt;
 
+	exec->exec_queries = bms_copy(exec->queries);
 	exec->update_queries = true;
 }
 
-bool
-ContExecutorStartQuery(ContExecutor *exec, Oid cq_id)
+Oid
+ContExecutorStartNextQuery(ContExecutor *exec)
 {
-	exec->cur_query = cq_id;
+	MemoryContextSwitchTo(exec->exec_cxt);
 
-	if (!exec->timedout)
-		return true;
+	for (;;)
+	{
+		int id = bms_first_member(exec->exec_queries);
 
-	return bms_is_member(cq_id, exec->queries_seen);
+		if (id == -1)
+			return InvalidOid;
+
+		exec->cur_query_id = id;
+
+		if (!exec->timedout)
+		{
+			if (IsContQueryWorkerProcess())
+				elog(LOG, "start query (n'to) %d", exec->cur_query_id);
+			return exec->cur_query_id;
+		}
+
+		if (bms_is_member(exec->cur_query_id, exec->queries_seen))
+		{
+			if (IsContQueryWorkerProcess())
+				elog(LOG, "start query (to) %d", exec->cur_query_id);
+			return exec->cur_query_id;
+		}
+	}
+
+	return InvalidOid;
+}
+
+void
+ContExecutorPurgeQuery(ContExecutor *exec)
+{
+	if (IsContQueryWorkerProcess())
+		elog(LOG, "purge query %d", exec->cur_query_id);
+	MemoryContext old = MemoryContextSwitchTo(exec->cxt);
+	exec->queries = bms_del_member(exec->queries, exec->cur_query_id);
+	MemoryContextSwitchTo(old);
 }
 
 static inline bool
@@ -445,20 +478,19 @@ should_yield_item(ContExecutor *exec, uintptr_t ptr)
 	if (exec->ptype == Worker)
 	{
 		StreamTupleState *sts = (StreamTupleState *) ptr;
-		return bms_is_member(exec->cur_query, sts->queries);
+		return bms_is_member(exec->cur_query_id, sts->queries);
 	}
 	else
 	{
 		PartialTupleState *pts = (PartialTupleState *) ptr;
-		return exec->cur_query == pts->query_id;
+		return exec->cur_query_id == pts->query_id;
 	}
 }
 
 void *
-ContExecutorNextItem(ContExecutor *exec)
+ContExecutorYieldItem(ContExecutor *exec, int *len)
 {
 	ContQueryRunParams *params = GetContQueryRunParams();
-	int len;
 
 	/*
 	 * If we've read a full batch, mark exec state as timed out so that we don't read more tuples from the
@@ -487,7 +519,7 @@ ContExecutorNextItem(ContExecutor *exec)
 			if (exec->depleted)
 				return NULL;
 
-			ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, &len);
+			ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, len);
 			Assert(ptr);
 
 			if (ptr == exec->cursor)
@@ -517,7 +549,7 @@ ContExecutorNextItem(ContExecutor *exec)
 			return NULL;
 		}
 
-		ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, &len);
+		ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, len);
 
 		if (ptr)
 		{
@@ -551,13 +583,13 @@ ContExecutorNextItem(ContExecutor *exec)
 void
 ContExecutorEndQuery(ContExecutor *exec)
 {
+	if (IsContQueryWorkerProcess())
+		elog(LOG, "end query %d", exec->cur_query_id);
+
 	IncrementCQExecutions(1);
 
 	if (!exec->started)
 		return;
-
-	exec->cur_query = InvalidOid;
-	exec->depleted = false;
 
 	dsm_cqueue_unpeek(exec->cq_handle->cqueue);
 
@@ -565,17 +597,36 @@ ContExecutorEndQuery(ContExecutor *exec)
 	{
 		MemoryContext old = MemoryContextSwitchTo(exec->cxt);
 		exec->queries_seen = bms_add_members(exec->queries, exec->queries_seen);
+
+		MemoryContextSwitchTo(exec->exec_cxt);
+		exec->exec_queries = bms_add_members(exec->exec_queries, exec->queries_seen);
+		exec->exec_queries = bms_del_member(exec->exec_queries, exec->cur_query_id);
+
 		MemoryContextSwitchTo(old);
 
 		exec->update_queries = false;
 	}
+
+	exec->cur_query_id = InvalidOid;
+	exec->depleted = false;
 }
 
 void
 ContExecutorEndBatch(ContExecutor *exec)
 {
+	if (IsContQueryWorkerProcess())
+		elog(LOG, "end batch");
+
+	uint64_t ptr = 0;
+
 	CommitTransactionCommand();
 	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
+
+	while (ptr < exec->cursor)
+	{
+		int len;
+		ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, &len);
+	}
 
 	dsm_cqueue_pop_peeked(exec->cq_handle->cqueue);
 

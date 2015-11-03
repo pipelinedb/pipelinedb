@@ -184,7 +184,7 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 	List *physical_tlist = (List *) lsecond(plan->fdw_private);
 	int i = 0;
 
-	if (!IsContQueryWorkerProcess() || !IsContQueryAdhocProcess())
+	if (!IsContQueryWorkerProcess() && !IsContQueryAdhocProcess())
 		elog(ERROR, "streams can only be read from worker or adhoc continuous query processes");
 
 	state = makeNode(StreamScanState);
@@ -453,8 +453,7 @@ IterateStreamScan(ForeignScanState *node)
 	bytea *piraw;
 	bytea *tupraw;
 
-	/* TODO (batch reader) */
-
+	sts = (StreamTupleState *) ContExecutorYieldItem(state->cont_executor, &len);
 	if (sts == NULL)
 		return NULL;
 
@@ -647,9 +646,6 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 			sis->cqueue = GetWorkerDSMCQueue();
 			ntries++;
 		}
-
-		elog(LOG, "%s \n %s", print_stream_tuple_state(&tupstate),
-				print_stream_tuple_state(dsm_cqueue_peek_next(sis->cqueue, &len)));
 	}
 
 	/* TODO: adhoc sending */

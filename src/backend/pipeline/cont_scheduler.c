@@ -453,8 +453,6 @@ create_dsm_cqueue(ContQueryProc *proc)
 	dsm_segment *segment;
 	dsm_handle handle;
 
-	Assert(CurrentResourceOwner);
-
 	if (proc->type == Combiner)
 	{
 		peek_fn = &PartialTupleStatePeekFn;
@@ -469,6 +467,8 @@ create_dsm_cqueue(ContQueryProc *proc)
 	}
 	else
 		return NULL;
+
+	Assert(CurrentResourceOwner);
 
 	/* Create dsm_segment and pin it. */
 	segment = dsm_create(continuous_query_ipc_shared_mem * 1024);
@@ -626,9 +626,6 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	hash_search(ContQuerySchedulerShmem->proc_table, &db_meta->db_oid, HASH_REMOVE, &found);
 
 	Assert(found);
-
-	TupleBufferDrain(WorkerTupleBuffer, db_meta->db_oid);
-	TupleBufferDrain(CombinerTupleBuffer, db_meta->db_oid);
 }
 
 void
@@ -984,8 +981,6 @@ AdhocContQueryProcGet(void)
 	int i;
 	int idx;
 	ContQueryProc *proc = NULL;
-	dsm_segment *segment;
-	dsm_handle handle;
 
 	db_meta = (ContQueryDatabaseMetadata *) hash_search(
 				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);

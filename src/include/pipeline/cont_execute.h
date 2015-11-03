@@ -76,7 +76,7 @@ typedef struct StreamTupleState
 } StreamTupleState;
 
 extern void StreamTupleStatePopFn(void *ptr, int len);
-extern void *StreamTupleStatePeekFn(void *ptr, int len);
+extern void StreamTupleStatePeekFn(void *ptr, int len);
 extern void StreamTupleStateCopyFn(void *dest, void *src, int len);
 
 typedef struct PartialTupleState
@@ -91,7 +91,7 @@ typedef struct PartialTupleState
 } PartialTupleState;
 
 extern void PartialTupleStatePopFn(void *ptr, int len);
-extern void *PartialTupleStatePeekFn(void *ptr, int len);
+extern void PartialTupleStatePeekFn(void *ptr, int len);
 extern void PartialTupleStateCopyFn(void *dest, void *src, int len);
 
 extern dsm_cqueue *GetWorkerDSMCQueue(void);
@@ -108,8 +108,8 @@ typedef struct ContExecutor
 	Bitmapset *queries;
 	bool update_queries;
 
-	Oid cur_query;
-
+	Oid cur_query_id;
+	Bitmapset *exec_queries;
 	uintptr_t cursor;
 	int nitems;
 
@@ -117,14 +117,16 @@ typedef struct ContExecutor
 	bool started;
 	bool timedout;
 	bool depleted;
+
 	Bitmapset *queries_seen;
 } ContExecutor;
 
-extern ContExecutor *ContinuousExecutorNew(ContQueryProcType type);
+extern ContExecutor *ContExecutorNew(ContQueryProcType type);
 extern void ContExecutorDestroy(ContExecutor *exec);
 extern void ContExecutorStartBatch(ContExecutor *exec);
-extern bool ContExecutorStartQuery(ContExecutor *exec, Oid cq_id);
-extern void *ContExecutorNextItem(ContExecutor *exec);
+extern Oid ContExecutorStartNextQuery(ContExecutor *exec);
+extern void ContExecutorPurgeQuery(ContExecutor *exec);
+extern void *ContExecutorYieldItem(ContExecutor *exec, int *len);
 extern void ContExecutorEndQuery(ContExecutor *exec);
 extern void ContExecutorEndBatch(ContExecutor *exec);
 

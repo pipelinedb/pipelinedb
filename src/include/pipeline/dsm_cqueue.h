@@ -26,7 +26,7 @@
 #include "storage/lwlock.h"
 #include "storage/spin.h"
 
-typedef void *(*dsm_cqueue_peek_fn) (void *ptr, int len);
+typedef void (*dsm_cqueue_peek_fn) (void *ptr, int len);
 typedef void (*dsm_cqueue_pop_fn) (void *ptr, int len);
 typedef void (*dsm_cqueue_copy_fn) (void *dest, void *src, int len);
 
@@ -34,6 +34,7 @@ typedef struct dsm_cqueue_slot
 {
 	uint64_t next;
 	bool     wraps;
+	bool     peeked;
 	int      len;
 	char     bytes[1]; /* dynamically allocated */
 } dsm_cqueue_slot;

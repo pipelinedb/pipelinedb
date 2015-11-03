@@ -31,9 +31,8 @@
 typedef struct
 {
 	DestReceiver pub;
-	TupleBufferBatchReader *reader;
+	ContExecutor *cont_executor;
 	Bitmapset *queries;
-	Oid query_id;
 	FunctionCallInfo hash_fcinfo;
 	FuncExpr *hash;
 } CombinerState;
@@ -109,17 +108,20 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 		list_free_deep(acks_list);
 	}
 
-	len = sizeof(PartialTupleState) + (nacks * sizeof(InsertBatchAck));
-
 	pts.tup = ExecMaterializeSlot(slot);
+	pts.query_id = c->cont_executor->cur_query_id;
 	pts.nacks = nacks;
 	pts.acks = acks;
+
+	len = (sizeof(PartialTupleState) +
+			HEAPTUPLESIZE + pts.tup->t_len +
+			(nacks * sizeof(InsertBatchAck)));
 
 	/* Shard by groups or id if no grouping. */
 	if (c->hash_fcinfo)
 		pts.hash = hash_group(slot, c);
 	else
-		pts.hash = MurmurHash3_64(&c->query_id, sizeof(Oid), MURMUR_SEED);
+		pts.hash = MurmurHash3_64(&c->cont_executor->cur_query_id, sizeof(Oid), MURMUR_SEED);
 
 	cq = GetCombinerDSMCQueue(&pts);
 	dsm_cqueue_push_nolock(cq, &pts, len, true);
@@ -161,11 +163,10 @@ CreateCombinerDestReceiver(void)
  * Set parameters for a CombinerDestReceiver
  */
 void
-SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader, Oid cq_id)
+SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *exec)
 {
 	CombinerState *c = (CombinerState *) self;
-	c->reader = reader;
-	c->query_id = cq_id;
+	c->cont_executor = exec;
 }
 
 /*
@@ -174,13 +175,13 @@ SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader
  * Initializes the hash function to use to determine which combiner should read a given tuple
  */
 void
-SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash, MemoryContext context)
+SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash)
 {
 	CombinerState *c = (CombinerState *) self;
 	FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
 
 	fcinfo->flinfo = palloc0(sizeof(FmgrInfo));
-	fcinfo->flinfo->fn_mcxt = context;
+	fcinfo->flinfo->fn_mcxt = c->cont_executor->exec_cxt;
 
 	fmgr_info(hash->funcid, fcinfo->flinfo);
 	fmgr_info_set_expr((Node *) hash, fcinfo->flinfo);

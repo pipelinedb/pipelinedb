@@ -56,6 +56,7 @@
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream.h"
+#include "pipeline/tuplebuf.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
