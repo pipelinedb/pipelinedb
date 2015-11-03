@@ -404,7 +404,17 @@ ContExecutorDestroy(ContExecutor *exec)
 void
 ContExecutorStartBatch(ContExecutor *exec)
 {
-	dsm_cqueue_wait_non_empty(exec->cq_handle->cqueue, 0);
+	if (dsm_cqueue_is_empty(exec->cq_handle->cqueue))
+	{
+		char *proc_name = GetContQueryProcName(MyContQueryProc);
+		cq_stat_report(true);
+
+		pgstat_report_activity(STATE_IDLE, proc_name);
+		dsm_cqueue_wait_non_empty(exec->cq_handle->cqueue, 0);
+		pgstat_report_activity(STATE_RUNNING, proc_name);
+
+		pfree(proc_name);
+	}
 
 	if (bms_is_empty(exec->queries))
 	{
