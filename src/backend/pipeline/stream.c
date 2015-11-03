@@ -150,7 +150,6 @@ SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
 void
 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	uint64 count = 0;
 	int i;
 	InsertBatchAck *ack = NULL;
 	InsertBatch *batch = NULL;
@@ -216,7 +215,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	if (batch)
 	{
 		pfree(ack);
-		InsertBatchWaitAndRemove(batch, count);
+		InsertBatchWaitAndRemove(batch, ntuples);
 	}
 
 	if (snap)
