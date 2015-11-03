@@ -861,7 +861,7 @@ ContinuousQueryCombinerMain(void)
 				if (ActiveSnapshotSet())
 					PopActiveSnapshot();
 
-				MemoryContextSwitchTo(ContQueryBatchContext);
+				MemoryContextSwitchTo(cont_exec->exec_cxt);
 
 				if (state)
 					cleanup_query_state(states, query_id);
@@ -870,8 +870,6 @@ ContinuousQueryCombinerMain(void)
 
 				if (!continuous_query_crash_recovery)
 					exit(1);
-
-				MemoryContextSwitchTo(cont_exec->exec_cxt);
 			}
 			PG_END_TRY();
 

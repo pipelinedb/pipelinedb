@@ -426,7 +426,7 @@ ContExecutorNew(ContQueryProcType type)
 	MemoryContext old;
 
 	/* Allocate continuous query execution state in a long-lived memory context. */
-	cxt = AllocSetContextCreate(TopMemoryContext, "ContQueryEState MemoryContext",
+	cxt = AllocSetContextCreate(TopMemoryContext, "ContExecutor Context",
 				ALLOCSET_DEFAULT_MINSIZE,
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
@@ -435,7 +435,7 @@ ContExecutorNew(ContQueryProcType type)
 
 	exec = palloc0(sizeof(ContExecutor));
 	exec->cxt = cxt;
-	exec->exec_cxt = AllocSetContextCreate(cxt, "ContQueryEState Exec MemoryCContinuousExecutorontext",
+	exec->exec_cxt = AllocSetContextCreate(cxt, "ContExecutor Exec Context",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -497,20 +497,13 @@ ContExecutorStartBatch(ContExecutor *exec)
 	ContQueryBatchContext = exec->exec_cxt;
 
 	exec->exec_queries = bms_copy(exec->queries);
-	exec->queries_seen = NULL;
 	exec->update_queries = true;
-
-	if (IsContQueryCombinerProcess())
-		elog(LOG, "start batch %p", exec->queries_seen);
 }
 
 Oid
 ContExecutorStartNextQuery(ContExecutor *exec)
 {
 	MemoryContextSwitchTo(exec->exec_cxt);
-
-	if (IsContQueryCombinerProcess())
-		elog(LOG, "start query %p", exec->queries_seen);
 
 	exec->cur_query_id = InvalidOid;
 
@@ -539,9 +532,6 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 	MemoryContext old = MemoryContextSwitchTo(exec->cxt);
 	exec->queries = bms_del_member(exec->queries, exec->cur_query_id);
 	MemoryContextSwitchTo(old);
-
-	if (IsContQueryCombinerProcess())
-		elog(LOG, "purge query %p", exec->queries_seen);
 }
 
 static inline bool
@@ -571,18 +561,7 @@ should_yield_item(ContExecutor *exec, uintptr_t ptr)
 void *
 ContExecutorYieldItem(ContExecutor *exec, int *len)
 {
-	ContQueryRunParams *params = GetContQueryRunParams();
-
-	/*
-	 * If we've read a full batch, mark exec state as timed out so that we don't read more tuples from the
-	 * underlying dsm_cqueue.
-	 */
-	if (!exec->timedout && exec->nitems == params->batch_size)
-	{
-		exec->timedout = true;
-		exec->depleted = true;
-		return NULL;
-	}
+	ContQueryRunParams *params;
 
 	/* We've yielded all items belonging to the CQ in this batch? */
 	if (exec->depleted)
@@ -617,12 +596,15 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 		exec->start_time = GetCurrentTimestamp();
 	}
 
+	params = GetContQueryRunParams();
+
 	for (;;)
 	{
 		uintptr_t ptr;
 
-		/* We've waited long enough to read a full batch? */
-		if (TimestampDifferenceExceeds(exec->start_time, GetCurrentTimestamp(), params->max_wait) ||
+		/* We've read a full batch or waited long enough? */
+		if (exec->nitems == params->batch_size ||
+				TimestampDifferenceExceeds(exec->start_time, GetCurrentTimestamp(), params->max_wait) ||
 				MyContQueryProc->db_meta->terminate)
 		{
 			exec->timedout = true;
@@ -647,8 +629,6 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			}
 			else
 			{
-				if (IsContQueryCombinerProcess())
-						elog(LOG, "start query %p", exec->queries_seen);
 				PartialTupleState *pts = (PartialTupleState *) ptr;
 				exec->queries_seen = bms_add_member(exec->queries_seen, pts->query_id);
 			}
@@ -667,9 +647,6 @@ void
 ContExecutorEndQuery(ContExecutor *exec)
 {
 	IncrementCQExecutions(1);
-
-	if (IsContQueryCombinerProcess())
-		elog(LOG, "end query %p", exec->queries_seen);
 
 	if (!exec->started)
 		return;
@@ -719,7 +696,4 @@ ContExecutorEndBatch(ContExecutor *exec)
 	exec->depleted = false;
 	exec->queries_seen = NULL;
 	exec->exec_queries = NULL;
-
-	if (IsContQueryCombinerProcess())
-		elog(LOG, "end batch %p", exec->queries_seen);
 }
