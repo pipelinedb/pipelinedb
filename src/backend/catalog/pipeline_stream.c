@@ -285,6 +285,7 @@ UnpackTupleDesc(bytea *bytes)
 	int nbytes;
 	int i;
 	int natts = 0;
+	TupleDesc desc;
 
 	nbytes = VARSIZE(bytes);
 
@@ -305,9 +306,10 @@ UnpackTupleDesc(bytea *bytes)
 		collations = lappend_int(collations, collation);
 	}
 
+	desc = BuildDescFromLists(names, types, mods, collations);
 	pfree(buf.data);
 
-	return BuildDescFromLists(names, types, mods, collations);
+	return desc;
 }
 
 /*
