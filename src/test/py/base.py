@@ -86,7 +86,7 @@ class PipelineDB(object):
         default_params = {
           'synchronous_stream_insert': 'on',
           'continuous_queries_adhoc_enabled': 'on',
-          'continuous_query_num_combiners': 1,
+          'continuous_query_num_combiners': 2,
           'continuous_query_num_workers': 2,
           'anonymous_update_checks': 'off',
           'continuous_query_max_wait': 5
