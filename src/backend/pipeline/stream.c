@@ -57,20 +57,22 @@ void *copy_iter_arg = NULL;
 Bitmapset *
 GetStreamReaders(Oid relid)
 {
-	Bitmapset *targets = GetLocalStreamReaders(relid);
-	char *name = get_rel_name(relid);
-
-	if (targets == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("no continuous views are currently reading from stream %s", name),
-				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", name)));
+	Bitmapset *targets;
+	char *name = get_rel_name(relid);;
 
 	if (!continuous_queries_enabled)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot insert into stream %s since continuous queries are disabled", name),
 				 errhint("Enable continuous queries using the \"continuous_queries_enabled\" parameter.")));
+
+	targets = GetLocalStreamReaders(relid);
+
+	if (targets == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("no continuous views are currently reading from stream %s", name),
+				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", name)));
 
 	return targets;
 }

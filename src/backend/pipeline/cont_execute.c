@@ -382,16 +382,12 @@ GetWorkerQueue(void)
 			}
 		}
 
-		/* Couldn't connect to any worker? */
-		if (ntries > continuous_query_num_workers && cq == NULL)
-			break;
-
 		ntries++;
 		idx = (idx + 1) % continuous_query_num_workers;
 	}
 
-	if (cq)
-		Assert(LWLockHeldByMe(&cq->lock));
+	Assert(cq);
+	Assert(LWLockHeldByMe(&cq->lock));
 
 	return cq;
 }
@@ -408,11 +404,15 @@ GetCombinerQueue(PartialTupleState *pts)
 	idx = pts->hash % continuous_query_num_combiners;
 	cpstate = &CombinerIPCStates[idx];
 
-	if (!cpstate->connected)
-		attach_to_cont_proc(cpstate);
 
-	if (!cpstate->connected)
-		return NULL;
+	for (;;)
+	{
+		if (!cpstate->connected)
+			attach_to_cont_proc(cpstate);
+
+		if (cpstate->connected)
+			break;
+	}
 
 	dsm_cqueue_lock(cpstate->cq_handle->cqueue);
 	return cpstate->cq_handle->cqueue;
