@@ -179,21 +179,23 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 	init_adhoc_data(&adhoc_data, adhoc_targets);
 
-	if (synchronous_stream_insert && !bms_is_empty(targets))
-	{
-		batch = InsertBatchCreate();
-		ack = palloc0(sizeof(InsertBatchAck));
-		ack->batch_id = batch->id;
-		ack->batch = batch;
-	}
-
 	if (snap)
 		PopActiveSnapshot();
 
 	packed_desc = PackTupleDesc(desc);
 
 	if (!bms_is_empty(targets))
+	{
+		if (synchronous_stream_insert)
+		{
+			batch = InsertBatchCreate();
+			ack = palloc0(sizeof(InsertBatchAck));
+			ack->batch_id = batch->id;
+			ack->batch = batch;
+		}
+
 		cq = GetWorkerDSMCQueue();
+	}
 
 	for (i=0; i<ntuples; i++)
 	{
@@ -220,7 +222,11 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	}
 
 	if (cq)
+	{
 		dsm_cqueue_unlock(cq);
+		if (ack)
+			pfree(ack);
+	}
 
 	stream_stat_report(RelationGetRelid(stream), count, 1, size);
 
