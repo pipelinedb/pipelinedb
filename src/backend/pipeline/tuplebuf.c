@@ -58,10 +58,7 @@ int tuple_buffer_blocks;
 
 /* Handler for writing to the combiner's TupleBuffer  */
 CombinerWriteFunc CombinerWriteHook = NULL;
-
-/* Shim for preparing a TupleBufferSlot just before it is read */
-typedef void (*PrepareTupleBufferSlotShimFunc) (TupleBufferSlot *slot);
-PrepareTupleBufferSlotShimFunc PrepareTupleBufferSlotShim;
+PrepareTupleBufferSlotShimFunc PrepareTupleBufferSlotShim = NULL;
 
 /*
  * MakeStreamTuple
