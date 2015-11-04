@@ -64,7 +64,8 @@
  * WorkerTupleBuffer -> Worker -> Combiner -> View -> Frontend
  */
 
-typedef struct {
+typedef struct
+{
 	TupleBufferBatchReader  *reader;
 	Oid                     view_id;
 	ContinuousView          *view;
@@ -75,28 +76,28 @@ typedef struct {
 
 } AdhocWorkerState;
 
-typedef struct {
-	QueryDesc               *query_desc;
+typedef struct
+{
+	QueryDesc *query_desc;
 
-	TupleDesc               tup_desc;
-	TupleTableSlot          *slot;
+	TupleDesc tup_desc;
+	TupleTableSlot *slot;
 
 	Tuplestorestate *batch;      /* to hold pre combine rows */
 	TupleHashTable existing; 	 /* only needed if is_agg is true */
 	Tuplestorestate *result; 	 /* holds the combined result */
 
-	DestReceiver            *dest;
+	DestReceiver *dest;
 
 	bool is_agg;
-
 } AdhocCombinerState;
 
-typedef struct {
-
+typedef struct
+{
 	Tuplestorestate *batch;
 	QueryDesc *query_desc;
 	DestReceiver *dest;
-	TupleTableSlot          *slot;
+	TupleTableSlot *slot;
 
 } AdhocViewState;
 
@@ -185,22 +186,23 @@ get_unique_adhoc_view_name()
 		sprintf(relname, "adhoc%d", i++);
 
 		if (!IsAContinuousView(&var))
-		{
 			break;
-		}
 	}
 
 	return relname;
 }
 
-typedef struct{
+typedef struct
+{
 	Oid view_id;
 	ContinuousView *view;
 } ContinuousViewData;
 
-/* reuse most of the machinery of ExecCreateContViewStmt to make the view.
+/*
+ * Reuse most of the machinery of ExecCreateContViewStmt to make the view.
  * The view will be flagged as adhoc because SetAmContQueryAdhoc(true) has been
- * called earlier - (it is passed into DefineContinuousView) */
+ * called earlier - (it is passed into DefineContinuousView)
+ */
 static void
 init_cont_view(ContinuousViewData *view_data, SelectStmt *stmt,
 			   const char * querystring)
@@ -335,9 +337,7 @@ init_adhoc_combiner(ContinuousViewData data,
 	SetTuplestoreDestReceiverParams(state->dest, state->result,
 									CurrentMemoryContext, true);
 
-	/* if this is an aggregating query, set up a hash table to store the
-	 * groups */
-
+	/* if this is an aggregating query, set up a hash table to store the groups */
 	if (IsA(pstmt->planTree, Agg))
 	{
 		Agg *agg = (Agg *) pstmt->planTree;
@@ -373,7 +373,6 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	bool has_tup = false;
 	EState *estate = 0;
 	int num_processed = 0;
-	ResourceOwner owner = CurrentResourceOwner;
 
 	TupleBufferBatchReaderTrySleepTimeout(state->reader,
 									      state->last_processed,
@@ -395,7 +394,7 @@ exec_adhoc_worker(AdhocWorkerState * state)
 
 	TupleBufferBatchReaderSetCQId(state->reader, state->view_id);
 
-	SetEStateSnapshot(estate, owner);
+	SetEStateSnapshot(estate);
 	plan = state->query_desc->plannedstmt->planTree;
 
 	state->query_desc->planstate = 
@@ -414,7 +413,7 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	if (num_processed)
 		state->last_processed = GetCurrentTimestamp();
 
-	UnsetEStateSnapshot(estate, owner);
+	UnsetEStateSnapshot(estate);
 
 	state->query_desc->estate = NULL;
 	estate = state->query_desc->estate;
@@ -427,8 +426,7 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	return num_processed != 0;
 }
 
-static void
-adhoc_sync_combine(AdhocCombinerState *state);
+static void adhoc_sync_combine(AdhocCombinerState *state);
 
 /* 
  * combine rows in state->batch (from worker)
@@ -436,7 +434,6 @@ adhoc_sync_combine(AdhocCombinerState *state);
 static void
 exec_adhoc_combiner(AdhocCombinerState *state)
 {
-	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
 	EState *estate = 0;
 
@@ -456,9 +453,7 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 		}
 
 		foreach_tuple(state->slot, state->result)
-		{
 			tuplestore_puttupleslot(state->batch, state->slot);
-		}
 
 		tuplestore_clear(state->result);
 		tuplestore_rescan(state->batch);
@@ -469,7 +464,7 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 	state->query_desc->estate = CreateEState(state->query_desc);
 	estate = state->query_desc->estate;
 
-	SetEStateSnapshot(estate, owner);
+	SetEStateSnapshot(estate);
 
 	plan = state->query_desc->plannedstmt->planTree;
 
@@ -483,7 +478,7 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 	ExecEndNode(state->query_desc->planstate);
 	state->query_desc->planstate = NULL;
 
-	UnsetEStateSnapshot(estate, owner);
+	UnsetEStateSnapshot(estate);
 
 	state->query_desc->estate = NULL;
 	estate = state->query_desc->estate;
@@ -570,7 +565,6 @@ init_adhoc_view(ContinuousViewData data,
 static void
 exec_adhoc_view(AdhocViewState *state)
 {
-	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
 	EState *estate = 0;
 
@@ -578,7 +572,7 @@ exec_adhoc_view(AdhocViewState *state)
 
 	state->query_desc->estate = CreateEState(state->query_desc);
 	estate = state->query_desc->estate;
-	SetEStateSnapshot(estate, owner);
+	SetEStateSnapshot(estate);
 
 	plan = state->query_desc->plannedstmt->planTree;
 
@@ -592,7 +586,7 @@ exec_adhoc_view(AdhocViewState *state)
 	ExecEndNode(state->query_desc->planstate);
 	state->query_desc->planstate = NULL;
 
-	UnsetEStateSnapshot(estate, owner);
+	UnsetEStateSnapshot(estate);
 
 	state->query_desc->estate = NULL;
 	estate = state->query_desc->estate;
@@ -670,9 +664,11 @@ cleanup(int code, Datum arg)
 	CommitTransactionCommand();
 }
 
-/* Initialize the worker, combiner and view modules, then loop until done.
+/*
+ * Initialize the worker, combiner and view modules, then loop until done.
  * The current exit conditions are when the query is cancelled, or when the frontend
- * goes away (the heartbeat will fail to send) */
+ * goes away (the heartbeat will fail to send)
+ */
 static void
 exec_adhoc_query(SelectStmt *stmt, const char *s)
 {
@@ -680,44 +676,36 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	AttrNumber one = 1;
 	AttrNumber *keyColIdx = &one;
 
-	AdhocWorkerState *worker_state = 0;
-	AdhocCombinerState *combiner_state = 0;
-	AdhocViewState *view_state = 0;
-	AdhocDestReceiver *adhoc_receiver = 0;
-	DestReceiver *worker_receiver = 0;
+	AdhocWorkerState *worker_state;
+	AdhocCombinerState *combiner_state;
+	AdhocViewState *view_state;
+	DestReceiver *adhoc_receiver;
+	DestReceiver *worker_receiver;
 
 	MemoryContext run_cxt = CurrentMemoryContext;
 	ContinuousViewData view_data;
-	Tuplestorestate *batch = 0;
+	Tuplestorestate *batch;
 	CleanupData cleanup_data;
-
-	ResourceOwner owner = 
-			ResourceOwnerCreate(CurrentResourceOwner, "WorkerResourceOwner");
 
 	acquire_cont_query_proc();
 
 	if (!MyContQueryProc)
-	{
 		elog(ERROR, "too many adhoc processes");
-	}
 
 	StartTransactionCommand();
-	CurrentResourceOwner = owner;
 	MemoryContextSwitchTo(run_cxt);
 	init_cont_view(&view_data, stmt, s);
 	CommitTransactionCommand();
 
-	StartTransactionCommand();
-	CurrentResourceOwner = owner;
-	MemoryContextSwitchTo(run_cxt);
 	worker_receiver = CreateDestReceiver(DestTuplestore);
-
 	batch = tuplestore_begin_heap(true, true, 
 				continuous_query_combiner_work_mem);
-
 	SetTuplestoreDestReceiverParams(worker_receiver, batch,
 			CurrentMemoryContext, true);
+	adhoc_receiver = CreateAdhocDestReceiver();
 
+	StartTransactionCommand();
+	MemoryContextSwitchTo(run_cxt);
 	worker_state = init_adhoc_worker(view_data, worker_receiver);
 	combiner_state = init_adhoc_combiner(view_data, batch);
 
@@ -727,12 +715,9 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 		numCols = combiner_state->existing->numCols;
 	}
 
-	adhoc_receiver = CreateAdhocDestReceiver(combiner_state->is_agg,
-										 keyColIdx,
-										 numCols);
+	SetAdhocDestReceiverParams(adhoc_receiver, combiner_state->is_agg, keyColIdx, numCols);
 
-	view_state = init_adhoc_view(view_data, combiner_state->result,
-				 (DestReceiver *) adhoc_receiver);
+	view_state = init_adhoc_view(view_data, combiner_state->result, adhoc_receiver);
 	view_state->slot = combiner_state->slot;
 
 	CommitTransactionCommand();
@@ -750,7 +735,6 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 
 			/* use normal transaction machinery to cleanup any 'run' allocs */
 			StartTransactionCommand();
-			CurrentResourceOwner = owner;
 
 			new_rows = exec_adhoc_worker(worker_state);
 
@@ -762,7 +746,7 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 			else
 			{
 				/* TODO - check deadline timeout */
-				AdhocDestReceiverHeartbeat(adhoc_receiver);
+				AdhocDestReceiverHeartbeat((AdhocDestReceiver *) adhoc_receiver);
 			}
 
 			CommitTransactionCommand();
@@ -781,21 +765,19 @@ get_stmt_sql(Node *node)
 	/* assumes IsAdhocQuery has returned true on node already. */
 
 	SelectStmt *stmt = (SelectStmt *) (node);
-	Node *first_node = 0;
-	ResTarget *target = 0;
+	ResTarget *target;
 	FuncCall *func = 0;
 	A_Const *sql_arg = 0;
 
-	first_node = (Node *) linitial(stmt->targetList);
-	target = (ResTarget *) (first_node);
-	func = (FuncCall *) (target->val);
+	target = (ResTarget *) linitial(stmt->targetList);
+	func = (FuncCall *) target->val;
 	sql_arg = linitial(func->args);
 
-	return sql_arg->val.val.str;
+	return strVal(&sql_arg->val);
 }
 
 void
-ExecAdhocQuery(Node *stmt, const char *s)
+ExecAdhocQuery(Node *select)
 {
 	/* Break out of the top level xact (from exec_simple_query) */
 	AbortCurrentTransaction();
@@ -808,7 +790,7 @@ ExecAdhocQuery(Node *stmt, const char *s)
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
 		
-		MemoryContext oldcontext = MemoryContextSwitchTo(adhoc_cxt);
+		MemoryContext old = MemoryContextSwitchTo(adhoc_cxt);
 
 		/* This must be set so that newly created views are tagged properly */
 		SetAmContQueryAdhoc(true);
@@ -818,12 +800,12 @@ ExecAdhocQuery(Node *stmt, const char *s)
 
 		/* At present, the queries always exit through the error path
 		 * The 'errors' are from query cancel, or the frontend not 
-		 * responding to * a heartbeat 
+		 * responding to a heartbeat
 		 */
 		PG_TRY();
 		{
 			List *parsetree_list;
-			const char *inner_sql = get_stmt_sql(stmt);
+			const char *inner_sql = get_stmt_sql(select);
 			parsetree_list = pg_parse_query(inner_sql);
 
 			exec_adhoc_query(linitial(parsetree_list), inner_sql);
@@ -831,18 +813,21 @@ ExecAdhocQuery(Node *stmt, const char *s)
 		PG_CATCH();
 		{
 			SetAmContQueryAdhoc(false);
-
 			SetDefaultPriority();
-			MemoryContextSwitchTo(oldcontext);
+
+			MemoryContextSwitchTo(old);
 			MemoryContextResetAndDeleteChildren(adhoc_cxt);
+
 			PG_RE_THROW();
 		}
 		PG_END_TRY();
 	}
+
+	StartTransactionCommand();
 }
 
 /* 
- * Functions for intercepting the select pipeline_exec_adhoc_query('xxx') call.
+ * Functions for intercepting the select pipeline_exec_adhoc_query(...) call.
  *
  * We have to do it this way rather than executing a regular function call, 
  * because the environment inside a portal is not conducive to sending
@@ -850,31 +835,21 @@ ExecAdhocQuery(Node *stmt, const char *s)
  */
 #define PIPELINE_FN_NAME "pipeline_exec_adhoc_query"
 
-/* returns true iff func call matches expected signature */
 static bool
 check_adhoc_func(FuncCall *func)
 {
-	Node *node = 0;
-	Value *value = 0;
-	A_Const *sql_arg = 0;
+	Node *node;
+	A_Const *sql_arg;
 
 	if (list_length(func->funcname) != 1)
 		return false;
 
 	node = linitial(func->funcname);
 
-	if (!IsA(node, String))
+	if (strcmp(strVal(node), PIPELINE_FN_NAME) != 0)
 		return false;
 
-	value = (Value *) (node);
-
-	if (strcmp(strVal(value), PIPELINE_FN_NAME) != 0)
-		return false;
-
-	if (!func->args)
-		return false;
-
-	if (list_length(func->args) != 1)
+	if (!func->args || list_length(func->args) != 1)
 		return false;
 
 	sql_arg = linitial(func->args);
@@ -885,14 +860,12 @@ check_adhoc_func(FuncCall *func)
 	return true;
 }
 
-/* returns true iff the query is an adhoc select */
 bool
 IsAdhocQuery(Node *node)
 {
 	SelectStmt *stmt = (SelectStmt *) (node);
-	Node *first_node = 0;
-	ResTarget *target = 0;
-	FuncCall *func = 0;
+	ResTarget *target;
+	FuncCall *func;
 
 	if (!continuous_queries_adhoc_enabled)
 		return false;
@@ -903,20 +876,12 @@ IsAdhocQuery(Node *node)
 	if (list_length(stmt->targetList) != 1)
 		return false;
 
-	first_node = (Node *) linitial(stmt->targetList);
-
-	if (!IsA(first_node, ResTarget))
-		return false;
-
-	target = (ResTarget *)(first_node);
-
-	if (!target->val)
-		return false;
+	target = (ResTarget *) linitial(stmt->targetList);
 
 	if (!IsA(target->val, FuncCall))
 		return false;
 
-	func = (FuncCall *)(target->val);
+	func = (FuncCall *) target->val;
 
 	if (!check_adhoc_func(func))
 		return false;
@@ -933,13 +898,12 @@ Datum
 pipeline_exec_adhoc_query(PG_FUNCTION_ARGS)
 {
 	if (!continuous_queries_adhoc_enabled)
-	{
-		elog(ERROR, "adhoc queries are not enabled");
-	}
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("adhoc continuous queries are disabled"),
+				 errhint("Enable adhoc continuous queries using the \"continuous_queries_adhoc_enabled\" parameter.")));
 	else
-	{
 		elog(ERROR, "pipeline_exec_adhoc_query intercept failure");
-	}
 
 	PG_RETURN_TEXT_P(CStringGetTextDatum(""));
 }

@@ -1,11 +1,6 @@
 from base import pipeline, clean_db
-import getpass
-import psycopg2
 import random
-import pprint
 import subprocess
-import time
-import tempfile
 import re
 import os
 from subprocess import Popen, PIPE, STDOUT
@@ -223,7 +218,7 @@ def test_multi_adhoc(pipeline, clean_db):
   adhoc1_buf = []
   adhoc2_buf = []
 
-  # multi adhoc expect will output a tag line before a set of lines 
+  # multi adhoc expect will output a tag line before a set of lines
   # for each adhoc. this loops splits up the data
 
   for line in lines:

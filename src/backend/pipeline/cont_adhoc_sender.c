@@ -344,10 +344,8 @@ static void adhoc_destroy(DestReceiver *self)
 {
 }
 
-AdhocDestReceiver *
-CreateAdhocDestReceiver(bool is_agg,
-					    AttrNumber *keyColIdx,
-					    int num_cols)
+DestReceiver *
+CreateAdhocDestReceiver(void)
 {
 	AdhocDestReceiver *self = (AdhocDestReceiver *) palloc0(sizeof(AdhocDestReceiver));
 
@@ -356,11 +354,16 @@ CreateAdhocDestReceiver(bool is_agg,
 	self->pub.rShutdown = adhoc_shutdown;
 	self->pub.rDestroy = adhoc_destroy;
 
-	self->is_agg = is_agg;
-	self->keyColIdx = keyColIdx;
-	self->numCols = num_cols;
+	return (DestReceiver *) self;
+}
 
-	return self;
+void
+SetAdhocDestReceiverParams(DestReceiver *self, bool is_agg, AttrNumber *keyColIdx, int num_cols)
+{
+	AdhocDestReceiver *a = (AdhocDestReceiver *) self;
+	a->is_agg = is_agg;
+	a->keyColIdx = keyColIdx;
+	a->numCols = num_cols;
 }
 
 void AdhocDestReceiverHeartbeat(AdhocDestReceiver *receiver)

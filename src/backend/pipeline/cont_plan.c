@@ -339,7 +339,7 @@ CreateEState(QueryDesc *query_desc)
 }
 
 void
-SetEStateSnapshot(EState *estate, ResourceOwner owner)
+SetEStateSnapshot(EState *estate)
 {
 	estate->es_snapshot = GetTransactionSnapshot();
 	estate->es_snapshot->active_count++;
@@ -348,7 +348,7 @@ SetEStateSnapshot(EState *estate, ResourceOwner owner)
 }
 
 void
-UnsetEStateSnapshot(EState *estate, ResourceOwner owner)
+UnsetEStateSnapshot(EState *estate)
 {
 	PopActiveSnapshot();
 	estate->es_snapshot = NULL;
