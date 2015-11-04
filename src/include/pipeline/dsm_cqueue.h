@@ -52,9 +52,9 @@ typedef struct dsm_cqueue
 	 * These are offsets from the address of the dsm_cqueue. Pointers don't work with
 	 * dsm because the memory segment can be mapped at different addresses.
 	 */
-	atomic_ullong  head;
-	atomic_ullong  tail;
-	atomic_ullong  cursor;
+	atomic_ullong head;
+	atomic_ullong tail;
+	atomic_ullong cursor;
 
 	atomic_uintptr_t producer_latch;
 	atomic_uintptr_t consumer_latch;

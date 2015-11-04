@@ -535,7 +535,7 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 }
 
 static inline bool
-should_yield_item(ContExecutor *exec, uintptr_t ptr)
+should_yield_item(ContExecutor *exec, void *ptr)
 {
 	if (exec->ptype == Worker)
 	{
@@ -574,19 +574,19 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 
 		for (;;)
 		{
-			uintptr_t ptr;
+			void *ptr;
 
 			if (exec->depleted)
 				return NULL;
 
-			ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, len);
+			ptr = dsm_cqueue_peek_next(exec->cq_handle->cqueue, len);
 			Assert(ptr);
 
 			if (ptr == exec->cursor)
 				exec->depleted = true;
 
 			if (should_yield_item(exec, ptr))
-				return (void *) ptr;
+				return ptr;
 		}
 	}
 
@@ -600,7 +600,7 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 
 	for (;;)
 	{
-		uintptr_t ptr;
+		void *ptr;
 
 		/* We've read a full batch or waited long enough? */
 		if (exec->nitems == params->batch_size ||
@@ -612,7 +612,7 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			return NULL;
 		}
 
-		ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, len);
+		ptr = dsm_cqueue_peek_next(exec->cq_handle->cqueue, len);
 
 		if (ptr)
 		{
@@ -636,7 +636,7 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			MemoryContextSwitchTo(old);
 
 			if (should_yield_item(exec, ptr))
-				return (void *) ptr;
+				return ptr;
 		}
 		else
 			pg_usleep(SLEEP_MS * 1000);
@@ -676,20 +676,22 @@ ContExecutorEndQuery(ContExecutor *exec)
 void
 ContExecutorEndBatch(ContExecutor *exec)
 {
-	uint64_t ptr = 0;
+	void *ptr;
 
 	CommitTransactionCommand();
 	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
 
-	while (ptr < exec->cursor)
+	while (exec->nitems--)
 	{
 		int len;
-		ptr = (uintptr_t) dsm_cqueue_peek_next(exec->cq_handle->cqueue, &len);
+		ptr = dsm_cqueue_peek_next(exec->cq_handle->cqueue, &len);
 	}
+
+	Assert(exec->cursor == NULL || exec->cursor == ptr);
 
 	dsm_cqueue_pop_peeked(exec->cq_handle->cqueue);
 
-	exec->cursor = 0;
+	exec->cursor = NULL;
 	exec->nitems = 0;
 	exec->started = false;
 	exec->timedout = false;

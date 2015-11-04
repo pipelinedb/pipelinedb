@@ -113,7 +113,7 @@ typedef struct ContExecutor
 
 	Oid cur_query_id;
 	Bitmapset *exec_queries;
-	uintptr_t cursor;
+	void *cursor;
 	int nitems;
 
 	Timestamp start_time;
