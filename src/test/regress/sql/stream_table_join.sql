@@ -210,6 +210,20 @@ ALTER TABLE test_stj_t4 DROP COLUMN x;
 DROP TABLE test_stj_t4;
 DROP FUNCTION test_stj_foo(integer);
 
+-- Stream-view joins
+CREATE VIEW test_stj_v0 AS SELECT * from test_stj_t0;
+CREATE CONTINUOUS VIEW svj AS SELECT COUNT(*) FROM test_svj_stream s JOIN test_stj_v0 v ON s.tid::integer = v.tid;
+
+INSERT INTO test_svj_stream (tid) SELECT 0 FROM generate_series(1, 1000);
+INSERT INTO test_svj_stream (tid) SELECT 1 FROM generate_series(1, 1000);
+
+SELECT pg_sleep(0.1);
+
+SELECT * FROM svj;
+
+DROP CONTINUOUS VIEW svj;
+DROP VIEW test_stj_v0;
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;

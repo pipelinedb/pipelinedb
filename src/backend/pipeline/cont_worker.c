@@ -309,7 +309,7 @@ ContinuousQueryWorkerMain(void)
 				MemoryContextSwitchTo(state->tmp_cxt);
 				state->query_desc->estate = estate = CreateEState(state->query_desc);
 
-				SetEStateSnapshot(estate, owner);
+				SetEStateSnapshot(estate);
 				CurrentResourceOwner = owner;
 
 				/* initialize the plan for execution within this xact */
@@ -327,7 +327,7 @@ ContinuousQueryWorkerMain(void)
 				MemoryContextResetAndDeleteChildren(state->tmp_cxt);
 				MemoryContextSwitchTo(state->state_cxt);
 
-				UnsetEStateSnapshot(estate, owner);
+				UnsetEStateSnapshot(estate);
 				state->query_desc->estate = estate = NULL;
 			}
 			PG_CATCH();
@@ -336,7 +336,7 @@ ContinuousQueryWorkerMain(void)
 				FlushErrorState();
 
 				if (estate && ActiveSnapshotSet())
-					UnsetEStateSnapshot(estate, owner);
+					UnsetEStateSnapshot(estate);
 
 				if (state)
 					cleanup_query_state(states, query_id);

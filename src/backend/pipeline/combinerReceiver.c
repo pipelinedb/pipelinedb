@@ -152,9 +152,16 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	else
 		pts.hash = MurmurHash3_64(&c->cont_executor->cur_query_id, sizeof(Oid), MURMUR_SEED);
 
-	cq = GetCombinerQueue(&pts);
-	dsm_cqueue_push_nolock(cq, &pts, len);
-	dsm_cqueue_unlock(cq);
+	if (CombinerWriteHook != NULL)
+	{
+		// TODO
+	}
+	else
+	{
+		cq = GetCombinerQueue(&pts);
+		dsm_cqueue_push_nolock(cq, &pts, len);
+		dsm_cqueue_unlock(cq);
+	}
 
 	IncrementCQWrite(1, len);
 

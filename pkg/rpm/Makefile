@@ -25,7 +25,7 @@ spec:
 
 set-perms:
 	find $(PREFIX) -type d -exec chmod 755 {} +
-	
+
 conf:
 	(cd $(TOP_BUILDDIR) && ./configure)
 
@@ -88,7 +88,7 @@ gdal:
             --with-hide-internal-symbols \
 						--disable-rpath)
 	(cd $(GDAL) && $(MAKE) && $(MAKE) install)
-	
+
 proj:
 	wget http://download.pipelinedb.com/dep/$(PROJ).tar.gz
 	tar -xf $(PROJ).tar.gz
@@ -103,7 +103,7 @@ gis:
 		--with-gdalconfig=$(BINDIR)/gdal-config \
 		--with-projdir=$(BINDIR)/../ \
 		--disable-rpath)
-	(cd $(TOP_BUILDDIR)/src/gis && $(MAKE) && $(MAKE) install)	
+	(cd $(TOP_BUILDDIR)/src/gis && $(MAKE) && $(MAKE) install)
 
 clean-libs:
 	chrpath -d $(BINDIR)/raster2pgsql
@@ -116,6 +116,6 @@ clean-libs:
 	rm -rf $(PREFIX)/share/gdal
 	rm -rf $(PREFIX)/share/proj
 	find $(LIBDIR) -name "*.la" -exec rm {} \;
-	
+
 clean:
 	rm -rf $(GEOS)* $(GDAL)* $(PROJ)* rpmbuild tmp pipelinedb.spec

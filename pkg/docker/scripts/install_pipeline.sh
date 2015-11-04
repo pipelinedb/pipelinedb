@@ -14,6 +14,3 @@ wget -q http://www.pipelinedb.com/download/0.8.0/ubuntu14
 dpkg --install ubuntu14
 
 useradd -m pipeline -s "/bin/bash"
-
-
-

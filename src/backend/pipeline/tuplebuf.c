@@ -57,7 +57,8 @@ TupleBuffer *AdhocTupleBuffer = NULL;
 int tuple_buffer_blocks;
 
 /* Handler for writing to the combiner's TupleBuffer  */
-ContCombinerWriteFunc ContCombinerWriteHook = NULL;
+CombinerWriteFunc CombinerWriteHook = NULL;
+PrepareTupleBufferSlotShimFunc PrepareTupleBufferSlotShim = NULL;
 
 /*
  * MakeStreamTuple
@@ -189,15 +190,20 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 	Size tupsize;
 	Size acks_size;
 	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
+	int bms_size = queries ? BITMAPSET_SIZE(queries->nwords) : 0;
 	int i;
 
-	/* no one is going to read this tuple, so it's a noop */
-	if (bms_is_empty(queries))
+	/*
+	 * If there are no queries reading this tuple, it's a noop unless
+	 * a prepare hook is installed, in which case we may still want
+	 * to read it.
+	 */
+	if (bms_is_empty(queries) && PrepareTupleBufferSlotShim == NULL)
 		return NULL;
 
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
 	acks_size = sizeof(InsertBatchAck) * tuple->num_acks;
-	size = sizeof(TupleBufferSlot) + sizeof(StreamTuple) + tupsize + BITMAPSET_SIZE(queries->nwords) + desclen + acks_size;
+	size = sizeof(TupleBufferSlot) + sizeof(StreamTuple) + tupsize + bms_size + desclen + acks_size;
 
 	for (i = 0; i < tuple->num_record_descs; i++)
 		size += sizeof(RecordTupleDesc) + VARSIZE(tuple->record_descs[i].desc);
@@ -337,8 +343,15 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 
 	slot->tuple->group_hash = tuple->group_hash;
 
-	slot->queries = (Bitmapset *) pos;
-	memcpy(slot->queries, queries, BITMAPSET_SIZE(queries->nwords));
+	if (queries)
+	{
+		slot->queries = (Bitmapset *) pos;
+		memcpy(slot->queries, queries, BITMAPSET_SIZE(queries->nwords));
+	}
+	else
+	{
+		slot->queries = NULL;
+	}
 
 	/* Move head forward */
 	if (buf->head)
@@ -372,11 +385,15 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 			TupleBufferReader *reader = buf->readers[i];
 
 			/* can never wake up waiters that are not connected to the same database */
-			if (reader->proc->db_meta->db_oid != slot->db_oid)
+			if (queries != NULL && OidIsValid(reader->proc->db_meta->db_oid) &&
+					reader->proc->db_meta->db_oid != slot->db_oid)
 				continue;
 
-			/* wake up reader only if it will read this slot */
-			if (reader->should_read_fn(reader, slot))
+			/*
+			 * Wake up reader only if it will read this slot, or if we don't
+			 * yet know who the readers are.
+			 */
+			if (queries == NULL || reader->should_read_fn(reader, slot))
 			{
 				buf->waiters = bms_del_member(buf->waiters, i);
 				buf->readers[i] = NULL;
@@ -540,8 +557,13 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	/* Return the first event in the buffer that we need to read from */
 	while (true)
 	{
+		/* Allow the process that will read this slot to prepare it if necessary */
+		if (PrepareTupleBufferSlotShim != NULL && IsContQueryCombinerProcess() && reader->should_read_fn(reader, reader->slot))
+			PrepareTupleBufferSlotShim(reader->slot);
+
 		/* Is this a slot for me? */
-		if (reader->proc->db_meta->db_oid == reader->slot->db_oid && reader->should_read_fn(reader, reader->slot))
+		if ((!OidIsValid(reader->proc->db_meta->db_oid) || reader->proc->db_meta->db_oid == reader->slot->db_oid) &&
+				reader->should_read_fn(reader, reader->slot))
 			break;
 
 		if (NoUnreadSlots(reader))
@@ -828,7 +850,6 @@ TupleBufferBatchReaderNext(TupleBufferBatchReader *reader)
 			if (bms_is_member(reader->cq_id, slot->queries))
 				goto yield;
 		}
-
 	}
 
 	/*

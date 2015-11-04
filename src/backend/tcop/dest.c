@@ -40,6 +40,7 @@
 #include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
+#include "pipeline/adhocReceiver.h"
 #include "pipeline/combinerReceiver.h"
 #include "utils/portal.h"
 
@@ -139,6 +140,9 @@ CreateDestReceiver(CommandDest dest)
 
 		case DestCombiner:
 			return CreateCombinerDestReceiver();
+
+		case DestAdhoc:
+			return CreateAdhocDestReceiver();
 	}
 
 	/* should never get here */
@@ -174,6 +178,7 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestTransientRel:
 		case DestTupleTable:
 		case DestCombiner:
+		case DestAdhoc:
 			break;
 	}
 }
@@ -218,6 +223,7 @@ NullCommand(CommandDest dest)
 		case DestTupleTable:
 		case DestTransientRel:
 		case DestCombiner:
+		case DestAdhoc:
 			break;
 	}
 }
@@ -264,6 +270,7 @@ ReadyForQuery(CommandDest dest)
 		case DestTransientRel:
 		case DestTupleTable:
 		case DestCombiner:
+		case DestAdhoc:
 			break;
 	}
 }

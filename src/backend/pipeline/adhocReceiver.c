@@ -1,5 +1,18 @@
+/*-------------------------------------------------------------------------
+ *
+ * adhocReceiver.c
+ *	  An implementation of DestReceiver that that allows us to send updates
+ *	  to clients for adhoc continuous queries.
+ *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
+ * IDENTIFICATION
+ *	  src/backend/pipeline/adhocReceiver.c
+ *
+ */
+
 #include "postgres.h"
-#include "pipeline/cont_adhoc_sender.h"
+#include "pipeline/adhocReceiver.h"
 #include "pipeline/cont_adhoc_format.h"
 #include "libpq/pqformat.h"
 #include "libpq/libpq.h"
@@ -344,10 +357,8 @@ static void adhoc_destroy(DestReceiver *self)
 {
 }
 
-AdhocDestReceiver *
-CreateAdhocDestReceiver(bool is_agg,
-					    AttrNumber *keyColIdx,
-					    int num_cols)
+DestReceiver *
+CreateAdhocDestReceiver(void)
 {
 	AdhocDestReceiver *self = (AdhocDestReceiver *) palloc0(sizeof(AdhocDestReceiver));
 
@@ -356,11 +367,16 @@ CreateAdhocDestReceiver(bool is_agg,
 	self->pub.rShutdown = adhoc_shutdown;
 	self->pub.rDestroy = adhoc_destroy;
 
-	self->is_agg = is_agg;
-	self->keyColIdx = keyColIdx;
-	self->numCols = num_cols;
+	return (DestReceiver *) self;
+}
 
-	return self;
+void
+SetAdhocDestReceiverParams(DestReceiver *self, bool is_agg, AttrNumber *keyColIdx, int num_cols)
+{
+	AdhocDestReceiver *a = (AdhocDestReceiver *) self;
+	a->is_agg = is_agg;
+	a->keyColIdx = keyColIdx;
+	a->numCols = num_cols;
 }
 
 void AdhocDestReceiverHeartbeat(AdhocDestReceiver *receiver)

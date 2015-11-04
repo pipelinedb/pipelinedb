@@ -81,7 +81,6 @@ dsm_cqueue_init_with_tranche_id(dsm_handle handle, int tranche_id)
 
 	MemSet((char *) cq, 0, size);
 
-	cq->handle = handle;
 	/* We leave enough space for a dsm_cqueue_slot to go at the end, so we never overflow the buffer. */
 	cq->size = size - sizeof(dsm_cqueue) - sizeof(dsm_cqueue_slot);
 
@@ -446,17 +445,11 @@ dsm_cqueue_lock_nowait(dsm_cqueue *cq)
 static void
 dsm_cqueue_check_consistency(dsm_cqueue *cq)
 {
-	dsm_segment *segment;
 	uint64_t head;
 	uint64_t tail;
 	uint64_t cursor;
 
 	Assert(cq->magic == MAGIC);
-	Assert(cq->handle > 0);
-
-	segment = dsm_find_or_attach(cq->handle);
-
-	Assert(cq->size == dsm_segment_map_length(segment) - sizeof(dsm_cqueue) - sizeof(dsm_cqueue_slot));
 
 	head = atomic_load(&cq->head);
 	tail = atomic_load(&cq->tail);
@@ -505,7 +498,6 @@ dsm_cqueue_print(dsm_cqueue *cq)
 	}
 
 	appendStringInfo(buf, "dsm_cqueue\n");
-	appendStringInfo(buf, "  handle: %d\n", cq->handle);
 	appendStringInfo(buf, "  size: %d\n", cq->size);
 	appendStringInfo(buf, "  head: %ld\n", head);
 	appendStringInfo(buf, "  tail: %ld\n", tail);

@@ -46,12 +46,7 @@ typedef struct dsm_cqueue
 	LWLock  lock;
 
 	int        size; /* physical size of buffer */
-	dsm_handle handle;
 
-	/*
-	 * These are offsets from the address of the dsm_cqueue. Pointers don't work with
-	 * dsm because the memory segment can be mapped at different addresses.
-	 */
 	atomic_ullong head;
 	atomic_ullong tail;
 	atomic_ullong cursor;

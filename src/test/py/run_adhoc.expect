@@ -45,5 +45,4 @@ expect {
 
 set spawn_id $adhoc
 send \003
-wait 
-
+wait

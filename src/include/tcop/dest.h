@@ -97,7 +97,8 @@ typedef enum
 	DestSQLFunction,			/* results sent to SQL-language func mgr */
 	DestTupleTable,				/* results sent to a TupleHashTable */
 	DestTransientRel,			/* results sent to transient relation */
-	DestCombiner				/* results are sent to the CombinerTupleBuffer */
+	DestCombiner,				/* results are sent to the CombinerTupleBuffer */
+	DestAdhoc					/* results are sent as a binary copy to adhoc clients */
 } CommandDest;
 
 /* ----------------

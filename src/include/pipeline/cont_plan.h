@@ -38,7 +38,7 @@ extern PlannedStmt *GetCombinerLookupPlan(ContinuousView *view);
 extern PlannedStmt *GetContinuousViewOverlayPlan(ContinuousView *view);
 
 extern EState *CreateEState(QueryDesc *query_desc);
-extern void SetEStateSnapshot(EState *estate, ResourceOwner owner);
-extern void UnsetEStateSnapshot(EState *estate, ResourceOwner owner);
+extern void SetEStateSnapshot(EState *estate);
+extern void UnsetEStateSnapshot(EState *estate);
 
 #endif
