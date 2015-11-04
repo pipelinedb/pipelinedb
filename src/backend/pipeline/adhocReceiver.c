@@ -1,5 +1,18 @@
+/*-------------------------------------------------------------------------
+ *
+ * adhocReceiver.c
+ *	  An implementation of DestReceiver that that allows us to send updates
+ *	  to clients for adhoc continuous queries.
+ *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
+ * IDENTIFICATION
+ *	  src/backend/pipeline/adhocReceiver.c
+ *
+ */
+
 #include "postgres.h"
-#include "pipeline/cont_adhoc_sender.h"
+#include "pipeline/adhocReceiver.h"
 #include "pipeline/cont_adhoc_format.h"
 #include "libpq/pqformat.h"
 #include "libpq/libpq.h"

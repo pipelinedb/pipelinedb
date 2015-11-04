@@ -1,5 +1,18 @@
-#ifndef CONT_ADHOC_SENDER_H
-#define CONT_ADHOC_SENDER_H
+/*-------------------------------------------------------------------------
+ *
+ * adhocReceiver.h
+ *	  An implementation of DestReceiver that that allows us to send updates
+ *	  to clients for adhoc continuous queries.
+ *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
+ * IDENTIFICATION
+ *	  src/include/pipeline/adhocReceiver.h
+ *
+ */
+
+#ifndef ADHOC_RECEIVER_H
+#define ADHOC_RECEIVER_H
 
 #include "access/attnum.h"
 #include "tcop/dest.h"
