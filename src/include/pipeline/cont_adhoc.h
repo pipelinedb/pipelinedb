@@ -20,7 +20,7 @@
  * Rows are not persisted in a matrel, but are streamed down to the client
  * in adhoc format
  */
-extern void ExecAdhocQuery(Node *node, const char *s);
+extern void ExecAdhocQuery(Node *select);
 
 /* returns true iff this parsetree is an adhoc query */
 extern bool IsAdhocQuery(Node *node);

@@ -31,7 +31,6 @@
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
-#include "pipeline/streamReceiver.h"
 #include "storage/shm_alloc.h"
 #include "storage/ipc.h"
 #include "tcop/pquery.h"

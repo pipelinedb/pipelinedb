@@ -959,7 +959,7 @@ exec_simple_query(const char *query_string)
 
 		if (IsAdhocQuery(parsetree))
 		{
-			ExecAdhocQuery(parsetree, query_string);
+			ExecAdhocQuery(parsetree);
 			continue;
 		}
 

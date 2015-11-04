@@ -98,7 +98,7 @@ typedef enum
 	DestTupleTable,				/* results sent to a TupleHashTable */
 	DestTransientRel,			/* results sent to transient relation */
 	DestCombiner,				/* results are sent to the CombinerTupleBuffer */
-	DestStream, 				/* results are sent to the WorkerTupleBuffer */
+	DestAdhoc					/* results are sent as a binary copy to adhoc clients */
 } CommandDest;
 
 /* ----------------
