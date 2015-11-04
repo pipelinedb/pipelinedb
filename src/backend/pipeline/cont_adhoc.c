@@ -233,7 +233,6 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 {
 	PlannedStmt *pstmt = 0;
 	AdhocWorkerState *state = palloc0(sizeof(AdhocWorkerState));
-	ResourceOwner owner = CurrentResourceOwner;
 
 	init_cont_query_batch_context();
 
@@ -256,13 +255,13 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	state->query_desc->snapshot = GetTransactionSnapshot();
 	state->query_desc->snapshot->copied = true;
 
-	RegisterSnapshotOnOwner(state->query_desc->snapshot, owner);
+	RegisterSnapshot(state->query_desc->snapshot);
 
 	ExecutorStart(state->query_desc, EXEC_NO_STREAM_LOCKING);
 
 	state->query_desc->snapshot->active_count++;
-	UnregisterSnapshotFromOwner(state->query_desc->snapshot, owner);
-	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, owner);
+	UnregisterSnapshot(state->query_desc->snapshot);
+	UnregisterSnapshot(state->query_desc->estate->es_snapshot);
 	state->query_desc->snapshot = NULL;
 
 	SetTupleBufferBatchReader(state->query_desc->planstate, state->reader);
@@ -686,6 +685,8 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	Tuplestorestate *batch;
 	CleanupData cleanup_data;
 
+	ResourceOwner owner = ResourceOwnerCreate(CurrentResourceOwner, "LongTermResOwner");
+
 	acquire_cont_query_proc();
 
 	if (!MyContQueryProc)
@@ -705,6 +706,7 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 
 	StartTransactionCommand();
 	MemoryContextSwitchTo(run_cxt);
+	CurrentResourceOwner = owner;
 	worker_state = init_adhoc_worker(view_data, worker_receiver);
 	combiner_state = init_adhoc_combiner(view_data, batch);
 
@@ -734,6 +736,7 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 
 			/* use normal transaction machinery to cleanup any 'run' allocs */
 			StartTransactionCommand();
+			CurrentResourceOwner = owner;
 
 			new_rows = exec_adhoc_worker(worker_state);
 
