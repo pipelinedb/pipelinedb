@@ -98,7 +98,6 @@ typedef struct
 	QueryDesc *query_desc;
 	DestReceiver *dest;
 	TupleTableSlot *slot;
-
 } AdhocViewState;
 
 #define ADHOC_TIMEOUT_MS 1000
