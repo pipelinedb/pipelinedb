@@ -175,7 +175,7 @@ GetContQueryProcName(ContQueryProc *proc)
 			sprintf(buf, "adhoc [%s]", NameStr(proc->db_meta->db_name));
 			break;
 		case Scheduler:
-			return "scheduler";
+			return pstrdup("scheduler");
 			break;
 	}
 
