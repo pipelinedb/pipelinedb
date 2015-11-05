@@ -56,7 +56,6 @@
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream.h"
-#include "pipeline/tuplebuf.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
@@ -2596,17 +2595,6 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&pgstat_track_activity_query_size,
 		1024, 100, 102400,
-		NULL, NULL, NULL
-	},
-
-	{
-		{"tuple_buffer_blocks", PGC_BACKEND, RESOURCES_MEM,
-		 gettext_noop("Sets the maximum number of blocks in the tuple buffer."),
-		 NULL,
-		 GUC_UNIT_BLOCKS
-		},
-		&tuple_buffer_blocks,
-		8192, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
 

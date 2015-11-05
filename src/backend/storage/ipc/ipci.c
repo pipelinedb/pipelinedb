@@ -24,7 +24,7 @@
 #include "commands/async.h"
 #include "miscadmin.h"
 #include "pgstat.h"
-#include "pipeline/tuplebuf.h"
+#include "pipeline/cont_scheduler.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/bgwriter.h"
@@ -146,8 +146,8 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 		addin_request_allowed = false;
 		size = add_size(size, total_addin_request);
 
-		size = add_size(size, TupleBuffersShmemSize());
 		size = add_size(size, ShmemDynAllocSize());
+		size = add_size(size, ContQuerySchedulerShmemSize());
 
 		/* might as well round it off to a multiple of a typical page size */
 		size = add_size(size, 8192 - (size % 8192));

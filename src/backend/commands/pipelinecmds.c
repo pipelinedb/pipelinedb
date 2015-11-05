@@ -47,7 +47,6 @@
 #include "pipeline/cont_plan.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
-#include "pipeline/tuplebuf.h"
 #include "regex/regex.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"

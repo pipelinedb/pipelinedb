@@ -21,12 +21,15 @@
 #include "pipeline/combinerReceiver.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/miscutils.h"
+#include "pipeline/stream.h"
 #include "miscadmin.h"
 #include "storage/shm_alloc.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
 
 #define MURMUR_SEED 0x155517D2
+
+CombinerReceiveFunc CombinerReceiveHook = NULL;
 
 typedef struct
 {
@@ -83,7 +86,6 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	InsertBatchAck *acks = NULL;
 	int nacks = 0;
 	int len;
-	dsm_cqueue *cq;
 
 	if (synchronous_stream_insert)
 	{
@@ -152,13 +154,11 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	else
 		pts.hash = MurmurHash3_64(&c->cont_executor->cur_query_id, sizeof(Oid), MURMUR_SEED);
 
-	if (CombinerWriteHook != NULL)
-	{
-		// TODO
-	}
+	if (CombinerReceiveHook)
+		CombinerReceiveHook(&pts);
 	else
 	{
-		cq = GetCombinerQueue(&pts);
+		dsm_cqueue *cq = GetCombinerQueue(&pts);
 		dsm_cqueue_push_nolock(cq, &pts, len);
 		dsm_cqueue_unlock(cq);
 	}

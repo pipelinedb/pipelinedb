@@ -43,7 +43,6 @@
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/dsm_cqueue.h"
 #include "pipeline/miscutils.h"
-#include "pipeline/tuplebuf.h"
 #include "storage/ipc.h"
 #include "storage/proc.h"
 #include "tcop/dest.h"

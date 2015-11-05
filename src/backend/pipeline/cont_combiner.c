@@ -37,7 +37,6 @@
 #include "pipeline/cqmatrel.h"
 #include "pipeline/groupcache.h"
 #include "pipeline/sw_vacuum.h"
-#include "pipeline/tuplebuf.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"

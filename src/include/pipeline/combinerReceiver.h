@@ -13,8 +13,11 @@
 #ifndef COMBINER_RECEIVER_H
 #define COMBINER_RECEIVER_H
 
-#include "pipeline/tuplebuf.h"
 #include "tcop/dest.h"
+#include "pipeline/cont_execute.h"
+
+typedef void (*CombinerReceiveFunc) (PartialTupleState *pts);
+extern CombinerReceiveFunc CombinerReceiveHook;
 
 extern DestReceiver *CreateCombinerDestReceiver(void);
 extern void SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *cont_exec);
