@@ -95,3 +95,16 @@ def test_multiple_stmts(pipeline, clean_db):
   result = list(pipeline.execute('SELECT * FROM test_multiple'))
   assert len(result) == 1
   assert result[0]['count'] == 100
+
+def test_uniqueness(pipeline, clean_db):
+  pipeline.create_cv('uniqueness', 'SELECT x::int, count(*) FROM stream GROUP BY x')
+
+  for i in range(10):
+    rows = [((10000 * i) + j, ) for j in xrange(10000)]
+    pipeline.insert('stream', ('x', ), rows)
+
+  count = pipeline.execute('SELECT count(*) FROM uniqueness').first()['count']
+  distinct_count = pipeline.execute(
+    'SELECT count(DISTINCT x) FROM uniqueness').first()['count']
+
+  assert count == distinct_count
