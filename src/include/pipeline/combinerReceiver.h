@@ -16,7 +16,7 @@
 #include "tcop/dest.h"
 
 extern DestReceiver *CreateCombinerDestReceiver(void);
-extern void SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader, Oid cq_id);
+extern void SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader, ContinuousView *v);
 extern void SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash, MemoryContext context);
 
 #endif

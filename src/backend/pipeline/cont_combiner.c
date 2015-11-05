@@ -923,13 +923,6 @@ ContinuousQueryCombinerMain(void)
 				if (!TupleBufferBatchReaderHasTuplesForCQId(reader, id))
 					goto next;
 
-				/*
-				 * If we aren't grouping then we're sharding on query id,
-				 * so we can skip eagerly for continuous queries that we don't own
-				 */
-				if (state->ngroupatts == 0 && id % continuous_query_num_combiners != MyContQueryProc->group_id)
-					continue;
-
 				debug_query_string = NameStr(state->view->name);
 				MemoryContextSwitchTo(state->tmp_cxt);
 

@@ -81,7 +81,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 
 	state->dest = CreateDestReceiver(DestCombiner);
 
-	SetCombinerDestReceiverParams(state->dest, reader, id);
+	SetCombinerDestReceiverParams(state->dest, reader, state->view);
 
 	pstmt = GetContPlan(state->view, Worker);
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot, InvalidSnapshot, state->dest, NULL, 0);
