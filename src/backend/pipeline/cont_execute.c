@@ -141,8 +141,13 @@ StreamTupleStatePeekFn(void *ptr, int len)
 		sts->ack = ptr_offset(sts, sts->ack);
 	else
 		sts->ack = NULL;
+
+	if (sts->queries)
+		sts->queries = ptr_offset(sts, sts->queries);
+	else
+		sts->queries = NULL;
+
 	sts->desc =  ptr_offset(sts, sts->desc);
-	sts->queries = ptr_offset(sts, sts->queries);
 	sts->record_descs = ptr_offset(sts, sts->record_descs);
 	sts->tup = ptr_offset(sts, sts->tup);
 	sts->tup->t_data = (HeapTupleHeader) (((char *) sts->tup) + HEAPTUPLESIZE);
