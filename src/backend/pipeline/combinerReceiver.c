@@ -23,11 +23,14 @@
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
 #include "pipeline/combinerReceiver.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/tuplebuf.h"
 #include "miscadmin.h"
 #include "storage/shm_alloc.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
+
+#define MURMUR_SEED 0xffaca8149c9238ff
 
 typedef struct
 {
@@ -37,6 +40,7 @@ typedef struct
 	Oid cq_id;
 	FunctionCallInfo hash_fcinfo;
 	FuncExpr *hash;
+	int64 query_hash;
 } CombinerState;
 
 static void
@@ -154,8 +158,8 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	}
 	else
 	{
-		/* shard by query id */
-		tup->group_hash = bms_singleton_member(c->queries);
+		/* shard by hash of query name */
+		tup->group_hash = c->query_hash;
 	}
 
 	if (CombinerWriteHook != NULL)
@@ -199,12 +203,13 @@ CreateCombinerDestReceiver(void)
  * Set parameters for a CombinerDestReceiver
  */
 void
-SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader, Oid cq_id)
+SetCombinerDestReceiverParams(DestReceiver *self, TupleBufferBatchReader *reader, ContinuousView *v)
 {
 	CombinerState *c = (CombinerState *) self;
 	c->reader = reader;
-	c->cq_id = cq_id;
-	c->queries = bms_add_member(c->queries, cq_id);
+	c->cq_id = v->id;
+	c->queries = bms_add_member(c->queries, v->id);
+	c->query_hash = MurmurHash3_64(NameStr(v->name), strlen(NameStr(v->name)), MURMUR_SEED);
 }
 
 /*
