@@ -94,7 +94,7 @@ ModelKeyRow(Model *m, Row *r)
 
 	for (i = 0; i < RowSize(r); ++i)
 	{
-		size_t ki = atoi(RowFieldValue(r,i)) - 1;
+		size_t ki = atoi(RowFieldValue(r, i)) - 1;
 
 		RowKeyAdd(ki);
 	}

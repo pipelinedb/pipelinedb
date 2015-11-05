@@ -68,11 +68,10 @@ typedef struct StreamTupleState
 	bytea *desc;
 	HeapTuple tup;
 
-	InsertBatchAck *ack; /* the ack this tuple is responsible for */
-
 	int num_record_descs; /* number of tuple descriptors for RECORD types */
 	RecordTupleDesc *record_descs; /* RECORD type cached tuple descriptors */
 
+	InsertBatchAck *ack; /* the ack this tuple is responsible for */
 	Bitmapset *queries;
 } StreamTupleState;
 

@@ -157,8 +157,6 @@ init_query_state(ContQueryWorkerState *state, ContExecutor *exec, ResourceOwner 
 		heap_close(matrel, NoLock);
 	}
 
-	set_cont_executor(state->query_desc->planstate, exec);
-
 	state->query_desc->estate->es_lastoid = InvalidOid;
 
 	(*state->dest->rStartup) (state->dest, state->query_desc->operation, state->query_desc->tupDesc);

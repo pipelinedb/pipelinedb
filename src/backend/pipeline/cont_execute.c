@@ -96,7 +96,7 @@ StreamTupleStateCopyFn(void *dest, void *src, int len)
 	memcpy(pos, sts->tup->t_data, sts->tup->t_len);
 	pos += sts->tup->t_len;
 
-	if (synchronous_stream_insert)
+	if (synchronous_stream_insert && sts->ack)
 	{
 		cpysts->ack = ptr_difference(dest, pos);
 		memcpy(pos, sts->ack, sizeof(InsertBatchAck));
@@ -123,9 +123,12 @@ StreamTupleStateCopyFn(void *dest, void *src, int len)
 		}
 	}
 
-	cpysts->queries = ptr_difference(dest, pos);
-	memcpy(pos, sts->queries, BITMAPSET_SIZE(sts->queries->nwords));
-	pos += BITMAPSET_SIZE(sts->queries->nwords);
+	if (sts->queries)
+	{
+		cpysts->queries = ptr_difference(dest, pos);
+		memcpy(pos, sts->queries, BITMAPSET_SIZE(sts->queries->nwords));
+		pos += BITMAPSET_SIZE(sts->queries->nwords);
+	}
 
 	Assert((uintptr_t) ptr_difference(dest, pos) == len);
 }
@@ -164,8 +167,12 @@ StreamTupleStateCreate(HeapTuple tup, TupleDesc desc, bytea *packed_desc, Bitmap
 	*len =  sizeof(StreamTupleState);
 	*len += VARSIZE(packed_desc);
 	*len += HEAPTUPLESIZE + tup->t_len;
-	*len += sizeof(InsertBatchAck);
-	*len += BITMAPSET_SIZE(queries->nwords);
+
+	if (ack)
+		*len += sizeof(InsertBatchAck);
+
+	if (queries)
+		*len += BITMAPSET_SIZE(queries->nwords);
 
 	tupstate->ack = ack;
 	tupstate->arrival_time = GetCurrentTimestamp();

@@ -37,26 +37,6 @@ extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
 extern void CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
-
-typedef struct AdhocQuery
-{
-	int cq_id;
-	int *active_flag;
-	int count; 
-} AdhocQuery;
-
-typedef struct AdhocData
-{
-	int num_adhoc;
-	AdhocQuery *queries;
-
-} AdhocData;
-
 extern Bitmapset *GetStreamReaders(Oid relid);
-
-extern int SendTupleToAdhoc(AdhocData *data,
-							HeapTuple tup,
-							TupleDesc desc,
-							Size *bytes);
 
 #endif

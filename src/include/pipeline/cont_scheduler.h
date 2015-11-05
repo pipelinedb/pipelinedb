@@ -35,9 +35,9 @@ typedef struct ContQueryDatabaseMetadata ContQueryDatabaseMetadata;
 typedef struct
 {
 	ContQueryProcType type;
+	int volatile group_id; /* unqiue [0, n) for each db_oid, type pair */
 
 	int   id; /* unique across all cont query processes */
-	int   group_id; /* unqiue [0, n) for each db_oid, type pair */
 	Latch *latch;
 
 	volatile dsm_handle dsm_handle;
@@ -98,6 +98,7 @@ extern double continuous_query_proc_priority;
 extern Size ContQuerySchedulerShmemSize(void);
 extern void ContQuerySchedulerShmemInit(void);
 extern ContQueryRunParams *GetContQueryRunParams(void);
+extern int GetContSchedulerTrancheId(void);
 
 /* status inquiry functions */
 extern bool IsContQuerySchedulerProcess(void);
@@ -128,5 +129,7 @@ extern void AdhocContQueryProcRelease(ContQueryProc *proc);
 
 extern ContQueryProc *GetContQueryWorkerProcs(void);
 extern ContQueryProc *GetContQueryCombinerProcs(void);
+extern ContQueryProc *GetContQueryAdhocProcs(void);
+extern int GetContProcTrancheId(void);
 
 #endif   /* CONT_SCHEDULER_H */

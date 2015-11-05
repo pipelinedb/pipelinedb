@@ -45,7 +45,6 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 #include "utils/typcache.h"
-#include "pipeline/cont_adhoc_mgr.h"
 
 /* guc parameters */
 bool synchronous_stream_insert;
@@ -78,73 +77,6 @@ GetStreamReaders(Oid relid)
 }
 
 /*
- * Initialize data structures to support sending data to adhoc tuple buffer
- */
-static void
-init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
-{
-	int num_adhoc = bms_num_members(adhoc_targets);
-	int ctr = 0;
-	int target = 0;
-	Bitmapset *tmp_targets;
-
-	memset(data, 0, sizeof(AdhocData));
-	data->num_adhoc = num_adhoc;
-
-	if (!data->num_adhoc)
-		return;
-
-	tmp_targets = bms_copy(adhoc_targets);
-	data->queries = palloc0(sizeof(AdhocQuery) * num_adhoc);
-
-	while ((target = bms_first_member(tmp_targets)) >= 0)
-	{
-		AdhocQuery *query = &data->queries[ctr++];
-
-		query->cq_id = target;
-		query->active_flag = AdhocMgrGetActiveFlag(target);
-		query->count = 0;
-	}
-}
-
-/*
- * Send a heap tuple to the adhoc buffer, by making a new stream tuple
- * for each adhoc query that is listening
- */
-int
-SendTupleToAdhoc(AdhocData *adhoc_data, HeapTuple tup, TupleDesc desc,
-					Size *bytes)
-{
-	int i = 0;
-	int count = 0;
-	*bytes = 0;
-
-	for (i = 0; i < adhoc_data->num_adhoc; ++i)
-	{
-		AdhocQuery *query = &adhoc_data->queries[i];
-
-		StreamTuple *tuple = 
-			MakeStreamTuple(tup, desc, 1, NULL);
-		Bitmapset *single = bms_make_singleton(query->cq_id);
-
-		tuple->group_hash = query->cq_id;
-
-		if (TupleBufferInsert(AdhocTupleBuffer, tuple, single))
-		{
-			query->count++;
-
-			if (i == 0)
-			{
-				count++;
-				(*bytes) += tuple->heaptup->t_len + HEAPTUPLESIZE;
-			}
-		}
-	}
-
-	return count;
-}
-
-/*
  * CopyIntoStream
  *
  * COPY events to a stream from an input source
@@ -158,15 +90,10 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	Size size = 0;
 	bool snap = ActiveSnapshotSet();
 	Bitmapset *all_targets = GetStreamReaders(RelationGetRelid(stream));
-	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
-	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? 
-		bms_difference(all_targets, targets) : NULL;
+	Bitmapset *adhoc = GetAdhocContinuousViewIds();
+	Bitmapset *targets = bms_difference(all_targets, adhoc);
 	dsm_cqueue *cq = NULL;
 	bytea *packed_desc;
-	AdhocData adhoc_data;
-
-	init_adhoc_data(&adhoc_data, adhoc_targets);
 
 	if (snap)
 		PopActiveSnapshot();
@@ -199,12 +126,6 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 			dsm_cqueue_push_nolock(cq, sts, len);
 			size += len;
 		}
-
-		if (adhoc_data.num_adhoc)
-		{
-			Size abytes = 0;
-			SendTupleToAdhoc(&adhoc_data, tup, desc, &abytes);
-		}
 	}
 
 	pfree(packed_desc);
@@ -222,4 +143,8 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 	if (snap)
 		PushActiveSnapshot(GetTransactionSnapshot());
+
+	bms_free(all_targets);
+	bms_free(adhoc);
+	bms_free(targets);
 }

@@ -26,7 +26,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parsetree.h"
 #include "pgstat.h"
-#include "pipeline/cont_adhoc_mgr.h"
+#include "pipeline/cont_adhoc.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/dsm_cqueue.h"
@@ -46,7 +46,6 @@ typedef struct StreamFdwInfo
 typedef struct StreamInsertState
 {
 	Bitmapset *targets;
-	AdhocData *adhoc_data;
 
 	long count;
 	long bytes;
@@ -58,6 +57,7 @@ typedef struct StreamInsertState
 	bytea *packed_desc;
 
 	dsm_cqueue *worker_queue;
+	AdhocInsertState *adhoc_state;
 } StreamInsertState;
 
 /*
@@ -430,7 +430,13 @@ IterateStreamScan(ForeignScanState *node)
 	bytea *piraw;
 	bytea *tupraw;
 
-	sts = (StreamTupleState *) ContExecutorYieldItem(state->cont_executor, &len);
+	if (state->cont_executor)
+		sts = (StreamTupleState *) ContExecutorYieldItem(state->cont_executor, &len);
+	else if (state->adhoc_executor)
+		sts = AdhocExecutorYieldItem(state->adhoc_executor, &len);
+	else
+		elog(ERROR, "streams can only be read from worker or adhoc processes");
+
 	if (sts == NULL)
 		return NULL;
 
@@ -454,36 +460,6 @@ IterateStreamScan(ForeignScanState *node)
 }
 
 /*
- * Initialize data structures to support sending data to adhoc tuple buffer
- */
-static void
-init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
-{
-	int num_adhoc = bms_num_members(adhoc_targets);
-	int ctr = 0;
-	int target = 0;
-	Bitmapset *tmp_targets;
-
-	memset(data, 0, sizeof(AdhocData));
-	data->num_adhoc = num_adhoc;
-
-	if (!data->num_adhoc)
-		return;
-
-	tmp_targets = bms_copy(adhoc_targets);
-	data->queries = palloc0(sizeof(AdhocQuery) * num_adhoc);
-
-	while ((target = bms_first_member(tmp_targets)) >= 0)
-	{
-		AdhocQuery *query = &data->queries[ctr++];
-
-		query->cq_id = target;
-		query->active_flag = AdhocMgrGetActiveFlag(target);
-		query->count = 0;
-	}
-}
-
-/*
  * BeginStreamModify
  */
 void
@@ -495,19 +471,17 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	StreamInsertState *sis = palloc0(sizeof(StreamInsertState));
 	Bitmapset *all_targets = GetStreamReaders(streamid);
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
-	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? bms_difference(all_targets, targets) : NULL;
+	Bitmapset *worker_targets = bms_difference(all_targets, all_adhoc);
+	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ?
+			bms_difference(all_targets, worker_targets) : NULL;
 	InsertBatchAck *ack = NULL;
 	InsertBatch *batch = NULL;
-	AdhocData *adhoc_data = palloc0(sizeof(AdhocData));
 	List *insert_tl;
 
 	Assert(fdw_private);
 	insert_tl = linitial(fdw_private);
 
-	init_adhoc_data(adhoc_data, adhoc_targets);
-
-	if (!bms_is_empty(targets))
+	if (!bms_is_empty(worker_targets))
 	{
 		if (synchronous_stream_insert)
 		{
@@ -522,10 +496,12 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 		Assert(sis->worker_queue);
 	}
 
-	sis->targets = targets;
+	if (!bms_is_empty(adhoc_targets))
+		sis->adhoc_state = AdhocInsertStateCreate(adhoc_targets);
+
+	sis->targets = worker_targets;
 	sis->ack = ack;
 	sis->batch = batch;
-	sis->adhoc_data = adhoc_data;
 	sis->count = 0;
 	sis->bytes = 0;
 	sis->desc = is_inferred_stream_relation(stream) ? ExecTypeFromTL(insert_tl, false) : RelationGetDescr(stream);
@@ -545,7 +521,6 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 	HeapTuple tup = ExecMaterializeSlot(slot);
 	StreamTupleState *sts;
 	int len;
-	int ntries = 0;
 
 	sts = StreamTupleStateCreate(tup, sis->desc, sis->packed_desc, sis->targets, sis->ack, &len);
 
@@ -564,7 +539,8 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 		dsm_cqueue_push_nolock(sis->worker_queue, sts, len);
 	}
 
-	/* TODO: adhoc sending */
+	if (sis->adhoc_state)
+		AdhocInsertStateSend(sis->adhoc_state, sts, len);
 
 	pfree(sts);
 
@@ -590,4 +566,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 		if (synchronous_stream_insert)
 			InsertBatchWaitAndRemove(sis->batch, sis->count);
 	}
+
+	if (sis->adhoc_state)
+		AdhocInsertStateDestroy(sis->adhoc_state);
 }

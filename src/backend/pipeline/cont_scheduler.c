@@ -45,7 +45,6 @@
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
 #include "utils/timeout.h"
-#include "pipeline/cont_adhoc_mgr.h"
 
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
 #define INIT_PROC_TABLE_SZ 4
@@ -394,6 +393,24 @@ get_database_list(void)
 }
 
 static void
+purge_adhoc_queries(void)
+{
+	int id;
+	Bitmapset *view_ids;
+
+	StartTransactionCommand();
+	view_ids = GetAdhocContinuousViewIds();
+
+	while ((id = bms_first_member(view_ids)) >= 0)
+	{
+		ContinuousView *cv = GetContinuousView(id);
+		CleanupAdhocContinuousView(cv);
+	}
+
+	CommitTransactionCommand();
+}
+
+static void
 cont_bgworker_main(Datum arg)
 {
 	void (*run) (void);
@@ -421,7 +438,7 @@ cont_bgworker_main(Datum arg)
 			break;
 		case Adhoc:
 			/* Clean up and die. */
-			AdhocMgrDeleteAdhocs();
+			purge_adhoc_queries();
 			return;
 		default:
 			ereport(ERROR, (errmsg("continuous queries can only be run as worker or combiner processes")));
@@ -823,12 +840,6 @@ ContQuerySchedulerMain(int argc, char *argv[])
 
 		DisableCatchupInterrupt();
 
-		if (rc & WL_TIMEOUT)
-		{
-			/* XXX - put this in a nicer place. */
-			AdhocMgrPeriodicDrain();
-		}
-
 		/*
 		 * Emergency bailout if postmaster has died.  This is to avoid the
 		 * necessity for manual cleanup of all postmaster children.
@@ -984,7 +995,7 @@ AdhocContQueryProcGet(void)
 
 	SpinLockAcquire(&db_meta->mutex);
 
-	for (i = 0; i < max_worker_processes; ++i)
+	for (i = 0; i < max_worker_processes; i++)
 	{
 		idx = (db_meta->adhoc_counter + i) % max_worker_processes;
 
@@ -992,6 +1003,7 @@ AdhocContQueryProcGet(void)
 		if (db_meta->adhoc_procs[idx].group_id == 0)
 		{
 			proc = &db_meta->adhoc_procs[idx];
+			proc->group_id = 0xdeadbeef;
 			db_meta->adhoc_counter++;
 			break;
 		}
@@ -1005,15 +1017,14 @@ AdhocContQueryProcGet(void)
 
 		proc->type = Adhoc;
 		proc->id = rand();
-		proc->group_id = idx;
 		proc->latch = &MyProc->procLatch;
 		proc->db_meta = db_meta;
+
+		proc->dsm_handle = 0;
+		proc->bgw_handle = NULL;
 	}
 	else
 		elog(ERROR, "no free slot for running adhoc continuous query process");
-
-	if (CurrentResourceOwner == NULL)
-		CurrentResourceOwner = ResourceOwnerCreate(NULL, "dsm_cqueue ResourceOwner");
 
 	return proc;
 }
@@ -1066,4 +1077,25 @@ GetContQueryCombinerProcs(void)
 		elog(ERROR, "failed to find database metadata for continuous queries");
 
 	return &db_meta->db_procs[continuous_query_num_workers];
+}
+
+ContQueryProc *
+GetContQueryAdhocProcs(void)
+{
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+			ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		elog(ERROR, "failed to find database metadata for continuous queries");
+
+	return db_meta->adhoc_procs;
+}
+
+int
+GetContProcTrancheId(void)
+{
+	return ContQuerySchedulerShmem->tranche_id;
 }

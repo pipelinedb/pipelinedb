@@ -78,4 +78,4 @@ wait
 
 set spawn_id $adhoc2
 send \003
-wait 
+wait

@@ -21,6 +21,7 @@
 #include "executor/instrument.h"
 #include "nodes/params.h"
 #include "nodes/plannodes.h"
+#include "pipeline/cont_adhoc.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/bloom.h"
 #include "utils/reltrigger.h"
@@ -1863,6 +1864,7 @@ typedef struct StreamScanState
 {
 	ScanState ss;
 	ContExecutor *cont_executor;
+	AdhocExecutor *adhoc_executor;
 	StreamProjectionInfo *pi;
 } StreamScanState;
 

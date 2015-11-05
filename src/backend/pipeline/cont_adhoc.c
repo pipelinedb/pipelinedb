@@ -38,9 +38,10 @@
 #include "pgstat.h"
 #include "pipeline/adhocReceiver.h"
 #include "pipeline/cont_adhoc.h"
-#include "pipeline/cont_adhoc_mgr.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_plan.h"
+#include "pipeline/cont_scheduler.h"
+#include "pipeline/dsm_cqueue.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/tuplebuf.h"
 #include "storage/ipc.h"
@@ -55,6 +56,9 @@
 #include "utils/syscache.h"
 #include "utils/builtins.h"
 
+#define SLEEP_MS 1
+#define ADHOC_TIMEOUT_MS 1000
+
 /* 
  * This module performs work analogous to the bg workers and combiners
  * (and a view select), but does it in memory using tuple stores.
@@ -64,16 +68,21 @@
  * WorkerTupleBuffer -> Worker -> Combiner -> View -> Frontend
  */
 
+struct AdhocExecutor
+{
+	dsm_cqueue *cqueue;
+	int nitems;
+	Timestamp start_time;
+};
+
 typedef struct
 {
-	TupleBufferBatchReader  *reader;
-	Oid                     view_id;
-	ContinuousView          *view;
-	DestReceiver            *dest;
-	QueryDesc               *query_desc;
-	CQStatEntry             stats;
-	TimestampTz 			last_processed;
-
+	Oid view_id;
+	ContinuousView *view;
+	DestReceiver *dest;
+	QueryDesc *query_desc;
+	TimestampTz last_processed;
+	AdhocExecutor exec;
 } AdhocWorkerState;
 
 typedef struct
@@ -100,13 +109,47 @@ typedef struct
 	TupleTableSlot *slot;
 } AdhocViewState;
 
-#define ADHOC_TIMEOUT_MS 1000
+StreamTupleState *
+AdhocExecutorYieldItem(AdhocExecutor *exec, int *len)
+{
+	ContQueryRunParams *params = GetContQueryRunParams();
+
+	if (exec->start_time == 0)
+		exec->start_time = GetCurrentTimestamp();
+
+	for (;;)
+	{
+		void *ptr;
+
+		/* We've read a full batch or waited long enough? */
+		if (exec->nitems == params->batch_size ||
+				TimestampDifferenceExceeds(exec->start_time, GetCurrentTimestamp(), params->max_wait) ||
+				MyContQueryProc->db_meta->terminate)
+		{
+			exec->start_time = 0;
+			exec->nitems = 0;
+			return NULL;
+		}
+
+		ptr = dsm_cqueue_peek_next(exec->cqueue, len);
+
+		if (ptr)
+		{
+			exec->nitems++;
+			return ptr;
+		}
+		else
+			pg_usleep(SLEEP_MS * 1000);
+	}
+
+	return NULL;
+}
 
 static TupleHashTable
 create_agg_hash(int num_cols, Oid *grp_ops, AttrNumber *group_atts)
 {
-	FmgrInfo *eq_funcs = 0;
-	FmgrInfo *hash_funcs = 0;
+	FmgrInfo *eq_funcs;
+	FmgrInfo *hash_funcs;
 	MemoryContext hash_tmp_cxt;
 
 	execTuplesHashPrepare(num_cols, grp_ops,
@@ -124,12 +167,6 @@ create_agg_hash(int num_cols, Oid *grp_ops, AttrNumber *group_atts)
 							   eq_funcs, hash_funcs, 1000,
 							   sizeof(HeapTupleEntryData),
 							   CurrentMemoryContext, hash_tmp_cxt);
-}
-
-static bool
-should_read_fn(TupleBufferReader *reader, TupleBufferSlot *slot)
-{
-	return slot->tuple->group_hash == reader->proc->group_id;
 }
 
 static void
@@ -161,13 +198,13 @@ get_cont_view_id(RangeVar *name)
 static void
 acquire_cont_query_proc()
 {
-	MyContQueryProc = AdhocMgrGetProc();
+	MyContQueryProc = AdhocContQueryProcGet();
 }
 
 static void
 release_cont_query_proc()
 {
-	AdhocMgrReleaseProc(MyContQueryProc);
+	AdhocContQueryProcRelease(MyContQueryProc);
 	MyContQueryProc = NULL;
 }
 
@@ -229,15 +266,15 @@ init_cont_view(ContinuousViewData *view_data, SelectStmt *stmt,
 
 /* get the worker plan and set up the worker state for execution */
 static AdhocWorkerState *
-init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
+init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver, dsm_segment *segment)
 {
 	PlannedStmt *pstmt = 0;
 	AdhocWorkerState *state = palloc0(sizeof(AdhocWorkerState));
 
 	init_cont_query_batch_context();
 
-	state->reader = 
-		TupleBufferOpenBatchReader(AdhocTupleBuffer, &should_read_fn, ContQueryBatchContext);
+	MemSet(&state->exec, 0, sizeof(AdhocExecutor));
+	state->exec.cqueue = (dsm_cqueue *) dsm_segment_address(segment);
 
 	state->view_id = data.view_id;
 	state->view = data.view;
@@ -268,8 +305,6 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 
 	(*state->dest->rStartup) (state->dest, 
 			state->query_desc->operation, state->query_desc->tupDesc);
-
-	cq_stat_init(&state->stats, state->view->id, 0);
 
 	/*
 	 * The main loop initializes and ends plans across plan executions, so 
@@ -355,6 +390,33 @@ init_adhoc_combiner(ContinuousViewData data,
 	return state;
 }
 
+static void
+set_adhoc_executor(PlanState *planstate, AdhocExecutor *exec)
+{
+	if (planstate == NULL)
+		return;
+
+	if (IsA(planstate, ForeignScanState))
+	{
+		ForeignScanState *fss = (ForeignScanState *) planstate;
+		if (IsStream(RelationGetRelid(fss->ss.ss_currentRelation)))
+		{
+			StreamScanState *scan = (StreamScanState *) fss->fdw_state;
+			scan->adhoc_executor = exec;
+		}
+
+		return;
+	}
+	else if (IsA(planstate, SubqueryScanState))
+	{
+		set_adhoc_executor(((SubqueryScanState *) planstate)->subplan, exec);
+		return;
+	}
+
+	set_adhoc_executor(planstate->lefttree, exec);
+	set_adhoc_executor(planstate->righttree, exec);
+}
+
 /* run the worker - this will block for one sec waiting for tuples in the worker tuple
  * buffer. 
  *
@@ -363,38 +425,25 @@ init_adhoc_combiner(ContinuousViewData data,
  * Otherwise, tuples are processed with the worker plan and sent to the dest receiver
  */
 static bool
-exec_adhoc_worker(AdhocWorkerState * state)
+exec_adhoc_worker(AdhocWorkerState *state)
 {
-	struct Plan *plan = 0;
-	bool has_tup = false;
-	EState *estate = 0;
+	struct Plan *plan;
+	EState *estate;
 	int num_processed = 0;
 
-	TupleBufferBatchReaderTrySleepTimeout(state->reader,
-									      state->last_processed,
-										  ADHOC_TIMEOUT_MS);
+	dsm_cqueue_wait_non_empty(state->exec.cqueue, ADHOC_TIMEOUT_MS);
 
 	CHECK_FOR_INTERRUPTS();
 
-	has_tup = 
-		TupleBufferBatchReaderHasTuplesForCQId(state->reader, state->view_id);
-
-	if (!has_tup)
-	{
-		TupleBufferBatchReaderRewind(state->reader);
-		return false;
-	}
-
 	state->query_desc->estate = CreateEState(state->query_desc);
 	estate = state->query_desc->estate;
-
-	TupleBufferBatchReaderSetCQId(state->reader, state->view_id);
 
 	SetEStateSnapshot(estate);
 	plan = state->query_desc->plannedstmt->planTree;
 
 	state->query_desc->planstate = 
 		ExecInitNode(plan, state->query_desc->estate, EXEC_NO_STREAM_LOCKING);
+	set_adhoc_executor(state->query_desc->planstate, &state->exec);
 
 	ExecutePlan(estate, state->query_desc->planstate, 
 				state->query_desc->operation,
@@ -412,12 +461,9 @@ exec_adhoc_worker(AdhocWorkerState * state)
 	state->query_desc->estate = NULL;
 	estate = state->query_desc->estate;
 
-	TupleBufferBatchReaderRewind(state->reader);
-	TupleBufferBatchReaderReset(state->reader);
-
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 
-	return num_processed != 0;
+	return num_processed > 0;
 }
 
 static void adhoc_sync_combine(AdhocCombinerState *state);
@@ -589,7 +635,8 @@ exec_adhoc_view(AdhocViewState *state)
 }
 
 /* Execute a drop view statement to cleanup the adhoc view */
-void AdhocMgrCleanupContinuousView(ContinuousView *view)
+void
+CleanupAdhocContinuousView(ContinuousView *view)
 {
 	DestReceiver *receiver = 0;
 	DropStmt *stmt = makeNode(DropStmt);
@@ -636,26 +683,52 @@ typedef struct CleanupData
 {
 	ContinuousViewData *cont_view_data;
 	AdhocWorkerState *worker_state;
+	dsm_segment *segment;
+	ResourceOwner owner;
 } CleanupData;
 
 /* To be called when adhoc query is finished */
 static void
 cleanup(int code, Datum arg)
 {
-	CleanupData *cleanup;
-	AbortCurrentTransaction();
+	CleanupData *cleanup = (CleanupData *) arg;
+
+	if (IsTransactionState())
+		AbortCurrentTransaction();
+
 	XactReadOnly = false;
 	
-	cleanup = (CleanupData *)(arg);
-
-	TupleBufferBatchReaderReset(cleanup->worker_state->reader);
-	TupleBufferCloseBatchReader(cleanup->worker_state->reader);
-
 	release_cont_query_proc();
 
+	dsm_detach(cleanup->segment);
+	ResourceOwnerDelete(cleanup->owner);
+
 	StartTransactionCommand();
-	AdhocMgrCleanupContinuousView(cleanup->cont_view_data->view);
+	CleanupAdhocContinuousView(cleanup->cont_view_data->view);
 	CommitTransactionCommand();
+}
+
+static dsm_segment *
+create_dsm_cqueue(ResourceOwner owner)
+{
+	dsm_segment *segment;
+	dsm_handle handle;
+
+	CurrentResourceOwner = owner;
+
+	/* Create dsm_segment and pin it. */
+	segment = dsm_create(continuous_query_ipc_shared_mem * 1024);
+	dsm_pin_mapping(segment);
+	handle = dsm_segment_handle(segment);
+
+	/* Initialize dsm_cqueue. */
+	dsm_cqueue_init_with_tranche_id(handle, GetContProcTrancheId());
+	dsm_cqueue_set_handlers((dsm_cqueue *) dsm_segment_address(segment),
+			StreamTupleStatePeekFn, NULL, StreamTupleStateCopyFn);
+
+	MyContQueryProc->dsm_handle = handle;
+
+	return segment;
 }
 
 /*
@@ -680,6 +753,7 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	ContinuousViewData view_data;
 	Tuplestorestate *batch;
 	CleanupData cleanup_data;
+	dsm_segment *segment;
 
 	ResourceOwner owner = ResourceOwnerCreate(CurrentResourceOwner, "LongTermResOwner");
 
@@ -687,6 +761,9 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 
 	if (!MyContQueryProc)
 		elog(ERROR, "too many adhoc processes");
+
+	/* Create dsm_cqueue */
+	segment = create_dsm_cqueue(owner);
 
 	StartTransactionCommand();
 	MemoryContextSwitchTo(run_cxt);
@@ -703,7 +780,7 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	StartTransactionCommand();
 	MemoryContextSwitchTo(run_cxt);
 	CurrentResourceOwner = owner;
-	worker_state = init_adhoc_worker(view_data, worker_receiver);
+	worker_state = init_adhoc_worker(view_data, worker_receiver, segment);
 	combiner_state = init_adhoc_combiner(view_data, batch);
 
 	if (combiner_state->existing)
@@ -723,6 +800,8 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 
 	cleanup_data.cont_view_data = &view_data;
 	cleanup_data.worker_state = worker_state;
+	cleanup_data.owner = owner;
+	cleanup_data.segment = segment;
 
 	PG_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&cleanup_data));
 	{
@@ -904,4 +983,130 @@ pipeline_exec_adhoc_query(PG_FUNCTION_ARGS)
 		elog(ERROR, "pipeline_exec_adhoc_query intercept failure");
 
 	PG_RETURN_TEXT_P(CStringGetTextDatum(""));
+}
+
+AdhocInsertState *
+AdhocInsertStateCreate(Bitmapset *queries)
+{
+	int nqueries = bms_num_members(queries);
+	AdhocInsertState *astate;
+	ContQueryProc *procs;
+	int i;
+	int idx = 0;
+
+	if (nqueries == 0)
+		return NULL;
+
+	astate = palloc0(sizeof(AdhocInsertState) +
+			(sizeof(AdhocQueryState) * nqueries));
+	astate->nqueries = nqueries;
+
+	procs = GetContQueryAdhocProcs();
+	for (i = 0; i < max_worker_processes; i++)
+	{
+		ContQueryProc *proc = &procs[i];
+		dsm_segment *segment;
+		dsm_handle handle = proc->dsm_handle;
+		AdhocQueryState *qstate;
+
+		if (proc->group_id == 0 || handle == 0 || !bms_is_member(proc->group_id, queries))
+			continue;
+
+		segment = dsm_find_mapping(handle);
+		if (segment == NULL)
+			segment = dsm_attach(handle);
+		if (segment == NULL)
+			continue;
+
+		qstate = &astate->queries[idx];
+		qstate->active = &proc->group_id;
+		qstate->segment = segment;
+		qstate->cqueue = dsm_segment_address(segment);
+
+		idx++;
+	}
+
+	if (idx == 0)
+	{
+		pfree(astate);
+		return NULL;
+	}
+
+	return astate;
+}
+
+static void
+adhoc_insert_state_resync(AdhocInsertState *astate)
+{
+	int i;
+
+	for (i = 0; i < astate->nqueries; i++)
+	{
+		AdhocQueryState *qstate = &astate->queries[i];
+
+		if (*qstate->active == 0)
+		{
+			dsm_detach(qstate->segment);
+			qstate->segment = NULL;
+			qstate->cqueue = NULL;
+		}
+	}
+}
+
+void
+AdhocInsertStateSend(AdhocInsertState *astate, StreamTupleState *sts, int len)
+{
+	int i;
+	InsertBatchAck *ack = sts->ack;
+	Bitmapset *queries = sts->queries;
+
+	if (astate == NULL)
+		return;
+
+	/* Adhoc queries don't care about ack and queries */
+	if (ack)
+	{
+		sts->ack = NULL;
+		len -= sizeof(InsertBatchAck);
+	}
+
+	if (queries)
+	{
+		sts->queries = NULL;
+		len -= BITMAPSET_SIZE(queries->nwords);
+	}
+
+	adhoc_insert_state_resync(astate);
+
+	for (i = 0; i < astate->nqueries; i++)
+	{
+		AdhocQueryState *qstate = &astate->queries[i];
+
+		if (qstate->segment == NULL)
+			continue;
+
+		dsm_cqueue_push(qstate->cqueue, sts, len);
+	}
+
+	sts->ack = ack;
+	sts->queries = queries;
+}
+
+void
+AdhocInsertStateDestroy(AdhocInsertState *astate)
+{
+	int i;
+
+	if (astate == NULL)
+		return;
+
+	for (i = 0; i < astate->nqueries; i++)
+	{
+		AdhocQueryState *qstate = &astate->queries[i];
+
+		if (qstate->segment)
+			dsm_detach(qstate->segment);
+	}
+
+	pfree(astate);
 }
