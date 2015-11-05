@@ -129,6 +129,8 @@ StreamTupleStateCopyFn(void *dest, void *src, int len)
 		memcpy(pos, sts->queries, BITMAPSET_SIZE(sts->queries->nwords));
 		pos += BITMAPSET_SIZE(sts->queries->nwords);
 	}
+	else
+		cpysts->queries = NULL;
 
 	Assert((uintptr_t) ptr_difference(dest, pos) == len);
 }
