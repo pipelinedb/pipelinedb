@@ -38,6 +38,7 @@ typedef struct
 	Bitmapset *queries;
 	FunctionCallInfo hash_fcinfo;
 	FuncExpr *hash;
+	int64 query_hash;
 } CombinerState;
 
 static void

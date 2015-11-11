@@ -97,38 +97,6 @@ dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len)
 	dsm_cqueue_unlock(cq);
 }
 
-static void
-dsm_cqueue_check_consistency(dsm_cqueue *cq)
-{
-	uint64_t head;
-	uint64_t tail;
-	uint64_t cursor;
-
-	Assert(cq->magic == MAGIC);
-
-	head = atomic_load(&cq->head);
-	tail = atomic_load(&cq->tail);
-	cursor = atomic_load(&cq->cursor);
-
-	Assert(cursor <= head);
-	Assert(tail <= head);
-
-	while (tail < head)
-	{
-		dsm_cqueue_slot *slot = dsm_cqueue_slot_get(cq, tail);
-
-		if (!slot->wraps)
-			Assert(slot->next == tail + slot->len + sizeof(dsm_cqueue_slot));
-		else
-		{
-			Assert(slot->next % cq->size == slot->len);
-			Assert(slot->next == tail + slot->len + cq->size - dsm_cqueue_offset(cq, tail));
-		}
-
-		tail = slot->next;
-	}
-}
-
 void
 dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 {
