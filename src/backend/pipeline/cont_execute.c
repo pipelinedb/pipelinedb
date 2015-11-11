@@ -291,7 +291,10 @@ attach_to_db_dsm_segment(void)
 	Timestamp start_time;
 
 	if (db_dsm_segment != NULL)
+	{
+		Assert(dsm_find_mapping(dsm_segment_handle(db_dsm_segment)));
 		return db_dsm_segment;
+	}
 
 	start_time = GetCurrentTimestamp();
 

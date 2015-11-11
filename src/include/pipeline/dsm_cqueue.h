@@ -61,20 +61,9 @@ typedef struct dsm_cqueue
 	char bytes[1];
 } dsm_cqueue;
 
-typedef struct dsm_cqueue_handle
-{
-	MemoryContext cxt;
-	dsm_segment   *segment;
-	dsm_cqueue    *cqueue;
-	LWLockTranche *tranche;
-} dsm_cqueue_handle;
-
 extern void dsm_cqueue_init(void *ptr, Size size, int tranche_id);
 extern void dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_peek_fn peek_fn,
 		dsm_cqueue_pop_fn pop_fn, dsm_cqueue_copy_fn cpy_fn);
-
-extern dsm_cqueue_handle *dsm_cqueue_attach(dsm_handle handle);
-extern void dsm_cqueue_detach(dsm_cqueue_handle *cq_handle);
 
 extern void dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len);
 extern void dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len);
