@@ -282,11 +282,11 @@ dsm_cqueue_pop_peeked(dsm_cqueue *cq)
 
 		if (tail_offset > cur_offset)
 		{
-			MemSet(cq->bytes, 0x7F, cur_offset);
-			MemSet(tail_pos, 0x7F, cq->size - tail_offset);
+			memset(cq->bytes, 0x7F, cur_offset);
+			memset(tail_pos, 0x7F, cq->size - tail_offset);
 		}
 		else
-			MemSet(tail_pos, 0x7F, cur_offset - tail_offset);
+			memset(tail_pos, 0x7F, cur_offset - tail_offset);
 	}
 #endif
 
