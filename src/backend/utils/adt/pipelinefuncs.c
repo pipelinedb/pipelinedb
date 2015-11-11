@@ -615,11 +615,3 @@ pipeline_version(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_TEXT_P(cstring_to_text(PIPELINE_VERSION_STR));
 }
-
-Datum
-pipeline_unittest(PG_FUNCTION_ARGS)
-{
-	dsm_cqueue_test();
-
-	PG_RETURN_DATUM(CStringGetTextDatum("success"));
-}

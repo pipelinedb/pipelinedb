@@ -15,6 +15,7 @@
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
 #include "pipeline/dsm_cqueue.h"
+#include "pipeline/miscutils.h"
 #include "postmaster/bgworker.h"
 #include "utils/memutils.h"
 #include "utils/resowner.h"
@@ -24,15 +25,6 @@
 #define MAGIC 0xDEADBABE /* x_x */
 #define WAIT_SLEEP_NS 250
 #define MAX_WAIT_SLEEP_NS 5000 /* 5ms */
-
-static dsm_segment *
-dsm_find_or_attach(dsm_handle handle)
-{
-	dsm_segment *segment = dsm_find_mapping(handle);
-	if (segment == NULL)
-		segment = dsm_attach(handle);
-	return segment;
-}
 
 static inline int
 dsm_cqueue_offset(dsm_cqueue *cq, int ptr)
@@ -55,27 +47,14 @@ dsm_cqueue_slot_get(dsm_cqueue *cq, uint64_t ptr)
 }
 
 void
-dsm_cqueue_init(dsm_handle handle)
+dsm_cqueue_init(void *ptr, Size size, int tranche_id)
 {
-	dsm_cqueue_init_with_tranche_id(handle, 0);
-}
-
-void
-dsm_cqueue_init_with_tranche_id(dsm_handle handle, int tranche_id)
-{
-	dsm_segment *segment;
-	Size size;
 	dsm_cqueue *cq;
 
-	segment = dsm_find_or_attach(handle);
-	if (segment == NULL)
-		elog(ERROR, "dsm segment missing");
-
-	size = dsm_segment_map_length(segment);
 	if (size <= sizeof(dsm_cqueue))
 		elog(ERROR, "dsm_segment too small");
 
-	cq = (dsm_cqueue *) dsm_segment_address(segment);
+	cq = (dsm_cqueue *) ptr;
 	if (cq->magic == MAGIC)
 		elog(ERROR, "dsm_cqueue already initialized");
 
@@ -92,62 +71,10 @@ dsm_cqueue_init_with_tranche_id(dsm_handle handle, int tranche_id)
 	atomic_init(&cq->consumer_latch, 0);
 
 	/* Initialize producer lock. */
-	if (tranche_id == 0)
-		tranche_id = LWLockNewTrancheId();
 	LWLockInitialize(&cq->lock, tranche_id);
 
 	/* This marks the dsm_cqueue as initialized. */
 	cq->magic = MAGIC;
-}
-
-dsm_cqueue_handle *
-dsm_cqueue_attach(dsm_handle handle)
-{
-	dsm_segment *segment;
-	dsm_cqueue *cq;
-	dsm_cqueue_handle *cq_handle;
-	MemoryContext old;
-	MemoryContext cxt;
-
-	/* Allocate dsm_cqueue handles in long-lived memory contexts */
-	cxt = AllocSetContextCreate(TopMemoryContext, "dsm_cqueue MemoryContext",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
-	old = MemoryContextSwitchTo(cxt);
-
-	segment = dsm_find_or_attach(handle);
-	if (segment == NULL)
-		elog(ERROR, "dsm segment missing");
-	dsm_pin_mapping(segment);
-
-	cq = (dsm_cqueue *) dsm_segment_address(segment);
-	if (cq->magic != MAGIC)
-		elog(ERROR, "dsm_cqueue is not initialized");
-
-	cq_handle = palloc0(sizeof(dsm_cqueue_handle));
-	cq_handle->cxt = cxt;
-	cq_handle->segment = segment;
-	cq_handle->cqueue = cq;
-
-	cq_handle->tranche = palloc0(sizeof(LWLockTranche));
-	cq_handle->tranche->name = "dsm_cqueue LWLock";
-	cq_handle->tranche->array_base = &cq->lock;
-	cq_handle->tranche->array_stride = sizeof(LWLock);
-
-	LWLockRegisterTranche(cq->lock.tranche, cq_handle->tranche);
-
-	MemoryContextSwitchTo(old);
-
-	return cq_handle;
-}
-
-void
-dsm_cqueue_detach(dsm_cqueue_handle *cq_handle)
-{
-	dsm_detach(cq_handle->segment);
-	MemoryContextDelete(cq_handle->cxt);
 }
 
 bool
@@ -168,6 +95,38 @@ dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len)
 	dsm_cqueue_lock(cq);
 	dsm_cqueue_push_nolock(cq, ptr, len);
 	dsm_cqueue_unlock(cq);
+}
+
+static void
+dsm_cqueue_check_consistency(dsm_cqueue *cq)
+{
+	uint64_t head;
+	uint64_t tail;
+	uint64_t cursor;
+
+	Assert(cq->magic == MAGIC);
+
+	head = atomic_load(&cq->head);
+	tail = atomic_load(&cq->tail);
+	cursor = atomic_load(&cq->cursor);
+
+	Assert(cursor <= head);
+	Assert(tail <= head);
+
+	while (tail < head)
+	{
+		dsm_cqueue_slot *slot = dsm_cqueue_slot_get(cq, tail);
+
+		if (!slot->wraps)
+			Assert(slot->next == tail + slot->len + sizeof(dsm_cqueue_slot));
+		else
+		{
+			Assert(slot->next % cq->size == slot->len);
+			Assert(slot->next == tail + slot->len + cq->size - dsm_cqueue_offset(cq, tail));
+		}
+
+		tail = slot->next;
+	}
 }
 
 void
@@ -442,222 +401,4 @@ dsm_cqueue_lock_nowait(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
 	return LWLockConditionalAcquire(&cq->lock, LW_EXCLUSIVE);
-}
-
-static void
-dsm_cqueue_check_consistency(dsm_cqueue *cq)
-{
-	uint64_t head;
-	uint64_t tail;
-	uint64_t cursor;
-
-	Assert(cq->magic == MAGIC);
-
-	head = atomic_load(&cq->head);
-	tail = atomic_load(&cq->tail);
-	cursor = atomic_load(&cq->cursor);
-
-	Assert(cursor <= head);
-	Assert(tail <= head);
-
-	while (tail < head)
-	{
-		dsm_cqueue_slot *slot = dsm_cqueue_slot_get(cq, tail);
-
-		if (!slot->wraps)
-			Assert(slot->next == tail + slot->len + sizeof(dsm_cqueue_slot));
-		else
-		{
-			Assert(slot->next % cq->size == slot->len);
-			Assert(slot->next == tail + slot->len + cq->size - dsm_cqueue_offset(cq, tail));
-		}
-
-		tail = slot->next;
-	}
-}
-
-static char *
-dsm_cqueue_print(dsm_cqueue *cq)
-{
-	StringInfo buf = makeStringInfo();
-	char *str;
-	uint64_t head;
-	uint64_t tail;
-	int nitems = 0;
-	uint64_t start;
-
-	Assert(cq->magic == MAGIC);
-
-	head = atomic_load(&cq->head);
-	tail = atomic_load(&cq->tail);
-	start = tail;
-
-	while (start < head)
-	{
-		dsm_cqueue_slot *slot = dsm_cqueue_slot_get(cq, start);
-		start = slot->next;
-		nitems++;
-	}
-
-	appendStringInfo(buf, "dsm_cqueue\n");
-	appendStringInfo(buf, "  size: %d\n", cq->size);
-	appendStringInfo(buf, "  head: %ld\n", head);
-	appendStringInfo(buf, "  tail: %ld\n", tail);
-	appendStringInfo(buf, "  cursor: %ld\n", (uint64_t) atomic_load(&cq->cursor));
-	appendStringInfo(buf, "  items: %d\n", nitems);
-	appendStringInfo(buf, "  free_space: %ld", cq->size - (head - tail));
-
-	str = buf->data;
-	pfree(buf);
-
-	return str;
-}
-
-static void
-dsm_cqueue_test_serial(void)
-{
-	dsm_segment *segment = dsm_create(8192);
-	dsm_handle handle = dsm_segment_handle(segment);
-	dsm_cqueue_handle *cq_handle;
-	dsm_cqueue *cq;
-	int i;
-
-	dsm_cqueue_init(handle);
-	cq_handle = dsm_cqueue_attach(handle);
-	cq = cq_handle->cqueue;
-
-	dsm_cqueue_check_consistency(cq);
-
-	for (i = 0; i < 1000; i++)
-	{
-		int nitems = rand() % 224; /* max items we can insert before the insert blocks */
-		int j;
-		char *hw = "hello world";
-		int len;
-		char *bytes;
-
-		for (j = 0; j < nitems; j++)
-		{
-			dsm_cqueue_push(cq, hw, strlen(hw) + 1);
-			dsm_cqueue_check_consistency(cq);
-		}
-
-		for (j = 0; j < nitems; j++)
-		{
-			bytes = dsm_cqueue_peek_next(cq, &len);
-			Assert(len == strlen(hw) + 1);
-			Assert(strcmp(bytes, hw) == 0);
-			dsm_cqueue_check_consistency(cq);
-		}
-
-		Assert(!dsm_cqueue_has_unread(cq));
-		bytes = dsm_cqueue_peek_next(cq, &len);
-		Assert(len == 0);
-		Assert(bytes == NULL);
-
-		dsm_cqueue_pop_peeked(cq);
-		Assert(dsm_cqueue_is_empty(cq));
-	}
-
-	dsm_cqueue_detach(cq_handle);
-}
-
-static void
-producer_main(Datum arg)
-{
-	dsm_handle handle = (dsm_handle) arg;
-	dsm_cqueue_handle *cq_handle;
-	dsm_cqueue *cq;
-	ResourceOwner res;
-	int i;
-	char data[1024];
-
-	BackgroundWorkerUnblockSignals();
-
-	res = ResourceOwnerCreate(NULL, "producer_main");
-	CurrentResourceOwner = res;
-
-	cq_handle = dsm_cqueue_attach(handle);
-	cq = cq_handle->cqueue;
-
-	for (i = 0; i < 1000000; i++)
-	{
-		int len = rand() % 1024 + 1;
-		dsm_cqueue_push(cq, data, len);
-
-		pg_usleep(rand() % 10);
-
-		if (i % 10000 == 0)
-			elog(LOG, "produced: %d", i);
-	}
-
-	dsm_cqueue_detach(cq_handle);
-
-	CurrentResourceOwner = NULL;
-	ResourceOwnerDelete(res);
-}
-
-static void
-dsm_cqueue_test_concurrent(void)
-{
-	BackgroundWorker worker;
-	BackgroundWorkerHandle *bg_handle;
-	pid_t pid;
-	dsm_segment *segment;
-	dsm_handle seg_handle;
-	dsm_cqueue_handle *cq_handle;
-	dsm_cqueue *cq;
-	int nitems;
-	bool printed;
-
-	worker.bgw_flags = BGWORKER_BACKEND_DATABASE_CONNECTION | BGWORKER_SHMEM_ACCESS;
-	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-	worker.bgw_restart_time = BGW_NEVER_RESTART;
-	worker.bgw_main = producer_main;
-	worker.bgw_notify_pid = MyProcPid;
-	sprintf(worker.bgw_name, "dsm_cqueue test producer process");
-
-	segment = dsm_create(8192);
-	seg_handle = dsm_segment_handle(segment);
-	dsm_cqueue_init(seg_handle);
-	cq_handle = dsm_cqueue_attach(seg_handle);
-	cq = cq_handle->cqueue;
-
-	worker.bgw_main_arg = seg_handle;
-	Assert(RegisterDynamicBackgroundWorker(&worker, &bg_handle));
-	Assert(WaitForBackgroundWorkerStartup(bg_handle, &pid) == BGWH_STARTED);
-
-	for (nitems = 0; nitems < 1000000;)
-	{
-		int len;
-		char *bytes = dsm_cqueue_peek_next(cq, &len);
-
-		if (bytes == NULL)
-			dsm_cqueue_pop_peeked(cq);
-		else
-			nitems++;
-
-		dsm_cqueue_wait_non_empty(cq, 0);
-
-		pg_usleep(rand() % 10);
-
-		if (nitems % 10000 == 0)
-		{
-			if (!printed)
-				elog(LOG, "consumed: %d", nitems);
-			printed = true;
-		}
-		else
-			printed = false;
-	}
-
-	dsm_cqueue_print(cq);
-	dsm_cqueue_detach(cq_handle);
-}
-
-void
-dsm_cqueue_test(void)
-{
-	dsm_cqueue_test_serial();
-	dsm_cqueue_test_concurrent();
 }

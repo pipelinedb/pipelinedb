@@ -69,8 +69,7 @@ typedef struct dsm_cqueue_handle
 	LWLockTranche *tranche;
 } dsm_cqueue_handle;
 
-extern void dsm_cqueue_init(dsm_handle handle);
-extern void dsm_cqueue_init_with_tranche_id(dsm_handle handle, int tranche_id);
+extern void dsm_cqueue_init(void *ptr, Size size, int tranche_id);
 extern void dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_peek_fn peek_fn,
 		dsm_cqueue_pop_fn pop_fn, dsm_cqueue_copy_fn cpy_fn);
 

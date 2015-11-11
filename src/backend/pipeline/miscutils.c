@@ -6,17 +6,19 @@
  * src/backend/pipeline/miscutils.c
  */
 #include "postgres.h"
-#include "access/htup_details.h"
-#include "catalog/pg_type.h"
-#include "pipeline/miscutils.h"
-#include "port.h"
-#include "utils/datum.h"
-#include "utils/typcache.h"
-#include "miscadmin.h"
+
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <math.h>
 #include <unistd.h>
+
+#include "access/htup_details.h"
+#include "catalog/pg_type.h"
+#include "miscadmin.h"
+#include "pipeline/miscutils.h"
+#include "port.h"
+#include "utils/datum.h"
+#include "utils/typcache.h"
 
 extern double continuous_query_proc_priority;
 
@@ -285,7 +287,7 @@ SetNicePriority()
 	int priority = 0;
 	default_priority = getpriority(PRIO_PROCESS, MyProcPid);
 	priority = Max(default_priority, MAX_PRIORITY - 
-			ceil(continuous_query_proc_priority * (20 - default_priority)));
+			ceil(continuous_query_proc_priority * (MAX_PRIORITY - default_priority)));
 
 	priority = nice(priority);
 }
@@ -294,4 +296,13 @@ void
 SetDefaultPriority()
 {
 	nice(default_priority);
+}
+
+dsm_segment *
+dsm_find_or_attach(dsm_handle handle)
+{
+	dsm_segment *segment = dsm_find_mapping(handle);
+	if (segment == NULL)
+		segment = dsm_attach(handle);
+	return segment;
 }

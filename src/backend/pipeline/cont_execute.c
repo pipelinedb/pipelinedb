@@ -123,7 +123,7 @@ StreamTupleStateCopyFn(void *dest, void *src, int len)
 		}
 	}
 
-	if (sts->queries)
+	if (!bms_is_empty(sts->queries))
 	{
 		cpysts->queries = ptr_difference(dest, pos);
 		memcpy(pos, sts->queries, BITMAPSET_SIZE(sts->queries->nwords));
@@ -280,88 +280,41 @@ InsertBatchAckTuple(InsertBatchAck *ack)
 		atomic_fetch_add(&ack->batch->num_cacks, 1);
 }
 
-typedef struct ContQueryProcIPCState
+static dsm_segment *
+attach_to_db_dsm_segment(void)
 {
-	bool connected;
-	ContQueryProc *proc;
-	dsm_cqueue_handle *cq_handle;
-} ContQueryProcIPCState;
+	static dsm_segment *db_dsm_segment = NULL;
+	dsm_handle handle;
+	Timestamp start_time;
 
-static ContQueryProcIPCState *WorkerIPCStates = NULL;
-static ContQueryProcIPCState *CombinerIPCStates = NULL;
+	if (db_dsm_segment != NULL)
+		return db_dsm_segment;
 
-static void
-attach_to_cont_proc(ContQueryProcIPCState *cpstate)
-{
-	ContQueryProc *proc;
+	start_time = GetCurrentTimestamp();
 
-	if (cpstate->connected)
-		return;
-
-	proc = cpstate->proc;
-	if (proc->dsm_handle == 0)
-		return;
-
-	cpstate->cq_handle = dsm_cqueue_attach(proc->dsm_handle);
-	dsm_pin_mapping(cpstate->cq_handle->segment);
-	cpstate->connected = true;
-}
-
-static void
-attach_to_cont_procs(ContQueryProcType type)
-{
-	int i;
-	ContQueryProcIPCState **states;
-	int nprocs;
-	ContQueryProc *procs;
-
-	if (type == Worker)
+	/* Wait till all db workers have started up */
+	while ((handle = GetDBDSMHandle()) == 0)
 	{
-		states = &WorkerIPCStates;
-		procs = GetContQueryWorkerProcs();
-		nprocs = continuous_query_num_workers;
-	}
-	else if (type == Combiner)
-	{
-		states = &CombinerIPCStates;
-		procs = GetContQueryCombinerProcs();
-		nprocs = continuous_query_num_combiners;
-	}
-	else
-	{
-		elog(ERROR, "can only attach to workers or combiners");
-		return; /* keep compiler quiet */
+		pg_usleep(SLEEP_MS);
+
+		if (TimestampDifferenceExceeds(start_time, GetCurrentTimestamp(), 1000))
+			elog(ERROR, "could not connect to database dsm segment");
 	}
 
-	if (*states == NULL)
-	{
-		MemoryContext old = MemoryContextSwitchTo(TopMemoryContext);
-		*states = palloc0(sizeof(ContQueryProcIPCState) * nprocs);
-		MemoryContextSwitchTo(old);
-	}
-	else
-		return;
-
-	for (i = 0; i < nprocs; i++)
-	{
-		ContQueryProc *proc = &procs[i];
-		ContQueryProcIPCState *cpstate = &(*states)[i];
-
-		cpstate->proc = proc;
-		attach_to_cont_proc(cpstate);
-	}
+	db_dsm_segment = dsm_find_or_attach(handle);
+	dsm_pin_mapping(db_dsm_segment);
+	return db_dsm_segment;
 }
 
 dsm_cqueue *
 GetWorkerQueue(void)
 {
 	static long idx = -1;
-	ContQueryProcIPCState *cpstate;
 	int ntries = 0;
 	dsm_cqueue *cq = NULL;
+	dsm_segment *segment;
 
-	attach_to_cont_procs(Worker);
-	Assert(WorkerIPCStates);
+	segment = attach_to_db_dsm_segment();
 
 	if (idx == -1)
 		idx = rand() % continuous_query_num_workers;
@@ -370,30 +323,22 @@ GetWorkerQueue(void)
 
 	for (;;)
 	{
-		cpstate = &WorkerIPCStates[idx];
+		cq = GetWorkerCQueue(segment, idx);
 
-		if (!cpstate->connected)
-			attach_to_cont_proc(cpstate);
-
-		if (cpstate->connected)
+		/*
+		 * Try to lock dsm_cqueue of any worker that is not already locked in
+		 * a round robin fashion.
+		 */
+		if (ntries < continuous_query_num_workers)
 		{
-			cq = cpstate->cq_handle->cqueue;
-
-			/*
-			 * Try to lock dsm_cqueue of any worker that is not already locked in
-			 * a round robin fashion.
-			 */
-			if (ntries < continuous_query_num_workers)
-			{
-				if (dsm_cqueue_lock_nowait(cq))
-					break;
-			}
-			else
-			{
-				/* If all workers are locked, then just wait for the lock. */
-				dsm_cqueue_lock(cq);
+			if (dsm_cqueue_lock_nowait(cq))
 				break;
-			}
+		}
+		else
+		{
+			/* If all workers are locked, then just wait for the lock. */
+			dsm_cqueue_lock(cq);
+			break;
 		}
 
 		ntries++;
@@ -409,27 +354,11 @@ GetWorkerQueue(void)
 dsm_cqueue *
 GetCombinerQueue(PartialTupleState *pts)
 {
-	int idx;
-	ContQueryProcIPCState *cpstate;
-
-	attach_to_cont_procs(Combiner);
-	Assert(CombinerIPCStates);
-
-	idx = pts->hash % continuous_query_num_combiners;
-	cpstate = &CombinerIPCStates[idx];
-
-
-	for (;;)
-	{
-		if (!cpstate->connected)
-			attach_to_cont_proc(cpstate);
-
-		if (cpstate->connected)
-			break;
-	}
-
-	dsm_cqueue_lock(cpstate->cq_handle->cqueue);
-	return cpstate->cq_handle->cqueue;
+	int idx = pts->hash % continuous_query_num_combiners;
+	dsm_segment *segment = attach_to_db_dsm_segment();
+	dsm_cqueue *cq = GetCombinerCQueue(segment, idx);
+	dsm_cqueue_lock(cq);
+	return cq;
 }
 
 ContExecutor *
@@ -457,10 +386,8 @@ ContExecutorNew(ContQueryProcType type)
 	exec->ptype = type;
 	exec->cur_query_id = InvalidOid;
 
-	StartTransactionCommand();
-	exec->cq_handle = dsm_cqueue_attach(MyContQueryProc->dsm_handle);
-	dsm_cqueue_pop_peeked(exec->cq_handle->cqueue);
-	CommitTransactionCommand();
+	exec->cqueue = GetContProcCQueue(MyContQueryProc);
+	dsm_cqueue_unpeek(exec->cqueue);
 
 	MemoryContextSwitchTo(old);
 
@@ -470,24 +397,20 @@ ContExecutorNew(ContQueryProcType type)
 void
 ContExecutorDestroy(ContExecutor *exec)
 {
+	dsm_cqueue_pop_peeked(exec->cqueue);
 	MemoryContextDelete(exec->cxt);
-
-	dsm_cqueue_pop_peeked(exec->cq_handle->cqueue);
-	dsm_cqueue_detach(exec->cq_handle);
-
-	pfree(exec);
 }
 
 void
 ContExecutorStartBatch(ContExecutor *exec)
 {
-	if (dsm_cqueue_is_empty(exec->cq_handle->cqueue))
+	if (dsm_cqueue_is_empty(exec->cqueue))
 	{
 		char *proc_name = GetContQueryProcName(MyContQueryProc);
 		cq_stat_report(true);
 
 		pgstat_report_activity(STATE_IDLE, proc_name);
-		dsm_cqueue_wait_non_empty(exec->cq_handle->cqueue, 0);
+		dsm_cqueue_wait_non_empty(exec->cqueue, 0);
 		pgstat_report_activity(STATE_RUNNING, proc_name);
 
 		pfree(proc_name);
@@ -593,7 +516,7 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			if (exec->depleted)
 				return NULL;
 
-			ptr = dsm_cqueue_peek_next(exec->cq_handle->cqueue, len);
+			ptr = dsm_cqueue_peek_next(exec->cqueue, len);
 			Assert(ptr);
 
 			if (ptr == exec->cursor)
@@ -626,7 +549,7 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			return NULL;
 		}
 
-		ptr = dsm_cqueue_peek_next(exec->cq_handle->cqueue, len);
+		ptr = dsm_cqueue_peek_next(exec->cqueue, len);
 
 		if (ptr)
 		{
@@ -665,7 +588,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 	if (!exec->started)
 		return;
 
-	dsm_cqueue_unpeek(exec->cq_handle->cqueue);
+	dsm_cqueue_unpeek(exec->cqueue);
 
 	if (!bms_is_empty(exec->queries_seen) && exec->update_queries)
 	{
@@ -698,12 +621,12 @@ ContExecutorEndBatch(ContExecutor *exec)
 	while (exec->nitems--)
 	{
 		int len;
-		ptr = dsm_cqueue_peek_next(exec->cq_handle->cqueue, &len);
+		ptr = dsm_cqueue_peek_next(exec->cqueue, &len);
 	}
 
 	Assert(exec->cursor == NULL || exec->cursor == ptr);
 
-	dsm_cqueue_pop_peeked(exec->cq_handle->cqueue);
+	dsm_cqueue_pop_peeked(exec->cqueue);
 
 	exec->cursor = NULL;
 	exec->nitems = 0;

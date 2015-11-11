@@ -712,18 +712,21 @@ create_dsm_cqueue(ResourceOwner owner)
 {
 	dsm_segment *segment;
 	dsm_handle handle;
+	Size size;
+	void *ptr;
 
 	CurrentResourceOwner = owner;
 
 	/* Create dsm_segment and pin it. */
-	segment = dsm_create(continuous_query_ipc_shared_mem * 1024);
+	size = continuous_query_ipc_shared_mem * 1024;
+	segment = dsm_create(size);
 	dsm_pin_mapping(segment);
 	handle = dsm_segment_handle(segment);
 
 	/* Initialize dsm_cqueue. */
-	dsm_cqueue_init_with_tranche_id(handle, GetContProcTrancheId());
-	dsm_cqueue_set_handlers((dsm_cqueue *) dsm_segment_address(segment),
-			StreamTupleStatePeekFn, NULL, StreamTupleStateCopyFn);
+	ptr = dsm_segment_address(segment);
+	dsm_cqueue_init(ptr, size, GetContProcTrancheId());
+	dsm_cqueue_set_handlers((dsm_cqueue *) ptr, StreamTupleStatePeekFn, NULL, StreamTupleStateCopyFn);
 
 	MyContQueryProc->dsm_handle = handle;
 
@@ -1011,9 +1014,7 @@ AdhocInsertStateCreate(Bitmapset *queries)
 		if (proc->group_id == 0 || handle == 0 || !bms_is_member(proc->group_id, queries))
 			continue;
 
-		segment = dsm_find_mapping(handle);
-		if (segment == NULL)
-			segment = dsm_attach(handle);
+		segment = dsm_find_or_attach(handle);
 		if (segment == NULL)
 			continue;
 

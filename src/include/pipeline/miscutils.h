@@ -11,6 +11,7 @@
 #include "c.h"
 #include "executor/tuptable.h"
 #include "lib/stringinfo.h"
+#include "storage/dsm.h"
 #include "utils/typcache.h"
 
 #define ptr_difference(begin, end) ((void *) (((char *) end) - ((char *) begin)))
@@ -29,5 +30,7 @@ extern void DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf);
 /* for backends / bg workers to yield cpu */
 extern void SetNicePriority(void);
 extern void SetDefaultPriority(void);
+
+extern dsm_segment *dsm_find_or_attach(dsm_handle handle);
 
 #endif   /* MISCUTILS_H */

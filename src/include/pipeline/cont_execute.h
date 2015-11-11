@@ -106,7 +106,7 @@ typedef struct ContExecutor
 
 	ContQueryProcType ptype;
 
-	dsm_cqueue_handle *cq_handle;
+	dsm_cqueue *cqueue;
 	Bitmapset *queries;
 	bool update_queries;
 
