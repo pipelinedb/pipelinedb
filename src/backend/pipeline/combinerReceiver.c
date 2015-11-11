@@ -153,7 +153,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	if (c->hash_fcinfo)
 		pts.hash = hash_group(slot, c);
 	else
-		pts.hash = MurmurHash3_64(&c->cont_executor->current_query_id, sizeof(Oid), MURMUR_SEED);
+		pts.hash = MurmurHash3_64(&c->cont_executor->current_query->view->name, sizeof(NameData), MURMUR_SEED);
 
 	if (CombinerReceiveHook)
 		CombinerReceiveHook(&pts);
