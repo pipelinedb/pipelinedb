@@ -274,22 +274,6 @@ dsm_cqueue_pop_peeked(dsm_cqueue *cq)
 		}
 	}
 
-#ifdef CLOBBER_FREED_MEMORY
-	{
-		int cur_offset = dsm_cqueue_offset(cq, cur);
-		int tail_offset = dsm_cqueue_offset(cq, tail);
-		char *tail_pos = (char *) dsm_cqueue_slot_get(cq, tail);
-
-		if (tail_offset > cur_offset)
-		{
-			memset(cq->bytes, 0x7F, cur_offset);
-			memset(tail_pos, 0x7F, cq->size - tail_offset);
-		}
-		else
-			memset(tail_pos, 0x7F, cur_offset - tail_offset);
-	}
-#endif
-
 	/*
 	 * We must update tail before setting the latch, because the producer will set its latch
 	 * before getting the new value for tail. This guarantees that we don't
