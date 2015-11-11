@@ -141,7 +141,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	}
 
 	pts.tup = ExecMaterializeSlot(slot);
-	pts.query_id = c->cont_executor->cur_query_id;
+	pts.query_id = c->cont_executor->current_query_id;
 	pts.nacks = nacks;
 	pts.acks = acks;
 
@@ -153,7 +153,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	if (c->hash_fcinfo)
 		pts.hash = hash_group(slot, c);
 	else
-		pts.hash = MurmurHash3_64(&c->cont_executor->cur_query_id, sizeof(Oid), MURMUR_SEED);
+		pts.hash = MurmurHash3_64(&c->cont_executor->current_query_id, sizeof(Oid), MURMUR_SEED);
 
 	if (CombinerReceiveHook)
 		CombinerReceiveHook(&pts);

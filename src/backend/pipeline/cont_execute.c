@@ -14,7 +14,7 @@
 #include "access/htup.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
-#include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "catalog/pg_type.h"
 #include "miscadmin.h"
@@ -24,7 +24,10 @@
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "storage/shm_alloc.h"
+#include "tcop/tcopprot.h"
 #include "utils/memutils.h"
+#include "utils/snapmgr.h"
+#include "utils/syscache.h"
 
 #define SLEEP_MS 1
 
@@ -362,7 +365,7 @@ GetCombinerQueue(PartialTupleState *pts)
 }
 
 ContExecutor *
-ContExecutorNew(ContQueryProcType type)
+ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 {
 	ContExecutor *exec;
 	MemoryContext cxt;
@@ -384,7 +387,8 @@ ContExecutorNew(ContQueryProcType type)
 			ALLOCSET_DEFAULT_MAXSIZE);
 
 	exec->ptype = type;
-	exec->cur_query_id = InvalidOid;
+	exec->current_query_id = InvalidOid;
+	exec->initfn = initfn;
 
 	exec->cqueue = GetContProcCQueue(MyContQueryProc);
 	dsm_cqueue_unpeek(exec->cqueue);
@@ -437,38 +441,161 @@ ContExecutorStartBatch(ContExecutor *exec)
 	exec->update_queries = true;
 }
 
+static ContQueryState *
+init_query_state(ContExecutor *exec, ContQueryState *state)
+{
+	MemoryContext state_cxt;
+	MemoryContext old_cxt;
+
+	state_cxt = AllocSetContextCreate(exec->cxt, "QueryStateCxt",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	old_cxt = MemoryContextSwitchTo(state_cxt);
+
+	state->view_id = exec->current_query_id;
+	state->state_cxt = state_cxt;
+	state->view = GetContinuousView(exec->current_query_id);
+	state->tmp_cxt = AllocSetContextCreate(state_cxt, "QueryStateTmpCxt",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	if (state->view == NULL)
+		return state;
+
+	cq_stat_init(&state->stats, state->view->id, 0);
+	state = exec->initfn(exec, state);
+
+	MemoryContextSwitchTo(old_cxt);
+
+	return state;
+}
+
+static ContQueryState *
+get_query_state(ContExecutor *exec)
+{
+	ContQueryState *state = exec->states[exec->current_query_id];
+	HeapTuple tuple;
+
+	MyCQStats = NULL;
+
+	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
+	if (state == NULL)
+	{
+		CommitTransactionCommand();
+		StartTransactionCommand();
+	}
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	tuple = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(exec->current_query_id));
+
+	/* Was the continuous view removed? */
+	if (!HeapTupleIsValid(tuple))
+	{
+		PopActiveSnapshot();
+		ContExecutorPurgeQuery(exec);
+		return NULL;
+	}
+
+	if (state != NULL)
+	{
+		/* Was the continuous view modified? In our case this means remove the old view and add a new one */
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
+		if (row->hash != state->view->hash)
+		{
+			ContExecutorPurgeQuery(exec);
+			state = NULL;
+		}
+	}
+
+	ReleaseSysCache(tuple);
+
+	if (state == NULL)
+	{
+		MemoryContext old_cxt = MemoryContextSwitchTo(exec->cxt);
+		state = palloc0(sizeof(ContQueryState));
+		state = init_query_state(exec, state);
+		exec->states[exec->current_query_id] = state;
+		MemoryContextSwitchTo(old_cxt);
+
+		if (state->view == NULL)
+		{
+			PopActiveSnapshot();
+			ContExecutorPurgeQuery(exec);
+			return NULL;
+		}
+	}
+
+	PopActiveSnapshot();
+
+	MyCQStats = &state->stats;
+
+	return state;
+}
+
 Oid
 ContExecutorStartNextQuery(ContExecutor *exec)
 {
 	MemoryContextSwitchTo(exec->exec_cxt);
-
-	exec->cur_query_id = InvalidOid;
 
 	for (;;)
 	{
 		int id = bms_first_member(exec->exec_queries);
 
 		if (id == -1)
-			return InvalidOid;
+		{
+			exec->current_query_id = InvalidOid;
+			break;
+		}
 
-		exec->cur_query_id = id;
+		exec->current_query_id = id;
 
 		if (!exec->timedout)
-			return exec->cur_query_id;
+			break;
 
-		if (bms_is_member(exec->cur_query_id, exec->queries_seen))
-			return exec->cur_query_id;
+		if (bms_is_member(exec->current_query_id, exec->queries_seen))
+			break;
 	}
 
-	return InvalidOid;
+	if (exec->current_query_id == InvalidOid)
+		exec->current_query = NULL;
+	else
+	{
+		exec->current_query = get_query_state(exec);
+
+		if (exec->current_query == NULL)
+		{
+			MemoryContext old = MemoryContextSwitchTo(exec->cxt);
+			exec->queries = bms_del_member(exec->queries, exec->current_query_id);
+			MemoryContextSwitchTo(old);
+		}
+		else
+			debug_query_string = NameStr(exec->current_query->view->name);
+	}
+
+	return exec->current_query_id;
 }
 
 void
 ContExecutorPurgeQuery(ContExecutor *exec)
 {
 	MemoryContext old = MemoryContextSwitchTo(exec->cxt);
-	exec->queries = bms_del_member(exec->queries, exec->cur_query_id);
+	ContQueryState *state = exec->states[exec->current_query_id];
+
+	exec->queries = bms_del_member(exec->queries, exec->current_query_id);
+
+	if (state)
+	{
+		MemoryContextDelete(state->state_cxt);
+		exec->states[exec->current_query_id] = NULL;
+	}
+
 	MemoryContextSwitchTo(old);
+
+	IncrementCQErrors(1);
 }
 
 static inline bool
@@ -477,7 +604,7 @@ should_yield_item(ContExecutor *exec, void *ptr)
 	if (exec->ptype == Worker)
 	{
 		StreamTupleState *sts = (StreamTupleState *) ptr;
-		bool succ = bms_is_member(exec->cur_query_id, sts->queries);
+		bool succ = bms_is_member(exec->current_query_id, sts->queries);
 
 		if (synchronous_stream_insert && succ)
 		{
@@ -491,7 +618,7 @@ should_yield_item(ContExecutor *exec, void *ptr)
 	else
 	{
 		PartialTupleState *pts = (PartialTupleState *) ptr;
-		return exec->cur_query_id == pts->query_id;
+		return exec->current_query_id == pts->query_id;
 	}
 }
 
@@ -597,17 +724,24 @@ ContExecutorEndQuery(ContExecutor *exec)
 
 		MemoryContextSwitchTo(exec->exec_cxt);
 		exec->exec_queries = bms_add_members(exec->exec_queries, exec->queries_seen);
-		exec->exec_queries = bms_del_member(exec->exec_queries, exec->cur_query_id);
+		exec->exec_queries = bms_del_member(exec->exec_queries, exec->current_query_id);
 
 		MemoryContextSwitchTo(old);
 
 		exec->update_queries = false;
 	}
 
-	exec->cur_query_id = InvalidOid;
+	exec->current_query_id = InvalidOid;
 	exec->depleted = false;
 	list_free(exec->yielded);
 	exec->yielded = NIL;
+
+	if (exec->current_query)
+		cq_stat_report(false);
+	else
+		cq_stat_send_purge(exec->current_query_id, 0, exec->ptype == Worker ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+
+	debug_query_string = NULL;
 }
 
 void

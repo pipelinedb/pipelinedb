@@ -26,23 +26,19 @@
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream_fdw.h"
+#include "tcop/dest.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "utils/resowner.h"
 #include "utils/snapmgr.h"
-#include "utils/syscache.h"
-#include "tcop/dest.h"
-#include "tcop/tcopprot.h"
+
+static ResourceOwner WorkerResOwner = NULL;
 
 typedef struct {
-	Oid view_id;
-	ContinuousView *view;
+	ContQueryState base;
 	DestReceiver *dest;
 	QueryDesc *query_desc;
-	MemoryContext state_cxt;
-	MemoryContext tmp_cxt;
-	CQStatEntry stats;
 	AttrNumber *groupatts;
 	FuncExpr *hashfunc;
 } ContQueryWorkerState;
@@ -74,49 +70,37 @@ set_cont_executor(PlanState *planstate, ContExecutor *exec)
 	set_cont_executor(planstate->righttree, exec);
 }
 
-static void
-init_query_state(ContQueryWorkerState *state, ContExecutor *exec, ResourceOwner owner)
+static ContQueryState *
+init_query_state(ContExecutor *exec, ContQueryState *base)
 {
 	PlannedStmt *pstmt;
-	MemoryContext state_cxt;
-	MemoryContext old_cxt;
+	ContQueryWorkerState *state;
+	ResourceOwner res;
 
-	MemSet(state, 0, sizeof(ContQueryWorkerState));
+	res = CurrentResourceOwner;
+	CurrentResourceOwner = WorkerResOwner;
 
-	state_cxt = AllocSetContextCreate(exec->cxt, "WorkerQueryStateCxt",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
-	old_cxt = MemoryContextSwitchTo(state_cxt);
-
-	state->view_id = exec->cur_query_id;
-	state->state_cxt = state_cxt;
-	state->view = GetContinuousView(exec->cur_query_id);
-	state->tmp_cxt = AllocSetContextCreate(state_cxt, "WorkerQueryTmpCxt",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
-	if (state->view == NULL)
-		return;
+	state = (ContQueryWorkerState *) palloc0(sizeof(ContQueryWorkerState));
+	memcpy(&state->base, base, sizeof(ContQueryState));
+	pfree(base);
+	base = (ContQueryState *) state;
 
 	state->dest = CreateDestReceiver(DestCombiner);
 
 	SetCombinerDestReceiverParams(state->dest, exec);
 
-	pstmt = GetContPlan(state->view, Worker);
+	pstmt = GetContPlan(base->view, Worker);
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot, InvalidSnapshot, state->dest, NULL, 0);
 	state->query_desc->snapshot = GetTransactionSnapshot();
 	state->query_desc->snapshot->copied = true;
 
-	RegisterSnapshotOnOwner(state->query_desc->snapshot, owner);
+	RegisterSnapshotOnOwner(state->query_desc->snapshot, WorkerResOwner);
 
 	ExecutorStart(state->query_desc, EXEC_NO_STREAM_LOCKING);
 
 	state->query_desc->snapshot->active_count++;
-	UnregisterSnapshotFromOwner(state->query_desc->snapshot, owner);
-	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, owner);
+	UnregisterSnapshotFromOwner(state->query_desc->snapshot, WorkerResOwner);
+	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, WorkerResOwner);
 	state->query_desc->snapshot = NULL;
 
 	if (IsA(state->query_desc->plannedstmt->planTree, Agg))
@@ -127,12 +111,12 @@ init_query_state(ContQueryWorkerState *state, ContExecutor *exec, ResourceOwner 
 
 		state->groupatts = agg->grpColIdx;
 
-		matrel = heap_openrv_extended(state->view->matrel, NoLock, true);
+		matrel = heap_openrv_extended(base->view->matrel, NoLock, true);
 
 		if (matrel == NULL)
 		{
-			state->view = NULL;
-			return;
+			base->view = NULL;
+			return base;
 		}
 
 		ri = CQMatRelOpen(matrel);
@@ -143,10 +127,10 @@ init_query_state(ContQueryWorkerState *state, ContExecutor *exec, ResourceOwner 
 			if (hash == NULL)
 			{
 				/* matrel has been dropped */
-				state->view = NULL;
+				base->view = NULL;
 				CQMatRelClose(ri);
 				heap_close(matrel, NoLock);
-				return;
+				return base;
 			}
 
 			SetCombinerDestReceiverHashFunc(state->dest, hash);
@@ -160,8 +144,6 @@ init_query_state(ContQueryWorkerState *state, ContExecutor *exec, ResourceOwner 
 
 	(*state->dest->rStartup) (state->dest, state->query_desc->operation, state->query_desc->tupDesc);
 
-	cq_stat_init(&state->stats, state->view->id, 0);
-
 	/*
 	 * The main loop initializes and ends plans across plan executions, so it expects
 	 * the plan to be uninitialized
@@ -169,114 +151,21 @@ init_query_state(ContQueryWorkerState *state, ContExecutor *exec, ResourceOwner 
 	ExecEndNode(state->query_desc->planstate);
 	FreeExecutorState(state->query_desc->estate);
 
-	MemoryContextSwitchTo(old_cxt);
-}
+	CurrentResourceOwner = res;
 
-static void
-cleanup_query_state(ContQueryWorkerState **states, Oid id)
-{
-	ContQueryWorkerState *state = states[id];
-
-	if (state == NULL)
-		return;
-
-	MemoryContextDelete(state->state_cxt);
-	pfree(state);
-	states[id] = NULL;
-}
-
-static ContQueryWorkerState **
-init_query_states_array(MemoryContext context)
-{
-	MemoryContext old_cxt = MemoryContextSwitchTo(context);
-	ContQueryWorkerState **states = palloc0(MAXALIGN(mul_size(sizeof(ContQueryWorkerState *), MAX_CQS)));
-	MemoryContextSwitchTo(old_cxt);
-
-	return states;
-}
-
-static ContQueryWorkerState *
-get_query_state(ContQueryWorkerState **states, ContExecutor *exec, ResourceOwner owner)
-{
-	ContQueryWorkerState *state = states[exec->cur_query_id];
-	HeapTuple tuple;
-	ResourceOwner old_owner;
-
-	MyCQStats = NULL;
-
-	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
-	if (state == NULL)
-	{
-		CommitTransactionCommand();
-		StartTransactionCommand();
-	}
-
-	old_owner = CurrentResourceOwner;
-	CurrentResourceOwner = owner;
-
-	PushActiveSnapshot(GetTransactionSnapshot());
-
-	tuple = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(exec->cur_query_id));
-
-	/* Was the continuous view removed? */
-	if (!HeapTupleIsValid(tuple))
-	{
-		PopActiveSnapshot();
-		cleanup_query_state(states, exec->cur_query_id);
-		return NULL;
-	}
-
-	if (state != NULL)
-	{
-		/* Was the continuous view modified? In our case this means remove the old view and add a new one */
-		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
-		if (row->hash != state->view->hash)
-		{
-			cleanup_query_state(states, exec->cur_query_id);
-			state = NULL;
-		}
-	}
-
-	ReleaseSysCache(tuple);
-
-	if (state == NULL)
-	{
-		MemoryContext old_cxt = MemoryContextSwitchTo(exec->cxt);
-		state = palloc0(sizeof(ContQueryWorkerState));
-		init_query_state(state, exec, owner);
-		states[exec->cur_query_id] = state;
-		MemoryContextSwitchTo(old_cxt);
-
-		if (state->view == NULL)
-		{
-			PopActiveSnapshot();
-			cleanup_query_state(states, exec->cur_query_id);
-			return NULL;
-		}
-	}
-
-	PopActiveSnapshot();
-
-	CurrentResourceOwner = old_owner;
-
-	MyCQStats = &state->stats;
-
-	return state;
+	return base;
 }
 
 void
 ContinuousQueryWorkerMain(void)
 {
-	ResourceOwner owner = ResourceOwnerCreate(NULL, "WorkerResourceOwner");
-	ContQueryWorkerState **states;
-	ContQueryWorkerState *state;
-	ContExecutor *cont_exec = ContExecutorNew(Worker);
+	ContExecutor *cont_exec = ContExecutorNew(Worker, &init_query_state);
 	Oid query_id;
+
+	WorkerResOwner = ResourceOwnerCreate(NULL, "WorkerResOwner");
 
 	/* Workers never perform any writes, so only need read only transactions. */
 	XactReadOnly = true;
-
-	states = init_query_states_array(cont_exec->cxt);
 
 	for (;;)
 	{
@@ -289,25 +178,20 @@ ContinuousQueryWorkerMain(void)
 		{
 			Plan *plan = NULL;
 			EState *estate = NULL;
+			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->current_query;
 
 			PG_TRY();
 			{
-				state = get_query_state(states, cont_exec, owner);
-
 				if (state == NULL)
-				{
-					ContExecutorPurgeQuery(cont_exec);
 					goto next;
-				}
 
 				CHECK_FOR_INTERRUPTS();
 
-				debug_query_string = NameStr(state->view->name);
-				MemoryContextSwitchTo(state->tmp_cxt);
+				MemoryContextSwitchTo(state->base.tmp_cxt);
 				state->query_desc->estate = estate = CreateEState(state->query_desc);
 
 				SetEStateSnapshot(estate);
-				CurrentResourceOwner = owner;
+				CurrentResourceOwner = WorkerResOwner;
 
 				/* initialize the plan for execution within this xact */
 				plan = state->query_desc->plannedstmt->planTree;
@@ -321,8 +205,8 @@ ContinuousQueryWorkerMain(void)
 				ExecEndNode(state->query_desc->planstate);
 				state->query_desc->planstate = NULL;
 
-				MemoryContextResetAndDeleteChildren(state->tmp_cxt);
-				MemoryContextSwitchTo(state->state_cxt);
+				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
+				MemoryContextSwitchTo(state->base.state_cxt);
 
 				UnsetEStateSnapshot(estate);
 				state->query_desc->estate = estate = NULL;
@@ -335,10 +219,7 @@ ContinuousQueryWorkerMain(void)
 				if (estate && ActiveSnapshotSet())
 					UnsetEStateSnapshot(estate);
 
-				if (state)
-					cleanup_query_state(states, query_id);
-
-				IncrementCQErrors(1);
+				ContExecutorPurgeQuery(cont_exec);
 
 				if (!continuous_query_crash_recovery)
 					exit(1);
@@ -352,13 +233,6 @@ ContinuousQueryWorkerMain(void)
 
 next:
 			ContExecutorEndQuery(cont_exec);
-
-			if (state)
-				cq_stat_report(false);
-			else
-				cq_stat_send_purge(query_id, 0, CQ_STAT_WORKER);
-
-			debug_query_string = NULL;
 		}
 
 		ContExecutorEndBatch(cont_exec);
@@ -368,7 +242,7 @@ next:
 
 	for (query_id = 0; query_id < MAX_CQS; query_id++)
 	{
-		ContQueryWorkerState *state = states[query_id];
+		ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->states[query_id];
 		QueryDesc *query_desc;
 		EState *estate;
 
@@ -390,10 +264,10 @@ next:
 				query_desc->estate = estate = CreateEState(state->query_desc);
 
 			/* The cleanup functions below expect these things to be registered. */
-			RegisterSnapshotOnOwner(estate->es_snapshot, owner);
-			RegisterSnapshotOnOwner(query_desc->snapshot, owner);
+			RegisterSnapshotOnOwner(estate->es_snapshot, WorkerResOwner);
+			RegisterSnapshotOnOwner(query_desc->snapshot, WorkerResOwner);
 
-			CurrentResourceOwner = owner;
+			CurrentResourceOwner = WorkerResOwner;
 
 			if (query_desc->totaltime)
 				InstrStopNode(query_desc->totaltime, estate->es_processed);
@@ -406,7 +280,7 @@ next:
 			ExecutorEnd(query_desc);
 			FreeQueryDesc(query_desc);
 
-			MyCQStats = &state->stats;
+			MyCQStats = &state->base.stats;
 			cq_stat_report(true);
 		}
 		PG_CATCH();

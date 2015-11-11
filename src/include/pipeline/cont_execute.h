@@ -22,8 +22,10 @@
 
 #include "access/htup.h"
 #include "access/tupdesc.h"
+#include "catalog/pipeline_query_fn.h"
 #include "nodes/bitmapset.h"
 #include "nodes/pg_list.h"
+#include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/dsm_cqueue.h"
 #include "storage/spin.h"
@@ -99,7 +101,19 @@ extern void PartialTupleStateCopyFn(void *dest, void *src, int len);
 extern dsm_cqueue *GetWorkerQueue(void);
 extern dsm_cqueue *GetCombinerQueue(PartialTupleState *pts);
 
-typedef struct ContExecutor
+typedef struct ContQueryState
+{
+	Oid view_id;
+	ContinuousView *view;
+	MemoryContext state_cxt;
+	MemoryContext tmp_cxt;
+	CQStatEntry stats;
+} ContQueryState;
+
+typedef struct ContExecutor ContExecutor;
+typedef ContQueryState *(*ContQueryStateInit) (ContExecutor *exec, ContQueryState *state);
+
+struct ContExecutor
 {
 	MemoryContext cxt;
 	MemoryContext exec_cxt;
@@ -110,7 +124,6 @@ typedef struct ContExecutor
 	Bitmapset *queries;
 	bool update_queries;
 
-	Oid cur_query_id;
 	Bitmapset *exec_queries;
 	void *cursor;
 	int nitems;
@@ -122,9 +135,14 @@ typedef struct ContExecutor
 	List *yielded;
 
 	Bitmapset *queries_seen;
-} ContExecutor;
 
-extern ContExecutor *ContExecutorNew(ContQueryProcType type);
+	Oid current_query_id;
+	ContQueryState *current_query;
+	ContQueryState *states[MAX_CQS];
+	ContQueryStateInit initfn;
+};
+
+extern ContExecutor *ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn);
 extern void ContExecutorDestroy(ContExecutor *exec);
 extern void ContExecutorStartBatch(ContExecutor *exec);
 extern Oid ContExecutorStartNextQuery(ContExecutor *exec);
