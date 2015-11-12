@@ -172,7 +172,7 @@ StreamTupleStateCreate(HeapTuple tup, TupleDesc desc, bytea *packed_desc, Bitmap
 	StreamTupleState *tupstate = palloc0(sizeof(StreamTupleState));
 	int i;
 	int nrdescs = 0;
-	RecordTupleDesc *rdescs;
+	RecordTupleDesc *rdescs = NULL;
 
 	*len =  sizeof(StreamTupleState);
 	*len += VARSIZE(packed_desc);

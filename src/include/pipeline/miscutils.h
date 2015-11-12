@@ -28,8 +28,8 @@ extern void SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *at
 extern void DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf);
 
 /* for backends / bg workers to yield cpu */
-extern void SetNicePriority(void);
-extern void SetDefaultPriority(void);
+extern int SetNicePriority(void);
+extern int SetDefaultPriority(void);
 
 extern dsm_segment *dsm_find_or_attach(dsm_handle handle);
 

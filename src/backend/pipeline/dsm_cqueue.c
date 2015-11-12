@@ -101,7 +101,6 @@ dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len)
 void
 dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 {
-	LWLock *lock;
 	uint64_t head;
 	uint64_t tail;
 	Latch *producer_latch;
@@ -112,9 +111,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	bool needs_wrap;
 
 	Assert(cq->magic == MAGIC);
-
-	lock = &cq->lock;
-	Assert(LWLockHeldByMe(lock));
+	Assert(LWLockHeldByMe(&cq->lock));
 
 	len_needed = sizeof(dsm_cqueue_slot) + len;
 	if (len_needed > cq->size)

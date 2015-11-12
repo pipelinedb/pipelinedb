@@ -615,15 +615,12 @@ GetInferredStreamTupleDesc(Oid relid, List *colnames)
 	Form_pg_attribute *attrs;
 	AttrNumber attno = InvalidAttrNumber;
 	int i;
-	Form_pipeline_stream row;
 	MemoryContext old;
 	TupleDesc result;
 
-	Assert (HeapTupleIsValid(tup));
+	Assert(HeapTupleIsValid(tup));
+	Assert(((Form_pipeline_stream) GETSTRUCT(tup))->inferred);
 
-	row = (Form_pipeline_stream) GETSTRUCT(tup);
-
-	Assert(row->inferred);
 	raw = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_desc, &isnull);
 
 	if (isnull)
