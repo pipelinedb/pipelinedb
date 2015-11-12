@@ -18,17 +18,18 @@
 #include "nodes/primnodes.h"
 #include "utils/relcache.h"
 
-typedef struct {
+typedef struct ContinuousView
+{
 	Oid id;
 	Oid namespace;
 	NameData name;
 	RangeVar *matrel;
 	char *query;
 	int sw_step_factor;
-	int32 hash;
+	Oid oid; /* OID in pipeline_query table */
 } ContinuousView;
 
-extern Oid DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc, bool adhoc, Oid *pq_id);
+extern Oid DefineContinuousView(RangeVar *name, Query *query, Oid matrel, bool gc, bool adhoc, Oid *pq_id);
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern SelectStmt *GetContSelectStmt(RangeVar *rv);
 extern bool IsAContinuousView(RangeVar *name);

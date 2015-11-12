@@ -484,7 +484,7 @@ static ContQueryState *
 get_query_state(ContExecutor *exec)
 {
 	ContQueryState *state = exec->states[exec->current_query_id];
-	HeapTuple tuple;
+	HeapTuple tup;
 
 	MyCQStats = NULL;
 
@@ -497,10 +497,10 @@ get_query_state(ContExecutor *exec)
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	tuple = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(exec->current_query_id));
+	tup = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(exec->current_query_id));
 
 	/* Was the continuous view removed? */
-	if (!HeapTupleIsValid(tuple))
+	if (!HeapTupleIsValid(tup))
 	{
 		PopActiveSnapshot();
 		ContExecutorPurgeQuery(exec);
@@ -509,16 +509,15 @@ get_query_state(ContExecutor *exec)
 
 	if (state != NULL)
 	{
-		/* Was the continuous view modified? In our case this means remove the old view and add a new one */
-		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
-		if (row->hash != state->view->hash)
+		/* Was the continuous view modified? In our case this means remove the old view and add a new one. */
+		if (HeapTupleGetOid(tup) != state->view->oid)
 		{
 			ContExecutorPurgeQuery(exec);
 			state = NULL;
 		}
 	}
 
-	ReleaseSysCache(tuple);
+	ReleaseSysCache(tup);
 
 	if (state == NULL)
 	{

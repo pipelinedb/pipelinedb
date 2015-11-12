@@ -207,16 +207,14 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc, bool adhoc, Oid *pq_id)
+DefineContinuousView(RangeVar *name, Query *query, Oid matrel, bool gc, bool adhoc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
 	bool nulls[Natts_pipeline_query];
 	Datum values[Natts_pipeline_query];
 	NameData name_data;
-	NameData matrelname_data;
 	Oid id;
-	uint64_t hash;
 	Oid namespace;
 	Oid result;
 	char *query_str;
@@ -250,19 +248,11 @@ DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc
 	values[Anum_pipeline_query_name - 1] = NameGetDatum(&name_data);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
 	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(namespace);
-
-	/* Copy matrelname */
-	namestrcpy(&matrelname_data, matrelname->relname);
-	values[Anum_pipeline_query_matrelname - 1] = NameGetDatum(&matrelname_data);
+	values[Anum_pipeline_query_matrel - 1] = ObjectIdGetDatum(matrel);
 
 	/* Copy flags */
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
-
-	hash = (MurmurHash3_64(name->relname, strlen(name->relname), MURMUR_SEED) ^
-			MurmurHash3_64(query_str, strlen(query_str), MURMUR_SEED) ^
-			RangeVarGetRelid(matrelname, NoLock, false));
-	values[Anum_pipeline_query_hash - 1] = Int32GetDatum(hash);
 
 	MemSet(nulls, 0, sizeof(nulls));
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
@@ -293,7 +283,6 @@ GetMatRelationName(RangeVar *cvname)
 {
 	HeapTuple tuple;
 	Form_pipeline_query row;
-	char *namespace;
 	RangeVar *result;
 
 	tuple = GetPipelineQueryTuple(cvname);
@@ -303,8 +292,7 @@ GetMatRelationName(RangeVar *cvname)
 				errmsg("continuous view \"%s\" does not exist", cvname->relname)));
 
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
-	namespace = get_namespace_name(row->namespace);
-	result = makeRangeVar(namespace, pstrdup(NameStr(row->matrelname)), -1);
+	result = makeRangeVar(get_namespace_name(row->namespace), get_rel_name(row->matrel), -1);
 
 	ReleaseSysCache(tuple);
 
@@ -329,7 +317,8 @@ GetCVNameFromMatRelName(RangeVar *name)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace), CStringGetDatum(name->relname));
+	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace),
+			ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
 
 	if (!HeapTupleIsValid(tup))
 		return NULL;
@@ -432,7 +421,8 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace), CStringGetDatum(name->relname));
+	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace),
+			ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
 
 	if (!HeapTupleIsValid(tup))
 	{
@@ -461,13 +451,12 @@ RelIdIsAMatRel(Oid relid)
 {
 	Relation rel = heap_open(relid, NoLock);
 	Oid namespace = RelationGetNamespace(rel);
-	char *relname = pstrdup(RelationGetRelationName(rel));
 	HeapTuple tup;
 
 	heap_close(rel, NoLock);
 
 	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL,
-			ObjectIdGetDatum(namespace), CStringGetDatum(relname));
+			ObjectIdGetDatum(namespace), ObjectIdGetDatum(relid));
 
 	if (!HeapTupleIsValid(tup))
 		return false;
@@ -503,35 +492,33 @@ GetGCFlag(RangeVar *name)
 ContinuousView *
 GetContinuousView(Oid id)
 {
-	HeapTuple tuple = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
+	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
 	ContinuousView *view;
 	Form_pipeline_query row;
 	Datum tmp;
 	bool isnull;
-	char *namespace;
 	Query *query;
 
-	if (!HeapTupleIsValid(tuple))
+	if (!HeapTupleIsValid(tup))
 		return NULL;
 
 	view = palloc0(sizeof(ContinuousView));
-	row = (Form_pipeline_query) GETSTRUCT(tuple);
+	row = (Form_pipeline_query) GETSTRUCT(tup);
 
 	view->id = id;
+	view->oid = HeapTupleGetOid(tup);
 
-	namespace = get_namespace_name(row->namespace);
 	view->namespace = row->namespace;
-	view->matrel = makeRangeVar(namespace, pstrdup(NameStr(row->matrelname)), -1);
+	view->matrel = makeRangeVar(get_namespace_name(row->namespace), get_rel_name(row->matrel), -1);
 
 	namestrcpy(&view->name, NameStr(row->name));
-	view->hash = row->hash;
 
-	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
+	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 	view->query = deparse_query_def(query);
 	view->sw_step_factor = query->swStepFactor;
 
-	ReleaseSysCache(tuple);
+	ReleaseSysCache(tup);
 
 	return view;
 }

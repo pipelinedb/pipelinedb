@@ -496,7 +496,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(view, cont_query, matrel, context->is_sw,  
+	pqoid = DefineContinuousView(view, cont_query, matreloid, context->is_sw,
 								 IsContQueryAdhocProcess(),
 								 &cvid);
 	CommandCounterIncrement();

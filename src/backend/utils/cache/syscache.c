@@ -619,7 +619,7 @@ static const struct cachedesc cacheinfo[] = {
 		2,
 		{
 			Anum_pipeline_query_namespace,
-			Anum_pipeline_query_matrelname,
+			Anum_pipeline_query_matrel,
 			0,
 			0
 		},
