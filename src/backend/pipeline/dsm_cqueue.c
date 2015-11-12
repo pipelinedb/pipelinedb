@@ -26,9 +26,10 @@
 #define WAIT_SLEEP_NS 250
 #define MAX_WAIT_SLEEP_NS 5000 /* 5ms */
 
-static inline int
-dsm_cqueue_offset(dsm_cqueue *cq, int ptr)
+static inline uint64_t
+dsm_cqueue_offset(dsm_cqueue *cq, uint64_t ptr)
 {
+	Assert(cq->size > 0);
 	return ptr % cq->size;
 }
 
@@ -43,7 +44,7 @@ dsm_cqueue_needs_wrap(dsm_cqueue *cq, uint64_t start, int len)
 static inline dsm_cqueue_slot *
 dsm_cqueue_slot_get(dsm_cqueue *cq, uint64_t ptr)
 {
-	return (dsm_cqueue_slot *) (cq->bytes + dsm_cqueue_offset(cq, ptr));
+	return (dsm_cqueue_slot *) ((uintptr_t) cq->bytes + dsm_cqueue_offset(cq, ptr));
 }
 
 void
