@@ -21,8 +21,9 @@
 #include "executor/instrument.h"
 #include "nodes/params.h"
 #include "nodes/plannodes.h"
+#include "pipeline/cont_adhoc.h"
+#include "pipeline/cont_execute.h"
 #include "pipeline/bloom.h"
-#include "pipeline/tuplebuf.h"
 #include "utils/reltrigger.h"
 #include "utils/sortsupport.h"
 #include "utils/tuplestore.h"
@@ -1861,8 +1862,9 @@ typedef struct WindowAggState
  */
 typedef struct StreamScanState
 {
-	ScanState	ss;
-	TupleBufferBatchReader *reader;
+	ScanState ss;
+	ContExecutor *cont_executor;
+	AdhocExecutor *adhoc_executor;
 	StreamProjectionInfo *pi;
 } StreamScanState;
 

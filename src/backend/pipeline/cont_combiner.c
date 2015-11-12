@@ -37,7 +37,6 @@
 #include "pipeline/cqmatrel.h"
 #include "pipeline/groupcache.h"
 #include "pipeline/sw_vacuum.h"
-#include "pipeline/tuplebuf.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
@@ -55,15 +54,12 @@
 
 typedef struct
 {
-	Oid view_id;
-	ContinuousView *view;
+	ContQueryState base;
 	PlannedStmt *combine_plan;
 	PlannedStmt *groups_plan;
 	TimestampTz last_groups_plan;
 	TupleDesc desc;
-	MemoryContext state_cxt;
 	MemoryContext plan_cache_cxt;
-	MemoryContext tmp_cxt;
 	Tuplestorestate *batch;
 	TupleTableSlot *slot;
 	bool isagg;
@@ -74,19 +70,12 @@ typedef struct
 	GroupCache *cache;
 	Relation matrel;
 	ResultRelInfo *ri;
-	CQStatEntry stats;
 	TupleHashTable existing;
 } ContQueryCombinerState;
 
 /* stores the hashes of the current batch, in parallel to the order of the batch's tuplestore */
 static int64 *group_hashes = NULL;
 static int group_hashes_len = 0;
-
-static bool
-should_read_fn(TupleBufferReader *reader, TupleBufferSlot *slot)
-{
-	return Abs(slot->tuple->group_hash % continuous_query_num_combiners) == reader->proc->group_id;
-}
 
 /*
  * prepare_combine_plan
@@ -104,7 +93,7 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	 * see anything after the first batch was consumed.
 	 *
 	 */
-	Relation rel = heap_openrv(state->view->matrel, AccessShareLock);
+	Relation rel = heap_openrv(state->base.view->matrel, AccessShareLock);
 
 	plan->is_continuous = false;
 
@@ -288,7 +277,7 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 	cref->fields = list_make1(star);
 	res->val = (Node *) cref;
 	sel->targetList = list_make1(res);
-	sel->fromClause = list_make1(state->view->matrel);
+	sel->fromClause = list_make1(state->base.view->matrel);
 	sel->forCombineLookup = true;
 
 	/* populate the ParseState's p_varnamespace member */
@@ -296,7 +285,7 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 	ps->p_no_locking = true;
 	transformFromClause(ps, sel->fromClause);
 
-	qlist = pg_analyze_and_rewrite((Node *) sel, state->view->matrel->relname, NULL, 0);
+	qlist = pg_analyze_and_rewrite((Node *) sel, state->base.view->matrel->relname, NULL, 0);
 	query = (Query *) linitial(qlist);
 
 	if (state->ngroupatts > 0 && list_length(values))
@@ -388,13 +377,13 @@ select_existing_groups(ContQueryCombinerState *state, TupleHashTable existing)
 
 	PortalDefineQuery(portal,
 			NULL,
-			state->view->matrel->relname,
+			state->base.view->matrel->relname,
 			"SELECT",
 			list_make1(plan),
 			NULL);
 
 	dest = CreateDestReceiver(DestTupleTable);
-	SetTupleTableDestReceiverParams(dest, existing, state->tmp_cxt, true);
+	SetTupleTableDestReceiverParams(dest, existing, state->base.tmp_cxt, true);
 
 	PortalStart(portal, NULL, EXEC_NO_MATREL_LOCKING, NULL);
 
@@ -538,7 +527,7 @@ combine(ContQueryCombinerState *state)
 	DestReceiver *dest;
 	Tuplestorestate *result;
 
-	state->matrel = heap_openrv_extended(state->view->matrel, RowExclusiveLock, true);
+	state->matrel = heap_openrv_extended(state->base.view->matrel, RowExclusiveLock, true);
 
 	if (state->matrel == NULL)
 		return;
@@ -549,7 +538,7 @@ combine(ContQueryCombinerState *state)
 	{
 		FmgrInfo *eq_funcs;
 		FmgrInfo *hash_funcs;
-		MemoryContext hash_tmp_cxt = AllocSetContextCreate(state->tmp_cxt, "CombinerQueryHashTableTempCxt",
+		MemoryContext hash_tmp_cxt = AllocSetContextCreate(state->base.tmp_cxt, "CombinerQueryHashTableTempCxt",
 				ALLOCSET_DEFAULT_MINSIZE,
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
@@ -566,14 +555,14 @@ combine(ContQueryCombinerState *state)
 
 	PortalDefineQuery(portal,
 					  NULL,
-					  state->view->matrel->relname,
+					  state->base.view->matrel->relname,
 					  "SELECT",
 					  list_make1(state->combine_plan),
 					  NULL);
 
 	result = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	dest = CreateDestReceiver(DestTuplestore);
-	SetTuplestoreDestReceiverParams(dest, result, state->tmp_cxt, true);
+	SetTuplestoreDestReceiverParams(dest, result, state->base.tmp_cxt, true);
 
 	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, NULL);
 
@@ -601,45 +590,29 @@ combine(ContQueryCombinerState *state)
 	state->matrel = NULL;
 }
 
-static void
-init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
+static ContQueryState *
+init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 {
 	PlannedStmt *pstmt;
-	MemoryContext state_cxt;
-	MemoryContext old_cxt;
 	MemoryContext cache_tmp_cxt;
+	ContQueryCombinerState *state;
 
-	MemSet(state, 0, sizeof(ContQueryCombinerState));
+	state = (ContQueryCombinerState *) palloc0(sizeof(ContQueryCombinerState));
+	memcpy(&state->base, base, sizeof(ContQueryState));
+	pfree(base);
+	base = (ContQueryState *) state;
 
-	state_cxt = AllocSetContextCreate(context, "CombinerQueryStateCxt",
+	state->plan_cache_cxt = AllocSetContextCreate(base->state_cxt, "CombinerQueryPlanCacheCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	old_cxt = MemoryContextSwitchTo(state_cxt);
-
-	state->view_id = id;
-	state->state_cxt = state_cxt;
-	state->tmp_cxt = AllocSetContextCreate(state_cxt, "CombinerQueryTmpCxt",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-	state->plan_cache_cxt = AllocSetContextCreate(state_cxt, "CombinerQueryPlanCacheCxt",
+	cache_tmp_cxt = AllocSetContextCreate(base->state_cxt, "CombinerQueryTmpCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	cache_tmp_cxt = AllocSetContextCreate(state_cxt, "CombinerQueryTmpCxt",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
-	state->view = GetContinuousView(id);
-
-	if (state->view == NULL)
-		return;
-
-	pstmt = GetContPlan(state->view, Combiner);
+	pstmt = GetContPlan(base->view, Combiner);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 
@@ -659,12 +632,12 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		state->groupops = agg->grpOperators;
 		state->isagg = true;
 
-		matrel = heap_openrv_extended(state->view->matrel, AccessShareLock, true);
+		matrel = heap_openrv_extended(base->view->matrel, AccessShareLock, true);
 
 		if (matrel == NULL)
 		{
-			state->view = NULL;
-			return;
+			base->view = NULL;
+			return base;
 		}
 
 		ri = CQMatRelOpen(matrel);
@@ -676,118 +649,29 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		heap_close(matrel, AccessShareLock);
 
 		state->cache = GroupCacheCreate(continuous_query_combiner_cache_mem * 1024, state->ngroupatts, state->groupatts,
-				state->groupops, state->slot, state_cxt, cache_tmp_cxt);
+				state->groupops, state->slot, base->state_cxt, cache_tmp_cxt);
 	}
 
-	cq_stat_init(&state->stats, state->view->id, 0);
-
-	MemoryContextSwitchTo(old_cxt);
-}
-
-static void
-cleanup_query_state(ContQueryCombinerState **states, Oid id)
-{
-	ContQueryCombinerState *state = states[id];
-
-	if (state == NULL)
-		return;
-
-	if (state->matrel)
-		heap_close(state->matrel, RowExclusiveLock);
-	MemoryContextDelete(state->state_cxt);
-	pfree(state);
-	states[id] = NULL;
-}
-
-static ContQueryCombinerState **
-init_query_states_array(MemoryContext context)
-{
-	MemoryContext old_cxt = MemoryContextSwitchTo(context);
-	ContQueryCombinerState **states = palloc0(MAXALIGN(mul_size(sizeof(ContQueryCombinerState *), MAX_CQS)));
-	MemoryContextSwitchTo(old_cxt);
-
-	return states;
-}
-
-static ContQueryCombinerState *
-get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
-{
-	ContQueryCombinerState *state = states[id];
-	HeapTuple tuple;
-
-	MyCQStats = NULL;
-
-	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
-	if (state == NULL)
-	{
-		CommitTransactionCommand();
-		StartTransactionCommand();
-	}
-
-	PushActiveSnapshot(GetTransactionSnapshot());
-
-	tuple = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(id));
-
-	/* Was the continuous view removed? */
-	if (!HeapTupleIsValid(tuple))
-	{
-		PopActiveSnapshot();
-		cleanup_query_state(states, id);
-		return NULL;
-	}
-
-	if (state != NULL)
-	{
-		/* Was the continuous view modified? In our case this means remove the old view and add a new one */
-		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
-		if (row->hash != state->view->hash)
-		{
-			cleanup_query_state(states, id);
-			state = NULL;
-		}
-	}
-
-	ReleaseSysCache(tuple);
-
-	if (state == NULL)
-	{
-		MemoryContext old_cxt = MemoryContextSwitchTo(context);
-		state = palloc0(sizeof(ContQueryCombinerState));
-		init_query_state(state, id, context);
-		states[id] = state;
-		MemoryContextSwitchTo(old_cxt);
-
-		if (state->view == NULL)
-		{
-			PopActiveSnapshot();
-			cleanup_query_state(states, id);
-			return NULL;
-		}
-	}
-
-	PopActiveSnapshot();
-
-	MyCQStats = &state->stats;
-
-	return state;
+	return base;
 }
 
 static int
-read_batch(ContQueryCombinerState *state, TupleBufferBatchReader *reader)
+read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
 {
-	TupleBufferSlot *tbs;
+	PartialTupleState *pts;
+	int len;
 	int count = 0;
 
-	while ((tbs = TupleBufferBatchReaderNext(reader)) != NULL)
+	while ((pts = (PartialTupleState *) ContExecutorYieldItem(cont_exec, &len)) != NULL)
 	{
 		if (!TupIsNull(state->slot))
 			ExecClearTuple(state->slot);
 
-		ExecStoreTuple(heap_copytuple(tbs->tuple->heaptup), state->slot, InvalidBuffer, false);
+		ExecStoreTuple(heap_copytuple(pts->tup), state->slot, InvalidBuffer, false);
 		tuplestore_puttupleslot(state->batch, state->slot);
-		group_hashes[count] = tbs->tuple->group_hash;
+		group_hashes[count] = pts->hash;
 
-		IncrementCQRead(1, tbs->size);
+		IncrementCQRead(1, len);
 		count++;
 	}
 
@@ -797,148 +681,57 @@ read_batch(ContQueryCombinerState *state, TupleBufferBatchReader *reader)
 	return count;
 }
 
-static bool
-has_queries_to_process(Bitmapset *queries)
-{
-	Bitmapset *tmp = bms_copy(queries);
-	int id;
-	bool has_queries = false;
-
-	while ((id = bms_first_member(tmp)) >= 0)
-		if (id % continuous_query_num_combiners == MyContQueryProc->group_id)
-		{
-			has_queries = true;
-			break;
-		}
-
-	bms_free(tmp);
-
-	return has_queries;
-}
-
 void
 ContinuousQueryCombinerMain(void)
 {
-	TupleBufferBatchReader *reader;
-	MemoryContext run_cxt = AllocSetContextCreate(TopMemoryContext, "CombinerRunCxt",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-	ContQueryCombinerState **states = init_query_states_array(run_cxt);
-	ContQueryCombinerState *state = NULL;
 	ContQueryRunParams *run_params;
-	Bitmapset *queries;
-	TimestampTz last_processed = GetCurrentTimestamp();
-	bool has_queries;
-	int id;
+	ContExecutor *cont_exec = ContExecutorNew(Combiner, &init_query_state);
+	Oid query_id;
 
 	/* Set the commit level */
 	synchronous_commit = continuous_query_combiner_synchronous_commit;
 
-	ContQueryBatchContext = AllocSetContextCreate(run_cxt, "ContQueryBatchContext",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
-	reader = TupleBufferOpenBatchReader(CombinerTupleBuffer, &should_read_fn, ContQueryBatchContext);
-
-	/* Bootstrap the query ids we should process. */
-	StartTransactionCommand();
-	MemoryContextSwitchTo(run_cxt);
-	queries = GetAllContinuousViewIds();
-	CommitTransactionCommand();
-
-	has_queries = has_queries_to_process(queries);
-
-	MemoryContextSwitchTo(run_cxt);
+	MemoryContextSwitchTo(cont_exec->cxt);
 	group_hashes_len = continuous_query_batch_size;
 	group_hashes = palloc0(group_hashes_len * sizeof(int64));
 
 	for (;;)
 	{
-		uint32 num_processed = 0;
-		Bitmapset *tmp;
-		int id;
-		bool updated_queries = false;
-
-		TupleBufferBatchReaderTrySleep(reader, last_processed);
-
-		if (MyContQueryProc->group->terminate)
-			break;
-
 		/* If necessary, reallocate resources that depend on runtime parameters that were changed */
 		run_params = GetContQueryRunParams();
 		if (run_params->batch_size != group_hashes_len)
 		{
-			MemoryContextSwitchTo(run_cxt);
+			MemoryContextSwitchTo(cont_exec->cxt);
 			group_hashes_len = run_params->batch_size;
 			group_hashes = repalloc(group_hashes, group_hashes_len * sizeof(int64));
 			MemSet(group_hashes, 0, group_hashes_len * sizeof(int64));
 		}
 
-		/* If we had no queries, then rescan the catalog. */
-		if (!has_queries)
+		ContExecutorStartBatch(cont_exec);
+
+		if (ShouldTerminateContQueryProcess())
+			break;
+
+		while ((query_id = ContExecutorStartNextQuery(cont_exec)) != InvalidOid)
 		{
-			Bitmapset *new, *removed;
-			StartTransactionCommand();
-			MemoryContextSwitchTo(run_cxt);
-			new = GetAllContinuousViewIds();
-			CommitTransactionCommand();
+			int count = 0;
+			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->current_query;
 
-			removed = bms_difference(queries, new);
-			bms_free(queries);
-			queries = new;
-
-			while ((id = bms_first_member(removed)) >= 0)
-				cleanup_query_state(states, id);
-
-			bms_free(removed);
-
-			has_queries = has_queries_to_process(queries);
-		}
-
-		StartTransactionCommand();
-
-		MemoryContextSwitchTo(ContQueryBatchContext);
-
-		tmp = bms_copy(queries);
-		while ((id = bms_first_member(tmp)) >= 0)
-		{
 			PG_TRY();
 			{
-				int count = 0;
-
-				state = get_query_state(states, id, run_cxt);
-
 				if (state == NULL)
-				{
-					queries = bms_del_member(queries, id);
-					has_queries = has_queries_to_process(queries);
 					goto next;
-				}
 
 				CHECK_FOR_INTERRUPTS();
 
-				/* No need to process queries which we don't have tuples for. */
-				if (!TupleBufferBatchReaderHasTuplesForCQId(reader, id))
-					goto next;
+				MemoryContextSwitchTo(state->base.tmp_cxt);
 
-				debug_query_string = NameStr(state->view->name);
-				MemoryContextSwitchTo(state->tmp_cxt);
-
-				TupleBufferBatchReaderSetCQId(reader, id);
-
-				count = read_batch(state, reader);
+				count = read_batch(state, cont_exec);
 
 				if (count)
-				{
-					num_processed += count;
 					combine(state);
-				}
 
-				MemoryContextResetAndDeleteChildren(state->tmp_cxt);
-
-				IncrementCQExecutions(1);
+				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
 			}
 			PG_CATCH();
 			{
@@ -948,77 +741,36 @@ ContinuousQueryCombinerMain(void)
 				if (ActiveSnapshotSet())
 					PopActiveSnapshot();
 
-				MemoryContextSwitchTo(ContQueryBatchContext);
-
-				if (state)
-					cleanup_query_state(states, id);
-
-				IncrementCQErrors(1);
+				ContExecutorPurgeQuery(cont_exec);
 
 				if (!continuous_query_crash_recovery)
 					exit(1);
+
+				MemoryContextSwitchTo(cont_exec->exec_cxt);
 			}
 			PG_END_TRY();
 
 next:
-			TupleBufferBatchReaderRewind(reader);
-
-			/* after reading a full batch, update query bitset with any new queries seen */
-			if (reader->batch_done && !updated_queries)
-			{
-				Bitmapset *new;
-
-				updated_queries = true;
-
-				new = bms_difference(reader->queries_seen, queries);
-
-				if (!bms_is_empty(new))
-				{
-					MemoryContextSwitchTo(ContQueryBatchContext);
-					tmp = bms_add_members(tmp, new);
-
-					MemoryContextSwitchTo(run_cxt);
-					queries = bms_add_members(queries, new);
-
-					has_queries = has_queries_to_process(queries);
-				}
-
-				bms_free(new);
-			}
-
-			if (state)
-				cq_stat_report(false);
-			else
-				cq_stat_send_purge(id, 0, CQ_STAT_COMBINER);
-
-			debug_query_string = NULL;
+			ContExecutorEndQuery(cont_exec);
 		}
 
-		CommitTransactionCommand();
+		ContExecutorEndBatch(cont_exec);
 		pgstat_report_stat(false);
-
-		if (num_processed)
-			last_processed = GetCurrentTimestamp();
-
-		TupleBufferBatchReaderReset(reader);
-		MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 	}
 
-	for (id = 0; id < MAX_CQS; id++)
+	for (query_id = 0; query_id < MAX_CQS; query_id++)
 	{
-		ContQueryCombinerState *state = states[id];
+		ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->states[query_id];
 
 		if (state == NULL)
 			continue;
 
-		MyCQStats = &state->stats;
+		MyCQStats = &state->base.stats;
 		cq_stat_report(true);
 	}
 
-	TupleBufferCloseBatchReader(reader);
-	pfree(states);
 	MemoryContextSwitchTo(TopMemoryContext);
-	MemoryContextDelete(run_cxt);
+	ContExecutorDestroy(cont_exec);
 }
 
 /*
@@ -1027,22 +779,34 @@ next:
 PlannedStmt *
 GetCombinerLookupPlan(ContinuousView *view)
 {
-	ContQueryCombinerState state;
+	ContQueryCombinerState *state;
+	ContQueryState *base;
 	PlannedStmt *plan;
 	List *values = NIL;
+	ContExecutor exec;
 
-	init_query_state(&state, view->id, CurrentMemoryContext);
-	group_hashes = palloc0(continuous_query_batch_size * sizeof(int64));
+	exec.cxt = CurrentMemoryContext;
+	exec.current_query_id = view->id;
 
-	if (state.isagg && state.ngroupatts > 0)
+	base = palloc0(sizeof(ContQueryState));
+
+	base->view_id = view->id;
+	base->view = view;
+	base->state_cxt = CurrentMemoryContext;
+	base->tmp_cxt = CurrentMemoryContext;
+
+	state = (ContQueryCombinerState *) init_query_state(&exec, base);
+	group_hashes = palloc0(continuous_query_batch_size * sizeof(uint64));
+
+	if (state->isagg && state->ngroupatts > 0)
 	{
 		TupleHashTable existing;
 		FmgrInfo *eq_funcs;
 		FmgrInfo *hash_funcs;
 		Relation rel;
 
-		execTuplesHashPrepare(state.ngroupatts, state.groupops, &eq_funcs, &hash_funcs);
-		existing = BuildTupleHashTable(state.ngroupatts, state.groupatts, eq_funcs, hash_funcs, 1000,
+		execTuplesHashPrepare(state->ngroupatts, state->groupops, &eq_funcs, &hash_funcs);
+		existing = BuildTupleHashTable(state->ngroupatts, state->groupatts, eq_funcs, hash_funcs, 1000,
 				sizeof(HeapTupleEntryData), CurrentMemoryContext, CurrentMemoryContext);
 
 		rel = heap_openrv_extended(view->matrel, AccessShareLock, true);
@@ -1054,11 +818,11 @@ GetCombinerLookupPlan(ContinuousView *view)
 
 			while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
 			{
-				if (!TupIsNull(state.slot))
-					ExecClearTuple(state.slot);
+				if (!TupIsNull(state->slot))
+					ExecClearTuple(state->slot);
 
-				ExecStoreTuple(heap_copytuple(tuple), state.slot, InvalidBuffer, false);
-				tuplestore_puttupleslot(state.batch, state.slot);
+				ExecStoreTuple(heap_copytuple(tuple), state->slot, InvalidBuffer, false);
+				tuplestore_puttupleslot(state->batch, state->slot);
 				break;
 			}
 
@@ -1066,12 +830,12 @@ GetCombinerLookupPlan(ContinuousView *view)
 			heap_close(rel, AccessShareLock);
 		}
 
-		values = get_values(&state, existing);
+		values = get_values(state, existing);
 	}
 
-	plan = get_cached_groups_plan(&state, values);
+	plan = get_cached_groups_plan(state, values);
 
-	tuplestore_end(state.batch);
+	tuplestore_end(state->batch);
 
 	return plan;
 }

@@ -36,58 +36,7 @@ extern void *copy_iter_arg;
 extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
-extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
-
-/* Represents a single batch of inserts made into a stream. */
-typedef struct InsertBatch
-{
-	int id;
-	/* Number of acks from workers */
-	int num_wacks;
-	/* Number of acks from combiners */
-	int num_cacks;
-	/* Total number of tuples sent to workers */
-	int num_wtups;
-	/* Total number of tuples sent to combiners */
-	int num_ctups;
-	slock_t mutex;
-} InsertBatch;
-
-/* Represents the number of tuples processed for the stream batch. */
-typedef struct InsertBatchAck
-{
-	int batch_id;
-	InsertBatch *batch;
-	int count;
-} InsertBatchAck;
-
-typedef struct AdhocQuery
-{
-	int cq_id;
-	int *active_flag;
-	int count; 
-	InsertBatchAck ack;
-} AdhocQuery;
-
-typedef struct AdhocData
-{
-	int num_adhoc;
-	AdhocQuery *queries;
-
-} AdhocData;
-
+extern void CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 extern Bitmapset *GetStreamReaders(Oid relid);
-extern InsertBatch *InsertBatchCreate(void);
-extern void InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples);
-
-extern void InsertBatchWaitAndRemoveActive(InsertBatch *batch, int num_tuples, 
-							   int *active, int cq_id);
-
-extern void InsertBatchIncrementNumCTuples(InsertBatch *batch);
-extern void InsertBatchMarkAcked(InsertBatchAck *ack);
-extern int SendTupleToAdhoc(AdhocData *data,
-							HeapTuple tup,
-							TupleDesc desc,
-							Size *bytes);
 
 #endif

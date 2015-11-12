@@ -24,7 +24,9 @@
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "pgstat.h"
+#include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/dsm_cqueue.h"
 #include "pipeline/miscutils.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -43,11 +45,10 @@
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
 #include "utils/timeout.h"
-#include "pipeline/cont_adhoc_mgr.h"
 
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
 #define INIT_PROC_TABLE_SZ 4
-#define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
+#define NUM_BG_WORKERS (continuous_query_num_workers + continuous_query_num_combiners)
 #define MIN_WAIT_TERMINATE_MS 250
 
 typedef struct
@@ -72,17 +73,18 @@ static bool am_cont_adhoc = false;
 bool continuous_queries_enabled;
 bool continuous_queries_adhoc_enabled;
 bool continuous_query_crash_recovery;
-int continuous_query_num_combiners;
-int continuous_query_num_workers;
-int continuous_query_batch_size;
-int continuous_query_max_wait;
-int continuous_query_combiner_work_mem;
-int continuous_query_combiner_cache_mem;
-int continuous_query_combiner_synchronous_commit;
+int  continuous_query_num_combiners;
+int  continuous_query_num_workers;
+int  continuous_query_batch_size;
+int  continuous_query_max_wait;
+int  continuous_query_combiner_work_mem;
+int  continuous_query_combiner_cache_mem;
+int  continuous_query_combiner_synchronous_commit;
+int  continuous_query_ipc_shared_mem;
 double continuous_query_proc_priority;
 
 /* memory context for long-lived data */
-static MemoryContext ContQuerySchedulerMemCxt;
+static MemoryContext ContQuerySchedulerContext;
 
 /* flags set by signal handlers */
 static volatile sig_atomic_t got_SIGHUP = false;
@@ -93,8 +95,10 @@ static volatile sig_atomic_t got_SIGINT = false;
 /* the main continuous process scheduler shmem struct */
 typedef struct
 {
-	pid_t scheduler_pid;
-	HTAB *proc_table;
+	pid_t pid;
+	HTAB  *proc_table;
+	int   tranche_id;
+
 	ContQueryRunParams params;
 } ContQuerySchedulerShmemStruct;
 
@@ -109,18 +113,19 @@ ContQuerySchedulerShmemSize(void)
 	return MAXALIGN(sizeof(ContQuerySchedulerShmemStruct));
 }
 
-void
-SetAmContQueryAdhoc(bool s)
+static void
+update_run_params(void)
 {
-	am_cont_adhoc = s;
+	ContQueryRunParams *params = GetContQueryRunParams();
+	params->batch_size = continuous_query_batch_size;
+	params->max_wait = continuous_query_max_wait;
 }
 
-static void
-update_tuning_params(void)
-{
-	ContQuerySchedulerShmem->params.batch_size = continuous_query_batch_size;
-	ContQuerySchedulerShmem->params.max_wait = continuous_query_max_wait;
-}
+#define ContQueryDatabaseMetadataSize() (sizeof(ContQueryDatabaseMetadata) + \
+		(sizeof(ContQueryProc) * NUM_BG_WORKERS) + \
+	(sizeof(ContQueryProc) * max_worker_processes))
+
+static LWLockTranche DummyLWLockTranche = {"dummy", NULL, 1};
 
 void
 ContQuerySchedulerShmemInit(void)
@@ -128,7 +133,7 @@ ContQuerySchedulerShmemInit(void)
 	bool found;
 	Size size = ContQuerySchedulerShmemSize();
 
-	ContQuerySchedulerShmem = ShmemInitStruct("ContQueryScheduler Data", size, &found);
+	ContQuerySchedulerShmem = ShmemInitStruct("ContQuerySchedulerShmem", size, &found);
 
 	if (!found)
 	{
@@ -137,14 +142,18 @@ ContQuerySchedulerShmemInit(void)
 		MemSet(ContQuerySchedulerShmem, 0, ContQuerySchedulerShmemSize());
 
 		info.keysize = sizeof(Oid);
-		info.entrysize = MAXALIGN(add_size(sizeof(ContQueryProcGroup), mul_size(sizeof(ContQueryProc), TOTAL_SLOTS)));
+		info.entrysize = ContQueryDatabaseMetadataSize();
 		info.hash = oid_hash;
 
-		ContQuerySchedulerShmem->proc_table = ShmemInitHash("ContQueryScheduler Proc Table", INIT_PROC_TABLE_SZ,
+		ContQuerySchedulerShmem->proc_table = ShmemInitHash("ContQueryDatabaseMetadata", INIT_PROC_TABLE_SZ,
 				MAX_PROC_TABLE_SZ, &info, HASH_ELEM | HASH_FUNCTION);
 
-		update_tuning_params();
+		update_run_params();
+
+		ContQuerySchedulerShmem->tranche_id = LWLockNewTrancheId();
 	}
+
+	LWLockRegisterTranche(ContQuerySchedulerShmem->tranche_id, &DummyLWLockTranche);
 }
 
 ContQueryRunParams *
@@ -160,18 +169,18 @@ GetContQueryProcName(ContQueryProc *proc)
 
 	switch (proc->type)
 	{
-	case Combiner:
-		sprintf(buf, "%s%d [%s]", "combiner", proc->group_id, NameStr(proc->group->db_name));
-		break;
-	case Worker:
-		sprintf(buf, "%s%d [%s]", "worker", proc->group_id, NameStr(proc->group->db_name));
-		break;
-	case Scheduler:
-		return pstrdup("scheduler");
-		break;
-	case Adhoc:
-		return pstrdup("adhoc");
-		break;
+		case Combiner:
+			sprintf(buf, "combiner%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
+			break;
+		case Worker:
+			sprintf(buf, "worker%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
+			break;
+		case Adhoc:
+			sprintf(buf, "adhoc [%s]", NameStr(proc->db_meta->db_name));
+			break;
+		case Scheduler:
+			return pstrdup("scheduler");
+			break;
 	}
 
 	return buf;
@@ -209,7 +218,7 @@ IsContQueryCombinerProcess(void)
  * Format up the arglist, then fork and exec.
  */
 static pid_t
-cqschduler_forkexec(void)
+cqscheduler_forkexec(void)
 {
 	char *av[10];
 	int ac = 0;
@@ -240,7 +249,7 @@ StartContQueryScheduler(void)
 	pid_t pid;
 
 #ifdef EXEC_BACKEND
-	switch ((scheduler_pid = cqschduler_forkexec()))
+	switch ((pid = cqscheduler_forkexec()))
 #else
 	switch ((pid = fork_process()))
 #endif
@@ -323,7 +332,7 @@ sigint_handler(SIGNAL_ARGS)
 }
 
 /*
- * get_database_oids
+ * get_database_list
  *
  * Returns a list of all database OIDs found in pg_database.
  */
@@ -388,74 +397,128 @@ get_database_list(void)
 }
 
 static void
-cq_bgproc_main(Datum arg)
+purge_adhoc_queries(void)
+{
+	int id;
+	Bitmapset *view_ids;
+
+	StartTransactionCommand();
+	view_ids = GetAdhocContinuousViewIds();
+
+	while ((id = bms_first_member(view_ids)) >= 0)
+	{
+		ContinuousView *cv = GetContinuousView(id);
+		CleanupAdhocContinuousView(cv);
+	}
+
+	CommitTransactionCommand();
+}
+
+static void
+cont_bgworker_main(Datum arg)
 {
 	void (*run) (void);
+	ContQueryProc *proc;
 
-	MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
+	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
 	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->group->db_name), NULL);
+	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_meta->db_name), NULL);
 
 	/* if we got a cancel signal in prior command, quit */
 	CHECK_FOR_INTERRUPTS();
 
-	MyContQueryProc->latch = &MyProc->procLatch;
+	proc->latch = &MyProc->procLatch;
 
-	ereport(LOG, (errmsg("continuous query process \"%s\" running with pid %d", GetContQueryProcName(MyContQueryProc), MyProcPid)));
-	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(MyContQueryProc));
-
-	/*
-	 * The BackgroundWorkerHandle's slot is always in the range [0, max_worker_processes)
-	 * and will be unique for any background process being run. We use this knowledge to
-	 * assign our continuous query processes's a unique ID that fits within any TupleBuffer's
-	 * waiters Bitmapset.
-	 */
-	MyContQueryProc->id = MyContQueryProc->handle.slot;
-
-	/* Be nice! - give up some cpu */
-	SetNicePriority();
-
-	switch (MyContQueryProc->type)
+	switch (proc->type)
 	{
-	case Combiner:
-		am_cont_combiner = true;
-		run = &ContinuousQueryCombinerMain;
-		break;
-	case Worker:
-		am_cont_worker = true;
-
-		/* XXX - put this somewhere nicer */
-		AdhocMgrDeleteAdhocs();
-
-		run = &ContinuousQueryWorkerMain;
-		break;
-	default:
-		ereport(ERROR, (errmsg("continuous queries can only be run as worker or combiner processes")));
+		case Combiner:
+			am_cont_combiner = true;
+			run = &ContinuousQueryCombinerMain;
+			break;
+		case Worker:
+			am_cont_worker = true;
+			run = &ContinuousQueryWorkerMain;
+			break;
+		case Adhoc:
+			/* Clean up and die. */
+			purge_adhoc_queries();
+			proc->group_id = 0;
+			return;
+		default:
+			ereport(ERROR, (errmsg("continuous queries can only be run as worker or combiner processes")));
 	}
 
-	/* initialize process level CQ stats */
+	StartTransactionCommand();
+	proc->segment = dsm_attach(proc->db_meta->handle);
+	dsm_pin_mapping(proc->segment);
+	CommitTransactionCommand();
+
+	ereport(LOG, (errmsg("continuous query process \"%s\" running with pid %d",
+			GetContQueryProcName(proc), MyProcPid)));
+	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(proc));
+
+	/* Be nice! - give up some CPU. */
+	SetNicePriority();
+
+	/* Initialize process level CQ stats. */
 	cq_stat_init(&MyProcCQStats, 0, MyProcPid);
 
+	/* Run the continuous execution function. */
 	run();
 
-	/* purge proc level CQ stats */
+	/* Purge process level CQ stats. */
 	cq_stat_send_purge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+
+	dsm_detach(proc->segment);
+}
+
+static void
+dsm_cqueue_setup(ContQueryProc *proc)
+{
+	dsm_cqueue_peek_fn peek_fn;
+	dsm_cqueue_pop_fn pop_fn;
+	dsm_cqueue_copy_fn cpy_fn;
+	void *ptr;
+	Size size;
+
+	if (proc->type == Combiner)
+	{
+		peek_fn = &PartialTupleStatePeekFn;
+		pop_fn = &PartialTupleStatePopFn;
+		cpy_fn = &PartialTupleStateCopyFn;
+	}
+	else if (proc->type == Worker)
+	{
+		peek_fn = &StreamTupleStatePeekFn;
+		pop_fn = &StreamTupleStatePopFn;
+		cpy_fn = &StreamTupleStateCopyFn;
+	}
+	else
+		return;
+
+	size = continuous_query_ipc_shared_mem * 1024;
+	ptr = (char *) dsm_segment_address(proc->db_meta->segment) + (size * proc->id);
+	dsm_cqueue_init(ptr, size, GetContProcTrancheId());
+	dsm_cqueue_set_handlers((dsm_cqueue *) ptr, peek_fn, pop_fn, cpy_fn);
 }
 
 static bool
-run_background_proc(ContQueryProc *proc)
+run_cont_bgworker(ContQueryProc *proc)
 {
 	BackgroundWorker worker;
 	BackgroundWorkerHandle *handle;
 	bool success;
 
+	dsm_cqueue_setup(proc);
+
 	strcpy(worker.bgw_name, GetContQueryProcName(proc));
 
-	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION | BGWORKER_IS_CONT_QUERY_PROC;
+	worker.bgw_flags = (BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION |
+			BGWORKER_IS_CONT_QUERY_PROC);
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-	worker.bgw_main = cq_bgproc_main;
-	worker.bgw_notify_pid = 0;
+	worker.bgw_main = cont_bgworker_main;
+	worker.bgw_notify_pid = -1;
 	worker.bgw_restart_time = 1; /* recover in 1s */
 	worker.bgw_let_crash = false;
 	worker.bgw_main_arg = PointerGetDatum(proc);
@@ -466,90 +529,121 @@ run_background_proc(ContQueryProc *proc)
 	 * TODO(usmanm): We should probably use something like WaitForBackgroundWorkerStartup here, but
 	 * the postmaster can't signal the continuous query scheduler since it isn't a valid 'backend'.
 	 */
-
 	if (success)
-		proc->handle = *handle;
+		proc->bgw_handle = handle;
 
 	return success;
 }
 
 static void
-start_group(ContQueryProcGroup *grp)
-{
-	int slot_idx;
-	int group_id;
-
-	SpinLockInit(&grp->mutex);
-	SpinLockAcquire(&grp->mutex);
-
-	grp->active = true;
-	grp->terminate = false;
-
-	/* Start workers */
-	for (slot_idx = 0, group_id = 0; slot_idx < continuous_query_num_workers; slot_idx++, group_id++)
-	{
-		ContQueryProc *proc = &grp->procs[slot_idx];
-
-		MemSet(proc, 0, sizeof(ContQueryProc));
-
-		proc->type = Worker;
-		proc->group_id = group_id;
-		proc->group = grp;
-
-		run_background_proc(proc);
-	}
-
-	/* Start combiners */
-	for (group_id = 0; slot_idx < TOTAL_SLOTS; slot_idx++, group_id++)
-	{
-		ContQueryProc *proc = &grp->procs[slot_idx];
-
-		MemSet(proc, 0, sizeof(ContQueryProc));
-
-		proc->type = Combiner;
-		proc->group_id = group_id;
-		proc->group = grp;
-
-		run_background_proc(proc);
-	}
-
-	SpinLockRelease(&grp->mutex);
-}
-
-static void
-terminate_group(ContQueryProcGroup *grp)
+terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 {
 	bool found;
 	int i;
 
-	grp->active = true;
+	SpinLockAcquire(&db_meta->mutex);
 
-	for (i = 0; i < TOTAL_SLOTS; i++)
+	for (i = 0; i < NUM_BG_WORKERS; i++)
 	{
-		ContQueryProc *proc = &grp->procs[i];
+		ContQueryProc *proc = &db_meta->db_procs[i];
 
 		/* Wake up processes, so they can see the terminate flag. */
 		SetLatch(proc->latch);
 
 		/* Let workers crash now as well in case we force terminate them. */
-		ChangeBackgroundWorkerRestartState(&proc->handle, true, 0);
+		ChangeBackgroundWorkerRestartState(proc->bgw_handle, true, 0);
 	}
 
 	/* Wait for a bit and then force terminate any processes that are still alive. */
-	pg_usleep(Max(ContQuerySchedulerShmem->params.max_wait, MIN_WAIT_TERMINATE_MS) * 1000);
+	pg_usleep(Max(GetContQueryRunParams()->max_wait, MIN_WAIT_TERMINATE_MS) * 1000);
 
-	for (i = 0; i < TOTAL_SLOTS; i++)
+	for (i = 0; i < NUM_BG_WORKERS; i++)
 	{
-		ContQueryProc *proc = &grp->procs[i];
-		TerminateBackgroundWorker(&proc->handle);
+		ContQueryProc *proc = &db_meta->db_procs[i];
+		TerminateBackgroundWorker(proc->bgw_handle);
+		pfree(proc->bgw_handle);
 	}
 
-	hash_search(ContQuerySchedulerShmem->proc_table, &grp->db_oid, HASH_REMOVE, &found);
+	/* XXX: Force delete segment? */
+	dsm_detach(db_meta->segment);
+	db_meta->handle = 0;
+
+	SpinLockRelease(&db_meta->mutex);
+
+	hash_search(ContQuerySchedulerShmem->proc_table, &db_meta->db_oid, HASH_REMOVE, &found);
 
 	Assert(found);
+}
 
-	TupleBufferDrain(WorkerTupleBuffer, grp->db_oid);
-	TupleBufferDrain(CombinerTupleBuffer, grp->db_oid);
+static void
+start_database_workers(ContQueryDatabaseMetadata *db_meta)
+{
+	int slot_idx;
+	int group_id;
+	ContQueryProc *proc;
+	ResourceOwner res;
+	bool success = true;
+
+	SpinLockAcquire(&db_meta->mutex);
+
+	/* Create dsm_segment for all worker queues */
+	CurrentResourceOwner = ResourceOwnerCreate(NULL, "Database dsm_segment ResourceOwner");
+
+	db_meta->segment = dsm_create(continuous_query_ipc_shared_mem * 1024 * NUM_BG_WORKERS);
+	dsm_pin_mapping(db_meta->segment);
+	db_meta->handle = dsm_segment_handle(db_meta->segment);
+
+	res = CurrentResourceOwner;
+	CurrentResourceOwner = NULL;
+	ResourceOwnerDelete(res);
+
+	db_meta->terminate = false;
+
+	/* Start worker processes. */
+	for (slot_idx = 0, group_id = 0; slot_idx < continuous_query_num_workers; slot_idx++, group_id++)
+	{
+		proc = &db_meta->db_procs[slot_idx];
+		MemSet(proc, 0, sizeof(ContQueryProc));
+
+		proc->type = Worker;
+		proc->id = slot_idx;
+		proc->group_id = group_id;
+		proc->db_meta = db_meta;
+
+		success &= run_cont_bgworker(proc);
+	}
+
+	/* Start combiner processes. */
+	for (group_id = 0; slot_idx < NUM_BG_WORKERS; slot_idx++, group_id++)
+	{
+		proc = &db_meta->db_procs[slot_idx];
+		MemSet(proc, 0, sizeof(ContQueryProc));
+
+		proc->type = Combiner;
+		proc->id = slot_idx;
+		proc->group_id = group_id;
+		proc->db_meta = db_meta;
+
+		success &= run_cont_bgworker(proc);
+	}
+
+	/* Start a single adhoc process for initial state clean up. */
+	proc = db_meta->adhoc_procs;
+	MemSet(proc, 0, sizeof(ContQueryProc));
+
+	proc->type = Adhoc;
+	proc->group_id = 1;
+	proc->db_meta = db_meta;
+
+	success &= run_cont_bgworker(proc);
+
+	SpinLockRelease(&db_meta->mutex);
+
+	if (!success)
+	{
+		terminate_database_workers(db_meta);
+		elog(ERROR, "failed to start some continuous query background workers");
+	}
 }
 
 void
@@ -635,12 +729,12 @@ ContQuerySchedulerMain(int argc, char *argv[])
 	 * that we can reset the context during error recovery and thereby avoid
 	 * possible memory leaks.
 	 */
-	ContQuerySchedulerMemCxt = AllocSetContextCreate(TopMemoryContext,
-			"ContQuerySchedulerCtx",
+	ContQuerySchedulerContext = AllocSetContextCreate(TopMemoryContext,
+			"ContQuerySchedulerContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
-	MemoryContextSwitchTo(ContQuerySchedulerMemCxt);
+	MemoryContextSwitchTo(ContQuerySchedulerContext);
 
 	/*
 	 * If an exception is encountered, processing resumes here.
@@ -669,11 +763,11 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		 * Now return to normal top-level context and clear ErrorContext for
 		 * next time.
 		 */
-		MemoryContextSwitchTo(ContQuerySchedulerMemCxt);
+		MemoryContextSwitchTo(ContQuerySchedulerContext);
 		FlushErrorState();
 
 		/* Flush any leaked data in the top-level context */
-		MemoryContextResetAndDeleteChildren(ContQuerySchedulerMemCxt);
+		MemoryContextResetAndDeleteChildren(ContQuerySchedulerContext);
 
 		/* Now we can allow interrupts again */
 		RESUME_INTERRUPTS();
@@ -682,21 +776,22 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		 * Sleep at least 1 second after any error.  We don't want to be
 		 * filling the error logs as fast as we can.
 		 */
-		pg_usleep(1000000L);
+		pg_usleep(1000 * 1000);
 	}
+
 	/* We can now handle ereport(ERROR) */
 	PG_exception_stack = &local_sigjmp_buf;
 
 	/* must unblock signals before calling rebuild_database_list */
 	PG_SETMASK(&UnBlockSig);
 
-	ContQuerySchedulerShmem->scheduler_pid = MyProcPid;
+	ContQuerySchedulerShmem->pid = MyProcPid;
 
 	dbs = get_database_list();
-	if (list_length(dbs) * TOTAL_SLOTS > max_worker_processes)
+	if (list_length(dbs) * (NUM_BG_WORKERS + 1) > max_worker_processes)
 		ereport(ERROR,
-				(errmsg("%d background worker slots are required but there are only %d available", list_length(dbs) * TOTAL_SLOTS, max_worker_processes),
-						errhint("Each database requires %d background worker slots. Increase max_worker_processes to enable more capacity.", TOTAL_SLOTS)));
+				(errmsg("%d background worker slots are required but there are only %d available", list_length(dbs) * NUM_BG_WORKERS, max_worker_processes),
+						errhint("Each database requires %d background worker slots. Increase max_worker_processes to enable more capacity.", NUM_BG_WORKERS)));
 
 	if (ContSchedulerStartupHook != NULL)
 		ContSchedulerStartupHook();
@@ -710,14 +805,27 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		{
 			DatabaseEntry *db_entry = lfirst(lc);
 			bool found;
-			ContQueryProcGroup *grp = hash_search(ContQuerySchedulerShmem->proc_table, &db_entry->oid, HASH_ENTER, &found);
+			ContQueryDatabaseMetadata *db_meta = hash_search(ContQuerySchedulerShmem->proc_table,
+					&db_entry->oid, HASH_ENTER, &found);
 
 			/* If we don't have an entry for this dboid, initialize a new one and fire off bg procs */
 			if (!found)
 			{
-				grp->db_oid = db_entry->oid;
-				namestrcpy(&grp->db_name, NameStr(db_entry->name));
-				start_group(grp);
+				char *pos;
+
+				MemSet(db_meta, 0, ContQueryDatabaseMetadataSize());
+
+				db_meta->db_oid = db_entry->oid;
+				namestrcpy(&db_meta->db_name, NameStr(db_entry->name));
+				SpinLockInit(&db_meta->mutex);
+
+				pos = (char *) db_meta;
+				pos += sizeof(ContQueryDatabaseMetadata);
+				db_meta->db_procs = (ContQueryProc *) pos;
+				pos += sizeof(ContQueryProc) * NUM_BG_WORKERS;
+				db_meta->adhoc_procs = (ContQueryProc *) pos;
+
+				start_database_workers(db_meta);
 			}
 		}
 
@@ -728,17 +836,10 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		 * Wait until naptime expires or we get some type of signal (all the
 		 * signal handlers will wake us by calling SetLatch).
 		 */
-		rc = WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, 1000);
-
+		rc = WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, 5000);
 		ResetLatch(&MyProc->procLatch);
 
 		DisableCatchupInterrupt();
-
-		if (rc & WL_TIMEOUT)
-		{
-			/* XXX - put this in a nicer place. */
-			AdhocMgrPeriodicDrain();
-		}
 
 		/*
 		 * Emergency bailout if postmaster has died.  This is to avoid the
@@ -758,42 +859,45 @@ ContQuerySchedulerMain(int argc, char *argv[])
 			ProcessConfigFile(PGC_SIGHUP);
 
 			/* update tuning parameters, so that they can be read downstream by background processes */
-			update_tuning_params();
+			update_run_params();
 		}
 
 		/* terminate a proc group? */
 		if (got_SIGUSR2)
 		{
 			HASH_SEQ_STATUS status;
-			ContQueryProcGroup *grp;
+			ContQueryDatabaseMetadata *db_meta;
 
 			got_SIGUSR2 = false;
 
 			hash_seq_init(&status, ContQuerySchedulerShmem->proc_table);
-			while ((grp = (ContQueryProcGroup *) hash_seq_search(&status)) != NULL)
+			while ((db_meta = (ContQueryDatabaseMetadata *) hash_seq_search(&status)) != NULL)
 			{
 				ListCell *lc;
 
-				if (!grp->terminate)
+				if (!db_meta->terminate)
 					continue;
 
 				foreach(lc, dbs)
 				{
 					DatabaseEntry *entry = lfirst(lc);
-					if (entry->oid == grp->db_oid)
+					if (entry->oid == db_meta->db_oid)
 					{
-						dbs = list_delete(dbs, entry);
+						dbs = list_delete_ptr(dbs, entry);
+						pfree(entry);
 						break;
 					}
 				}
 
-				terminate_group(grp);
+				terminate_database_workers(db_meta);
 			}
 		}
 
 		/* refresh db list? */
 		if (got_SIGINT)
 		{
+			got_SIGINT = false;
+
 			list_free_deep(dbs);
 			dbs = get_database_list();
 		}
@@ -802,7 +906,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 	/* Normal exit from the continuous query scheduler is here */
 	ereport(LOG, (errmsg("continuous query scheduler shutting down")));
 
-	ContQuerySchedulerShmem->scheduler_pid = 0;
+	ContQuerySchedulerShmem->pid = 0;
 
 	proc_exit(0); /* done */
 }
@@ -819,7 +923,7 @@ signal_cont_query_scheduler(int signal)
 	 */
 	for (ntries = 0;; ntries++)
 	{
-		if (ContQuerySchedulerShmem->scheduler_pid == 0)
+		if (ContQuerySchedulerShmem->pid == 0)
 		{
 			if (ntries >= 20) /* max wait 2.0 sec */
 			{
@@ -827,7 +931,7 @@ signal_cont_query_scheduler(int signal)
 				break;
 			}
 		}
-		else if (kill(ContQuerySchedulerShmem->scheduler_pid, signal) != 0)
+		else if (kill(ContQuerySchedulerShmem->pid, signal) != 0)
 		{
 			if (ntries >= 20) /* max wait 2.0 sec */
 			{
@@ -839,7 +943,7 @@ signal_cont_query_scheduler(int signal)
 			break; /* signal sent successfully */
 
 		CHECK_FOR_INTERRUPTS();
-		pg_usleep(100000L); /* wait 0.1 sec, then retry */
+		pg_usleep(100 * 1000); /* wait 0.1 sec, then retry */
 	}
 }
 
@@ -850,11 +954,12 @@ void
 SignalContQuerySchedulerTerminate(Oid db_oid)
 {
 	bool found;
-	ContQueryProcGroup *grp = (ContQueryProcGroup *) hash_search(ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, &found);
+	ContQueryDatabaseMetadata *db_meta = (ContQueryDatabaseMetadata *) hash_search(
+			ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, &found);
 
 	if (found)
 	{
-		grp->terminate = true;
+		db_meta->terminate = true;
 		signal_cont_query_scheduler(SIGUSR2);
 	}
 }
@@ -866,4 +971,130 @@ void
 SignalContQuerySchedulerRefresh(void)
 {
 	signal_cont_query_scheduler(SIGINT);
+}
+
+void
+SetAmContQueryAdhoc(bool value)
+{
+	am_cont_adhoc = value;
+}
+
+ContQueryProc *
+AdhocContQueryProcGet(void)
+{
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+	int i;
+	int idx;
+	ContQueryProc *proc = NULL;
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		elog(ERROR, "failed to find database metadata for continuous queries");
+
+	SpinLockAcquire(&db_meta->mutex);
+
+	for (i = 0; i < max_worker_processes; i++)
+	{
+		idx = (db_meta->adhoc_counter + i) % max_worker_processes;
+
+		/* We use group_idx > 0 as a slot occupied check. */
+		if (db_meta->adhoc_procs[idx].group_id == 0)
+		{
+			proc = &db_meta->adhoc_procs[idx];
+			proc->group_id = 0xdeadbeef;
+			db_meta->adhoc_counter++;
+			break;
+		}
+	}
+
+	SpinLockRelease(&db_meta->mutex);
+
+	if (proc)
+	{
+		MemSet(proc, 0, sizeof(ContQueryProc));
+
+		proc->type = Adhoc;
+		proc->id = rand();
+		proc->latch = &MyProc->procLatch;
+		proc->db_meta = db_meta;
+
+		proc->dsm_handle = 0;
+		proc->bgw_handle = NULL;
+	}
+	else
+		elog(ERROR, "no free slot for running adhoc continuous query process");
+
+	return proc;
+}
+
+void
+AdhocContQueryProcRelease(ContQueryProc *proc)
+{
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+
+	Assert(proc->type == Adhoc);
+	Assert(proc->group_id > 0);
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		elog(ERROR, "failed to find database metadata for continuous queries");
+
+	SpinLockAcquire(&db_meta->mutex);
+
+	/* Mark ContQueryProc struct as free. */
+	MemSet(proc, 0, sizeof(ContQueryProc));
+
+	SpinLockRelease(&db_meta->mutex);
+}
+
+dsm_handle
+GetDBDSMHandle(void)
+{
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+	dsm_handle handle;
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+			ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		elog(ERROR, "failed to find database metadata for continuous queries");
+
+	SpinLockAcquire(&db_meta->mutex);
+	handle = db_meta->handle;
+	SpinLockRelease(&db_meta->mutex);
+
+	return handle;
+}
+
+ContQueryProc *
+GetContQueryAdhocProcs(void)
+{
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+	ContQueryProc *procs;
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+			ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		elog(ERROR, "failed to find database metadata for continuous queries");
+
+	SpinLockAcquire(&db_meta->mutex);
+	procs = db_meta->adhoc_procs;
+	SpinLockRelease(&db_meta->mutex);
+
+	return procs;
+}
+
+int
+GetContProcTrancheId(void)
+{
+	return ContQuerySchedulerShmem->tranche_id;
 }

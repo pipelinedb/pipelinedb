@@ -24,7 +24,6 @@ extern void GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 extern ForeignScan *GetStreamScanPlan(PlannerInfo *root, RelOptInfo *baserel,
 		Oid streamid, ForeignPath *best_path, List *tlist, List *scan_clauses);
 extern void BeginStreamScan(ForeignScanState *node, int eflags);
-extern HeapTuple ExecStreamProject(StreamTuple *event, StreamScanState *node);
 extern List *PlanStreamModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int subplan_index);
 extern TupleTableSlot *IterateStreamScan(ForeignScanState *node);
 extern void ReScanStreamScan(ForeignScanState *node);
