@@ -108,7 +108,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	dsm_cqueue_slot *slot;
 	int len_needed;
 	char *pos;
-	bool needs_wrap;
+	bool needs_wrap = false;
 
 	Assert(cq->magic == MAGIC);
 	Assert(LWLockHeldByMe(&cq->lock));
