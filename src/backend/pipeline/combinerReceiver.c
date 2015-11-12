@@ -156,7 +156,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 		pts.hash = MurmurHash3_64(&c->cont_executor->current_query->view->name, sizeof(NameData), MURMUR_SEED);
 
 	if (CombinerReceiveHook)
-		CombinerReceiveHook(&pts);
+		CombinerReceiveHook(&pts, len);
 	else
 	{
 		dsm_cqueue *cq = GetCombinerQueue(&pts);

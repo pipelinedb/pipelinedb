@@ -16,7 +16,7 @@
 #include "tcop/dest.h"
 #include "pipeline/cont_execute.h"
 
-typedef void (*CombinerReceiveFunc) (PartialTupleState *pts);
+typedef void (*CombinerReceiveFunc) (PartialTupleState *pts, int len);
 extern CombinerReceiveFunc CombinerReceiveHook;
 
 extern DestReceiver *CreateCombinerDestReceiver(void);

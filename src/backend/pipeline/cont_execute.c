@@ -14,6 +14,7 @@
 #include "access/htup.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/namespace.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "catalog/pg_type.h"
@@ -64,14 +65,29 @@ PartialTupleStateCopyFn(void *dest, void *src, int len)
 void
 PartialTupleStatePeekFn(void *ptr, int len)
 {
-	if (PartialTupleStatePeekFnHook)
-		PartialTupleStatePeekFnHook(ptr, len);
-	else
+	PartialTupleState *pts = (PartialTupleState *) ptr;
+	pts->acks = ptr_offset(pts, pts->acks);
+	pts->tup = ptr_offset(pts, pts->tup);
+	pts->tup->t_data = (HeapTupleHeader) (((char *) pts->tup) + HEAPTUPLESIZE);
+
+	if (pts->query_id == InvalidOid)
 	{
-		PartialTupleState *pts = (PartialTupleState *) ptr;
-		pts->acks = ptr_offset(pts, pts->acks);
-		pts->tup = ptr_offset(pts, pts->tup);
-		pts->tup->t_data = (HeapTupleHeader) (((char *) pts->tup) + HEAPTUPLESIZE);
+		HeapTuple tup;
+		Oid namespace;
+		Form_pipeline_query row;
+
+		Assert(strlen(NameStr(pts->cv)));
+		Assert(strlen(NameStr(pts->namespace)));
+
+		namespace = get_namespace_oid(NameStr(pts->namespace), false);
+		Assert(OidIsValid(namespace));
+
+		tup = SearchSysCache2(PIPELINEQUERYNAMESPACENAME, ObjectIdGetDatum(namespace),
+				CStringGetDatum(NameStr(pts->cv)));
+		Assert(HeapTupleIsValid(tup));
+
+		row = (Form_pipeline_query) GETSTRUCT(tup);
+		pts->query_id = row->id;
 	}
 }
 
