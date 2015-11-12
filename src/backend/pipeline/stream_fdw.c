@@ -13,6 +13,7 @@
 #include "postgres.h"
 
 #include "access/htup_details.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "executor/executor.h"
 #include "foreign/fdwapi.h"
@@ -25,14 +26,17 @@
 #include "parser/parse_coerce.h"
 #include "parser/parsetree.h"
 #include "pgstat.h"
-#include "pipeline/cont_adhoc_mgr.h"
+#include "pipeline/cont_adhoc.h"
+#include "pipeline/cont_execute.h"
+#include "pipeline/cont_scheduler.h"
+#include "pipeline/dsm_cqueue.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/typcache.h"
-
 
 typedef struct StreamFdwInfo
 {
@@ -42,13 +46,18 @@ typedef struct StreamFdwInfo
 typedef struct StreamInsertState
 {
 	Bitmapset *targets;
-	InsertBatchAck *acks;
-	int nacks;
-	AdhocData *adhoc_data;
+
 	long count;
 	long bytes;
+
 	InsertBatch *batch;
+	InsertBatchAck *ack;
+
 	TupleDesc desc;
+	bytea *packed_desc;
+
+	dsm_cqueue *worker_queue;
+	AdhocInsertState *adhoc_state;
 } StreamInsertState;
 
 /*
@@ -250,29 +259,29 @@ map_field_positions(TupleDesc evdesc, TupleDesc desc)
  * may only change after many event projections.
  */
 static void
-init_proj_info(StreamProjectionInfo *pi, StreamTuple *tuple)
+init_proj_info(StreamProjectionInfo *pi, StreamTupleState *sts)
 {
 	MemoryContext old;
 
 	old = MemoryContextSwitchTo(pi->ctxt);
 
-	pi->eventdesc = UnpackTupleDesc(tuple->desc);
+	pi->eventdesc = UnpackTupleDesc(sts->desc);
 	pi->attrmap = map_field_positions(pi->eventdesc, pi->resultdesc);
 	pi->curslot = MakeSingleTupleTableSlot(pi->eventdesc);
 
-	pi->raweventdesc = palloc0(VARSIZE(tuple->desc) + VARHDRSZ);
-	memcpy(pi->raweventdesc, tuple->desc, VARSIZE(tuple->desc) + VARHDRSZ);
+	pi->raweventdesc = palloc0(VARSIZE(sts->desc) + VARHDRSZ);
+	memcpy(pi->raweventdesc, sts->desc, VARSIZE(sts->desc) + VARHDRSZ);
 
 	/*
 	 * Load RECORDOID tuple descriptors in the cache.
 	 */
-	if (tuple->num_record_descs)
+	if (sts->num_record_descs)
 	{
 		int i;
 
-		for (i = 0; i < tuple->num_record_descs; i++)
+		for (i = 0; i < sts->num_record_descs; i++)
 		{
-			RecordTupleDesc *rdesc = &tuple->record_descs[i];
+			RecordTupleDesc *rdesc = &sts->record_descs[i];
 			set_record_type_typemod(rdesc->typmod, UnpackTupleDesc(rdesc->desc));
 		}
 	}
@@ -303,11 +312,8 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype)
 	return result;
 }
 
-/*
- * ExecStreamProject
- */
-HeapTuple
-ExecStreamProject(StreamTuple *event, StreamScanState *node)
+static HeapTuple
+exec_stream_project(StreamTupleState *sts, StreamScanState *node)
 {
 	HeapTuple decoded;
 	MemoryContext oldcontext;
@@ -324,7 +330,7 @@ ExecStreamProject(StreamTuple *event, StreamScanState *node)
 	/* assume every element in the output tuple is null until we actually see values */
 	MemSet(nulls, true, desc->natts);
 
-	ExecStoreTuple(event->heaptup, pi->curslot, InvalidBuffer, false);
+	ExecStoreTuple(sts->tup, pi->curslot, InvalidBuffer, false);
 
 	/*
 	 * For each field in the event, place it in the corresponding field in the
@@ -383,7 +389,7 @@ ExecStreamProject(StreamTuple *event, StreamScanState *node)
 	{
 		if (pg_strcasecmp(NameStr(desc->attrs[i]->attname), ARRIVAL_TIMESTAMP) == 0)
 		{
-			values[i] = TimestampGetDatum(event->arrival_time);
+			values[i] = TimestampGetDatum(sts->arrival_time);
 			nulls[i] = false;
 			break;
 		}
@@ -415,7 +421,8 @@ PlanStreamModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int
 TupleTableSlot *
 IterateStreamScan(ForeignScanState *node)
 {
-	TupleBufferSlot *tbs;
+	StreamTupleState *sts;
+	int len;
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	StreamScanState *state = (StreamScanState *) node->fdw_state;
 
@@ -423,87 +430,33 @@ IterateStreamScan(ForeignScanState *node)
 	bytea *piraw;
 	bytea *tupraw;
 
-	/*
-	 * The TupleBuffer needs this slot until it gets unpinned, which we don't
-	 * know when will happen so we need to keep it around for a full CQ execution.
-	 */
-	tbs = TupleBufferBatchReaderNext(state->reader);
+	if (state->cont_executor)
+		sts = (StreamTupleState *) ContExecutorYieldItem(state->cont_executor, &len);
+	else if (state->adhoc_executor)
+		sts = AdhocExecutorYieldItem(state->adhoc_executor, &len);
+	else
+		elog(ERROR, "streams can only be read from worker or adhoc processes");
 
-	if (tbs == NULL)
+	if (sts == NULL)
 		return NULL;
 
-	IncrementCQRead(1, tbs->size);
+	IncrementCQRead(1, len);
 
 	/*
 	 * Check if the incoming event descriptor is different from the one we're
 	 * currently using before fully unpacking it.
 	 */
 	piraw = state->pi->raweventdesc;
-	tupraw = tbs->tuple->desc;
+	tupraw = sts->desc;
 
 	if (piraw == NULL || VARSIZE(piraw) != VARSIZE(tupraw) ||
 			memcmp(VARDATA(piraw), VARDATA(tupraw), VARSIZE(piraw)))
-	{
-		init_proj_info(state->pi, tbs->tuple);
-	}
+		init_proj_info(state->pi, sts);
 
-	tup = ExecStreamProject(tbs->tuple, state);
+	tup = exec_stream_project(sts, state);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	return slot;
-}
-
-/*
- * Initialize data structures to support sending data to adhoc tuple buffer
- */
-static void
-init_adhoc_data(AdhocData *data, Bitmapset *adhoc_targets)
-{
-	int num_adhoc = bms_num_members(adhoc_targets);
-	int ctr = 0;
-	int target = 0;
-	Bitmapset *tmp_targets;
-
-	memset(data, 0, sizeof(AdhocData));
-	data->num_adhoc = num_adhoc;
-
-	if (!data->num_adhoc)
-		return;
-
-	tmp_targets = bms_copy(adhoc_targets);
-	data->queries = palloc0(sizeof(AdhocQuery) * num_adhoc);
-
-	while ((target = bms_first_member(tmp_targets)) >= 0)
-	{
-		AdhocQuery *query = &data->queries[ctr++];
-
-		query->cq_id = target;
-		query->active_flag = AdhocMgrGetActiveFlag(target);
-		query->count = 0;
-
-		if (synchronous_stream_insert)
-		{
-			query->ack.batch = InsertBatchCreate();
-			query->ack.batch_id = query->ack.batch->id;
-			query->ack.count = 1;
-		}
-	}
-}
-
-/*
- * WaitForAdhoc
- */
-static void
-WaitForAdhoc(AdhocData *adhoc_data)
-{
-	int i = 0;
-	for (i = 0; i < adhoc_data->num_adhoc; ++i)
-	{
-		AdhocQuery *query = &adhoc_data->queries[i];
-
-		InsertBatchWaitAndRemoveActive(query->ack.batch, query->count,
-									   query->active_flag, query->cq_id);
-	}
 }
 
 /*
@@ -518,38 +471,41 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	StreamInsertState *sis = palloc0(sizeof(StreamInsertState));
 	Bitmapset *all_targets = GetStreamReaders(streamid);
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
-	Bitmapset *targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ? bms_difference(all_targets, targets) : NULL;
-	InsertBatchAck *acks = palloc0(sizeof(InsertBatchAck));
+	Bitmapset *worker_targets = bms_difference(all_targets, all_adhoc);
+	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ?
+			bms_difference(all_targets, worker_targets) : NULL;
+	InsertBatchAck *ack = NULL;
 	InsertBatch *batch = NULL;
-	int num_batches = 0;
-	int num_worker = bms_num_members(targets);
-	AdhocData *adhoc_data = palloc0(sizeof(AdhocData));
 	List *insert_tl;
 
 	Assert(fdw_private);
 	insert_tl = linitial(fdw_private);
 
-	init_adhoc_data(adhoc_data, adhoc_targets);
-
-	if (synchronous_stream_insert && num_worker)
+	if (!bms_is_empty(worker_targets))
 	{
-		batch = InsertBatchCreate();
-		num_batches = 1;
+		if (synchronous_stream_insert)
+		{
+			batch = InsertBatchCreate();
+			ack = palloc0(sizeof(InsertBatchAck));
 
-		acks[0].batch_id = batch->id;
-		acks[0].batch = batch;
-		acks[0].count = 1;
+			ack->batch_id = batch->id;
+			ack->batch = batch;
+		}
+
+		sis->worker_queue = GetWorkerQueue();
+		Assert(sis->worker_queue);
 	}
 
-	sis->targets = targets;
-	sis->acks = acks;
-	sis->nacks = num_batches;
-	sis->adhoc_data = adhoc_data;
+	if (!bms_is_empty(adhoc_targets))
+		sis->adhoc_state = AdhocInsertStateCreate(adhoc_targets);
+
+	sis->targets = worker_targets;
+	sis->ack = ack;
 	sis->batch = batch;
 	sis->count = 0;
 	sis->bytes = 0;
 	sis->desc = is_inferred_stream_relation(stream) ? ExecTypeFromTL(insert_tl, false) : RelationGetDescr(stream);
+	sis->packed_desc = PackTupleDesc(sis->desc);
 
 	result_info->ri_FdwState = sis;
 }
@@ -561,37 +517,35 @@ TupleTableSlot *
 ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 						  TupleTableSlot *slot, TupleTableSlot *planSlot)
 {
-	StreamInsertState *stream = (StreamInsertState *) result_info->ri_FdwState;
-	int num_targets = bms_num_members(stream->targets);
-	int count = 0;
-	Size bytes = 0;
+	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
 	HeapTuple tup = ExecMaterializeSlot(slot);
+	StreamTupleState *sts;
+	int len;
 
-	if (num_targets)
+	sts = StreamTupleStateCreate(tup, sis->desc, sis->packed_desc, sis->targets, sis->ack, &len);
+
+	if (sis->worker_queue)
 	{
-		StreamTuple *tuple =
-			MakeStreamTuple(tup, stream->desc, stream->nacks, stream->acks);
-
-		if (TupleBufferInsert(WorkerTupleBuffer, tuple, stream->targets))
+		/*
+		 * If we've written a batch to a worker process, start writing to
+		 * the next worker process.
+		 */
+		if (sis->count && (sis->count % continuous_query_batch_size == 0))
 		{
-			count++;
-			bytes += tuple->heaptup->t_len + HEAPTUPLESIZE;
+			dsm_cqueue_unlock(sis->worker_queue);
+			sis->worker_queue = GetWorkerQueue();
 		}
+
+		dsm_cqueue_push_nolock(sis->worker_queue, sts, len);
 	}
 
-	if (stream->adhoc_data->num_adhoc)
-	{
-		Size abytes = 0;
-		long acount;
+	if (sis->adhoc_state)
+		AdhocInsertStateSend(sis->adhoc_state, sts, len);
 
-		acount = SendTupleToAdhoc(stream->adhoc_data, tup, stream->desc, &abytes);
+	pfree(sts);
 
-		count = Max(count, acount);
-		bytes = Max(bytes, abytes);
-	}
-
-	stream->count += count;
-	stream->bytes += bytes;
+	sis->count++;
+	sis->bytes += tup->t_len + HEAPTUPLESIZE;
 
 	return slot;
 }
@@ -606,12 +560,13 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 
 	stream_stat_report(RelationGetRelid(result_info->ri_RelationDesc), sis->count, 1, sis->bytes);
 
-	if (synchronous_stream_insert)
+	if (sis->worker_queue)
 	{
-		if (bms_num_members(sis->targets))
+		dsm_cqueue_unlock(sis->worker_queue);
+		if (synchronous_stream_insert)
 			InsertBatchWaitAndRemove(sis->batch, sis->count);
-
-		if (sis->adhoc_data->num_adhoc)
-			WaitForAdhoc(sis->adhoc_data);
 	}
+
+	if (sis->adhoc_state)
+		AdhocInsertStateDestroy(sis->adhoc_state);
 }

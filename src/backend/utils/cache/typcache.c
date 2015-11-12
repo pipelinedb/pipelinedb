@@ -1265,7 +1265,13 @@ set_record_type_typemod(int32 typmod, TupleDesc desc)
 void
 reset_record_type_cache(void)
 {
+	if (RecordCacheHash)
+		hash_destroy(RecordCacheHash);
+	if (RecordCacheArray)
+		pfree(RecordCacheArray);
+
 	RecordCacheHash = NULL;
 	RecordCacheArray = NULL;
+	RecordCacheArrayLen = 0;
 	NextRecordTypmod = 0;
 }

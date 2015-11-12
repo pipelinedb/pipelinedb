@@ -54,7 +54,7 @@ SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 
 SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
  input_rows | input_bytes | errors 
 ------------+-------------+--------
-       2000 |      476000 |      0
+       2000 |      300000 |      0
 (1 row)
 
 DROP CONTINUOUS VIEW test_pipeline_stats0;
@@ -74,7 +74,7 @@ SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 
 SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
  input_rows | input_bytes | errors 
 ------------+-------------+--------
-       2000 |      476000 |      0
+       2000 |      300000 |      0
 (1 row)
 
 \c regression

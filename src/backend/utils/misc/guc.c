@@ -2599,13 +2599,13 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"tuple_buffer_blocks", PGC_BACKEND, RESOURCES_MEM,
-		 gettext_noop("Sets the maximum number of blocks in the tuple buffer."),
+		{"continuous_query_ipc_shared_mem", PGC_BACKEND, RESOURCES_MEM,
+		 gettext_noop("Sets the shared memory to be used for IPC between different processes."),
 		 NULL,
-		 GUC_UNIT_BLOCKS
+		 GUC_UNIT_KB
 		},
-		&tuple_buffer_blocks,
-		8192, 0, INT_MAX,
+		&continuous_query_ipc_shared_mem,
+		32768, 8192, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 

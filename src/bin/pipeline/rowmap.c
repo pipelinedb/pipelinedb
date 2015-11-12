@@ -3,7 +3,7 @@
 #include "adhoc_util.h"
 #include "bsd_rbtree.h"
 
-static size_t *g_row_key = 0;
+static size_t *g_row_key = NULL;
 static size_t g_row_key_n = 0;
 
 void
