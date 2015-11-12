@@ -31,6 +31,8 @@
 
 #define SLEEP_MS 1
 
+dsm_cqueue_peek_fn PartialTupleStatePeekFnHook = NULL;
+
 void
 PartialTupleStateCopyFn(void *dest, void *src, int len)
 {
@@ -62,10 +64,15 @@ PartialTupleStateCopyFn(void *dest, void *src, int len)
 void
 PartialTupleStatePeekFn(void *ptr, int len)
 {
-	PartialTupleState *pts = (PartialTupleState *) ptr;
-	pts->acks = ptr_offset(pts, pts->acks);
-	pts->tup = ptr_offset(pts, pts->tup);
-	pts->tup->t_data = (HeapTupleHeader) (((char *) pts->tup) + HEAPTUPLESIZE);
+	if (PartialTupleStatePeekFnHook)
+		PartialTupleStatePeekFnHook(ptr, len);
+	else
+	{
+		PartialTupleState *pts = (PartialTupleState *) ptr;
+		pts->acks = ptr_offset(pts, pts->acks);
+		pts->tup = ptr_offset(pts, pts->tup);
+		pts->tup->t_data = (HeapTupleHeader) (((char *) pts->tup) + HEAPTUPLESIZE);
+	}
 }
 
 void
@@ -296,7 +303,7 @@ attach_to_db_dsm_segment(void)
 	start_time = GetCurrentTimestamp();
 
 	/* Wait till all db workers have started up */
-	while ((handle = GetDBDSMHandle()) == 0)
+	while ((handle = GetDatabaseDSMHandle(NULL)) == 0)
 	{
 		pg_usleep(SLEEP_MS);
 

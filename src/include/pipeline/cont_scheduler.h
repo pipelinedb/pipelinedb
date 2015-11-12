@@ -137,7 +137,7 @@ extern void SetAmContQueryAdhoc(bool value);
 extern ContQueryProc *AdhocContQueryProcGet(void);
 extern void AdhocContQueryProcRelease(ContQueryProc *proc);
 
-extern dsm_handle GetDBDSMHandle(void);
+extern dsm_handle GetDatabaseDSMHandle(char *dbname);
 extern ContQueryProc *GetContQueryAdhocProcs(void);
 extern int GetContProcTrancheId(void);
 

@@ -94,6 +94,8 @@ typedef struct PartialTupleState
 	Oid query_id;
 } PartialTupleState;
 
+extern dsm_cqueue_peek_fn PartialTupleStatePeekFnHook;
+
 extern void PartialTupleStatePopFn(void *ptr, int len);
 extern void PartialTupleStatePeekFn(void *ptr, int len);
 extern void PartialTupleStateCopyFn(void *dest, void *src, int len);

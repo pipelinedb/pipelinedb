@@ -1054,14 +1054,29 @@ AdhocContQueryProcRelease(ContQueryProc *proc)
 }
 
 dsm_handle
-GetDBDSMHandle(void)
+GetDatabaseDSMHandle(char *dbname)
 {
-	bool found;
+	bool found = false;
 	ContQueryDatabaseMetadata *db_meta;
 	dsm_handle handle;
 
-	db_meta = (ContQueryDatabaseMetadata *) hash_search(
-			ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+	if (dbname == NULL)
+		db_meta = (ContQueryDatabaseMetadata *) hash_search(
+				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+	else
+	{
+		HASH_SEQ_STATUS scan;
+		hash_seq_init(&scan, ContQuerySchedulerShmem->proc_table);
+		while ((db_meta = (ContQueryDatabaseMetadata *) hash_seq_search(&scan)))
+		{
+			if (pg_strcasecmp(dbname, NameStr(db_meta->db_name)) == 0)
+			{
+				found = true;
+				break;
+			}
+		}
+		hash_seq_term(&scan);
+	}
 
 	if (!found)
 		elog(ERROR, "failed to find database metadata for continuous queries");
