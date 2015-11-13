@@ -88,6 +88,8 @@ PartialTupleStatePeekFn(void *ptr, int len)
 
 		row = (Form_pipeline_query) GETSTRUCT(tup);
 		pts->query_id = row->id;
+
+		ReleaseSysCache(tup);
 	}
 }
 
