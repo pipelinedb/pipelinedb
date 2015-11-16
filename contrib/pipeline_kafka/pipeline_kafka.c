@@ -29,6 +29,7 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "pipeline_kafka.h"
+#include "pipeline/stream.h"
 #include "postmaster/bgworker.h"
 #include "storage/ipc.h"
 #include "storage/latch.h"
