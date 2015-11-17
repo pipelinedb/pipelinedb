@@ -80,11 +80,15 @@ PartialTupleStatePeekFn(void *ptr, int len)
 		Assert(strlen(NameStr(pts->namespace)));
 
 		namespace = get_namespace_oid(NameStr(pts->namespace), false);
-		Assert(OidIsValid(namespace));
+
+		if (!OidIsValid(namespace))
+			return;
 
 		tup = SearchSysCache2(PIPELINEQUERYNAMESPACENAME, ObjectIdGetDatum(namespace),
 				CStringGetDatum(NameStr(pts->cv)));
-		Assert(HeapTupleIsValid(tup));
+
+		if (!HeapTupleIsValid(tup))
+			return;
 
 		row = (Form_pipeline_query) GETSTRUCT(tup);
 		pts->query_id = row->id;
