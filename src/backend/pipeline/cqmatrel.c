@@ -185,3 +185,14 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 	heap_insert(ri->ri_RelationDesc, tup, GetCurrentCommandId(true), 0, NULL);
 	ExecInsertCQMatRelIndexTuples(ri, slot, estate);
 }
+
+char *
+CVNameToMatRelName(char *cv_name)
+{
+	char *relname = palloc0(NAMEDATALEN);
+
+	strcpy(relname, cv_name);
+	append_suffix(relname, CQ_MATREL_SUFFIX, NAMEDATALEN);
+
+	return relname;
+}

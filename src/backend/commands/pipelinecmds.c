@@ -60,7 +60,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-#define CQ_MATREL_SUFFIX "_mrel"
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
 
@@ -354,17 +353,6 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid,
 	recordDependencyOnExpr(&dependent, (Node *) query, NIL, DEPENDENCY_NORMAL);
 }
 
-static char *
-get_matrel_name(char *cvname)
-{
-	char *relname = palloc0(NAMEDATALEN);
-
-	strcpy(relname, cvname);
-	append_suffix(relname, CQ_MATREL_SUFFIX, NAMEDATALEN);
-
-	return relname;
-}
-
 /*
  * ExecCreateContViewStmt
  *
@@ -411,7 +399,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 				(errcode(ERRCODE_DUPLICATE_CONTINUOUS_VIEW),
 				errmsg("continuous view \"%s\" already exists", view->relname)));
 
-	matrel = makeRangeVar(view->schemaname, get_matrel_name(view->relname), -1);
+	matrel = makeRangeVar(view->schemaname, CVNameToMatRelName(view->relname), -1);
 
 	/*
 	 * allowSystemTableMods is a global flag that, when true, allows certain column types
