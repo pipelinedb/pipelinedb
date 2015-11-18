@@ -156,18 +156,18 @@ FROM generate_series(1, 100) AS i ORDER BY key;
 CREATE CONTINUOUS VIEW hash_group AS SELECT x::int, COUNT(*) FROM hash_group_stream GROUP BY x;
 CREATE CONTINUOUS VIEW ls_hash_group1 AS SELECT x::int, minute(y::timestamptz), COUNT(*) FROM hash_group_stream WHERE ( arrival_timestamp > clock_timestamp() - interval '5 hour' ) GROUP BY x, minute;
 CREATE CONTINUOUS VIEW ls_hash_group2 AS SELECT x::int, y::timestamptz, COUNT(*) FROM hash_group_stream GROUP BY x, y;
-\d+ hash_group_mrel0;
-                   Table "public.hash_group_mrel0"
+\d+ hash_group_mrel;
+                   Table "public.hash_group_mrel"
  Column |  Type   | Modifiers | Storage | Stats target | Description 
 --------+---------+-----------+---------+--------------+-------------
  x      | integer |           | plain   |              | 
  count  | bigint  |           | plain   |              | 
 Indexes:
-    "hash_group_mrel0_expr_idx" btree (hash_group(x))
+    "hash_group_mrel_expr_idx" btree (hash_group(x))
 Options: fillfactor=50
 
-\d+ ls_hash_group1_mrel0;
-                               Table "public.ls_hash_group1_mrel0"
+\d+ ls_hash_group1_mrel;
+                               Table "public.ls_hash_group1_mrel"
       Column       |           Type           | Modifiers | Storage | Stats target | Description 
 -------------------+--------------------------+-----------+---------+--------------+-------------
  arrival_timestamp | timestamp with time zone |           | plain   |              | 
@@ -175,29 +175,29 @@ Options: fillfactor=50
  minute            | timestamp with time zone |           | plain   |              | 
  count             | bigint                   |           | plain   |              | 
 Indexes:
-    "ls_hash_group1_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, x, minute))
+    "ls_hash_group1_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, x, minute))
 Options: fillfactor=50
 
-\d+ ls_hash_group2_mrel0;
-                           Table "public.ls_hash_group2_mrel0"
+\d+ ls_hash_group2_mrel;
+                           Table "public.ls_hash_group2_mrel"
  Column |            Type             | Modifiers | Storage | Stats target | Description 
 --------+-----------------------------+-----------+---------+--------------+-------------
  x      | integer                     |           | plain   |              | 
  y      | timestamp(0) with time zone |           | plain   |              | 
  count  | bigint                      |           | plain   |              | 
 Indexes:
-    "ls_hash_group2_mrel0_expr_idx" btree (ls_hash_group(x, y))
+    "ls_hash_group2_mrel_expr_idx" btree (ls_hash_group(x, y))
 Options: fillfactor=50
 
-DROP INDEX hash_group_mrel0_expr_idx;
-ERROR:  cannot drop index hash_group_mrel0_expr_idx because table hash_group_mrel0 requires it
-HINT:  You can drop table hash_group_mrel0 instead.
-DROP INDEX ls_hash_group1_mrel0_expr_idx;
-ERROR:  cannot drop index ls_hash_group1_mrel0_expr_idx because table ls_hash_group1_mrel0 requires it
-HINT:  You can drop table ls_hash_group1_mrel0 instead.
-DROP INDEX ls_hash_group2_mrel0_expr_idx;
-ERROR:  cannot drop index ls_hash_group2_mrel0_expr_idx because table ls_hash_group2_mrel0 requires it
-HINT:  You can drop table ls_hash_group2_mrel0 instead.
+DROP INDEX hash_group_mrel_expr_idx;
+ERROR:  cannot drop index hash_group_mrel_expr_idx because table hash_group_mrel requires it
+HINT:  You can drop table hash_group_mrel instead.
+DROP INDEX ls_hash_group1_mrel_expr_idx;
+ERROR:  cannot drop index ls_hash_group1_mrel_expr_idx because table ls_hash_group1_mrel requires it
+HINT:  You can drop table ls_hash_group1_mrel instead.
+DROP INDEX ls_hash_group2_mrel_expr_idx;
+ERROR:  cannot drop index ls_hash_group2_mrel_expr_idx because table ls_hash_group2_mrel requires it
+HINT:  You can drop table ls_hash_group2_mrel instead.
 DROP CONTINUOUS VIEW hash_group;
 DROP CONTINUOUS VIEW ls_hash_group1;
 DROP CONTINUOUS VIEW ls_hash_group2;

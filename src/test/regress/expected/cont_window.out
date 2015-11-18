@@ -1,13 +1,13 @@
 CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PARTITION BY key ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM cqwindow_stream;
-\d+ cqwindow0_mrel0;
-                                  Table "public.cqwindow0_mrel0"
+\d+ cqwindow0_mrel;
+                                  Table "public.cqwindow0_mrel"
       Column       |           Type           | Modifiers | Storage  | Stats target | Description 
 -------------------+--------------------------+-----------+----------+--------------+-------------
  arrival_timestamp | timestamp with time zone |           | plain    |              | 
  key               | text(0)                  |           | extended |              | 
  sum               | bytea                    |           | extended |              | 
 Indexes:
-    "cqwindow0_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
+    "cqwindow0_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
 Options: fillfactor=50
 
 \d+ cqwindow0;
@@ -22,11 +22,11 @@ View definition:
    FROM ONLY cqwindow_stream;
 
 SELECT pipeline_get_overlay_viewdef('cqwindow0');
-                                                                                        pipeline_get_overlay_viewdef                                                                                        
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT cqwindow0_mrel0.key,                                                                                                                                                                              +
-     pg_catalog.numeric_sum(combine(naggstaterecv(cqwindow0_mrel0.sum)) OVER (PARTITION BY cqwindow0_mrel0.key ORDER BY cqwindow0_mrel0.arrival_timestamp ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)) AS sum+
-    FROM cqwindow0_mrel0;
+                                                                                      pipeline_get_overlay_viewdef                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT cqwindow0_mrel.key,                                                                                                                                                                            +
+     pg_catalog.numeric_sum(combine(naggstaterecv(cqwindow0_mrel.sum)) OVER (PARTITION BY cqwindow0_mrel.key ORDER BY cqwindow0_mrel.arrival_timestamp ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)) AS sum+
+    FROM cqwindow0_mrel;
 (1 row)
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2);
@@ -65,15 +65,15 @@ SELECT * FROM cqwindow0 ORDER BY key;
 (8 rows)
 
 CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITION BY key ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM cqwindow_stream;
-\d+ cqwindow1_mrel0;
-                                  Table "public.cqwindow1_mrel0"
+\d+ cqwindow1_mrel;
+                                  Table "public.cqwindow1_mrel"
       Column       |           Type           | Modifiers | Storage  | Stats target | Description 
 -------------------+--------------------------+-----------+----------+--------------+-------------
  arrival_timestamp | timestamp with time zone |           | plain    |              | 
  key               | text(0)                  |           | extended |              | 
  avg               | bigint[]                 |           | extended |              | 
 Indexes:
-    "cqwindow1_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
+    "cqwindow1_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
 Options: fillfactor=50
 
 \d+ cqwindow1;
@@ -88,11 +88,11 @@ View definition:
    FROM ONLY cqwindow_stream;
 
 SELECT pipeline_get_overlay_viewdef('cqwindow1');
-                                                                         pipeline_get_overlay_viewdef                                                                          
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT cqwindow1_mrel0.key,                                                                                                                                                 +
-     int8_avg(combine(cqwindow1_mrel0.avg) OVER (PARTITION BY cqwindow1_mrel0.key ORDER BY cqwindow1_mrel0.arrival_timestamp ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)) AS avg+
-    FROM cqwindow1_mrel0;
+                                                                        pipeline_get_overlay_viewdef                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT cqwindow1_mrel.key,                                                                                                                                               +
+     int8_avg(combine(cqwindow1_mrel.avg) OVER (PARTITION BY cqwindow1_mrel.key ORDER BY cqwindow1_mrel.arrival_timestamp ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)) AS avg+
+    FROM cqwindow1_mrel;
 (1 row)
 
 SELECT pipeline_get_worker_querydef('cqwindow1');
@@ -111,7 +111,7 @@ SELECT pipeline_get_combiner_querydef('cqwindow1');
   SELECT arrival_timestamp,       +
      key,                         +
      combine(avg) AS avg          +
-    FROM cqwindow1_mrel0          +
+    FROM cqwindow1_mrel           +
    GROUP BY key, arrival_timestamp
 (1 row)
 
@@ -166,13 +166,13 @@ SELECT pg_sleep(1);
  
 (1 row)
 
-SELECT COUNT(*) FROM cqwindow2_mrel0;
+SELECT COUNT(*) FROM cqwindow2_mrel;
  count 
 -------
      1
 (1 row)
 
-SELECT COUNT(*) FROM cqwindow3_mrel0;
+SELECT COUNT(*) FROM cqwindow3_mrel;
  count 
 -------
      1

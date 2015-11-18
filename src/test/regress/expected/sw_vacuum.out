@@ -19,13 +19,13 @@ SELECT * FROM cqvacuum ORDER BY key;
 
 -- Just verify that the mrel has more rows, as we can't gaurantee which time bucket the
 -- rows will fall in which makes it tricky to compare this result to a predetermined result
-SELECT (SELECT COUNT(*) FROM cqvacuum) < (SELECT COUNT(*) FROM cqvacuum_mrel0);
+SELECT (SELECT COUNT(*) FROM cqvacuum) < (SELECT COUNT(*) FROM cqvacuum_mrel);
  ?column? 
 ----------
  t
 (1 row)
 
-SELECT DISTINCT key FROM cqvacuum_mrel0 ORDER BY key;
+SELECT DISTINCT key FROM cqvacuum_mrel ORDER BY key;
  key 
 -----
  a
@@ -44,7 +44,7 @@ SELECT * FROM cqvacuum ORDER BY key;
 -----+-------
 (0 rows)
 
-SELECT key, SUM(count) FROM cqvacuum_mrel0 GROUP BY key ORDER BY key;
+SELECT key, SUM(count) FROM cqvacuum_mrel GROUP BY key ORDER BY key;
  key | sum 
 -----+-----
  a   |   4
@@ -62,13 +62,13 @@ SELECT * FROM cqvacuum ORDER BY key;
  c   |     2
 (3 rows)
 
-SELECT (SELECT COUNT(*) FROM cqvacuum) < (SELECT COUNT(*) FROM cqvacuum_mrel0);
+SELECT (SELECT COUNT(*) FROM cqvacuum) < (SELECT COUNT(*) FROM cqvacuum_mrel);
  ?column? 
 ----------
  t
 (1 row)
 
-SELECT DISTINCT key FROM cqvacuum_mrel0 ORDER BY key;
+SELECT DISTINCT key FROM cqvacuum_mrel ORDER BY key;
  key 
 -----
  a
@@ -85,7 +85,7 @@ SELECT * FROM cqvacuum ORDER BY key;
  c   |     2
 (3 rows)
 
-SELECT key, SUM(count) FROM cqvacuum_mrel0 GROUP BY key ORDER BY key;
+SELECT key, SUM(count) FROM cqvacuum_mrel GROUP BY key ORDER BY key;
  key | sum 
 -----+-----
  a   |   2
@@ -104,7 +104,7 @@ SELECT * FROM cqvacuum ORDER BY key;
 -----+-------
 (0 rows)
 
-SELECT key, SUM(count) FROM cqvacuum_mrel0 GROUP BY key ORDER BY key;
+SELECT key, SUM(count) FROM cqvacuum_mrel GROUP BY key ORDER BY key;
  key | sum 
 -----+-----
  a   |   2
@@ -118,7 +118,7 @@ SELECT * FROM cqvacuum ORDER BY key;
 -----+-------
 (0 rows)
 
-SELECT key, SUM(count) FROM cqvacuum_mrel0 GROUP BY key ORDER BY key;
+SELECT key, SUM(count) FROM cqvacuum_mrel GROUP BY key ORDER BY key;
  key | sum 
 -----+-----
 (0 rows)

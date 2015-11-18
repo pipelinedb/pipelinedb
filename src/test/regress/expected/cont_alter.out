@@ -1,10 +1,10 @@
 CREATE CONTINUOUS VIEW test_cont_alter AS SELECT x::int FROM stream;
 ALTER VIEW test_cont_alter RENAME TO lolcat;
 ERROR:  "test_cont_alter" is not a view
-ALTER TABLE test_cont_alter_mrel0 RENAME TO lolcat;
-ERROR:  cannot rename materialization table "test_cont_alter_mrel0" for continuous view "test_cont_alter"
+ALTER TABLE test_cont_alter_mrel RENAME TO lolcat;
+ERROR:  cannot rename materialization table "test_cont_alter_mrel" for continuous view "test_cont_alter"
 ALTER VIEW test_cont_alter ALTER COLUMN x SET DEFAULT 10;
 ERROR:  "test_cont_alter" is not a view
-ALTER TABLE test_cont_alter_mrel0 DROP COLUMN x;
-ERROR:  cannot alter materialization table "test_cont_alter_mrel0" for continuous view "test_cont_alter"
+ALTER TABLE test_cont_alter_mrel DROP COLUMN x;
+ERROR:  cannot alter materialization table "test_cont_alter_mrel" for continuous view "test_cont_alter"
 DROP CONTINUOUS VIEW test_cont_alter;

@@ -11,7 +11,7 @@ SELECT * FROM test_avg ORDER BY key;
  y   | 100
 (2 rows)
 
-SELECT * FROM test_avg_mrel0 ORDER BY key;
+SELECT * FROM test_avg_mrel ORDER BY key;
  key |      avg      
 -----+---------------
  x   | {2,3,5}
@@ -26,7 +26,7 @@ SELECT * FROM test_avg ORDER BY key;
  y   |  150
 (2 rows)
 
-SELECT * FROM test_avg_mrel0 ORDER BY key;
+SELECT * FROM test_avg_mrel ORDER BY key;
  key |      avg      
 -----+---------------
  x   | {4,33,505}

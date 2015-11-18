@@ -1958,7 +1958,7 @@ static struct config_int ConfigureNamesInt[] =
 			NULL
 		},
 		&max_prepared_xacts,
-		0, 0, MAX_BACKENDS,
+		10, 0, MAX_BACKENDS,
 		NULL, NULL, NULL
 	},
 

@@ -45,8 +45,8 @@ SELECT * FROM test_distinct_count;
     10
 (1 row)
 
-\d+ test_distinct_count_mrel0;
-             Table "public.test_distinct_count_mrel0"
+\d+ test_distinct_count_mrel;
+              Table "public.test_distinct_count_mrel"
  Column | Type | Modifiers | Storage  | Stats target | Description 
 --------+------+-----------+----------+--------------+-------------
  count  | hll  |           | extended |              | 
@@ -58,14 +58,14 @@ SELECT * FROM test_distinct_sw_count;
     10
 (1 row)
 
-\d+ test_distinct_sw_count_mrel0;
-                           Table "public.test_distinct_sw_count_mrel0"
+\d+ test_distinct_sw_count_mrel;
+                            Table "public.test_distinct_sw_count_mrel"
       Column       |           Type           | Modifiers | Storage  | Stats target | Description 
 -------------------+--------------------------+-----------+----------+--------------+-------------
  arrival_timestamp | timestamp with time zone |           | plain    |              | 
  count             | hll                      |           | extended |              | 
 Indexes:
-    "test_distinct_sw_count_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp))
+    "test_distinct_sw_count_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp))
 Options: fillfactor=50
 
 SELECT pg_sleep(1);

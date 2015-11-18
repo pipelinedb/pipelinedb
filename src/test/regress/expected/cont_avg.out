@@ -5,14 +5,14 @@ CREATE CONTINUOUS VIEW test_int4_avg AS SELECT k::text, AVG(v::int4) FROM int_st
 CREATE CONTINUOUS VIEW test_int2_avg AS SELECT k::text, AVG(v::int2) FROM int_stream_cqavg GROUP BY k;
 INSERT INTO int_stream_cqavg (k, v) VALUES ('x', 1), ('x', 1), ('x', 1);
 INSERT INTO int_stream_cqavg (k, v) VALUES ('y', -10000), ('y', 10000), ('y', 0);
-SELECT * FROM test_int4_avg_mrel0 ORDER BY k;
+SELECT * FROM test_int4_avg_mrel ORDER BY k;
  k |  avg  
 ---+-------
  x | {3,3}
  y | {3,0}
 (2 rows)
 
-SELECT * FROM test_int2_avg_mrel0 ORDER BY k;
+SELECT * FROM test_int2_avg_mrel ORDER BY k;
  k |  avg  
 ---+-------
  x | {3,3}
@@ -101,7 +101,7 @@ INSERT INTO interval_stream_cqavg (k, ts0, ts1) VALUES ('x', '2014-01-01 00:00:0
 INSERT INTO interval_stream_cqavg (k, ts0, ts1) VALUES ('x', '2014-01-01 00:00:00', '2014-01-02 01:00:00');
 INSERT INTO interval_stream_cqavg (k, ts0, ts1) VALUES ('x', '2014-01-01 00:00:00', '2014-01-02 11:00:00');
 -- We truncated down to day, so the hours shouldn't have affected the averages
-SELECT * FROM test_interval_avg_mrel0 ORDER BY k;
+SELECT * FROM test_interval_avg_mrel ORDER BY k;
  k |              avg               
 ---+--------------------------------
  x | {"@ 3 days","@ 0.000003 secs"}

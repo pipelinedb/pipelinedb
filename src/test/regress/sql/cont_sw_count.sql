@@ -17,7 +17,7 @@ DROP CONTINUOUS VIEW test_count;
 -- Truncate the timestamp to second so that we don't create 6 second buckets (step_factor = 10)
 CREATE CONTINUOUS VIEW sw_count0 AS SELECT COUNT(*) FROM cqswcount_stream WHERE second(arrival_timestamp) > clock_timestamp() - interval '60 second';
 
-CREATE VIEW sw_count1 AS SELECT combine(count) FROM sw_count0_mrel0 WHERE arrival_timestamp > clock_timestamp() - interval '5 second';
+CREATE VIEW sw_count1 AS SELECT combine(count) FROM sw_count0_mrel WHERE arrival_timestamp > clock_timestamp() - interval '5 second';
 
 INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x');
 

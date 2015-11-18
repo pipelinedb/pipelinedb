@@ -2,7 +2,7 @@ CREATE TABLESPACE testspace LOCATION '@testtablespace@';
 
 CREATE CONTINUOUS VIEW test_tablespace TABLESPACE testspace AS SELECT COUNT(*) FROM test_tablespace_stream;
 
-SELECT tablespace FROM pg_tables WHERE tablename='test_tablespace_mrel0';
+SELECT tablespace FROM pg_tables WHERE tablename='test_tablespace_mrel';
 
 DROP TABLESPACE testspace;
 

@@ -9,6 +9,6 @@ INSERT INTO cqlimit_stream (x) VALUES (16), (17), (18);
 INSERT INTO cqlimit_stream (x) VALUES (19), (20), (21);
 
 SELECT * FROM cqlimit ORDER BY x;
-SELECT * FROM cqlimit_mrel0 ORDER BY x;
+SELECT * FROM cqlimit_mrel ORDER BY x;
 
 DROP CONTINUOUS VIEW cqlimit;

@@ -67,14 +67,14 @@ SELECT count(*) FROM pipeline_combine WHERE combinefn IN
 -- Verify that the matrel looks ok
 CREATE CONTINUOUS VIEW test_combinable_aggs_v0 AS
 	SELECT x::integer, combinable_avg(y::integer) FROM cca_stream GROUP BY x;
-\d+ test_combinable_aggs_v0_mrel0;
-                 Table "public.test_combinable_aggs_v0_mrel0"
+\d+ test_combinable_aggs_v0_mrel;
+                 Table "public.test_combinable_aggs_v0_mrel"
      Column     |  Type   | Modifiers | Storage  | Stats target | Description 
 ----------------+---------+-----------+----------+--------------+-------------
  x              | integer |           | plain    |              | 
  combinable_avg | json    |           | extended |              | 
 Indexes:
-    "test_combinable_aggs_v0_mrel0_expr_idx" btree (hash_group(x))
+    "test_combinable_aggs_v0_mrel_expr_idx" btree (hash_group(x))
 Options: fillfactor=50
 
 INSERT INTO cca_stream (x, y) VALUES (0, 0);
@@ -101,7 +101,7 @@ SELECT round(combinable_avg) FROM test_combinable_aggs_v0 ORDER BY x;
      6
 (4 rows)
 
-SELECT x, combinable_avg FROM test_combinable_aggs_v0_mrel0 ORDER BY x;
+SELECT x, combinable_avg FROM test_combinable_aggs_v0_mrel ORDER BY x;
  x |      combinable_avg       
 ---+---------------------------
  0 | { "sum": 1, "count": 2 }

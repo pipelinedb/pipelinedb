@@ -71,7 +71,7 @@ SELECT count(*) FROM pipeline_combine WHERE combinefn IN
 CREATE CONTINUOUS VIEW test_combinable_aggs_v0 AS
 	SELECT x::integer, combinable_avg(y::integer) FROM cca_stream GROUP BY x;
 
-\d+ test_combinable_aggs_v0_mrel0;
+\d+ test_combinable_aggs_v0_mrel;
 
 INSERT INTO cca_stream (x, y) VALUES (0, 0);
 INSERT INTO cca_stream (x, y) VALUES (0, 1);
@@ -87,7 +87,7 @@ INSERT INTO cca_stream (x, y) VALUES (3, 6);
 INSERT INTO cca_stream (x, y) VALUES (3, 7);
 
 SELECT round(combinable_avg) FROM test_combinable_aggs_v0 ORDER BY x;
-SELECT x, combinable_avg FROM test_combinable_aggs_v0_mrel0 ORDER BY x;
+SELECT x, combinable_avg FROM test_combinable_aggs_v0_mrel ORDER BY x;
 
 -- We should also be able to run user combines on it
 SELECT combine(combinable_avg) FROM test_combinable_aggs_v0;

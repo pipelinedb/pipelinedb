@@ -6,12 +6,12 @@ CREATE CONTINUOUS VIEW test_avg AS SELECT key::text, avg(value::float8) FROM san
 INSERT INTO sanity_stream (key, value) VALUES ('x', 1), ('x', 2), ('y', 100);
 
 SELECT * FROM test_avg ORDER BY key;
-SELECT * FROM test_avg_mrel0 ORDER BY key;
+SELECT * FROM test_avg_mrel ORDER BY key;
 
 INSERT INTO sanity_stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
 
 SELECT * FROM test_avg ORDER BY key;
-SELECT * FROM test_avg_mrel0 ORDER BY key;
+SELECT * FROM test_avg_mrel ORDER BY key;
 
 CREATE CONTINUOUS VIEW cv AS SELECT key::text, COUNT(*), MAX(x::integer + y::integer) FROM sanity_stream GROUP BY key;
 

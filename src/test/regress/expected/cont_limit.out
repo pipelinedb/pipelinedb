@@ -20,7 +20,7 @@ SELECT * FROM cqlimit ORDER BY x;
  12
 (9 rows)
 
-SELECT * FROM cqlimit_mrel0 ORDER BY x;
+SELECT * FROM cqlimit_mrel ORDER BY x;
  x  
 ----
   1

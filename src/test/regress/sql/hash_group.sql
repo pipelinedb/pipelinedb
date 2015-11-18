@@ -16,13 +16,13 @@ CREATE CONTINUOUS VIEW hash_group AS SELECT x::int, COUNT(*) FROM hash_group_str
 CREATE CONTINUOUS VIEW ls_hash_group1 AS SELECT x::int, minute(y::timestamptz), COUNT(*) FROM hash_group_stream WHERE ( arrival_timestamp > clock_timestamp() - interval '5 hour' ) GROUP BY x, minute;
 CREATE CONTINUOUS VIEW ls_hash_group2 AS SELECT x::int, y::timestamptz, COUNT(*) FROM hash_group_stream GROUP BY x, y;
 
-\d+ hash_group_mrel0;
-\d+ ls_hash_group1_mrel0;
-\d+ ls_hash_group2_mrel0;
+\d+ hash_group_mrel;
+\d+ ls_hash_group1_mrel;
+\d+ ls_hash_group2_mrel;
 
-DROP INDEX hash_group_mrel0_expr_idx;
-DROP INDEX ls_hash_group1_mrel0_expr_idx;
-DROP INDEX ls_hash_group2_mrel0_expr_idx;
+DROP INDEX hash_group_mrel_expr_idx;
+DROP INDEX ls_hash_group1_mrel_expr_idx;
+DROP INDEX ls_hash_group2_mrel_expr_idx;
 
 DROP CONTINUOUS VIEW hash_group;
 DROP CONTINUOUS VIEW ls_hash_group1;

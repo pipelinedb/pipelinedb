@@ -6,17 +6,17 @@ SELECT * FROM cont_matrel;
      1
 (1 row)
 
-INSERT INTO cont_matrel_mrel0 (count) VALUES (1);
-ERROR:  cannot change materialization table "cont_matrel_mrel0" of continuous view "cont_matrel"
+INSERT INTO cont_matrel_mrel (count) VALUES (1);
+ERROR:  cannot change materialization table "cont_matrel_mrel" of continuous view "cont_matrel"
 HINT:  Toggle the "continuous_query_materialization_table_updatable" parameter to change this behavior.
-UPDATE cont_matrel_mrel0 SET count = 2;
-ERROR:  cannot change materialization table "cont_matrel_mrel0" of continuous view "cont_matrel"
+UPDATE cont_matrel_mrel SET count = 2;
+ERROR:  cannot change materialization table "cont_matrel_mrel" of continuous view "cont_matrel"
 HINT:  Toggle the "continuous_query_materialization_table_updatable" parameter to change this behavior.
-DELETE FROM cont_matrel_mrel0;
-ERROR:  cannot change materialization table "cont_matrel_mrel0" of continuous view "cont_matrel"
+DELETE FROM cont_matrel_mrel;
+ERROR:  cannot change materialization table "cont_matrel_mrel" of continuous view "cont_matrel"
 HINT:  Toggle the "continuous_query_materialization_table_updatable" parameter to change this behavior.
 SET continuous_query_materialization_table_updatable TO ON;
-UPDATE cont_matrel_mrel0 SET count = 2;
+UPDATE cont_matrel_mrel SET count = 2;
 SELECT * FROM cont_matrel;
  count 
 -------
@@ -30,7 +30,7 @@ SELECT * FROM cont_matrel;
      3
 (1 row)
 
-DELETE FROM cont_matrel_mrel0;
+DELETE FROM cont_matrel_mrel;
 SELECT * FROM cont_matrel;
  count 
 -------
@@ -44,7 +44,7 @@ SELECT * FROM cont_matrel;
 (1 row)
 
 TRUNCATE CONTINUOUS VIEW cont_matrel;
-INSERT INTO cont_matrel_mrel0 (count) VALUES (5);
+INSERT INTO cont_matrel_mrel (count) VALUES (5);
 SELECT * FROM cont_matrel;
  count 
 -------

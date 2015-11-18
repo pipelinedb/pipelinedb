@@ -92,15 +92,15 @@ CREATE CONTINUOUS VIEW test_view AS
   SELECT id::integer + avg(id) AS x, SUM(x::float8)
   FROM test_stream
   GROUP BY id;
-\d+ test_view_mrel0;
-                        Table "public.test_view_mrel0"
+\d+ test_view_mrel;
+                         Table "public.test_view_mrel"
  Column |       Type       | Modifiers | Storage  | Stats target | Description 
 --------+------------------+-----------+----------+--------------+-------------
  _0     | integer          |           | plain    |              | 
  _1     | bigint[]         |           | extended |              | 
  sum    | double precision |           | plain    |              | 
 Indexes:
-    "test_view_mrel0_expr_idx" btree (hash_group(_0))
+    "test_view_mrel_expr_idx" btree (hash_group(_0))
 Options: fillfactor=50
 
 INSERT INTO test_stream (id, x) VALUES (1, 1.5), (2, 3.0), (3, 4.5);
@@ -130,7 +130,7 @@ SELECT pg_sleep(1);
 (1 row)
 
 INSERT INTO stream (x) VALUES (1), (1);
-SELECT count FROM test_view_mrel0;
+SELECT count FROM test_view_mrel;
  count 
 -------
      2

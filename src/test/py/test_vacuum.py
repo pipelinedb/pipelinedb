@@ -52,17 +52,17 @@ def test_disk_spill(pipeline, clean_db):
     rows = pipeline.execute(
       'SELECT COUNT(*) FROM test_vacuum').first()['count']
     matrel_rows = pipeline.execute(
-      'SELECT COUNT(*) FROM test_vacuum_mrel0').first()['count']
+      'SELECT COUNT(*) FROM test_vacuum_mrel').first()['count']
     disk_pages = pipeline.execute("""
     SELECT pg_relation_filepath(oid), relpages
-    FROM pg_class WHERE relname = 'test_vacuum_mrel0';
+    FROM pg_class WHERE relname = 'test_vacuum_mrel';
     """).first()['relpages']
     for r in pipeline.execute("""
     SELECT relname, relpages
     FROM pg_class,
          (SELECT reltoastrelid
           FROM pg_class
-          WHERE relname = 'test_vacuum_mrel0') AS ss
+          WHERE relname = 'test_vacuum_mrel') AS ss
     WHERE oid = ss.reltoastrelid OR
           oid = (SELECT indexrelid
                  FROM pg_index
@@ -73,7 +73,7 @@ def test_disk_spill(pipeline, clean_db):
     for r in pipeline.execute("""
     SELECT c2.relname, c2.relpages
     FROM pg_class c, pg_class c2, pg_index i
-    WHERE c.relname = 'test_vacuum_mrel0' AND
+    WHERE c.relname = 'test_vacuum_mrel' AND
           c.oid = i.indrelid AND
           c2.oid = i.indexrelid
     ORDER BY c2.relname;

@@ -139,7 +139,7 @@ DROP CONTINUOUS VIEW test_string_agg;
 
 -- array_agg
 CREATE CONTINUOUS VIEW test_array_agg AS SELECT k::text, array_agg(v::integer) FROM cqobjectagg_stream GROUP BY k;
-\d+ test_array_agg_mrel0
+\d+ test_array_agg_mrel
 
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('x', 0), ('x', 1), ('x', 2), ('x', 3);
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('y', 0), ('y', 1);

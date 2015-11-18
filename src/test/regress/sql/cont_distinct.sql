@@ -42,10 +42,10 @@ INSERT INTO test_distinct_count_stream (z, y, x) VALUES (null, null, null);
 INSERT INTO test_distinct_count_stream (z, y, x) VALUES (null, null, null);
 
 SELECT * FROM test_distinct_count;
-\d+ test_distinct_count_mrel0;
+\d+ test_distinct_count_mrel;
 
 SELECT * FROM test_distinct_sw_count;
-\d+ test_distinct_sw_count_mrel0;
+\d+ test_distinct_sw_count_mrel;
 
 SELECT pg_sleep(1);
 SELECT * FROM test_distinct_sw_count_small;

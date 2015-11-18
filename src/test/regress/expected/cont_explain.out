@@ -15,7 +15,7 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
          ->  Tuplestore Scan
                Output: count
  Combiner Lookup Plan:
-   ->  Seq Scan on public.test_cont_explain1_mrel0
+   ->  Seq Scan on public.test_cont_explain1_mrel
          Output: count
 (13 rows)
 
@@ -31,11 +31,11 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
  Combiner Plan:
    ->  HashAggregate
          Output: x, combine(count)
-         Group Key: test_cont_explain2_mrel0.x
+         Group Key: test_cont_explain2_mrel.x
          ->  Tuplestore Scan
                Output: x, count
  Combiner Lookup Plan:
-   ->  Seq Scan on public.test_cont_explain2_mrel0
+   ->  Seq Scan on public.test_cont_explain2_mrel
          Output: x, count
 (15 rows)
 
@@ -51,11 +51,11 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
  Combiner Plan:
    ->  HashAggregate
          Output: x, y, combine(sum)
-         Group Key: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y
+         Group Key: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y
          ->  Tuplestore Scan
                Output: x, y, sum
  Combiner Lookup Plan:
-   ->  Seq Scan on public.test_cont_explain3_mrel0
+   ->  Seq Scan on public.test_cont_explain3_mrel
          Output: x, y, sum
 (15 rows)
 
@@ -74,13 +74,13 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
          ->  Tuplestore Scan
                Output: count
  Combiner Lookup Plan:
-   ->  Seq Scan on public.test_cont_explain1_mrel0
+   ->  Seq Scan on public.test_cont_explain1_mrel
          Output: count
 (13 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
-                                       CONTINUOUS QUERY PLANS                                        
------------------------------------------------------------------------------------------------------
+                                       CONTINUOUS QUERY PLANS                                       
+----------------------------------------------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
          Output: x::integer, count(*)
@@ -90,26 +90,26 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
  Combiner Plan:
    ->  HashAggregate
          Output: x, combine(count)
-         Group Key: test_cont_explain2_mrel0.x
+         Group Key: test_cont_explain2_mrel.x
          ->  Tuplestore Scan
                Output: x, count
  Combiner Lookup Plan:
    ->  Physical Group Lookup
-         Output: test_cont_explain2_mrel0.x, test_cont_explain2_mrel0.count
+         Output: test_cont_explain2_mrel.x, test_cont_explain2_mrel.count
          ->  Nested Loop
-               Output: test_cont_explain2_mrel0.x, test_cont_explain2_mrel0.count
+               Output: test_cont_explain2_mrel.x, test_cont_explain2_mrel.count
                ->  Values Scan on "*VALUES*"
                      Output: "*VALUES*".column1
-               ->  Bitmap Heap Scan on public.test_cont_explain2_mrel0
-                     Output: test_cont_explain2_mrel0.x, test_cont_explain2_mrel0.count
-                     Recheck Cond: (hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1)
-                     ->  Bitmap Index Scan on test_cont_explain2_mrel0_expr_idx
-                           Index Cond: (hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1)
+               ->  Bitmap Heap Scan on public.test_cont_explain2_mrel
+                     Output: test_cont_explain2_mrel.x, test_cont_explain2_mrel.count
+                     Recheck Cond: (hash_group(test_cont_explain2_mrel.x) = "*VALUES*".column1)
+                     ->  Bitmap Index Scan on test_cont_explain2_mrel_expr_idx
+                           Index Cond: (hash_group(test_cont_explain2_mrel.x) = "*VALUES*".column1)
 (24 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
-                                                     CONTINUOUS QUERY PLANS                                                      
----------------------------------------------------------------------------------------------------------------------------------
+                                                    CONTINUOUS QUERY PLANS                                                     
+-------------------------------------------------------------------------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
          Output: x::integer, y::text, sum(x::integer)
@@ -119,20 +119,20 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
  Combiner Plan:
    ->  HashAggregate
          Output: x, y, combine(sum)
-         Group Key: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y
+         Group Key: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y
          ->  Tuplestore Scan
                Output: x, y, sum
  Combiner Lookup Plan:
    ->  Physical Group Lookup
-         Output: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y, test_cont_explain3_mrel0.sum
+         Output: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y, test_cont_explain3_mrel.sum
          ->  Nested Loop
-               Output: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y, test_cont_explain3_mrel0.sum
+               Output: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y, test_cont_explain3_mrel.sum
                ->  Values Scan on "*VALUES*"
                      Output: "*VALUES*".column1
-               ->  Bitmap Heap Scan on public.test_cont_explain3_mrel0
-                     Output: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y, test_cont_explain3_mrel0.sum
-                     Recheck Cond: (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1)
-                     ->  Bitmap Index Scan on test_cont_explain3_mrel0_expr_idx
-                           Index Cond: (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1)
+               ->  Bitmap Heap Scan on public.test_cont_explain3_mrel
+                     Output: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y, test_cont_explain3_mrel.sum
+                     Recheck Cond: (hash_group(test_cont_explain3_mrel.x, test_cont_explain3_mrel.y) = "*VALUES*".column1)
+                     ->  Bitmap Index Scan on test_cont_explain3_mrel_expr_idx
+                           Index Cond: (hash_group(test_cont_explain3_mrel.x, test_cont_explain3_mrel.y) = "*VALUES*".column1)
 (24 rows)
 

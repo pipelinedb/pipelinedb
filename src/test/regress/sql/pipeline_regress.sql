@@ -76,7 +76,7 @@ CREATE CONTINUOUS VIEW test_view AS
   FROM test_stream
   GROUP BY id;
 
-\d+ test_view_mrel0;
+\d+ test_view_mrel;
 
 INSERT INTO test_stream (id, x) VALUES (1, 1.5), (2, 3.0), (3, 4.5);
 
@@ -98,7 +98,7 @@ INSERT INTO stream (x) VALUES (1), (1);
 SELECT pg_sleep(1);
 INSERT INTO stream (x) VALUES (1), (1);
 
-SELECT count FROM test_view_mrel0;
+SELECT count FROM test_view_mrel;
 SELECT count FROM test_view;
 
 DROP CONTINUOUS VIEW test_view;
