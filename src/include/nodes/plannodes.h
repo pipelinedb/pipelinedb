@@ -74,9 +74,7 @@ typedef struct PlannedStmt
 	/*
 	 * Continuous query fields
 	 */
-	bool is_continuous; /* should this be executed continuously? */
-	Oid	cq_id; /* continuous query id, valid only if is_continuous is true */
-	bool is_combine;
+	bool isContinuous; /* should this be executed continuously? */
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */

@@ -869,7 +869,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	estate->es_epqTupleSet = NULL;
 	estate->es_epqScanDone = NULL;
 
-	estate->es_continuous = plannedstmt->is_continuous;
+	estate->es_continuous = plannedstmt->isContinuous;
 
 	/*
 	 * Initialize private state information for each SubPlan.  We must do this

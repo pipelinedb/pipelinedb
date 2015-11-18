@@ -327,7 +327,7 @@ prepare_plan_for_reading(RangeVar *matrel, PlannedStmt *plan,
 
 	Relation rel = heap_openrv(matrel, AccessShareLock);
 
-	plan->is_continuous = false;
+	plan->isContinuous = false;
 
 	scan = SetCombinerPlanTuplestorestate(plan, batch);
 	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));

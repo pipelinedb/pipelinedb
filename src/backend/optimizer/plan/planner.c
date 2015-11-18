@@ -141,10 +141,7 @@ planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		result = standard_planner(parse, cursorOptions, boundParams);
 
 	if (parse->isContinuous)
-	{
-		result->is_continuous = true;
-		result->cq_id = parse->cqId;
-	}
+		result->isContinuous = true;
 
 	return result;
 }
@@ -263,7 +260,7 @@ standard_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	result->relationOids = glob->relationOids;
 	result->invalItems = glob->invalItems;
 	result->nParamExec = glob->nParamExec;
-	result->is_continuous = parse->isContinuous;
+	result->isContinuous = parse->isContinuous;
 
 	return result;
 }

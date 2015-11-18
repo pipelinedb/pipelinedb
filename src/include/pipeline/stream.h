@@ -29,7 +29,7 @@ extern void *copy_iter_arg;
 
 #define QueryIsStreaming(query) ((query)->isContinuous)
 #define QueryIsCombine(query) ((query)->isCombine)
-#define PlanIsStreaming(stmt) ((stmt)->is_continuous)
+#define PlanIsStreaming(stmt) ((stmt)->isContinuous)
 #define ARRIVAL_TIMESTAMP "arrival_timestamp"
 
 /* Whether or not to wait on the inserted event to be consumed by the CV*/

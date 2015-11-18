@@ -95,7 +95,7 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	 */
 	Relation rel = heap_openrv(state->base.view->matrel, AccessShareLock);
 
-	plan->is_continuous = false;
+	plan->isContinuous = false;
 
 	scan = SetCombinerPlanTuplestorestate(plan, state->batch);
 	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
