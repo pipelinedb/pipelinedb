@@ -387,6 +387,9 @@ DATA(insert ( 4455	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-			
 DATA(insert ( 4456	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 413		20		0	0		0	_null_ _null_ ));
 DATA(insert ( 4457	n 0 keyed_max_trans		keyed_min_max_finalize				-				-				-				f f 3519	3500	0	0		0	_null_ _null_ ));
 
+DATA(insert ( 4463	n 0 set_agg_trans		-				-				-				-				f f 0 17	0	0		0	_null_ _null_ ));
+DATA(insert ( 4467	n 0 set_agg_trans		set_cardinality				-				-				-				f f 0 17	0	0		0	_null_ _null_ ));
+
 /*
  * prototypes for functions in pg_aggregate.c
  */
