@@ -23,8 +23,8 @@
 
 typedef struct SetKey
 {
-	uint32 k;
-	Datum d;
+	uint32 hash;
+	Datum value;
 	TypeCacheEntry *typ;
 } SetKey;
 
@@ -46,7 +46,7 @@ set_key_match(const void *kl, const void *kr, Size keysize)
 
 	Assert(l->typ->type_id == r->typ->type_id);
 
-	cmp = datumIsEqual(l->d, r->d, l->typ->typbyval, l->typ->typlen) ? 0 : 1;
+	cmp = datumIsEqual(l->value, r->value, l->typ->typbyval, l->typ->typlen) ? 0 : 1;
 
 	return DatumGetInt32(cmp);
 }
@@ -62,7 +62,7 @@ set_key_hash(const void *key, Size keysize)
 	uint64_t h;
 
 	initStringInfo(&buf);
-	DatumToBytes(k->d, k->typ, &buf);
+	DatumToBytes(k->value, k->typ, &buf);
 
 	h = MurmurHash3_64(buf.data, buf.len, MURMUR_SEED);
 	pfree(buf.data);
@@ -125,8 +125,8 @@ set_add(FunctionCallInfo fcinfo, Datum d, ArrayType *state)
 	pfree(buf.data);
 
 	MemSet(&key, 0, sizeof(SetKey));
-	key.k = h;
-	key.d = copy;
+	key.hash = h;
+	key.value = copy;
 	key.typ = sas->typ;
 
 	hash_search_with_hash_value(sas->htab, &key, h, HASH_ENTER, &found);
