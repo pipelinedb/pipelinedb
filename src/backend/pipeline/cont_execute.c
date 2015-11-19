@@ -82,13 +82,20 @@ PartialTupleStatePeekFn(void *ptr, int len)
 		namespace = get_namespace_oid(NameStr(pts->namespace), false);
 
 		if (!OidIsValid(namespace))
+		{
+			elog(WARNING, "couldn't find namespace %s, skipping partial tuple", NameStr(pts->namespace));
 			return;
+		}
 
 		tup = SearchSysCache2(PIPELINEQUERYNAMESPACENAME, ObjectIdGetDatum(namespace),
 				CStringGetDatum(NameStr(pts->cv)));
 
 		if (!HeapTupleIsValid(tup))
+		{
+			elog(WARNING, "couldn't find continuous view %s.%s, skipping partial tuple",
+					NameStr(pts->namespace), NameStr(pts->cv));
 			return;
+		}
 
 		row = (Form_pipeline_query) GETSTRUCT(tup);
 		pts->query_id = row->id;
