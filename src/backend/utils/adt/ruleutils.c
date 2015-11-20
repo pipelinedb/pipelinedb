@@ -426,44 +426,18 @@ static char *flatten_reloptions(Oid relid);
 
 
 /*
- * deparse_cont_query_def
+ * deparse_query_def
  */
 char *
 deparse_query_def(Query *query)
 {
-	StringInfo buf = makeStringInfo();
-	deparse_context context;
-	deparse_namespace dpns;
-	char *sql;
+	StringInfoData buf;
 
-	/*
-	 * Before we begin to examine the query, acquire locks on referenced
-	 * relations, and fix up deleted columns in JOIN RTEs.  This ensures
-	 * consistent results.  Note we assume it's OK to scribble on the passed
-	 * querytree!
-	 *
-	 * We are only deparsing the query (we are not about to execute it), so we
-	 * only need AccessShareLock on the relations it mentions.
-	 */
-	AcquireRewriteLocks(query, false, false);
+	initStringInfo(&buf);
+	get_query_def(query, &buf, NIL, NULL,
+			PRETTYFLAG_INDENT, WRAP_COLUMN_DEFAULT, 0);
 
-	context.buf = buf;
-	context.namespaces = list_make1(&dpns);
-	context.windowClause = NIL;
-	context.windowTList = NIL;
-	context.varprefix = list_length(query->rtable) != 1;
-	context.prettyFlags = PRETTYFLAG_INDENT;
-	context.wrapColumn = WRAP_COLUMN_DEFAULT;
-	context.indentLevel = 0;
-
-	set_deparse_for_query(&dpns, query, NIL);
-	get_select_query_def(query, &context, NULL);
-
-	sql = buf->data;
-
-	pfree(buf);
-
-	return sql;
+	return buf.data;
 }
 
 /* ----------
