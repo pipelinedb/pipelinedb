@@ -77,10 +77,6 @@ typedef struct
 	int max_wait;
 } ContQueryRunParams;
 
-/* scheduler per-database startup hook */
-typedef void (*ContSchedulerStartupFunc) (void);
-extern ContSchedulerStartupFunc ContSchedulerStartupHook;
-
 /* per proc structures */
 extern ContQueryProc *MyContQueryProc;
 

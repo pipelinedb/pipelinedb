@@ -57,9 +57,6 @@ typedef struct
 	NameData name;
 } DatabaseEntry;
 
-/* scheduler per-database startup hook */
-ContSchedulerStartupFunc ContSchedulerStartupHook = NULL;
-
 /* per proc structures */
 ContQueryProc *MyContQueryProc = NULL;
 
@@ -792,9 +789,6 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		ereport(ERROR,
 				(errmsg("%d background worker slots are required but there are only %d available", list_length(dbs) * NUM_BG_WORKERS, max_worker_processes),
 						errhint("Each database requires %d background worker slots. Increase max_worker_processes to enable more capacity.", NUM_BG_WORKERS)));
-
-	if (ContSchedulerStartupHook != NULL)
-		ContSchedulerStartupHook();
 
 	/* Loop forever */
 	for (;;)
