@@ -15,7 +15,6 @@ ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pg_ctl
 ln -s /usr/bin/psql /usr/bin/pipeline
 ln -s $INSTALL_PREFIX/bin/padhoc /usr/bin/padhoc
 
-
 echo "
     ____  _            ___            ____  ____
    / __ \(_)___  ___  / (_)___  ___  / __ \/ __ )
