@@ -20,6 +20,7 @@
 
 #include <unistd.h>
 #include "execinfo.h"
+#include "miscadmin.h"
 #include "tcop/tcopprot.h"
 
 /*
@@ -47,7 +48,9 @@ ExceptionalCondition(const char *conditionName,
 
 	/* dump stack trace */
 	size = backtrace(array, 32);
-	fprintf(stderr, "assertion failure at:\n");
+	fprintf(stderr, "Assertion failure (PID %d)\n", MyProcPid);
+	fprintf(stderr, "version: %s\n", PIPELINE_VERSION_STR);
+	fprintf(stderr, "backtrace:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
 
 	/* Usually this shouldn't be needed, but make sure the msg went out */

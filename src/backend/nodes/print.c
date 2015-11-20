@@ -24,6 +24,7 @@
 
 #include "access/printtup.h"
 #include "lib/stringinfo.h"
+#include "miscadmin.h"
 #include "nodes/print.h"
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
@@ -47,7 +48,9 @@ debug_segfault(SIGNAL_ARGS)
 {
 	void *array[32];
 	size_t size = backtrace(array, 32);
-	fprintf(stderr, "segfault at:\n");
+	fprintf(stderr, "Segmentation fault (PID %d)\n", MyProcPid);
+	fprintf(stderr, "version: %s\n", PIPELINE_VERSION_STR);
+	fprintf(stderr, "backtrace:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
 
 #ifdef DUMP_CORE
