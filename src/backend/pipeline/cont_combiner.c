@@ -41,6 +41,7 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/datum.h"
 #include "utils/hsearch.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
@@ -62,6 +63,7 @@ typedef struct
 	MemoryContext plan_cache_cxt;
 	Tuplestorestate *batch;
 	TupleTableSlot *slot;
+	TupleTableSlot *prev_slot;
 	bool isagg;
 	int ngroupatts;
 	AttrNumber *groupatts;
@@ -452,16 +454,18 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results)
 	ListCell *lc;
 	int i;
 
-	/* Only replace values for non-group attributes */
-	MemSet(replace_all, true, size);
-	for (i = 0; i < state->ngroupatts; i++)
-		replace_all[state->groupatts[i] - 1] = false;
-
 	foreach_tuple(slot, results)
 	{
 		HeapTupleEntry update = NULL;
 		HeapTuple tup = NULL;
 		bool should_cache = true;
+		AttrNumber att = 1;
+		int replaces = 0;
+
+		/* Only replace values for non-group attributes */
+		MemSet(replace_all, true, size);
+		for (i = 0; i < state->ngroupatts; i++)
+			replace_all[state->groupatts[i] - 1] = false;
 
 		slot_getallattrs(slot);
 
@@ -470,6 +474,37 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results)
 
 		if (update)
 		{
+			ExecStoreTuple(update->tuple, state->prev_slot, InvalidBuffer, false);
+
+			/*
+			 * Figure out which columns actually changed, as those are the only values
+			 * that we want to write to disk.
+			 */
+			for (att = 1; att <= state->prev_slot->tts_tupleDescriptor->natts; att++)
+			{
+				Datum prev;
+				Datum new;
+				bool prev_null;
+				bool new_null;
+				Form_pg_attribute attr = state->prev_slot->tts_tupleDescriptor->attrs[att - 1];
+
+				prev = slot_getattr(state->prev_slot, att, &prev_null);
+				new = slot_getattr(slot, att, &new_null);
+
+				/*
+				 * Note that this equality check only does a byte-by-byte comparison, which may yield false
+				 * negatives. This is fine, because a false negative will just cause an extraneous write, which
+				 * seems like a reasonable balance compared to looking up and invoking actual equality operators.
+				 */
+				if ((!prev_null && !new_null) && datumIsEqual(prev, new, attr->attbyval, attr->attlen))
+					replace_all[att - 1] = false;
+				else
+					replaces++;
+			}
+
+			if (replaces == 0)
+				continue;
+
 			/*
 			 * The slot has the updated values, so store them in the updatable physical tuple
 			 */
@@ -619,6 +654,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	/* this also sets the state's desc field */
 	prepare_combine_plan(state, pstmt);
 	state->slot = MakeSingleTupleTableSlot(state->desc);
+	state->prev_slot = MakeSingleTupleTableSlot(state->desc);
 	state->groups_plan = NULL;
 
 	if (IsA(state->combine_plan->planTree, Agg))
