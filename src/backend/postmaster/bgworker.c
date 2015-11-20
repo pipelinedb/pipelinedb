@@ -909,29 +909,6 @@ RegisterDynamicBackgroundWorker(BackgroundWorker *worker,
 }
 
 /*
- * Returns the number of background worker slots currently in use.
- */
-int
-GetNumOfBackgroundWorkerSlotsInUse(void)
-{
-	int num_in_use = 0;
-	int slotno;
-
-	LWLockAcquire(BackgroundWorkerLock, LW_SHARED);
-
-	for (slotno = 0; slotno < BackgroundWorkerData->total_slots; slotno++) {
-		BackgroundWorkerSlot *slot = &BackgroundWorkerData->slot[slotno];
-
-		if(slot->in_use)
-			num_in_use++;
-	}
-
-	LWLockRelease(BackgroundWorkerLock);
-
-	return num_in_use;
-}
-
-/*
  * Get the PID of a dynamically-registered background worker.
  *
  * If the worker is determined to be running, the return value will be
