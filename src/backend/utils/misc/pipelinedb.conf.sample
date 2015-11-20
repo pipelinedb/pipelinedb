@@ -595,9 +595,6 @@
 # CONTINUOUS VIEW OPTIONS
 #------------------------------------------------------------------------------
 
-# number of blocks to allocate per tuple buffer
-#tuple_buffer_blocks = 8192
-
 # synchronization level for combiner commits; off, local, remote_write, or on
 #continuous_query_combiner_synchronous_commit = off
 
@@ -621,11 +618,11 @@
 
 # the number of parallel continuous query combiner processes to use for
 # each database
-#continuous_query_num_combiners = 2
+#continuous_query_num_combiners = 1
 
 # the number of parallel continuous query worker processes to use for
 # each database
-#continuous_query_num_workers = 2
+#continuous_query_num_workers = 1
 
 # allow direct changes to be made to materialization tables?
 #continuous_query_materialization_table_updatable = off
@@ -636,6 +633,23 @@
 # continuous views that should be affected when writing to streams.
 # it is string with comma separated values for continuous view names.
 #stream_targets = ''
+
+# amount of shared memory reserved by each continuous query process
+# for IPC
+#continuous_query_ipc_shared_mem = 32mb
+
+# the default step factor for sliding window continuous queries (as a percentage
+# of the total window size)
+#sliding_window_step_factor = 5
+
+# allow adhoc continuous queries?
+#continuous_queries_adhoc_enabled = off
+
+# allow continuous queries?
+#continuous_queries_enabled = on
+
+# allow anonymous statistics collection and version checks?
+#anonymous_update_checks = on
 
 #------------------------------------------------------------------------------
 # CONFIG FILE INCLUDES
