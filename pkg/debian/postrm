@@ -8,7 +8,9 @@ ldconfig
 
 rm -f /usr/bin/pipeline-server
 rm -f /usr/bin/pipeline-ctl
+rm -f /usr/bin/pg_ctl
 rm -f /usr/bin/pipeline-init
 rm -f /usr/bin/psql
 rm -f /usr/bin/pipeline
+rm -f /usr/bin/pg_config
 rm -f /usr/bin/padhoc

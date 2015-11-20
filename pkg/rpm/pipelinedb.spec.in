@@ -27,9 +27,11 @@ echo "$RPM_INSTALL_PREFIX/lib" > /etc/ld.so.conf.d/pipelinedb.conf
 
 ln -s $RPM_INSTALL_PREFIX/bin/pipeline-server /usr/bin/pipeline-server
 ln -s $RPM_INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pipeline-ctl
+ln -s $RPM_INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pg_ctl
 ln -s $RPM_INSTALL_PREFIX/bin/pipeline-init /usr/bin/pipeline-init
 ln -s $RPM_INSTALL_PREFIX/bin/psql /usr/bin/psql
-ln -s /usr/bin/psql /usr/bin/pipeline
+ln -s $RPM_INSTALL_PREFIX/bin/psql /usr/bin/pipeline
+ln -s $RPM_INSTALL_PREFIX/bin/pipeline-config /usr/bin/pg_config
 ln -s $RPM_INSTALL_PREFIX/bin/padhoc /usr/bin/padhoc
 
 echo "
@@ -59,9 +61,11 @@ rm /etc/ld.so.conf.d/pipelinedb.conf
 
 rm -f /usr/bin/pipeline-server
 rm -f /usr/bin/pipeline-ctl
+rm -f /usr/bin/pg_ctl
 rm -f /usr/bin/pipeline-init
 rm -f /usr/bin/psql
 rm -f /usr/bin/pipeline
+rm -f /usr/bin/pg_config
 rm -f /usr/bin/padhoc
 
 %clean

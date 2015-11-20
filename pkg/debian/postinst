@@ -8,9 +8,11 @@ ldconfig
 
 ln -s $INSTALL_PREFIX/bin/pipeline-server /usr/bin/pipeline-server
 ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pipeline-ctl
+ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pg_ctl
 ln -s $INSTALL_PREFIX/bin/pipeline-init /usr/bin/pipeline-init
 ln -s $INSTALL_PREFIX/bin/psql /usr/bin/psql
-ln -s /usr/bin/psql /usr/bin/pipeline
+ln -s $INSTALL_PREFIX/bin/psql /usr/bin/pipeline
+ln -s $INSTALL_PREFIX/bin/pipeline-config /usr/bin/pg_config
 ln -s $INSTALL_PREFIX/bin/padhoc /usr/bin/padhoc
 
 echo "
