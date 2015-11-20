@@ -462,6 +462,8 @@ exec_adhoc_worker(AdhocWorkerState *state)
 
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 
+	dsm_cqueue_pop_peeked(state->exec.cqueue);
+
 	return num_processed > 0;
 }
 
