@@ -1331,8 +1331,6 @@ movedb(const char *dbname, const char *tblspcname)
 	/* Now it's safe to release the database lock */
 	UnlockSharedObjectForSession(DatabaseRelationId, db_id, 0,
 								 AccessExclusiveLock);
-
-	SignalContQuerySchedulerRefresh();
 }
 
 /* Error cleanup callback for movedb */
