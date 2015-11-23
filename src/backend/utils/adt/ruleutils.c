@@ -5191,6 +5191,7 @@ get_insert_query_def(Query *query, deparse_context *context)
 	ListCell   *values_cell;
 	ListCell   *l;
 	List	   *strippedexprs;
+	List       *sorted_tlist;
 
 	/* Insert the WITH clause if given */
 	get_with_clause(query, context);
@@ -5250,7 +5251,50 @@ get_insert_query_def(Query *query, deparse_context *context)
 	sep = "";
 	if (query->targetList)
 		appendStringInfoChar(buf, '(');
-	foreach(l, query->targetList)
+
+	/*
+	 * If it's an INSERT ... SELECT or multi-row VALUES, the targetList Vars point to
+	 * their corresponding RTE and so while deparsing, we must output column names in
+	 * the order of varattno, not resno.
+	 */
+	if (select_rte || values_rte)
+	{
+		sorted_tlist = NIL;
+		foreach(l, query->targetList)
+		{
+			ListCell *before = NULL;
+			ListCell *lc;
+			TargetEntry *curr_tle = (TargetEntry *) lfirst(l);
+			Var *curr_var;
+			RangeTblEntry *rte;
+
+			Assert(IsA(curr_tle->expr, Var));
+			curr_var = (Var *) curr_tle->expr;
+
+			/* All these Vars must belong to the SELECT or VALUES RTE. */
+			rte = (RangeTblEntry *) list_nth(query->rtable, curr_var->varno - 1);
+			Assert(rte == values_rte || rte == select_rte);
+
+			foreach(lc, sorted_tlist)
+			{
+				Var *tle_var = (Var *) ((TargetEntry *) lfirst(lc))->expr;
+
+				if (curr_var->varattno <  tle_var->varattno)
+					break;
+
+				before = lc;
+			}
+
+			if (before == NULL)
+				sorted_tlist = lcons(curr_tle, sorted_tlist);
+			else
+				lappend_cell(sorted_tlist, before, curr_tle);
+		}
+	}
+	else
+		sorted_tlist = query->targetList;
+
+	foreach(l, sorted_tlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(l);
 
