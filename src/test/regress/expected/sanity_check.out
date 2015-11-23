@@ -137,6 +137,7 @@ pg_ts_template|t
 pg_type|t
 pg_user_mapping|t
 pipeline_combine|t
+pipeline_database|t
 pipeline_query|t
 pipeline_stream|t
 pipeline_tstate|t
