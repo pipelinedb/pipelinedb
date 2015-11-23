@@ -244,13 +244,16 @@ IsSharedRelation(Oid relationId)
 		relationId == SharedSecLabelObjectIndexId ||
 		relationId == TablespaceOidIndexId ||
 		relationId == TablespaceNameIndexId ||
-		relationId == DbRoleSettingDatidRolidIndexId)
+		relationId == DbRoleSettingDatidRolidIndexId ||
+		relationId == PipelineDatabaseDbIdIndexId)
 		return true;
 	/* These are their toast tables and toast indexes (see toasting.h) */
 	if (relationId == PgShdescriptionToastTable ||
 		relationId == PgShdescriptionToastIndex ||
 		relationId == PgDbRoleSettingToastTable ||
-		relationId == PgDbRoleSettingToastIndex)
+		relationId == PgDbRoleSettingToastIndex ||
+		relationId == PipelineDatabaseToastTable ||
+		relationId == PipelineDatabaseToastIndex)
 		return true;
 	return false;
 }

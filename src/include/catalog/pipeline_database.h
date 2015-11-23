@@ -40,7 +40,9 @@ typedef FormData_pipeline_database *Form_pipeline_database;
  *		compiler constants for pipeline_database
  * ----------------
  */
-#define Natts_pipeline_database		1
-#define Anum_pg_database_dboid		1
+#define Natts_pipeline_database						3
+#define Anum_pipeline_database_dbid					1
+#define Anum_pipeline_database_cont_queries_enabled	2
+#define Anum_pipeline_database_meta					3
 
 #endif   /* PIPELINE_DATABASE_H */

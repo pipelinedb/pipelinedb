@@ -15,4 +15,7 @@
 
 #include "catalog/pipeline_database.h"
 
+extern void CreatePipelineDatabaseCatalogEntry(Oid dbid);
+extern void RemovePipelineDatabaseByDbId(Oid oid);
+
 #endif
