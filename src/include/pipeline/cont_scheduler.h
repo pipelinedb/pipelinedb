@@ -110,6 +110,7 @@ extern bool IsContQuerySchedulerProcess(void);
 extern bool IsContQueryWorkerProcess(void);
 extern bool IsContQueryCombinerProcess(void);
 extern bool IsContQueryAdhocProcess(void);
+extern bool ContQueriesEnabled(void);
 
 #define IsContQueryProcess() \
 	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess())

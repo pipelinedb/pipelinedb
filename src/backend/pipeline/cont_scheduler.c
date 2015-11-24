@@ -1141,3 +1141,16 @@ GetContProcTrancheId(void)
 {
 	return ContQuerySchedulerShmem->tranche_id;
 }
+
+bool
+ContQueriesEnabled(void)
+{
+	HeapTuple tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
+	bool enabled;
+
+	Assert(HeapTupleIsValid(tup));
+
+	enabled = ((Form_pipeline_database) GETSTRUCT(tup))->cq_enabled;
+	ReleaseSysCache(tup);
+	return enabled;
+}
