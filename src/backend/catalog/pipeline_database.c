@@ -20,6 +20,7 @@
 #include "catalog/pg_database.h"
 #include "catalog/pipeline_database.h"
 #include "catalog/pipeline_database_fn.h"
+#include "pipeline/cont_scheduler.h"
 #include "storage/lock.h"
 #include "utils/rel.h"
 #include "utils/relcache.h"
@@ -39,7 +40,7 @@ CreatePipelineDatabaseCatalogEntry(Oid dbid)
 	MemSet(nulls, 0, sizeof(nulls));
 
 	values[Anum_pipeline_database_dbid - 1] = ObjectIdGetDatum(dbid);
-	values[Anum_pipeline_database_cont_queries_enabled - 1] = BoolGetDatum(false);
+	values[Anum_pipeline_database_cq_enabled - 1] = BoolGetDatum(continuous_queries_enabled);
 	nulls[Anum_pipeline_database_meta - 1] = true;
 
 	tup = heap_form_tuple(pipeline_database->rd_att, values, nulls);

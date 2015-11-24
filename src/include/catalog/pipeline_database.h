@@ -19,11 +19,12 @@
  * ----------------
  */
 #define PipelineDatabaseRelationId	4467
+#define PipelineDatabaseRelation_Rowtype_Id  4468
 
-CATALOG(pipeline_database,4467) BKI_SHARED_RELATION BKI_WITHOUT_OIDS
+CATALOG(pipeline_database,4467) BKI_SHARED_RELATION BKI_ROWTYPE_OID(4468) BKI_SCHEMA_MACRO BKI_WITHOUT_OIDS
 {
 	Oid	 dbid;
-	bool cont_queries_enabled;
+	bool cq_enabled;
 #ifdef CATALOG_VARLEN
 	text meta;
 #endif
@@ -40,9 +41,9 @@ typedef FormData_pipeline_database *Form_pipeline_database;
  *		compiler constants for pipeline_database
  * ----------------
  */
-#define Natts_pipeline_database						3
-#define Anum_pipeline_database_dbid					1
-#define Anum_pipeline_database_cont_queries_enabled	2
-#define Anum_pipeline_database_meta					3
+#define Natts_pipeline_database				3
+#define Anum_pipeline_database_dbid			1
+#define Anum_pipeline_database_cq_enabled	2
+#define Anum_pipeline_database_meta			3
 
 #endif   /* PIPELINE_DATABASE_H */

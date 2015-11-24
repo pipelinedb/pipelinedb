@@ -2559,12 +2559,12 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		snprintf(buf, sizeof(buf),
 				 "\"%s/pipeline-server\" -D \"%s/data\" -F%s "
 				 "-c \"listen_addresses=%s\" "
-				 "-c \"synchronous_stream_insert=true\" "
+				 "-c \"synchronous_stream_insert=on\" "
 				 "-c \"continuous_query_num_combiners=2\" "
 				 "-c \"continuous_query_num_workers=4\" "
-				 "-c \"anonymous_update_checks=false\" "
+				 "-c \"anonymous_update_checks=off\" "
 				 "-c \"continuous_query_max_wait=5\" "
-				 "-c \"anonymous_update_checks=false\" "
+				 "-c \"continuous_queries_enabled=on\" "
 				 "-k \"%s\" "
 				 "> \"%s/log/postmaster.log\" 2>&1",
 				 bindir, temp_install, debug ? " -d 5" : "",

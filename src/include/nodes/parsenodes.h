@@ -2814,4 +2814,14 @@ typedef struct CreateStreamStmt
 	bool 		is_inferred;
 } CreateStreamStmt;
 
+typedef struct DeactivateStmt
+{
+	NodeTag	type;
+} DeactivateStmt;
+
+typedef struct ActivateStmt
+{
+	NodeTag	type;
+} ActivateStmt;
+
 #endif   /* PARSENODES_H */
