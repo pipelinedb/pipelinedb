@@ -126,12 +126,19 @@ class PipelineDB(object):
         # Wait to connect to PipelineDB
         for i in xrange(10):
           try:
-            self.conn = self.engine.connect()
+            conn = self.engine.connect()
             break
           except OperationalError:
             time.sleep(0.1)
         else:
           raise Exception('Failed to connect to PipelineDB')
+
+        # ACTVATE continuous queries
+        conn.execute('COMMIT')
+        conn.execute('ACTIVATE')
+        conn.close()
+
+        self.conn = self.engine.connect()
 
     def stop(self):
       """
