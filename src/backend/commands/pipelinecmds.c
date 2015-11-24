@@ -733,7 +733,7 @@ set_cq_enabled(bool value, ProcessUtilityContext context)
 		HeapTuple new;
 
 		MemSet(replace, 0 , sizeof(replace));
-		MemSet(nulls, 0 , sizeof(replace));
+		MemSet(nulls, 0 , sizeof(nulls));
 		replace[Anum_pipeline_database_cq_enabled - 1] = true;
 		values[Anum_pipeline_database_cq_enabled - 1] = BoolGetDatum(value);
 
