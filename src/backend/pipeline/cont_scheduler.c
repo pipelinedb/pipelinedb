@@ -45,6 +45,7 @@
 #include "utils/portal.h"
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
+#include "utils/syscache.h"
 #include "utils/timeout.h"
 
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
