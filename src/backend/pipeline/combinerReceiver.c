@@ -39,6 +39,7 @@ typedef struct
 	FunctionCallInfo hash_fcinfo;
 	FuncExpr *hash;
 	int64 query_hash;
+	List **partials;
 } CombinerState;
 
 static void
@@ -83,10 +84,10 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
 	MemoryContext old = MemoryContextSwitchTo(ContQueryBatchContext);
-	PartialTupleState pts;
+	PartialTupleState *pts = palloc0(sizeof(PartialTupleState));
 	InsertBatchAck *acks = NULL;
 	int nacks = 0;
-	int len;
+	int idx;
 
 	if (synchronous_stream_insert)
 	{
@@ -140,34 +141,19 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 		list_free_deep(acks_list);
 	}
 
-	pts.tup = ExecMaterializeSlot(slot);
-	pts.query_id = c->cont_executor->current_query_id;
-	pts.nacks = nacks;
-	pts.acks = acks;
-
-	len = (sizeof(PartialTupleState) +
-			HEAPTUPLESIZE + pts.tup->t_len +
-			(nacks * sizeof(InsertBatchAck)));
+	pts->tup = ExecCopySlotTuple(slot);
+	pts->query_id = c->cont_executor->current_query_id;
+	pts->nacks = nacks;
+	pts->acks = acks;
 
 	/* Shard by groups or id if no grouping. */
 	if (c->hash_fcinfo)
-		pts.hash = hash_group(slot, c);
+		pts->hash = hash_group(slot, c);
 	else
-		pts.hash = MurmurHash3_64(&c->cont_executor->current_query->view->name, sizeof(NameData), MURMUR_SEED);
+		pts->hash = MurmurHash3_64(&c->cont_executor->current_query->view->name, sizeof(NameData), MURMUR_SEED);
 
-	if (CombinerReceiveHook)
-		CombinerReceiveHook(&pts, len);
-	else
-	{
-		dsm_cqueue *cq = GetCombinerQueue(&pts);
-		dsm_cqueue_push_nolock(cq, &pts, len);
-		dsm_cqueue_unlock(cq);
-	}
-
-	IncrementCQWrite(1, len);
-
-	if (nacks)
-		pfree(acks);
+	idx = pts->hash % continuous_query_num_combiners;
+	c->partials[idx] = lappend(c->partials[idx], pts);
 
 	MemoryContextSwitchTo(old);
 }
@@ -177,6 +163,7 @@ static void combiner_destroy(DestReceiver *self)
 	CombinerState *c = (CombinerState *) self;
 	if (c->hash_fcinfo)
 		pfree(c->hash_fcinfo);
+	pfree(c->partials);
 	pfree(c);
 }
 
@@ -190,6 +177,8 @@ CreateCombinerDestReceiver(void)
 	self->pub.rShutdown = combiner_shutdown;
 	self->pub.rDestroy = combiner_destroy;
 	self->pub.mydest = DestCombiner;
+
+	self->partials = palloc0(sizeof(List *) * continuous_query_num_combiners);
 
 	return (DestReceiver *) self;
 }
@@ -228,4 +217,56 @@ SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash)
 
 	c->hash_fcinfo = fcinfo;
 	c->hash = hash;
+}
+
+void
+CombinerDestReceiverFlush(DestReceiver *self)
+{
+	CombinerState *c = (CombinerState *) self;
+	int i;
+
+	if (CombinerReceiveHook)
+	{
+		CombinerReceiveHook(c->partials);
+
+		for (i = 0; i < continuous_query_num_combiners; i++)
+		{
+			list_free_deep(c->partials[i]);
+			c->partials[i] = NIL;
+		}
+
+		return;
+	}
+
+	for (i = 0; i < continuous_query_num_combiners; i++)
+	{
+		List *partials = c->partials[i];
+		ListCell *lc;
+		dsm_cqueue *cq = NULL;
+
+		if (partials == NIL)
+			continue;
+
+		foreach(lc, partials)
+		{
+			PartialTupleState *pts = (PartialTupleState *) lfirst(lc);
+			int len = (sizeof(PartialTupleState) +
+					HEAPTUPLESIZE + pts->tup->t_len +
+					(pts->nacks * sizeof(InsertBatchAck)));
+
+			if (cq == NULL)
+				cq = GetCombinerQueue(pts);
+
+			Assert(cq);
+			dsm_cqueue_push_nolock(cq, pts, len);
+
+			IncrementCQWrite(1, len);
+		}
+
+		Assert(cq);
+		dsm_cqueue_unlock(cq);
+
+		list_free_deep(partials);
+		c->partials[i] = NIL;
+	}
 }

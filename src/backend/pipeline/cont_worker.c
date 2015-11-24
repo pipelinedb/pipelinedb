@@ -205,6 +205,9 @@ ContinuousQueryWorkerMain(void)
 				ExecEndNode(state->query_desc->planstate);
 				state->query_desc->planstate = NULL;
 
+				/* Flush all resulting tuples to combiners */
+				CombinerDestReceiverFlush(state->query_desc->dest);
+
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
 				MemoryContextSwitchTo(state->base.state_cxt);
 
