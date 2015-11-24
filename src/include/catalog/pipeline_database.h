@@ -26,7 +26,7 @@ CATALOG(pipeline_database,4467) BKI_SHARED_RELATION BKI_ROWTYPE_OID(4468) BKI_SC
 	Oid	 dbid;
 	bool cq_enabled;
 #ifdef CATALOG_VARLEN
-	text meta;
+	jsonb meta;
 #endif
 } FormData_pipeline_database;
 
