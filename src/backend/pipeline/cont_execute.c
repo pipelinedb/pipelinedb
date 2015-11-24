@@ -323,11 +323,9 @@ static dsm_segment *
 attach_to_db_dsm_segment(void)
 {
 	static dsm_segment *db_dsm_segment = NULL;
+	static dsm_handle db_dsm_handle = 0;
 	dsm_handle handle;
 	Timestamp start_time;
-
-	if (db_dsm_segment != NULL)
-		return db_dsm_segment;
 
 	start_time = GetCurrentTimestamp();
 
@@ -340,6 +338,16 @@ attach_to_db_dsm_segment(void)
 			elog(ERROR, "could not connect to database dsm segment");
 	}
 
+	if (handle == db_dsm_handle)
+	{
+		Assert(db_dsm_segment);
+		return db_dsm_segment;
+	}
+
+	if (db_dsm_handle > 0)
+		dsm_detach(db_dsm_segment);
+
+	db_dsm_handle = handle;
 	db_dsm_segment = dsm_find_or_attach(handle);
 	dsm_pin_mapping(db_dsm_segment);
 	return db_dsm_segment;

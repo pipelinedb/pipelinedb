@@ -1,9 +1,13 @@
 from base import pipeline, clean_db
+import getpass
 import os
+import psycopg2
 import random
 import signal
 import threading
 import time
+
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from subprocess import check_output, CalledProcessError
 
 def _get_pid(grep_str):
@@ -149,7 +153,7 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
     try:
       # Just keep a long-running backend connection open
       client = pipeline.engine.connect()
-      result = client.execute('SELECT pg_sleep(10000)')
+      client.execute('SELECT pg_sleep(10000)')
     except:
       pass
 
@@ -191,29 +195,28 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
   result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
   assert result['count'] == expected_combiners
 
-def test_continuous_queries_enabled(pipeline, clean_db):
-  # Check that continuous query processes are running
-  try:
-    procs = check_output('ps aux | grep "pipeline" | grep "combiner0"',
-                         shell=True).split('\n')
-  except:
-    procs = []
+def test_activate_deactivate(pipeline, clean_db):
+  pipeline.create_cv('v', 'SELECT count(*) FROM stream')
+  pipeline.insert('stream', ('x', ), [(1, )])
 
-  procs = filter(lambda s: s and 'grep' not in s, procs)
-  assert len(procs) > 0
+  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
+  conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
 
-  # Restart with continuous queries disabled.
-  pipeline.stop()
-  pipeline.run(params={'continuous_queries_enabled': 'off'})
+  cur = conn.cursor()
+  cur.execute('DEACTIVATE')
+  cur.close()
 
   try:
-    procs = check_output('ps aux | grep "pipeline" | grep "combiner0"',
-                         shell=True).split('\n')
+    pipeline.insert('stream', ('x', ), [(1, )])
+    assert False
   except:
-    procs = []
+    pass
 
-  procs = filter(lambda s: s and 'grep' not in s, procs)
-  assert len(procs) == 0
+  cur = conn.cursor()
+  cur.execute('ACTIVATE')
+  cur.close()
+  conn.close()
 
-  pipeline.stop()
-  pipeline.run()
+  pipeline.insert('stream', ('x', ), [(1, )])
+  count = pipeline.execute('SELECT * FROM v').first()['count']
+  assert count == 2

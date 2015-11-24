@@ -1665,7 +1665,7 @@ ServerLoop(void)
 				start_autovac_launcher = false; /* signal processed */
 		}
 
-		if (ContQueriesEnabled() && ContQuerySchedulerPID == 0 && pmState == PM_RUN)
+		if (ContQuerySchedulerPID == 0 && pmState == PM_RUN)
 			ContQuerySchedulerPID = StartContQueryScheduler();
 
 		/* If we have lost the archiver, try to start a new one */

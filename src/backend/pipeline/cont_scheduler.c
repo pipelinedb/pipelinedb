@@ -20,6 +20,7 @@
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/pg_database.h"
+#include "catalog/pipeline_database.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "nodes/print.h"
@@ -44,6 +45,7 @@
 #include "utils/portal.h"
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
+#include "utils/syscache.h"
 #include "utils/timeout.h"
 
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
@@ -55,6 +57,7 @@ typedef struct
 {
 	Oid oid;
 	NameData name;
+	bool active;
 } DatabaseEntry;
 
 /* per proc structures */
@@ -337,7 +340,8 @@ static List *
 get_database_list(void)
 {
 	List *dbs = NIL;
-	Relation rel;
+	Relation pg_database;
+	Relation pipeline_database;
 	HeapScanDesc scan;
 	HeapTuple tup;
 	MemoryContext resultcxt;
@@ -356,17 +360,17 @@ get_database_list(void)
 	(void) GetTransactionSnapshot();
 
 	/* We take a AccessExclusiveLock so we don't conflict with any DATABASE commands */
-	rel = heap_open(DatabaseRelationId, AccessExclusiveLock);
-	scan = heap_beginscan_catalog(rel, 0, NULL);
+	pg_database = heap_open(DatabaseRelationId, AccessExclusiveLock);
+	scan = heap_beginscan_catalog(pg_database, 0, NULL);
 
 	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
 	{
 		MemoryContext oldcxt;
-		Form_pg_database pgdatabase = (Form_pg_database) GETSTRUCT(tup);
+		Form_pg_database row = (Form_pg_database) GETSTRUCT(tup);
 		DatabaseEntry *db_entry;
 
 		/* Ignore template databases or ones that don't allow connections. */
-		if (pgdatabase->datistemplate || !pgdatabase->datallowconn)
+		if (row->datistemplate || !row->datallowconn)
 			continue;
 
 		/*
@@ -379,14 +383,37 @@ get_database_list(void)
 
 		db_entry = palloc0(sizeof(DatabaseEntry));
 		db_entry->oid = HeapTupleGetOid(tup);
-		StrNCpy(NameStr(db_entry->name), NameStr(pgdatabase->datname), NAMEDATALEN);
+		StrNCpy(NameStr(db_entry->name), NameStr(row->datname), NAMEDATALEN);
 		dbs = lappend(dbs, db_entry);
 
 		MemoryContextSwitchTo(oldcxt);
 	}
 
 	heap_endscan(scan);
-	heap_close(rel, AccessExclusiveLock);
+
+	/* Get enabled flags */
+	pipeline_database = heap_open(PipelineDatabaseRelationId, AccessShareLock);
+	scan = heap_beginscan_catalog(pipeline_database, 0, NULL);
+
+	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
+	{
+		Form_pipeline_database row = (Form_pipeline_database) GETSTRUCT(tup);
+		ListCell *lc;
+
+		foreach(lc, dbs)
+		{
+			DatabaseEntry *db_entry = (DatabaseEntry *) lfirst(lc);
+
+			if (db_entry->oid == row->dbid)
+				db_entry->active = row->cq_enabled;
+		}
+	}
+
+	heap_endscan(scan);
+	heap_close(pipeline_database, AccessShareLock);
+
+	/* Unlock pg_database at the very end. */
+	heap_close(pg_database, AccessExclusiveLock);
 
 	CommitTransactionCommand();
 
@@ -538,6 +565,8 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	bool found;
 	int i;
 
+	elog(LOG, "terminating continuous query processes for database: \"%s\"", NameStr(db_meta->db_name));
+
 	SpinLockAcquire(&db_meta->mutex);
 
 	for (i = 0; i < NUM_BG_WORKERS; i++)
@@ -580,6 +609,8 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	ContQueryProc *proc;
 	ResourceOwner res;
 	bool success = true;
+
+	elog(LOG, "starting continuous query processes for database: \"%s\"", NameStr(db_meta->db_name));
 
 	SpinLockAcquire(&db_meta->mutex);
 
@@ -800,12 +831,14 @@ ContQuerySchedulerMain(int argc, char *argv[])
 			DatabaseEntry *db_entry = lfirst(lc);
 			bool found;
 			ContQueryDatabaseMetadata *db_meta = hash_search(ContQuerySchedulerShmem->proc_table,
-					&db_entry->oid, HASH_ENTER, &found);
+					&db_entry->oid, HASH_FIND, &found);
 
-			/* If we don't have an entry for this dboid, initialize a new one and fire off bg procs */
-			if (!found)
+			if (db_entry->active && !found)
 			{
 				char *pos;
+
+				db_meta = hash_search(ContQuerySchedulerShmem->proc_table,
+						&db_entry->oid, HASH_ENTER, &found);
 
 				MemSet(db_meta, 0, ContQueryDatabaseMetadataSize());
 
@@ -821,6 +854,8 @@ ContQuerySchedulerMain(int argc, char *argv[])
 
 				start_database_workers(db_meta);
 			}
+			else if (!db_entry->active && found)
+				terminate_database_workers(db_meta);
 		}
 
 		/* Allow sinval catchup interrupts while sleeping */
@@ -1106,4 +1141,17 @@ int
 GetContProcTrancheId(void)
 {
 	return ContQuerySchedulerShmem->tranche_id;
+}
+
+bool
+ContQueriesEnabled(void)
+{
+	HeapTuple tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
+	bool enabled;
+
+	Assert(HeapTupleIsValid(tup));
+
+	enabled = ((Form_pipeline_database) GETSTRUCT(tup))->cq_enabled;
+	ReleaseSysCache(tup);
+	return enabled;
 }

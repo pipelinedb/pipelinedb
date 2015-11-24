@@ -53,6 +53,7 @@
 #include "catalog/pg_tablespace.h"
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_database.h"
 #include "catalog/schemapg.h"
 #include "catalog/storage.h"
 #include "commands/trigger.h"
@@ -95,6 +96,7 @@ static const FormData_pg_attribute Desc_pg_database[Natts_pg_database] = {Schema
 static const FormData_pg_attribute Desc_pg_authid[Natts_pg_authid] = {Schema_pg_authid};
 static const FormData_pg_attribute Desc_pg_auth_members[Natts_pg_auth_members] = {Schema_pg_auth_members};
 static const FormData_pg_attribute Desc_pg_index[Natts_pg_index] = {Schema_pg_index};
+static const FormData_pg_attribute Desc_pipeline_database[Natts_pipeline_database] = {Schema_pipeline_database};
 
 /*
  *		Hash tables that index the relation cache
@@ -3104,8 +3106,10 @@ RelationCacheInitializePhase2(void)
 				  true, Natts_pg_authid, Desc_pg_authid);
 		formrdesc("pg_auth_members", AuthMemRelation_Rowtype_Id, true,
 				  false, Natts_pg_auth_members, Desc_pg_auth_members);
+		formrdesc("pipeline_database", PipelineDatabaseRelation_Rowtype_Id, true,
+				  false, Natts_pipeline_database, Desc_pipeline_database);
 
-#define NUM_CRITICAL_SHARED_RELS	3	/* fix if you change list above */
+#define NUM_CRITICAL_SHARED_RELS	4	/* fix if you change list above */
 	}
 
 	MemoryContextSwitchTo(oldcxt);

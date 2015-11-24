@@ -37,6 +37,7 @@
 #include "catalog/pg_database.h"
 #include "catalog/pg_db_role_setting.h"
 #include "catalog/pg_tablespace.h"
+#include "catalog/pipeline_database_fn.h"
 #include "commands/comment.h"
 #include "commands/dbcommands.h"
 #include "commands/seclabel.h"
@@ -517,6 +518,7 @@ createdb(const CreatedbStmt *stmt)
 	/*
 	 * Now generate additional catalog entries associated with the new DB
 	 */
+	CreatePipelineDatabaseCatalogEntry(dboid);
 
 	/* Register owner dependency */
 	recordDependencyOnOwner(DatabaseRelationId, dboid, datdba);
@@ -868,6 +870,7 @@ dropdb(const char *dbname, bool missing_ok)
 	 * Remove shared dependency references for the database.
 	 */
 	dropDatabaseDependencies(db_id);
+	RemovePipelineDatabaseByDbId(db_id);
 
 	/*
 	 * Drop pages for this database that are in the shared buffer cache. This
@@ -1328,8 +1331,6 @@ movedb(const char *dbname, const char *tblspcname)
 	/* Now it's safe to release the database lock */
 	UnlockSharedObjectForSession(DatabaseRelationId, db_id, 0,
 								 AccessExclusiveLock);
-
-	SignalContQuerySchedulerRefresh();
 }
 
 /* Error cleanup callback for movedb */

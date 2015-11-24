@@ -37,6 +37,7 @@
 #include "catalog/pg_shdescription.h"
 #include "catalog/pg_shseclabel.h"
 #include "catalog/pg_tablespace.h"
+#include "catalog/pipeline_database.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/toasting.h"
 #include "miscadmin.h"
@@ -226,7 +227,8 @@ IsSharedRelation(Oid relationId)
 		relationId == SharedDependRelationId ||
 		relationId == SharedSecLabelRelationId ||
 		relationId == TableSpaceRelationId ||
-		relationId == DbRoleSettingRelationId)
+		relationId == DbRoleSettingRelationId ||
+		relationId == PipelineDatabaseRelationId)
 		return true;
 	/* These are their indexes (see indexing.h) */
 	if (relationId == AuthIdRolnameIndexId ||
@@ -242,13 +244,16 @@ IsSharedRelation(Oid relationId)
 		relationId == SharedSecLabelObjectIndexId ||
 		relationId == TablespaceOidIndexId ||
 		relationId == TablespaceNameIndexId ||
-		relationId == DbRoleSettingDatidRolidIndexId)
+		relationId == DbRoleSettingDatidRolidIndexId ||
+		relationId == PipelineDatabaseDbIdIndexId)
 		return true;
 	/* These are their toast tables and toast indexes (see toasting.h) */
 	if (relationId == PgShdescriptionToastTable ||
 		relationId == PgShdescriptionToastIndex ||
 		relationId == PgDbRoleSettingToastTable ||
-		relationId == PgDbRoleSettingToastIndex)
+		relationId == PgDbRoleSettingToastIndex ||
+		relationId == PipelineDatabaseToastTable ||
+		relationId == PipelineDatabaseToastIndex)
 		return true;
 	return false;
 }

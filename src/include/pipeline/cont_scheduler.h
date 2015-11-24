@@ -96,7 +96,6 @@ extern int  continuous_query_combiner_synchronous_commit;
 extern int  continuous_query_ipc_shared_mem;
 extern double continuous_query_proc_priority;
 
-#define ContQueriesEnabled() (continuous_queries_enabled)
 #define ShouldTerminateContQueryProcess() (MyContQueryProc->db_meta->terminate)
 #define MyDSMCQueue (MyContQueryProc->cq_handle->cqueue)
 
@@ -111,6 +110,7 @@ extern bool IsContQuerySchedulerProcess(void);
 extern bool IsContQueryWorkerProcess(void);
 extern bool IsContQueryCombinerProcess(void);
 extern bool IsContQueryAdhocProcess(void);
+extern bool ContQueriesEnabled(void);
 
 #define IsContQueryProcess() \
 	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess())

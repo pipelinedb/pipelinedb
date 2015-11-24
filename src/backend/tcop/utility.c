@@ -853,6 +853,14 @@ standard_ProcessUtility(Node *parsetree,
 			}
 			break;
 
+		case T_ActivateStmt:
+			ExecActivateStmt((ActivateStmt *) parsetree, context);
+			break;
+
+		case T_DeactivateStmt:
+			ExecDeactivateStmt((DeactivateStmt *) parsetree, context);
+			break;
+
 		default:
 			/* All other statement types have event trigger support */
 			ProcessUtilitySlow(parsetree, queryString,
@@ -2388,6 +2396,14 @@ CreateCommandTag(Node *parsetree)
 				else
 					tag = "DEALLOCATE";
 			}
+			break;
+
+		case T_ActivateStmt:
+			tag = "ACTIVATE";
+			break;
+
+		case T_DeactivateStmt:
+			tag = "DEACTIVATE";
 			break;
 
 			/* already-planned queries */

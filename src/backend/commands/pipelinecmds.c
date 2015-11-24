@@ -27,6 +27,7 @@
 #include "catalog/pg_class.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_database.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
@@ -705,4 +706,66 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 	tuplestore_end(tupstore);
 
 	explain_cont_plan("Combiner Lookup Plan", GetCombinerLookupPlan(view), &es, desc, dest);
+}
+
+static void
+set_cq_enabled(bool value, ProcessUtilityContext context)
+{
+	Relation pipeline_database;
+	HeapTuple tup;
+	Form_pipeline_database row;
+	bool changed = false;
+
+	PreventTransactionChain(context == PROCESS_UTILITY_TOPLEVEL, value ? "ACTIVATE" : "DEACTIVATE");
+
+	pipeline_database = heap_open(PipelineDatabaseRelationId, RowExclusiveLock);
+	tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
+
+	Assert(HeapTupleIsValid(tup));
+
+	row = (Form_pipeline_database) GETSTRUCT(tup);
+
+	if (row->cq_enabled != value)
+	{
+		bool replace[Natts_pipeline_database];
+		bool nulls[Natts_pipeline_database];
+		Datum values[Natts_pipeline_database];
+		HeapTuple new;
+
+		MemSet(replace, 0 , sizeof(replace));
+		MemSet(nulls, 0 , sizeof(nulls));
+		replace[Anum_pipeline_database_cq_enabled - 1] = true;
+		values[Anum_pipeline_database_cq_enabled - 1] = BoolGetDatum(value);
+
+		new = heap_modify_tuple(tup, pipeline_database->rd_att,	values, nulls, replace);
+
+		simple_heap_update(pipeline_database, &tup->t_self, new);
+		CatalogUpdateIndexes(pipeline_database, new);
+		CommandCounterIncrement();
+
+		changed = true;
+	}
+
+	ReleaseSysCache(tup);
+	heap_close(pipeline_database, NoLock);
+
+	if (changed)
+	{
+		PopActiveSnapshot();
+		CommitTransactionCommand();
+		SignalContQuerySchedulerRefresh();
+		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
+	}
+}
+
+void
+ExecActivateStmt(ActivateStmt *stmt, ProcessUtilityContext context)
+{
+	set_cq_enabled(true, context);
+}
+
+void ExecDeactivateStmt(DeactivateStmt *stmt, ProcessUtilityContext context)
+{
+	set_cq_enabled(false, context);
 }
