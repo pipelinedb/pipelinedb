@@ -227,11 +227,25 @@ CombinerDestReceiverFlush(DestReceiver *self)
 
 	if (CombinerReceiveHook)
 	{
-		CombinerReceiveHook(c->partials);
-
 		for (i = 0; i < continuous_query_num_combiners; i++)
 		{
-			list_free_deep(c->partials[i]);
+			List *partials = c->partials[i];
+			ListCell *lc;
+
+			if (partials == NIL)
+				continue;
+
+			foreach(lc, partials)
+			{
+				PartialTupleState *pts = (PartialTupleState *) lfirst(lc);
+				int len = (sizeof(PartialTupleState) +
+						HEAPTUPLESIZE + pts->tup->t_len +
+						(pts->nacks * sizeof(InsertBatchAck)));
+
+				CombinerReceiveHook(pts, len);
+			}
+
+			list_free_deep(partials);
 			c->partials[i] = NIL;
 		}
 
