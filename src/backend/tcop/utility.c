@@ -3006,6 +3006,8 @@ GetCommandLogLevel(Node *parsetree)
 			break;
 
 		case T_ExplainContViewStmt:
+		case T_ActivateStmt:
+		case T_DeactivateStmt:
 			lev = LOGSTMT_ALL;
 			break;
 
