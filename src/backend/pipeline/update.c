@@ -37,7 +37,7 @@
 #define NO_UPDATES 200
 
 #define REQUEST_FMT "POST /check HTTP/1.1\r\nHost: anonymous.pipelinedb.com\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s"
-#define PROC_PAYLOAD_FMT 	"{ \"t\": \"%c\", \"e\": \"%s\", \"v\": \"%s\", \"s\": \"%s\", \"sr\": \"%s\", \"sv\": \"%s\", \"ri\": %ld, \"bi\": %ld, \"ro\": %ld, \"bo\": %ld, \"er\": %ld, \"cc\": %ld, \"cd\": %ld}"
+#define PROC_PAYLOAD_FMT 	"{ \"t\": \"%c\", \"e\": \"%s\", \"v\": \"%s\", \"s\": \"%s\", \"sr\": \"%s\", \"sv\": \"%s\", \"ri\": %ld, \"bi\": %ld, \"ro\": %ld, \"bo\": %ld, \"er\": %ld, \"cc\": %ld, \"cd\": %ld, \"id\": \"%s\"}"
 #define PAYLOAD_FMT "[%s,%s]"
 
 #define FAIL(sock) \
@@ -48,6 +48,8 @@
 
 /* guc */
 bool anonymous_update_checks;
+
+GetInstallationIdFunc GetInstallationIdHook = NULL;
 
 /*
  * parse_response_code
@@ -182,6 +184,7 @@ get_stats(HTAB *all_dbs, bool startup, CQStatsType ptype)
 	long cv_create = 0;
 	long cv_drop = 0;
 	long errors = 0;
+	char *id = "";
 
 	uname(&mname);
 	strncpy(name, mname.sysname, 64);
@@ -206,11 +209,14 @@ get_stats(HTAB *all_dbs, bool startup, CQStatsType ptype)
 		errors += g->errors;
 	}
 
+	if (GetInstallationIdHook != NULL)
+		id = GetInstallationIdHook();
+
 	initStringInfo(&payload);
 	appendStringInfo(&payload, PROC_PAYLOAD_FMT, proc, etype,
 			PIPELINE_VERSION, name, mname.release, mname.version, rows_in,
 			bytes_in, rows_out, bytes_out, errors, cv_create,
-			cv_drop);
+			cv_drop, id);
 
 	return payload.data;
 }
