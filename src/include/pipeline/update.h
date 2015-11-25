@@ -13,6 +13,9 @@
 /* guc */
 extern bool anonymous_update_checks;
 
+typedef char *(*GetInstallationIdFunc) (void);
+extern GetInstallationIdFunc GetInstallationIdHook;
+
 extern void UpdateCheck(HTAB *all_dbs, bool startup);
 
 #endif
