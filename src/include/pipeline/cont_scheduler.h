@@ -94,6 +94,7 @@ extern int  continuous_query_combiner_work_mem;
 extern int  continuous_query_combiner_cache_mem;
 extern int  continuous_query_combiner_synchronous_commit;
 extern int  continuous_query_ipc_shared_mem;
+extern int continuous_query_commit_interval;
 extern double continuous_query_proc_priority;
 
 #define ShouldTerminateContQueryProcess() (MyContQueryProc->db_meta->terminate)

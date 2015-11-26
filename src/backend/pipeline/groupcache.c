@@ -123,6 +123,7 @@ GroupCachePut(GroupCache *cache, TupleTableSlot *slot)
 	if (!isnew)
 	{
 		cache->available += ENTRY_SIZE(entry->tuple);
+//		 this tuple might still be referenced by input
 		heap_freetuple(entry->tuple);
 		dlist_delete(&(entry->lru->node));
 	}

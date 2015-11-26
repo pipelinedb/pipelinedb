@@ -153,6 +153,6 @@ extern Oid ContExecutorStartNextQuery(ContExecutor *exec);
 extern void ContExecutorPurgeQuery(ContExecutor *exec);
 extern void *ContExecutorYieldItem(ContExecutor *exec, int *len);
 extern void ContExecutorEndQuery(ContExecutor *exec);
-extern void ContExecutorEndBatch(ContExecutor *exec);
+extern void ContExecutorEndBatch(ContExecutor *exec, bool commit);
 
 #endif

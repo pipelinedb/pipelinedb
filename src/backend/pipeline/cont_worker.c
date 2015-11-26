@@ -169,7 +169,7 @@ ContinuousQueryWorkerMain(void)
 
 	for (;;)
 	{
-		ContExecutorStartBatch(cont_exec);
+		ContExecutorStartBatch(cont_exec, true);
 
 		if (ShouldTerminateContQueryProcess())
 			break;
@@ -238,7 +238,7 @@ next:
 			ContExecutorEndQuery(cont_exec);
 		}
 
-		ContExecutorEndBatch(cont_exec);
+		ContExecutorEndBatch(cont_exec, true);
 	}
 
 	StartTransactionCommand();
