@@ -394,7 +394,10 @@ select_existing_groups(ContQueryCombinerState *state)
 	 */
 	if (state->isagg && state->ngroupatts > 0)
 	{
+		Assert(state->existing);
+
 		values = get_values(state);
+
 		/*
 		 * If we're grouping and there aren't any uncached values to look up,
 		 * there is no need to execute a query.

@@ -86,7 +86,7 @@ def main(args):
     sys.exit(1)
 
   cmd = [SERVER, '-D' , os.path.join(root, DATA_DIR), '-p', args.port,
-#         '-c', 'synchronous_stream_insert=on',
+         '-c', 'synchronous_stream_insert=on',
          '-c', 'anonymous_update_checks=off',
          '-c', 'continuous_queries_adhoc_enabled=on']
 
