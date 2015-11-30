@@ -88,8 +88,6 @@ typedef struct
 	int group_hashes_len;
 } ContQueryCombinerState;
 
-static MemoryContext combine_cxt;
-
 /*
  * prepare_combine_plan
  */
@@ -478,7 +476,7 @@ finish:
 static TupleHashTable
 build_existing_hashtable(ContQueryCombinerState *state)
 {
-	MemoryContext existing_cxt = AllocSetContextCreate(combine_cxt, "CombinerExistingGroupsCxt",
+	MemoryContext existing_cxt = AllocSetContextCreate(state->combine_cxt, "CombinerExistingGroupsCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -486,7 +484,7 @@ build_existing_hashtable(ContQueryCombinerState *state)
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
-	MemoryContext old = MemoryContextSwitchTo(combine_cxt);
+	MemoryContext old = MemoryContextSwitchTo(state->combine_cxt);
 	TupleHashTable result;
 
 	result = BuildTupleHashTable(state->ngroupatts, state->groupatts, state->eq_funcs, state->hash_funcs, 1000,
@@ -599,10 +597,12 @@ sync_combine(ContQueryCombinerState *state)
  * sync_all
  */
 static void
-sync_all(ContQueryCombinerState **states, Bitmapset *queries)
+sync_all(ContExecutor *cont_exec)
 {
-	Bitmapset *tmp = bms_copy(queries);
+	Bitmapset *tmp = bms_copy(cont_exec->queries);
+	ContQueryCombinerState **states = (ContQueryCombinerState **) cont_exec->states;
 	int id;
+
 	while ((id = bms_first_member(tmp)) >= 0)
 	{
 		ContQueryCombinerState *state = states[id];
@@ -618,6 +618,7 @@ sync_all(ContQueryCombinerState **states, Bitmapset *queries)
 		state->matrel = NULL;
 		state->existing = NULL;
 		MemSet(state->group_hashes, 0, state->group_hashes_len);
+		MemoryContextResetAndDeleteChildren(state->combine_cxt);
 	}
 }
 
@@ -656,7 +657,7 @@ combine(ContQueryCombinerState *state)
 					  NULL);
 
 	dest = CreateDestReceiver(DestTuplestore);
-	SetTuplestoreDestReceiverParams(dest, state->combined, combine_cxt, true);
+	SetTuplestoreDestReceiverParams(dest, state->combined, state->combine_cxt, true);
 
 	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, NULL);
 
@@ -683,6 +684,11 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	base = (ContQueryState *) state;
 
 	state->plan_cache_cxt = AllocSetContextCreate(base->state_cxt, "CombinerQueryPlanCacheCxt",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	state->combine_cxt = AllocSetContextCreate(base->state_cxt, "CombinerQueryCombineCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -792,10 +798,10 @@ read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
  * need_sync
  */
 static bool
-need_sync(ContQueryCombinerState **states, Bitmapset *queries, TimestampTz last_sync, long *num_pending)
+need_sync(ContExecutor *cont_exec, TimestampTz last_sync)
 {
-	Bitmapset *tmp = bms_copy(queries);
-	long pending = 0;
+	Bitmapset *tmp = bms_copy(cont_exec->queries);
+	ContQueryCombinerState **states = (ContQueryCombinerState **) cont_exec->states;
 	int id;
 
 	while ((id = bms_first_member(tmp)) >= 0)
@@ -803,13 +809,7 @@ need_sync(ContQueryCombinerState **states, Bitmapset *queries, TimestampTz last_
 		ContQueryCombinerState *state = states[id];
 		if (state == NULL)
 			continue;
-		pending += state->pending_tuples;
 	}
-
-	*num_pending = pending;
-
-	if (pending == 0)
-		return false;
 
 	if (synchronous_stream_insert || continuous_query_commit_interval == 0)
 		return true;
@@ -822,15 +822,9 @@ ContinuousQueryCombinerMain(void)
 {
 	ContExecutor *cont_exec = ContExecutorNew(Combiner, &init_query_state);
 	Oid query_id;
-	TimestampTz first_tuple = GetCurrentTimestamp();
+	TimestampTz first_combine = GetCurrentTimestamp();
 	bool do_commit = false;
-	bool do_sync = false;
 	long total_pending = 0;
-
-	combine_cxt =  AllocSetContextCreate(cont_exec->cxt, "CombinerCombineCxt",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
 
 	/* Set the commit level */
 	synchronous_commit = continuous_query_combiner_synchronous_commit;
@@ -861,10 +855,12 @@ ContinuousQueryCombinerMain(void)
 				if (count)
 				{
 					state->pending_tuples += count;
+					total_pending += count;
+
 					combine(state);
 
-					if (first_tuple < 0)
-						first_tuple = GetCurrentTimestamp();
+					if (first_combine == 0)
+						first_combine = GetCurrentTimestamp();
 				}
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
@@ -890,17 +886,15 @@ next:
 			ContExecutorEndQuery(cont_exec);
 		}
 
-		do_sync = need_sync((ContQueryCombinerState **) cont_exec->states, cont_exec->queries, first_tuple, &total_pending);
-		if (do_sync)
+		if (total_pending == 0)
+			do_commit = true;
+		else if (need_sync(cont_exec, first_combine))
 		{
-			sync_all((ContQueryCombinerState **) cont_exec->states, cont_exec->queries);
+			sync_all(cont_exec);
 			do_commit = true;
-
-			MemoryContextResetAndDeleteChildren(combine_cxt);
-			first_tuple = -1;
+			first_combine = 0;
+			total_pending = 0;
 		}
-		else if (total_pending == 0)
-			do_commit = true;
 		else
 			do_commit = false;
 
