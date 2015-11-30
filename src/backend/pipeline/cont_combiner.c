@@ -609,6 +609,8 @@ sync_all(ContQueryCombinerState **states, Bitmapset *queries)
 		if (!state)
 			continue;
 
+		MyCQStats = &state->base.stats;
+
 		if (state->pending_tuples > 0)
 			sync_combine(state);
 
