@@ -556,7 +556,8 @@ get_query_state(ContExecutor *exec)
 		/* Was the continuous view modified? In our case this means remove the old view and add a new one. */
 		if (HeapTupleGetOid(tup) != state->view->oid)
 		{
-			ContExecutorPurgeQuery(exec);
+			MemoryContextDelete(state->state_cxt);
+			exec->states[exec->current_query_id] = NULL;
 			state = NULL;
 		}
 	}
