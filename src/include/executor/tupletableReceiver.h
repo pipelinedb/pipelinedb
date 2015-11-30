@@ -23,6 +23,7 @@ typedef struct HeapTupleEntryData
 {
 	TupleHashEntryData shared;	/* common header for hash table entries */
 	HeapTuple tuple;	/* physical tuple belonging to this entry */
+	char flags;
 }	HeapTupleEntryData;
 
 extern DestReceiver *CreateTupleTableDestReceiver(void);

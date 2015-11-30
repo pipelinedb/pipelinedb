@@ -2696,6 +2696,16 @@ static struct config_int ConfigureNamesInt[] =
 		NULL, NULL, NULL
 	},
 
+	{
+		{"continuous_query_commit_interval", PGC_BACKEND, QUERY_TUNING_OTHER,
+		 gettext_noop("Sets the number of milliseconds that combiners will keep combining in memory before committing the result."),
+		 gettext_noop("A longer commit interval will increase performance at the expense of less frequent continuous view updates and more potential data loss.")
+		},
+		&continuous_query_commit_interval,
+		500, 0, 60000,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0, 0, 0, NULL, NULL, NULL
