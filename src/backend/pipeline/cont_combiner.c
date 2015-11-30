@@ -35,7 +35,6 @@
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
-#include "pipeline/groupcache.h"
 #include "pipeline/sw_vacuum.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -78,7 +77,6 @@ typedef struct
 	FmgrInfo *hash_funcs;
 	Oid *groupops;
 	FuncExpr *hashfunc;
-	GroupCache *cache;
 	Relation matrel;
 	ResultRelInfo *ri;
 	TupleHashTable existing;
@@ -160,25 +158,6 @@ get_values(ContQueryCombinerState *state)
 		{
 			pos++;
 			continue;
-		}
-
-		/*
-		 * If we already have the physical tuple cached from a previous combine
-		 * call, then we don't need to look for it on disk. Instead, just add it
-		 * to the output that the on-disk tuples will eventually go to.
-		 */
-		if (state->cache)
-		{
-			bool isnew;
-			HeapTuple cached = GroupCacheGet(state->cache, slot);
-			if (cached)
-			{
-				HeapTupleEntry ex = (HeapTupleEntry) LookupTupleHashEntry(existing, slot, &isnew);
-
-				ex->tuple = cached;
-				pos++;
-				continue;
-			}
 		}
 
 		typeinfo = typeidType(state->hashfunc->funcresulttype);
@@ -532,8 +511,6 @@ sync_combine(ContQueryCombinerState *state)
 	Size size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
 	bool *replace_all = palloc0(size);
 	EState *estate = CreateExecutorState();
-	List *tuples_to_cache = NIL;
-	ListCell *lc;
 	int i;
 
 	state->matrel = heap_openrv_extended(state->base.view->matrel, RowExclusiveLock, true);
@@ -546,7 +523,6 @@ sync_combine(ContQueryCombinerState *state)
 	{
 		HeapTupleEntry update = NULL;
 		HeapTuple tup = NULL;
-		bool should_cache = true;
 		AttrNumber att = 1;
 		int replaces = 0;
 
@@ -601,11 +577,6 @@ sync_combine(ContQueryCombinerState *state)
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			if (ExecCQMatRelUpdate(state->ri, slot, estate))
 				IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
-			else if (state->cache)
-			{
-				should_cache = false;
-				GroupCacheDelete(state->cache, slot);
-			}
 		}
 		else
 		{
@@ -614,26 +585,8 @@ sync_combine(ContQueryCombinerState *state)
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
-		if (state->cache && should_cache)
-			tuples_to_cache = lappend(tuples_to_cache, ExecCopySlotTuple(slot));
-
 		ResetPerTupleExprContext(estate);
 	}
-
-	/*
-	 * We need to wait until we've completed all updates/inserts before caching everything, otherwise
-	 * we may free a cached tuple before trying to read it.
-	 */
-	foreach(lc, tuples_to_cache)
-	{
-		HeapTuple tup = (HeapTuple) lfirst(lc);
-		ExecStoreTuple(tup, slot, InvalidBuffer, false);
-		GroupCachePut(state->cache, slot);
-		ExecClearTuple(slot);
-		heap_freetuple(tup);
-	}
-
-	list_free(tuples_to_cache);
 
 	tuplestore_clear(state->combined);
 
@@ -776,10 +729,6 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 
 		execTuplesHashPrepare(state->ngroupatts, state->groupops, &state->eq_funcs, &state->hash_funcs);
 		state->existing = build_existing_hashtable(state);
-
-//		state->cache = GroupCacheCreate(continuous_query_combiner_cache_mem * 1024, state->ngroupatts, state->groupatts,
-//				state->groupops, state->slot, state_cxt, cache_tmp_cxt);
-		state->cache = NULL;
 	}
 
 	return base;
