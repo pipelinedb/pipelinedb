@@ -2702,7 +2702,7 @@ static struct config_int ConfigureNamesInt[] =
 		 gettext_noop("A longer commit interval will increase performance at the expense of less frequent continuous view updates and more potential data loss.")
 		},
 		&continuous_query_commit_interval,
-		5000, 0, 60000,
+		500, 0, 60000,
 		NULL, NULL, NULL
 	},
 
