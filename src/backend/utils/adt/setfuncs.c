@@ -16,6 +16,7 @@
 #include "utils/array.h"
 #include "utils/datum.h"
 #include "utils/hsearch.h"
+#include "utils/memutils.h"
 #include "utils/setfuncs.h"
 #include "utils/typcache.h"
 
@@ -104,10 +105,9 @@ set_agg_startup(FunctionCallInfo fcinfo, Oid type)
 /*
  * set_add
  */
-static ArrayType *
-set_add(FunctionCallInfo fcinfo, Datum d, ArrayType *state)
+static ArrayBuildState *
+set_add(FunctionCallInfo fcinfo, MemoryContext aggcontext, Datum d, bool isnull, ArrayBuildState *state)
 {
-	ArrayType *result = state;
 	SetKey key;
 	bool found;
 	SetAggState *sas;
@@ -132,13 +132,13 @@ set_add(FunctionCallInfo fcinfo, Datum d, ArrayType *state)
 	hash_search_with_hash_value(sas->htab, &key, h, HASH_ENTER, &found);
 
 	if (!found)
-	{
-		int index = ArrayGetNItems(ARR_NDIM(state), ARR_DIMS(state));
-		result = array_set(state, 1, &index, copy, false, -1,
-				sas->typ->typlen, sas->typ->typbyval, sas->typ->typalign);
-	}
+		state = accumArrayResult(state,
+								 d,
+								 PG_ARGISNULL(1),
+								 sas->typ->type_id,
+								 aggcontext);
 
-	return result;
+	return state;
 }
 
 /*
@@ -147,7 +147,7 @@ set_add(FunctionCallInfo fcinfo, Datum d, ArrayType *state)
 Datum
 set_agg_trans(PG_FUNCTION_ARGS)
 {
-	ArrayType *state;
+	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
 	Datum incoming = PG_GETARG_DATUM(1);
 	MemoryContext old;
 	MemoryContext context;
@@ -157,55 +157,14 @@ set_agg_trans(PG_FUNCTION_ARGS)
 
 	old = MemoryContextSwitchTo(context);
 
-	if (PG_ARGISNULL(0))
-	{
-		Oid type = AggGetInitialArgType(fcinfo);
+	if (state == NULL)
+		set_agg_startup(fcinfo, AggGetInitialArgType(fcinfo));
 
-		set_agg_startup(fcinfo, type);
-		state = construct_empty_array(type);
-	}
-	else
-	{
-		state = (ArrayType *) PG_GETARG_POINTER(0);
-	}
-
-	state = set_add(fcinfo, incoming, state);
+	state = set_add(fcinfo, context, incoming, PG_ARGISNULL(1), state);
 
 	MemoryContextSwitchTo(old);
 
 	PG_RETURN_POINTER(state);
-}
-
-/*
- * set_add_all
- *
- * Add all incoming elements to the current state
- */
-static ArrayType *
-set_add_all(FunctionCallInfo fcinfo, ArrayType *state, ArrayType *incoming)
-{
-	SetAggState *sas;
-	ArrayType *result = state;
-	int len;
-	int i;
-	char *p;
-
-	sas = (SetAggState *) fcinfo->flinfo->fn_extra;
-	len = ArrayGetNItems(ARR_NDIM(incoming), ARR_DIMS(incoming));
-	p = ARR_DATA_PTR(incoming);
-
-	for (i = 0; i < len; i++)
-	{
-		Datum d;
-
-		d = fetch_att(p, sas->typ->typbyval, sas->typ->typlen);
-		p = att_addlength_pointer(p, sas->typ->typlen, p);
-		p = (char *) att_align_nominal(p, sas->typ->typalign);
-
-		result = set_add(fcinfo, d, result);
-	}
-
-	return result;
 }
 
 /*
@@ -214,27 +173,29 @@ set_add_all(FunctionCallInfo fcinfo, ArrayType *state, ArrayType *incoming)
 Datum
 set_agg_combine(PG_FUNCTION_ARGS)
 {
-	ArrayType *state;
-	ArrayType *incoming = (ArrayType *) PG_GETARG_VARLENA_P(1);
+	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	ArrayBuildState *incoming = PG_ARGISNULL(1) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(1);
 	MemoryContext old;
 	MemoryContext context;
+	int i;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "set_agg_combine called in non-aggregate context");
 
+	if (incoming == NULL)
+		PG_RETURN_POINTER(state);
+
 	old = MemoryContextSwitchTo(context);
 
-	if (PG_ARGISNULL(0))
-	{
-		set_agg_startup(fcinfo, ARR_ELEMTYPE(incoming));
-		state = construct_empty_array(ARR_ELEMTYPE(incoming));
-	}
-	else
-	{
-		state = (ArrayType *) PG_GETARG_VARLENA_P(0);
-	}
+	if (state == NULL)
+		set_agg_startup(fcinfo, incoming->element_type);
 
-	state = set_add_all(fcinfo, state, incoming);
+	/*
+	 * The incoming arrays will be appended to the existing transition state,
+	 * but the order in which they're appended isn't predictable.
+	 */
+	for (i = 0; i < incoming->nelems; i++)
+		state = set_add(fcinfo, context, incoming->dvalues[i], incoming->dnulls[i], state);
 
 	MemoryContextSwitchTo(old);
 
@@ -247,13 +208,12 @@ set_agg_combine(PG_FUNCTION_ARGS)
 Datum
 set_cardinality(PG_FUNCTION_ARGS)
 {
-	ArrayType *state;
+	Datum array;
 
 	if (PG_ARGISNULL(0))
 		PG_RETURN_INT64(0);
 
-	state = (ArrayType *) PG_GETARG_VARLENA_P(0);
-
-	PG_RETURN_INT64(ArrayGetNItems(ARR_NDIM(state), ARR_DIMS(state)));
+	array = DirectFunctionCall1(array_agg_finalfn, PG_GETARG_DATUM(0));;
+	PG_RETURN_INT32(DirectFunctionCall2(array_length, array, Int32GetDatum(1)));
 }
 
