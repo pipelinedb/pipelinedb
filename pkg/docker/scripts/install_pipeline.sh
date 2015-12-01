@@ -9,7 +9,7 @@ apt-get install -y wget nano
 # install dependencies
 apt-get install -y libxml2 libxml2-dev
 
-wget -q http://www.pipelinedb.com/download/0.8.0/ubuntu14
+wget -q http://www.pipelinedb.com/download/0.8.4/ubuntu14
 
 dpkg --install ubuntu14
 
