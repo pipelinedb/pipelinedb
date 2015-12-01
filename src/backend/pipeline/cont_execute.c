@@ -454,17 +454,23 @@ ContExecutorStartBatch(ContExecutor *exec)
 {
 	if (dsm_cqueue_is_empty(exec->cqueue))
 	{
-		char *proc_name = GetContQueryProcName(MyContQueryProc);
-		cq_stat_report(true);
+		if (!IsTransactionState())
+		{
+			char *proc_name = GetContQueryProcName(MyContQueryProc);
 
-		pgstat_report_activity(STATE_IDLE, proc_name);
-		dsm_cqueue_wait_non_empty(exec->cqueue, 0);
-		pgstat_report_activity(STATE_RUNNING, proc_name);
+			cq_stat_report(true);
 
-		pfree(proc_name);
+			pgstat_report_activity(STATE_IDLE, proc_name);
+			dsm_cqueue_wait_non_empty(exec->cqueue, 0);
+			pgstat_report_activity(STATE_RUNNING, proc_name);
+
+			pfree(proc_name);
+		}
+		else
+			pg_usleep(500);
 	}
 
-	if (bms_is_empty(exec->queries))
+	if (bms_is_empty(exec->queries) && !IsTransactionState())
 	{
 		MemoryContext old = CurrentMemoryContext;
 
@@ -476,7 +482,8 @@ ContExecutorStartBatch(ContExecutor *exec)
 		MemoryContextSwitchTo(old);
 	}
 
-	StartTransactionCommand();
+	if (!IsTransactionState())
+		StartTransactionCommand();
 
 	MemoryContextSwitchTo(exec->exec_cxt);
 	ContQueryBatchContext = exec->exec_cxt;
@@ -549,7 +556,8 @@ get_query_state(ContExecutor *exec)
 		/* Was the continuous view modified? In our case this means remove the old view and add a new one. */
 		if (HeapTupleGetOid(tup) != state->view->oid)
 		{
-			ContExecutorPurgeQuery(exec);
+			MemoryContextDelete(state->state_cxt);
+			exec->states[exec->current_query_id] = NULL;
 			state = NULL;
 		}
 	}
@@ -788,11 +796,15 @@ ContExecutorEndQuery(ContExecutor *exec)
 }
 
 void
-ContExecutorEndBatch(ContExecutor *exec)
+ContExecutorEndBatch(ContExecutor *exec, bool commit)
 {
 	void *ptr;
 
-	CommitTransactionCommand();
+	Assert(IsTransactionState());
+
+	if (commit)
+		CommitTransactionCommand();
+
 	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
 
 	while (exec->nitems--)

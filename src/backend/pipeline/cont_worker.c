@@ -238,7 +238,7 @@ next:
 			ContExecutorEndQuery(cont_exec);
 		}
 
-		ContExecutorEndBatch(cont_exec);
+		ContExecutorEndBatch(cont_exec, true);
 	}
 
 	StartTransactionCommand();
