@@ -178,3 +178,11 @@ SELECT * FROM test_view ORDER BY uid;
 
 CREATE CONTINUOUS VIEW v AS SELECT array_agg(ARRAY[x::int, y::int]) FROM stream;
 ERROR:  could not find array type for data type integer[]
+CREATE CONTINUOUS VIEW v AS SELECT x::int, count(*) FROM stream;
+ERROR:  column "stream.x" must appear in the GROUP BY clause or be used in an aggregate function
+LINE 1: CREATE CONTINUOUS VIEW v AS SELECT x::int, count(*) FROM str...
+                                           ^
+CREATE CONTINUOUS VIEW v AS SELECT x::int, y::int, count(*) FROM stream GROUP BY x;
+ERROR:  column "stream.y" must appear in the GROUP BY clause or be used in an aggregate function
+LINE 1: CREATE CONTINUOUS VIEW v AS SELECT x::int, y::int, count(*) ...
+                                                   ^
