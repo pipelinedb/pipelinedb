@@ -206,7 +206,7 @@ DATA(insert (keyed_min_max_finalize keyed_min_trans  0 0 keyed_min_combine 17));
 DATA(insert (keyed_min_max_finalize keyed_max_trans  0 0 keyed_max_combine 17));
 
 /* set_agg */
-DATA(insert (0 set_agg_trans  0 0 set_agg_combine 17));
-DATA(insert (set_cardinality set_agg_trans  0 0 set_agg_combine 17));
+DATA(insert (array_agg_finalfn set_agg_trans  arrayaggstatesend arrayaggstaterecv set_agg_combine 17));
+DATA(insert (set_cardinality set_agg_trans  arrayaggstatesend arrayaggstaterecv set_agg_combine 17));
 
 #endif
