@@ -753,6 +753,8 @@ permissionsList(const char *pattern)
 					  " WHEN 'm' THEN '%s'"
 					  " WHEN 'S' THEN '%s'"
 					  " WHEN 'f' THEN '%s'"
+					  " WHEN 'C' THEN '%s'"
+					  " WHEN '$' THEN '%s'"
 					  " END as \"%s\",\n"
 					  "  ",
 					  gettext_noop("Schema"),
@@ -762,6 +764,8 @@ permissionsList(const char *pattern)
 					  gettext_noop("materialized view"),
 					  gettext_noop("sequence"),
 					  gettext_noop("foreign table"),
+					  gettext_noop("continuous view"),
+					  gettext_noop("stream"),
 					  gettext_noop("Type"));
 
 	printACLColumn(&buf, "c.relacl");
@@ -777,7 +781,7 @@ permissionsList(const char *pattern)
 
 	appendPQExpBufferStr(&buf, "\nFROM pg_catalog.pg_class c\n"
 	   "     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n"
-						 "WHERE c.relkind IN ('r', 'v', 'm', 'S', 'f')\n");
+						 "WHERE c.relkind IN ('r', 'v', 'm', 'S', 'f', 'C', '$')\n");
 
 	/*
 	 * Unless a schema pattern is specified, we suppress system and temp
