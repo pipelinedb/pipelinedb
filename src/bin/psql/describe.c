@@ -2740,14 +2740,17 @@ listTables(const char *tabtypes, const char *pattern, bool verbose, bool showSys
 	bool		showMatViews = strchr(tabtypes, 'm') != NULL;
 	bool		showSeq = strchr(tabtypes, 's') != NULL;
 	bool		showForeign = strchr(tabtypes, 'E') != NULL;
+	bool		showStreams = strchr(tabtypes, '$') != NULL;
+	bool		showContViews = strchr(tabtypes, 'C') != NULL;
 
 	PQExpBufferData buf;
 	PGresult   *res;
 	printQueryOpt myopt = pset.popt;
 	static const bool translate_columns[] = {false, false, true, false, false, false, false};
 
-	if (!(showTables || showIndexes || showViews || showMatViews || showSeq || showForeign))
-		showTables = showViews = showMatViews = showSeq = showForeign = true;
+	if (!(showTables || showIndexes || showViews || showMatViews || showSeq || showForeign ||
+			showStreams || showContViews))
+		showTables = showViews = showMatViews = showSeq = showForeign = showContViews = showStreams = true;
 
 	initPQExpBuffer(&buf);
 
@@ -2766,6 +2769,8 @@ listTables(const char *tabtypes, const char *pattern, bool verbose, bool showSys
 					  " WHEN 'S' THEN '%s'"
 					  " WHEN 's' THEN '%s'"
 					  " WHEN 'f' THEN '%s'"
+					  " WHEN 'C' THEN '%s'"
+					  " WHEN '$' THEN '%s'"
 					  " END as \"%s\",\n"
 					  "  pg_catalog.pg_get_userbyid(c.relowner) as \"%s\"",
 					  gettext_noop("Schema"),
@@ -2777,6 +2782,8 @@ listTables(const char *tabtypes, const char *pattern, bool verbose, bool showSys
 					  gettext_noop("sequence"),
 					  gettext_noop("special"),
 					  gettext_noop("foreign table"),
+					  gettext_noop("continuous view"),
+					  gettext_noop("stream"),
 					  gettext_noop("Type"),
 					  gettext_noop("Owner"));
 
@@ -2829,6 +2836,11 @@ listTables(const char *tabtypes, const char *pattern, bool verbose, bool showSys
 												 * 8.1 */
 	if (showForeign)
 		appendPQExpBufferStr(&buf, "'f',");
+
+	if (showContViews)
+		appendPQExpBufferStr(&buf, "'C',");
+	if (showStreams)
+		appendPQExpBufferStr(&buf, "'$',");
 
 	appendPQExpBufferStr(&buf, "''");	/* dummy */
 	appendPQExpBufferStr(&buf, ")\n");
