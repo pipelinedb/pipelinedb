@@ -128,3 +128,5 @@ INSERT INTO stream (uid) VALUES (41950);
 SELECT * FROM test_view ORDER BY uid;
 
 CREATE CONTINUOUS VIEW v AS SELECT array_agg(ARRAY[x::int, y::int]) FROM stream;
+CREATE CONTINUOUS VIEW v AS SELECT x::int, count(*) FROM stream;
+CREATE CONTINUOUS VIEW v AS SELECT x::int, y::int, count(*) FROM stream GROUP BY x;

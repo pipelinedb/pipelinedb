@@ -2402,7 +2402,13 @@ get_rte_attribute_name(RangeTblEntry *rte, AttrNumber attnum)
 	 * built (which can easily happen for rules).
 	 */
 	if (rte->rtekind == RTE_RELATION)
+	{
+		/* Special handling for inferred streams */
+		if (rte->relkind == RELKIND_STREAM && IsInferredStream(rte->relid) &&
+				attnum > 0 && attnum <= list_length(rte->eref->colnames))
+			return strVal(list_nth(rte->eref->colnames, attnum - 1));
 		return get_relid_attribute_name(rte->relid, attnum);
+	}
 
 	/*
 	 * Otherwise use the column name from eref.  There should always be one.
