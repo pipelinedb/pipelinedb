@@ -592,7 +592,7 @@
 #restart_after_crash = on		# reinitialize after backend crash?
 
 #------------------------------------------------------------------------------
-# CONTINUOUS VIEW OPTIONS
+# PIPELINEDB OPTIONS
 #------------------------------------------------------------------------------
 
 # synchronization level for combiner commits; off, local, remote_write, or on
