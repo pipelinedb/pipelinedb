@@ -601,10 +601,6 @@
 # maximum amount of memory to use for combiner query executions
 #continuous_query_combiner_work_mem = 256MB
 
-# maximum memory to be used by the combiner for caching; this is independent
-# of combiner_work_mem
-#continuous_query_combiner_cache_mem = 32MB
-
 # the default fillfactor to use for continuous views
 #continuous_view_fillfactor = 50
 
