@@ -612,6 +612,10 @@
 # to accumulate
 # continuous_query_max_wait = 10
 
+# time in milliseconds after which a combiner process will commit state to
+# disk
+# continuous_query_commit_interval = 50
+
 # the maximum number of events to accumulate before executing a continuous query
 # plan on them
 #continuous_query_batch_size = 10000

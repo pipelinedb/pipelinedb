@@ -91,7 +91,6 @@ extern int  continuous_query_num_workers;
 extern int  continuous_query_batch_size;
 extern int  continuous_query_max_wait;
 extern int  continuous_query_combiner_work_mem;
-extern int  continuous_query_combiner_cache_mem;
 extern int  continuous_query_combiner_synchronous_commit;
 extern int  continuous_query_ipc_shared_mem;
 extern int continuous_query_commit_interval;

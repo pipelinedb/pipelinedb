@@ -2623,17 +2623,6 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"continuous_query_combiner_cache_mem", PGC_BACKEND, RESOURCES_MEM,
-		 gettext_noop("Sets the maximum memory to be used by the combiner for caching. This is independent of combiner_work_mem."),
-		 NULL,
-		 GUC_UNIT_KB
-		},
-		&continuous_query_combiner_cache_mem,
-		16384, 0, MAX_KILOBYTES,
-		NULL, NULL, NULL
-	},
-
-	{
 		{"continuous_query_max_wait", PGC_SIGHUP, QUERY_TUNING,
 		 gettext_noop("Sets the time a continuous query process will wait for a batch to accumulate."),
 		 gettext_noop("A higher value usually yields less frequent continuous view updates, but adversely affects "
