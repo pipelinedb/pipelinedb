@@ -267,6 +267,150 @@ static char *get_synchronized_snapshot(Archive *fout);
 static PGresult *ExecuteSqlQueryForSingleRow(Archive *fout, char *query);
 static void setupDumpWorker(Archive *AHX, RestoreOptions *ropt);
 
+/*
+ * is_matrel
+ *
+ * Is the given relation a a matrel?
+ */
+static bool
+is_matrel(Archive *fout, TableInfo *ti, Oid matrel_oid)
+{
+	PQExpBuffer pq = createPQExpBuffer();
+	PGresult *res;
+	bool result = false;
+	Oid oid = ti ? ti->dobj.catId.oid : matrel_oid;
+
+	if (ti->relkind != RELKIND_RELATION)
+		return false;
+
+	/*
+	 * If this table is a matrel, we don't want to dump its definition since
+	 * CREATE CONTINUOUS VIEW will create it.
+	 */
+	appendPQExpBuffer(pq, "SELECT c.oid, pq.matrel AS matrel FROM pipeline_query pq "
+			"RIGHT JOIN pg_class c ON pq.matrel = c.oid WHERE c.oid = %d", oid);
+	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
+	destroyPQExpBuffer(pq);
+
+	if (!PQgetisnull(res, 0, PQfnumber(res, "matrel")))
+		result = true;
+
+	return result;
+}
+
+/*
+ * is_seqrel
+ *
+ * Is the given relation a sequence belonging to a matrel?
+ */
+static bool
+is_seqrel(Archive *fout, Oid oid)
+{
+	PQExpBuffer pq = createPQExpBuffer();
+	PGresult *res;
+	bool result = false;
+
+	appendPQExpBuffer(pq, "SELECT c.oid, pq.seqrel AS seqrel FROM pipeline_query pq "
+			"RIGHT JOIN pg_class c ON pq.seqrel = c.oid WHERE c.oid = %d", oid);
+	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
+	destroyPQExpBuffer(pq);
+
+	if (!PQgetisnull(res, 0, PQfnumber(res, "seqrel")))
+		result = true;
+
+	return result;
+}
+
+/*
+ * is_inferred_stream
+ *
+ * Is the given relation an inferred stream?
+ */
+static bool
+is_inferred_stream(Archive *fout, TableInfo *ti)
+{
+	PQExpBuffer ps = createPQExpBuffer();
+	PGresult *res;
+	bool result = false;
+
+	if (ti->relkind != RELKIND_STREAM)
+		return false;
+
+	appendPQExpBuffer(ps, "SELECT inferred FROM pipeline_stream WHERE relid = %d", ti->dobj.catId.oid);
+	res = ExecuteSqlQueryForSingleRow(fout, ps->data);
+
+	/*
+	 * We only want to dump static streams, as inferred streams will be created by
+	 * CREATE CONTINUOUS VIEW.
+	 */
+	destroyPQExpBuffer(ps);
+
+	if (strcmp(PQgetvalue(res, 0, PQfnumber(res, "inferred")), "t") == 0)
+		result = true;
+
+	return result;
+}
+
+/*
+ * dumpContinuousView
+ *
+ * Dump a CREATE CONTINUOUS VIEW statement
+ */
+static void
+dumpContinuousView(Archive *fout, TableInfo *ti, PQExpBuffer delq)
+{
+	PQExpBuffer q = createPQExpBuffer();
+	PQExpBuffer pq = createPQExpBuffer();
+	PGresult *res;
+	char *qdef;
+	char *seqrel;
+	char *last;
+	bool called;
+
+	appendPQExpBuffer(pq, "SELECT query FROM pipeline_queries() WHERE schema = '%s' AND name = '%s'",
+			ti->dobj.namespace->dobj.name, ti->dobj.name);
+	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
+	qdef = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "query")));
+
+	appendPQExpBuffer(q, "SET continuous_query_materialization_table_updatable = on;\n\n");
+	appendPQExpBuffer(q, "CREATE CONTINUOUS VIEW %s.%s AS %s;\n\n", ti->dobj.namespace->dobj.name, ti->dobj.name, qdef);
+
+	/* Get the name of the seqrel */
+	resetPQExpBuffer(pq);
+	appendPQExpBuffer(pq, "SELECT c.relname AS seqrel FROM pipeline_query pq JOIN pg_class c "
+			"ON pq.seqrel = c.oid WHERE pq.namespace = %d AND pq.name = '%s'",
+			ti->dobj.namespace->dobj.catId.oid, ti->dobj.name);
+	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
+	seqrel = PQgetvalue(res, 0, PQfnumber(res, "seqrel"));
+
+	/* Get the current value so we can set it immediately after creating the CV */
+	resetPQExpBuffer(pq);
+	appendPQExpBuffer(pq, "SELECT last_value, is_called FROM %s", seqrel);
+	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
+	last = PQgetvalue(res, 0, 0);
+	called = (strcmp(PQgetvalue(res, 0, 1), "t") == 0);
+
+	/* Now set it right after creating the CV */
+	appendPQExpBufferStr(q, "SELECT pg_catalog.setval(");
+	appendStringLiteralAH(q, fmtId(seqrel), fout);
+	appendPQExpBuffer(q, ", %s, %s);\n\n",
+					  last, (called ? "true" : "false"));
+
+	ArchiveEntry(fout, ti->dobj.catId, ti->dobj.dumpId,
+			ti->dobj.name,
+			ti->dobj.namespace->dobj.name,
+			ti->reltablespace,
+			ti->rolname,
+			   false,
+				 "CONTINUOUS VIEW",
+				 SECTION_PRE_DATA,
+				 q->data, delq->data, NULL,
+				 NULL, 0,
+				 NULL, NULL);
+
+	destroyPQExpBuffer(q);
+	destroyPQExpBuffer(pq);
+}
 
 int
 main(int argc, char **argv)
@@ -1194,10 +1338,9 @@ expand_table_name_patterns(Archive *fout,
 						  "SELECT c.oid"
 						  "\nFROM pg_catalog.pg_class c"
 		"\n     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace"
-					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c')\n",
+					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c')\n",
 						  RELKIND_RELATION, RELKIND_SEQUENCE, RELKIND_VIEW,
-						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
-						  RELKIND_CONTVIEW, RELKIND_STREAM);
+						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE, RELKIND_CONTVIEW);
 		processSQLNamePattern(GetConnection(fout), query, cell->val, true,
 							  false, "n.nspname", "c.relname", NULL,
 							  "pg_catalog.pg_table_is_visible(c.oid)");
@@ -1775,6 +1918,12 @@ dumpTableData(Archive *fout, TableDataInfo *tdinfo)
 	DataDumperPtr dumpFn;
 	char	   *copyStmt;
 
+	/*
+	 * Streams don't contain any data
+	 */
+	if (tbinfo->relkind == RELKIND_STREAM)
+		return;
+
 	if (!dump_inserts)
 	{
 		/* Dump/restore using COPY */
@@ -1894,9 +2043,7 @@ makeTableDataInfo(TableInfo *tbinfo, bool oids)
 	/* Skip FOREIGN TABLEs (no data to dump) */
 	if (tbinfo->relkind == RELKIND_FOREIGN_TABLE)
 		return;
-
-	/* Skip CONTINUOUS VIEWs and STREAMs (no data to dump) */
-	if (tbinfo->relkind == RELKIND_CONTVIEW || tbinfo->relkind == RELKIND_STREAM)
+	if (tbinfo->relkind == RELKIND_CONTVIEW)
 		return;
 
 	/* Don't dump data in unlogged tables, if so requested */
@@ -4352,14 +4499,14 @@ getTables(Archive *fout, int *numTables)
 						  "d.objsubid = 0 AND "
 						  "d.refclassid = c.tableoid AND d.deptype = 'a') "
 					   "LEFT JOIN pg_class tc ON (c.reltoastrelid = tc.oid) "
-				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
-						  "ORDER BY c.oid",
+					   "LEFT JOIN pipeline_stream ps ON c.oid = ps.relid WHERE inferred = false OR inferred IS NULL "
+				   "AND c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
+						  " ORDER BY c.oid",
 						  username_subquery,
 						  RELKIND_SEQUENCE,
 						  RELKIND_RELATION, RELKIND_SEQUENCE,
 						  RELKIND_VIEW, RELKIND_COMPOSITE_TYPE,
-						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
-						  RELKIND_CONTVIEW, RELKIND_STREAM);
+						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE, RELKIND_CONTVIEW, RELKIND_STREAM);
 	}
 	else if (fout->remoteVersion >= 90300)
 	{
@@ -5012,6 +5159,9 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 		if (!tbinfo->dobj.dump)
 			continue;
 
+		if (is_matrel(fout, tbinfo, 0))
+			continue;
+
 		if (g_verbose)
 			write_msg(NULL, "reading indexes for table \"%s\"\n",
 					  tbinfo->dobj.name);
@@ -5569,12 +5719,9 @@ getRules(Archive *fout, int *numRules)
 
 	if (fout->remoteVersion >= 80300)
 	{
-		appendPQExpBufferStr(query, "SELECT "
-							 "tableoid, oid, rulename, "
-							 "ev_class AS ruletable, ev_type, is_instead, "
-							 "ev_enabled "
-							 "FROM pg_rewrite "
-							 "ORDER BY oid");
+		appendPQExpBufferStr(query, "SELECT c.relkind, r.tableoid, r.oid, r.rulename, "
+				"r.ev_class AS ruletable, r.ev_type, r.is_instead, r.ev_enabled FROM pg_rewrite r "
+				"JOIN pg_class c on r.ev_class = c.oid WHERE c.relkind != 'C'");
 	}
 	else if (fout->remoteVersion >= 70100)
 	{
@@ -12272,6 +12419,10 @@ dumpForeignDataWrapper(Archive *fout, FdwInfo *fdwinfo)
 	if (!fdwinfo->dobj.dump || dataOnly)
 		return;
 
+	/* This is created at initdb time */
+	if (strcmp(fdwinfo->dobj.name, "stream_fdw") == 0)
+		return;
+
 	/*
 	 * FDWs that belong to an extension are dumped based on their "dump"
 	 * field. Otherwise omit them if we are only dumping some specific object.
@@ -12355,6 +12506,10 @@ dumpForeignServer(Archive *fout, ForeignServerInfo *srvinfo)
 
 	/* Skip if not to be dumped */
 	if (!srvinfo->dobj.dump || dataOnly || !include_everything)
+		return;
+
+	/* This is created at initdb time */
+	if (strcmp(srvinfo->dobj.name, "pipeline_streams") == 0)
 		return;
 
 	q = createPQExpBuffer();
@@ -13183,11 +13338,25 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 				srvname = NULL;
 				ftoptions = NULL;
 				break;
+			case (RELKIND_CONTVIEW):
+				reltypename = "CONTINUOUS VIEW";
+				srvname = NULL;
+				ftoptions = NULL;
+				break;
+			case RELKIND_STREAM:
+				reltypename = "STREAM";
+				srvname = NULL;
+				ftoptions = NULL;
+				break;
 			default:
 				reltypename = "TABLE";
 				srvname = NULL;
 				ftoptions = NULL;
 		}
+
+		/* These relations are implicitly created by CREATE CONTINUOUS VIEW */
+		if (is_matrel(fout, tbinfo, 0) || is_inferred_stream(fout, tbinfo))
+			return;
 
 		numParents = tbinfo->numParents;
 		parents = tbinfo->parents;
@@ -13203,6 +13372,12 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 
 		appendPQExpBuffer(labelq, "%s %s", reltypename,
 						  fmtId(tbinfo->dobj.name));
+
+		if (tbinfo->relkind == RELKIND_CONTVIEW)
+		{
+			dumpContinuousView(fout, tbinfo, delq);
+			return;
+		}
 
 		if (binary_upgrade)
 			binary_upgrade_set_pg_class_oids(fout, q,
@@ -14216,6 +14391,13 @@ dumpSequence(Archive *fout, TableInfo *tbinfo)
 	PQExpBuffer delqry = createPQExpBuffer();
 	PQExpBuffer labelq = createPQExpBuffer();
 
+	/*
+	 * If this sequence belongs to a matrel, we don't want to dump its definition since
+	 * CREATE CONTINUOUS VIEW will create it.
+	 */
+	if (is_seqrel(fout, tbinfo->dobj.catId.oid))
+		return;
+
 	/* Make sure we are in proper schema */
 	selectSourceSchema(fout, tbinfo->dobj.namespace->dobj.name);
 
@@ -14414,6 +14596,9 @@ dumpSequenceData(Archive *fout, TableDataInfo *tdinfo)
 	bool		called;
 	PQExpBuffer query = createPQExpBuffer();
 
+	if (is_seqrel(fout, tdinfo->tdtable->dobj.catId.oid))
+		return;
+
 	/* Make sure we are in proper schema */
 	selectSourceSchema(fout, tbinfo->dobj.namespace->dobj.name);
 
@@ -14446,7 +14631,7 @@ dumpSequenceData(Archive *fout, TableDataInfo *tdinfo)
 				 tbinfo->dobj.namespace->dobj.name,
 				 NULL,
 				 tbinfo->rolname,
-				 false, "SEQUENCE SET", SECTION_DATA,
+				 false, "SEQUENCE SET", SECTION_PRE_DATA,
 				 query->data, "", NULL,
 				 &(tbinfo->dobj.dumpId), 1,
 				 NULL, NULL);
