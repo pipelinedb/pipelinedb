@@ -28,3 +28,11 @@ DROP CONTINUOUS VIEW test_set_agg0;
 DROP CONTINUOUS VIEW test_set_agg1;
 DROP CONTINUOUS VIEW test_set_agg2;
 DROP CONTINUOUS VIEW test_set_agg3;
+
+CREATE CONTINUOUS VIEW test_set_agg4 AS SELECT array_agg(DISTINCT x::int), set_agg(x::int) FROM test_set_agg_stream;
+INSERT INTO test_set_agg_stream (x) VALUES (1), (2), (3);
+INSERT INTO test_set_agg_stream (x) VALUES (1), (2), (4);
+
+SELECT * FROM test_set_agg4;
+\d+ test_set_agg4
+DROP CONTINUOUS VIEW test_set_agg4;

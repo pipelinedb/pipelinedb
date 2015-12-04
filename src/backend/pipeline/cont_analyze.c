@@ -69,6 +69,7 @@ int sliding_window_step_factor;
 #define MIN_USEC (60 * SECOND_USEC)
 #define HOUR_USEC (60 * MIN_USEC)
 #define INTERNAL_COLNAME_PREFIX "_"
+#define IS_DISTINCT_ONLY_AGG(name) (pg_strcasecmp((name), "count") == 0 || pg_strcasecmp((name), "array_agg") == 0)
 
 /*
  * Maps hypothetical set aggregates to their streaming variants
@@ -82,7 +83,8 @@ static char *StreamingVariants[][2] = {
 		{"percent_rank", "cq_percent_rank"},
 		{"cume_dist", "cq_cume_dist"},
 		{"count", "hll_count_distinct"},
-		{"percentile_cont", "cq_percentile_cont"}
+		{"percentile_cont", "cq_percentile_cont"},
+		{"array_agg", "set_agg"}
 };
 
 typedef struct ReplaceNodeContext
@@ -136,8 +138,7 @@ get_streaming_agg(FuncCall *fn)
 	int len = sizeof(StreamingVariants) / sizeof(char *) / 2;
 	char *name = NameListToString(fn->funcname);
 
-	/* if the agg is count, we only need a streaming variant if it's DISTINCT */
-	if (pg_strcasecmp(name, "count") == 0 && fn->agg_distinct == false)
+	if (IS_DISTINCT_ONLY_AGG(name) && fn->agg_distinct == false)
 		return NULL;
 
 	for (i = 0; i < len; i++)
@@ -168,7 +169,8 @@ get_inv_streaming_agg(char *name, bool *is_distinct)
 
 		if (pg_strcasecmp(v, name) == 0)
 		{
-			if (is_distinct && pg_strcasecmp(v, "hll_count_distinct") == 0)
+			if (is_distinct &&
+					(pg_strcasecmp(v, "hll_count_distinct") == 0 || pg_strcasecmp(v, "set_agg") == 0))
 				*is_distinct = true;
 
 			return k;
@@ -1206,8 +1208,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 					errmsg("continuous queries don't support \"%s\" aggregate", name),
 					parser_errposition(context->pstate, func->location)));
 
-		/* only count(DISTINCT) is supported */
-		if (func->agg_distinct && pg_strcasecmp(name, "count") != 0)
+		if (func->agg_distinct && !IS_DISTINCT_ONLY_AGG(name))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					errmsg("continuous queries don't support DISTINCT expressions for \"%s\" aggregate", name),
