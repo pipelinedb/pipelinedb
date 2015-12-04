@@ -162,7 +162,9 @@ CREATE CONTINUOUS VIEW ls_hash_group2 AS SELECT x::int, y::timestamptz, COUNT(*)
 --------+---------+-----------+---------+--------------+-------------
  x      | integer |           | plain   |              | 
  count  | bigint  |           | plain   |              | 
+ $pk    | bigint  | not null  | plain   |              | 
 Indexes:
+    "hash_group_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "hash_group_mrel_expr_idx" btree (hash_group(x))
 Options: fillfactor=50
 
@@ -174,7 +176,9 @@ Options: fillfactor=50
  x                 | integer                  |           | plain   |              | 
  minute            | timestamp with time zone |           | plain   |              | 
  count             | bigint                   |           | plain   |              | 
+ $pk               | bigint                   | not null  | plain   |              | 
 Indexes:
+    "ls_hash_group1_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "ls_hash_group1_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, x, minute))
 Options: fillfactor=50
 
@@ -185,7 +189,9 @@ Options: fillfactor=50
  x      | integer                     |           | plain   |              | 
  y      | timestamp(0) with time zone |           | plain   |              | 
  count  | bigint                      |           | plain   |              | 
+ $pk    | bigint                      | not null  | plain   |              | 
 Indexes:
+    "ls_hash_group2_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "ls_hash_group2_mrel_expr_idx" btree (ls_hash_group(x, y))
 Options: fillfactor=50
 

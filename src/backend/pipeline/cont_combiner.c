@@ -18,6 +18,7 @@
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
+#include "commands/sequence.h"
 #include "executor/execdesc.h"
 #include "executor/executor.h"
 #include "executor/tstoreReceiver.h"
@@ -510,12 +511,15 @@ sync_combine(ContQueryCombinerState *state)
 	bool *replace_all = palloc0(size);
 	EState *estate = CreateExecutorState();
 	int i;
+	int natts;
 
 	state->matrel = heap_openrv_extended(state->base.view->matrel, RowExclusiveLock, true);
 
 	if (state->matrel == NULL)
 		return;
 	state->ri = CQMatRelOpen(state->matrel);
+
+	natts = state->prev_slot->tts_tupleDescriptor->natts;
 
 	foreach_tuple(slot, state->combined)
 	{
@@ -528,6 +532,9 @@ sync_combine(ContQueryCombinerState *state)
 		MemSet(replace_all, true, size);
 		for (i = 0; i < state->ngroupatts; i++)
 			replace_all[state->groupatts[i] - 1] = false;
+
+		/* Never replace pkey */
+		replace_all[natts - 1] = false;
 
 		slot_getallattrs(slot);
 
@@ -542,7 +549,7 @@ sync_combine(ContQueryCombinerState *state)
 			 * Figure out which columns actually changed, as those are the only values
 			 * that we want to write to disk.
 			 */
-			for (att = 1; att <= state->prev_slot->tts_tupleDescriptor->natts; att++)
+			for (att = 1; att <= natts - 1; att++)
 			{
 				Datum prev;
 				Datum new;
@@ -578,7 +585,11 @@ sync_combine(ContQueryCombinerState *state)
 		}
 		else
 		{
-			/* No existing tuple found, so it's an INSERT */
+			/* No existing tuple found, so it's an INSERT. Also generate a primary key for it. */
+			slot->tts_values[natts - 1] = nextval_internal(state->base.view->seqrel);
+			slot->tts_isnull[natts - 1] = false;
+			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
+			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecCQMatRelInsert(state->ri, slot, estate);
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}

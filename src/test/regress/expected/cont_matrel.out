@@ -44,7 +44,10 @@ SELECT * FROM cont_matrel;
 (1 row)
 
 TRUNCATE CONTINUOUS VIEW cont_matrel;
-INSERT INTO cont_matrel_mrel (count) VALUES (5);
+INSERT INTO cont_matrel_mrel (count, "$pk") VALUES (5, 1);
+INSERT INTO cont_matrel_mrel (count, "$pk") VALUES (10, 1);
+ERROR:  duplicate key value violates unique constraint "cont_matrel_mrel_pkey"
+DETAIL:  Key ("$pk")=(1) already exists.
 SELECT * FROM cont_matrel;
  count 
 -------

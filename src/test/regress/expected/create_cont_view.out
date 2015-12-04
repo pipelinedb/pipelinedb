@@ -27,6 +27,9 @@ View definition:
  Column |  Type   | Modifiers | Storage | Stats target | Description 
 --------+---------+-----------+---------+--------------+-------------
  key    | integer |           | plain   |              | 
+ $pk    | bigint  | not null  | plain   |              | 
+Indexes:
+    "cqcreate0_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate0');
@@ -53,10 +56,13 @@ View definition:
    FROM ONLY create_cont_stream1;
 
 \d+ cqcreate1_mrel;
-                    Table "public.cqcreate1_mrel"
-  Column   | Type | Modifiers | Storage  | Stats target | Description 
------------+------+-----------+----------+--------------+-------------
- substring | text |           | extended |              | 
+                     Table "public.cqcreate1_mrel"
+  Column   |  Type  | Modifiers | Storage  | Stats target | Description 
+-----------+--------+-----------+----------+--------------+-------------
+ substring | text   |           | extended |              | 
+ $pk       | bigint | not null  | plain    |              | 
+Indexes:
+    "cqcreate1_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate1');
@@ -90,6 +96,9 @@ View definition:
 --------+---------+-----------+----------+--------------+-------------
  key    | integer |           | plain    |              | 
  s      | text    |           | extended |              | 
+ $pk    | bigint  | not null  | plain    |              | 
+Indexes:
+    "cqcreate2_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate2');
@@ -129,7 +138,9 @@ View definition:
  key    | text(0) |           | extended |              | 
  count  | bigint  |           | plain    |              | 
  sum    | bytea   |           | extended |              | 
+ $pk    | bigint  | not null  | plain    |              | 
 Indexes:
+    "cqcreate3_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqcreate3_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
@@ -168,7 +179,9 @@ View definition:
  _0     | text(0) |           | extended |              | 
  count  | bigint  |           | plain    |              | 
  sum    | bytea   |           | extended |              | 
+ $pk    | bigint  | not null  | plain    |              | 
 Indexes:
+    "cqcreate4_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqcreate4_mrel_expr_idx" btree (hash_group(_0))
 Options: fillfactor=50
 
@@ -210,7 +223,9 @@ View definition:
 -------------------+-----------------------------+-----------+----------+--------------+-------------
  arrival_timestamp | timestamp(0) with time zone |           | plain    |              | 
  key               | text(0)                     |           | extended |              | 
+ $pk               | bigint                      | not null  | plain    |              | 
 Indexes:
+    "cqcreate5_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqcreate5_mrel_arrival_timestamp_idx" btree (arrival_timestamp)
 Options: fillfactor=50
 
@@ -253,7 +268,9 @@ View definition:
  arrival_timestamp | timestamp with time zone |           | plain    |              | 
  _0                | text(0)                  |           | extended |              | 
  count             | bigint                   |           | plain    |              | 
+ $pk               | bigint                   | not null  | plain    |              | 
 Indexes:
+    "cqcreate6_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqcreate6_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, _0))
 Options: fillfactor=50
 
@@ -292,7 +309,9 @@ View definition:
  float_avg    | double precision[] |           | extended |              | 
  int_avg      | bigint[]           |           | extended |              | 
  internal_avg | interval[]         |           | extended |              | 
+ $pk          | bigint             | not null  | plain    |              | 
 Indexes:
+    "cvavg_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cvavg_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
@@ -317,10 +336,13 @@ View definition:
    FROM ONLY create_cont_stream1;
 
 \d+ cvjson_mrel;
-                      Table "public.cvjson_mrel"
-  Column   | Type  | Modifiers | Storage  | Stats target | Description 
------------+-------+-----------+----------+--------------+-------------
- count_col | bytea |           | extended |              | 
+                       Table "public.cvjson_mrel"
+  Column   |  Type  | Modifiers | Storage  | Stats target | Description 
+-----------+--------+-----------+----------+--------------+-------------
+ count_col | bytea  |           | extended |              | 
+ $pk       | bigint | not null  | plain    |              | 
+Indexes:
+    "cvjson_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cvjson');
@@ -342,9 +364,12 @@ View definition:
 
 \d+ cvjsonobj_mrel;
                         Table "public.cvjsonobj_mrel"
-     Column      | Type  | Modifiers | Storage  | Stats target | Description 
------------------+-------+-----------+----------+--------------+-------------
- json_object_agg | bytea |           | extended |              | 
+     Column      |  Type  | Modifiers | Storage  | Stats target | Description 
+-----------------+--------+-----------+----------+--------------+-------------
+ json_object_agg | bytea  |           | extended |              | 
+ $pk             | bigint | not null  | plain    |              | 
+Indexes:
+    "cvjsonobj_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cvjsonobj');
@@ -370,6 +395,9 @@ View definition:
  Column  |       Type       | Modifiers | Storage | Stats target | Description 
 ---------+------------------+-----------+---------+--------------+-------------
  sum_col | double precision |           | plain   |              | 
+ $pk     | bigint           | not null  | plain   |              | 
+Indexes:
+    "cvcount_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cvcount');
@@ -394,6 +422,9 @@ View definition:
   Column   |  Type  | Modifiers | Storage | Stats target | Description 
 -----------+--------+-----------+---------+--------------+-------------
  count_col | bigint |           | plain   |              | 
+ $pk       | bigint | not null  | plain   |              | 
+Indexes:
+    "cvarray_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cvarray');
@@ -422,7 +453,9 @@ View definition:
 ------------+---------+-----------+----------+--------------+-------------
  key        | text(0) |           | extended |              | 
  string_agg | bytea   |           | extended |              | 
+ $pk        | bigint  | not null  | plain    |              | 
 Indexes:
+    "cvtext_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cvtext_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
@@ -451,6 +484,9 @@ View definition:
 --------+--------+-----------+---------+--------------+-------------
  _0     | bigint |           | plain   |              | 
  _1     | bigint |           | plain   |              | 
+ $pk    | bigint | not null  | plain   |              | 
+Indexes:
+    "cqaggexpr1_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
@@ -480,7 +516,9 @@ View definition:
  key    | text(0)            |           | extended |              | 
  _0     | double precision[] |           | extended |              | 
  _1     | integer            |           | plain    |              | 
+ $pk    | bigint             | not null  | plain    |              | 
 Indexes:
+    "cqaggexpr2_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqaggexpr2_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
@@ -513,7 +551,9 @@ View definition:
  arrival_timestamp | timestamp with time zone |           | plain    |              | 
  key               | text(0)                  |           | extended |              | 
  value             | bigint                   |           | plain    |              | 
+ $pk               | bigint                   | not null  | plain    |              | 
 Indexes:
+    "cqaggexpr3_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqaggexpr3_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
 Options: fillfactor=50
 
@@ -546,7 +586,9 @@ View definition:
 --------+--------------------+-----------+----------+--------------+-------------
  key    | text(0)            |           | extended |              | 
  _0     | double precision[] |           | extended |              | 
+ $pk    | bigint             | not null  | plain    |              | 
 Indexes:
+    "cqaggexpr4_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqaggexpr4_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
@@ -580,7 +622,9 @@ View definition:
  k0     | text(0) |           | extended |              | 
  k1     | integer |           | plain    |              | 
  count  | bigint  |           | plain    |              | 
+ $pk    | bigint  | not null  | plain    |              | 
 Indexes:
+    "cqgroupby_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqgroupby_mrel_expr_idx" btree (hash_group(k0, k1))
 Options: fillfactor=50
 
@@ -625,7 +669,9 @@ View definition:
  d      | smallint         |           | plain    |              | 
  e      | double precision |           | plain    |              | 
  count  | bigint           |           | plain    |              | 
+ $pk    | bigint           | not null  | plain    |              | 
 Indexes:
+    "multigroupindex_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "multigroupindex_mrel_expr_idx" btree (hash_group(a, b, c, d, e))
 Options: fillfactor=50
 
@@ -648,6 +694,9 @@ CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM str
  Column |  Type  | Modifiers | Storage | Stats target | Description 
 --------+--------+-----------+---------+--------------+-------------
  count  | bigint |           | plain   |              | 
+ $pk    | bigint | not null  | plain   |              | 
+Indexes:
+    "withff_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=42
 
 -- It shouldn't be possible to DROP a continuous view with DROP VIEW, and vice-versa

@@ -68,6 +68,7 @@ extern Datum currval_oid(PG_FUNCTION_ARGS);
 extern Datum setval_oid(PG_FUNCTION_ARGS);
 extern Datum setval3_oid(PG_FUNCTION_ARGS);
 extern Datum lastval(PG_FUNCTION_ARGS);
+extern int64 nextval_internal(Oid relid);
 
 extern Datum pg_sequence_parameters(PG_FUNCTION_ARGS);
 

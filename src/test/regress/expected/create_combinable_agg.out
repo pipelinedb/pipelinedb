@@ -73,7 +73,9 @@ CREATE CONTINUOUS VIEW test_combinable_aggs_v0 AS
 ----------------+---------+-----------+----------+--------------+-------------
  x              | integer |           | plain    |              | 
  combinable_avg | json    |           | extended |              | 
+ $pk            | bigint  | not null  | plain    |              | 
 Indexes:
+    "test_combinable_aggs_v0_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_combinable_aggs_v0_mrel_expr_idx" btree (hash_group(x))
 Options: fillfactor=50
 

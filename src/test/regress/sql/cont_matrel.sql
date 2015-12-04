@@ -20,7 +20,8 @@ INSERT INTO cont_matrel_stream (x) VALUES (1);
 SELECT * FROM cont_matrel;
 
 TRUNCATE CONTINUOUS VIEW cont_matrel;
-INSERT INTO cont_matrel_mrel (count) VALUES (5);
+INSERT INTO cont_matrel_mrel (count, "$pk") VALUES (5, 1);
+INSERT INTO cont_matrel_mrel (count, "$pk") VALUES (10, 1);
 SELECT * FROM cont_matrel;
 INSERT INTO cont_matrel_stream (x) VALUES (1);
 SELECT * FROM cont_matrel;
