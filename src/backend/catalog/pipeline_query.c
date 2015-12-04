@@ -207,7 +207,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(RangeVar *name, Query *query, Oid matrel, bool gc, bool adhoc, Oid *pq_id)
+DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -249,6 +249,7 @@ DefineContinuousView(RangeVar *name, Query *query, Oid matrel, bool gc, bool adh
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
 	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(namespace);
 	values[Anum_pipeline_query_matrel - 1] = ObjectIdGetDatum(matrel);
+	values[Anum_pipeline_query_seqrel - 1] = ObjectIdGetDatum(seqrel);
 
 	/* Copy flags */
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
@@ -510,6 +511,7 @@ GetContinuousView(Oid id)
 
 	view->namespace = row->namespace;
 	view->matrel = makeRangeVar(get_namespace_name(row->namespace), get_rel_name(row->matrel), -1);
+	view->seqrel = row->seqrel;
 
 	namestrcpy(&view->name, NameStr(row->name));
 

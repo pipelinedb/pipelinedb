@@ -33,6 +33,7 @@ CATALOG(pipeline_query,4242)
 	Oid			namespace;
 	NameData	name;
 	Oid			matrel;
+	Oid         seqrel;
 	bool		gc;
 	bool 		adhoc;
 #ifdef CATALOG_VARLEN
@@ -51,13 +52,14 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query			7
+#define Natts_pipeline_query			8
 #define Anum_pipeline_query_id			1
 #define Anum_pipeline_query_namespace	2
 #define Anum_pipeline_query_name		3
 #define Anum_pipeline_query_matrel		4
-#define Anum_pipeline_query_gc			5
-#define Anum_pipeline_query_adhoc		6
-#define Anum_pipeline_query_query 		7
+#define Anum_pipeline_query_seqrel		5
+#define Anum_pipeline_query_gc			6
+#define Anum_pipeline_query_adhoc		7
+#define Anum_pipeline_query_query 		8
 
 #endif   /* PIPELINE_QUERIES_H */

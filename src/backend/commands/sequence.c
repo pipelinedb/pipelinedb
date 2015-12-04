@@ -86,7 +86,6 @@ static HTAB *seqhashtab = NULL; /* hash table for SeqTable items */
 static SeqTableData *last_used_seq = NULL;
 
 static void fill_seq_with_data(Relation rel, HeapTuple tuple);
-static int64 nextval_internal(Oid relid);
 static Relation open_share_lock(SeqTable seq);
 static void create_seq_hashtable(void);
 static void init_sequence(Oid relid, SeqTable *p_elm, Relation *p_rel);
@@ -513,7 +512,7 @@ nextval_oid(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(nextval_internal(relid));
 }
 
-static int64
+int64
 nextval_internal(Oid relid)
 {
 	SeqTable	elm;

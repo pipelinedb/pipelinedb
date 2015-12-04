@@ -24,12 +24,13 @@ typedef struct ContinuousView
 	Oid namespace;
 	NameData name;
 	RangeVar *matrel;
+	Oid seqrel;
 	char *query;
 	int sw_step_factor;
 	Oid oid; /* OID in pipeline_query table */
 } ContinuousView;
 
-extern Oid DefineContinuousView(RangeVar *name, Query *query, Oid matrel, bool gc, bool adhoc, Oid *pq_id);
+extern Oid DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern SelectStmt *GetContSelectStmt(RangeVar *rv);
 extern bool IsAContinuousView(RangeVar *name);

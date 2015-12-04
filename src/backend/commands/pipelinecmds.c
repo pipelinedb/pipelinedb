@@ -20,6 +20,7 @@
 #include "commands/defrem.h"
 #include "commands/explain.h"
 #include "commands/pipelinecmds.h"
+#include "commands/sequence.h"
 #include "commands/tablecmds.h"
 #include "commands/view.h"
 #include "catalog/indexing.h"
@@ -178,16 +179,8 @@ make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 	return (Node *) hash;
 }
 
-/*
- * create_index_on_mat_relation
- *
- * If feasible, create an index on the new materialization table to make
- * combine retrievals on it as efficient as possible. Sometimes this may be
- * impossible to do automatically in a smart way, but for some queries,
- * such as single-column GROUP BYs, it's straightforward.
- */
 static Oid
-create_index_on_mat_relation(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query *query, bool is_sw)
+create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query *query, bool is_sw)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
@@ -225,24 +218,37 @@ create_index_on_mat_relation(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query
 	indexcol = makeNode(IndexElem);
 	indexcol->name = indexcolname;
 	indexcol->expr = expr;
-	indexcol->indexcolname = NULL;
-	indexcol->collation = NULL;
-	indexcol->opclass = NULL;
 	indexcol->ordering = SORTBY_DEFAULT;
 	indexcol->nulls_ordering = SORTBY_NULLS_DEFAULT;
 
 	index = makeNode(IndexStmt);
-	index->idxname = NULL;
 	index->relation = matrel;
 	index->accessMethod = CQ_MATREL_INDEX_TYPE;
-	index->tableSpace = NULL;
 	index->indexParams = list_make1(indexcol);
-	index->unique = false;
-	index->primary = false;
-	index->isconstraint = false;
-	index->deferrable = false;
-	index->initdeferred = false;
-	index->concurrent = false;
+
+	index_oid = DefineIndex(matrelid, index, InvalidOid, false, false, false, false);
+	CommandCounterIncrement();
+
+	return index_oid;
+}
+
+static Oid
+create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel)
+{
+	IndexStmt *index;
+	IndexElem *indexcol;
+	Oid index_oid;
+
+	indexcol = makeNode(IndexElem);
+	indexcol->name = CQ_MATREL_PKEY;
+	indexcol->ordering = SORTBY_DEFAULT;
+	indexcol->nulls_ordering = SORTBY_NULLS_DEFAULT;
+
+	index = makeNode(IndexStmt);
+	index->relation = matrel;
+	index->accessMethod = CQ_MATREL_INDEX_TYPE;
+	index->indexParams = list_make1(indexcol);
+	index->unique = true;
 
 	index_oid = DefineIndex(matrelid, index, InvalidOid, false, false, false, false);
 	CommandCounterIncrement();
@@ -251,8 +257,8 @@ create_index_on_mat_relation(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query
 }
 
 static void
-record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid,
-		Oid indexoid, SelectStmt *stmt, Query *query)
+record_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
+		Oid indexoid, Oid pkey_idxoid, SelectStmt *stmt, Query *query)
 {
 	ObjectAddress referenced;
 	ObjectAddress dependent;
@@ -274,6 +280,13 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid,
 	referenced.classId = RelationRelationId;
 	referenced.objectId = viewoid;
 	referenced.objectSubId = 0;
+
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
+
+	/* Record dependency between sequence relation and view */
+	dependent.classId = RelationRelationId;
+	dependent.objectId = seqreloid;
+	dependent.objectSubId = 0;
 
 	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
@@ -307,6 +320,17 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid,
 
 		recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 	}
+
+	/* Record dependency on pkey index */
+	dependent.classId = RelationRelationId;
+	dependent.objectId = pkey_idxoid;
+	dependent.objectSubId = 0;
+
+	referenced.classId = RelationRelationId;
+	referenced.objectId = matreloid;
+	referenced.objectSubId = 0;
+
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
 	collect_rels_and_streams((Node *) stmt->fromClause, &cxt);
 
@@ -364,17 +388,21 @@ void
 ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 {
 	CreateStmt *create_stmt;
+	CreateSeqStmt *create_seq_stmt;
 	ViewStmt *view_stmt;
 	Query *query;
 	RangeVar *matrel;
+	RangeVar *seqrel;
 	RangeVar *view;
 	List *tableElts = NIL;
 	List *tlist;
 	ListCell *col;
 	Oid matreloid;
+	Oid seqreloid;
 	Oid viewoid;
 	Oid pqoid;
 	Oid indexoid;
+	Oid pkey_idxoid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
@@ -387,6 +415,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ContAnalyzeContext *context;
 	ContinuousView *cv;
 	Oid cvid;
+	ColumnDef *coldef;
+	Constraint *pkey;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -401,6 +431,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 				errmsg("continuous view \"%s\" already exists", view->relname)));
 
 	matrel = makeRangeVar(view->schemaname, CVNameToMatRelName(view->relname), -1);
+	seqrel = makeRangeVar(view->schemaname, CVNameToSeqRelName(view->relname), -1);
 
 	/*
 	 * allowSystemTableMods is a global flag that, when true, allows certain column types
@@ -444,7 +475,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	foreach(col, tlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(col);
-		ColumnDef   *coldef;
 		char		*colname;
 		Oid type;
 
@@ -465,6 +495,14 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		coldef = make_cv_columndef(colname, type, exprTypmod((Node *) tle->expr));
 		tableElts = lappend(tableElts, coldef);
 	}
+
+	/* Add primary key column */
+	coldef = make_cv_columndef(CQ_MATREL_PKEY, INT8OID, InvalidOid);
+	coldef->is_not_null = true;
+	pkey = makeNode(Constraint);
+	pkey->contype = CONSTR_PRIMARY;
+	coldef->constraints = list_make1(pkey);
+	tableElts = lappend(tableElts, coldef);
 
 	if (!GetContinuousViewOption(stmt->into->options, OPTION_FILLFACTOR))
 		stmt->into->options = add_default_fillfactor(stmt->into->options);
@@ -490,6 +528,13 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	AlterTableCreateToastTable(matreloid, toast_options, AccessExclusiveLock);
 
+	/* Create the sequence for primary keys */
+	create_seq_stmt = makeNode(CreateSeqStmt);
+	create_seq_stmt->sequence = seqrel;
+
+	seqreloid = DefineSequence(create_seq_stmt);
+	CommandCounterIncrement();
+
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
@@ -497,7 +542,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(view, cont_query, matreloid, context->is_sw,
+	pqoid = DefineContinuousView(view, cont_query, matreloid, seqreloid, context->is_sw,
 								 IsContQueryAdhocProcess(),
 								 &cvid);
 	CommandCounterIncrement();
@@ -512,8 +557,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CommandCounterIncrement();
 
 	/* Create group look up index and record dependencies */
-	indexoid = create_index_on_mat_relation(view, matreloid, matrel, query, context->is_sw);
-	record_dependencies(pqoid, matreloid, viewoid, indexoid, workerselect, query);
+	indexoid = create_lookup_index(view, matreloid, matrel, query, context->is_sw);
+	pkey_idxoid = create_pkey_index(view, matreloid, matrel);
+	record_dependencies(pqoid, matreloid, seqreloid, viewoid, indexoid, pkey_idxoid, workerselect, query);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
 

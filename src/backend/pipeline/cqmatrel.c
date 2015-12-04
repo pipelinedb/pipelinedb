@@ -196,3 +196,14 @@ CVNameToMatRelName(char *cv_name)
 
 	return relname;
 }
+
+char *
+CVNameToSeqRelName(char *cv_name)
+{
+	char *relname = palloc0(NAMEDATALEN);
+
+	strcpy(relname, cv_name);
+	append_suffix(relname, CQ_SEQREL_SUFFIX, NAMEDATALEN);
+
+	return relname;
+}
