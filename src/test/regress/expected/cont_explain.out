@@ -13,10 +13,10 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
    ->  Aggregate
          Output: combine(count)
          ->  Tuplestore Scan
-               Output: count
+               Output: count, "$pk"
  Combiner Lookup Plan:
    ->  Seq Scan on public.test_cont_explain1_mrel
-         Output: count
+         Output: count, "$pk"
 (13 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
@@ -33,10 +33,10 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
          Output: x, combine(count)
          Group Key: test_cont_explain2_mrel.x
          ->  Tuplestore Scan
-               Output: x, count
+               Output: x, count, "$pk"
  Combiner Lookup Plan:
    ->  Seq Scan on public.test_cont_explain2_mrel
-         Output: x, count
+         Output: x, count, "$pk"
 (15 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
@@ -53,10 +53,10 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
          Output: x, y, combine(sum)
          Group Key: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y
          ->  Tuplestore Scan
-               Output: x, y, sum
+               Output: x, y, sum, "$pk"
  Combiner Lookup Plan:
    ->  Seq Scan on public.test_cont_explain3_mrel
-         Output: x, y, sum
+         Output: x, y, sum, "$pk"
 (15 rows)
 
 INSERT INTO test_cont_explain_stream (x, y) VALUES (1, 'hello');
@@ -72,15 +72,15 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
    ->  Aggregate
          Output: combine(count)
          ->  Tuplestore Scan
-               Output: count
+               Output: count, "$pk"
  Combiner Lookup Plan:
    ->  Seq Scan on public.test_cont_explain1_mrel
-         Output: count
+         Output: count, "$pk"
 (13 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
-                                       CONTINUOUS QUERY PLANS                                       
-----------------------------------------------------------------------------------------------------
+                                               CONTINUOUS QUERY PLANS                                                
+---------------------------------------------------------------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
          Output: x::integer, count(*)
@@ -92,24 +92,24 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
          Output: x, combine(count)
          Group Key: test_cont_explain2_mrel.x
          ->  Tuplestore Scan
-               Output: x, count
+               Output: x, count, "$pk"
  Combiner Lookup Plan:
    ->  Physical Group Lookup
-         Output: test_cont_explain2_mrel.x, test_cont_explain2_mrel.count
+         Output: test_cont_explain2_mrel.x, test_cont_explain2_mrel.count, test_cont_explain2_mrel."$pk"
          ->  Nested Loop
-               Output: test_cont_explain2_mrel.x, test_cont_explain2_mrel.count
+               Output: test_cont_explain2_mrel.x, test_cont_explain2_mrel.count, test_cont_explain2_mrel."$pk"
                ->  Values Scan on "*VALUES*"
                      Output: "*VALUES*".column1
                ->  Bitmap Heap Scan on public.test_cont_explain2_mrel
-                     Output: test_cont_explain2_mrel.x, test_cont_explain2_mrel.count
+                     Output: test_cont_explain2_mrel.x, test_cont_explain2_mrel.count, test_cont_explain2_mrel."$pk"
                      Recheck Cond: (hash_group(test_cont_explain2_mrel.x) = "*VALUES*".column1)
                      ->  Bitmap Index Scan on test_cont_explain2_mrel_expr_idx
                            Index Cond: (hash_group(test_cont_explain2_mrel.x) = "*VALUES*".column1)
 (24 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
-                                                    CONTINUOUS QUERY PLANS                                                     
--------------------------------------------------------------------------------------------------------------------------------
+                                                            CONTINUOUS QUERY PLANS                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
          Output: x::integer, y::text, sum(x::integer)
@@ -121,16 +121,16 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
          Output: x, y, combine(sum)
          Group Key: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y
          ->  Tuplestore Scan
-               Output: x, y, sum
+               Output: x, y, sum, "$pk"
  Combiner Lookup Plan:
    ->  Physical Group Lookup
-         Output: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y, test_cont_explain3_mrel.sum
+         Output: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y, test_cont_explain3_mrel.sum, test_cont_explain3_mrel."$pk"
          ->  Nested Loop
-               Output: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y, test_cont_explain3_mrel.sum
+               Output: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y, test_cont_explain3_mrel.sum, test_cont_explain3_mrel."$pk"
                ->  Values Scan on "*VALUES*"
                      Output: "*VALUES*".column1
                ->  Bitmap Heap Scan on public.test_cont_explain3_mrel
-                     Output: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y, test_cont_explain3_mrel.sum
+                     Output: test_cont_explain3_mrel.x, test_cont_explain3_mrel.y, test_cont_explain3_mrel.sum, test_cont_explain3_mrel."$pk"
                      Recheck Cond: (hash_group(test_cont_explain3_mrel.x, test_cont_explain3_mrel.y) = "*VALUES*".column1)
                      ->  Bitmap Index Scan on test_cont_explain3_mrel_expr_idx
                            Index Cond: (hash_group(test_cont_explain3_mrel.x, test_cont_explain3_mrel.y) = "*VALUES*".column1)

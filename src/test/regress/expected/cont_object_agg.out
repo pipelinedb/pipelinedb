@@ -227,7 +227,9 @@ CREATE CONTINUOUS VIEW test_array_agg AS SELECT k::text, array_agg(v::integer) F
 -----------+---------+-----------+----------+--------------+-------------
  k         | text(0) |           | extended |              | 
  array_agg | bytea   |           | extended |              | 
+ $pk       | bigint  | not null  | plain    |              | 
 Indexes:
+    "test_array_agg_mrel_$pk_idx" UNIQUE, btree ("$pk")
     "test_array_agg_mrel_expr_idx" btree (hash_group(k))
 Options: fillfactor=50
 

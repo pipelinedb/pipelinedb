@@ -99,7 +99,9 @@ CREATE CONTINUOUS VIEW test_view AS
  _0     | integer          |           | plain    |              | 
  _1     | bigint[]         |           | extended |              | 
  sum    | double precision |           | plain    |              | 
+ $pk    | bigint           | not null  | plain    |              | 
 Indexes:
+    "test_view_mrel_$pk_idx" UNIQUE, btree ("$pk")
     "test_view_mrel_expr_idx" btree (hash_group(_0))
 Options: fillfactor=50
 

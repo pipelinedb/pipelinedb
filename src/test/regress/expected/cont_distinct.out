@@ -46,10 +46,13 @@ SELECT * FROM test_distinct_count;
 (1 row)
 
 \d+ test_distinct_count_mrel;
-              Table "public.test_distinct_count_mrel"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- count  | hll  |           | extended |              | 
+               Table "public.test_distinct_count_mrel"
+ Column |  Type  | Modifiers | Storage  | Stats target | Description 
+--------+--------+-----------+----------+--------------+-------------
+ count  | hll    |           | extended |              | 
+ $pk    | bigint | not null  | plain    |              | 
+Indexes:
+    "test_distinct_count_mrel_$pk_idx" UNIQUE, btree ("$pk")
 Options: fillfactor=50
 
 SELECT * FROM test_distinct_sw_count;
@@ -64,7 +67,9 @@ SELECT * FROM test_distinct_sw_count;
 -------------------+--------------------------+-----------+----------+--------------+-------------
  arrival_timestamp | timestamp with time zone |           | plain    |              | 
  count             | hll                      |           | extended |              | 
+ $pk               | bigint                   | not null  | plain    |              | 
 Indexes:
+    "test_distinct_sw_count_mrel_$pk_idx" UNIQUE, btree ("$pk")
     "test_distinct_sw_count_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp))
 Options: fillfactor=50
 
