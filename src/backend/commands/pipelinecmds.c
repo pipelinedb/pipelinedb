@@ -248,7 +248,8 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel)
 	index->relation = matrel;
 	index->accessMethod = CQ_MATREL_INDEX_TYPE;
 	index->indexParams = list_make1(indexcol);
-	index->unique = true;
+	index->primary = true;
+	index->isconstraint = true;
 
 	index_oid = DefineIndex(matrelid, index, InvalidOid, false, false, false, false);
 	CommandCounterIncrement();

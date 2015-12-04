@@ -52,7 +52,7 @@ SELECT * FROM test_distinct_count;
  count  | hll    |           | extended |              | 
  $pk    | bigint | not null  | plain    |              | 
 Indexes:
-    "test_distinct_count_mrel_$pk_idx" UNIQUE, btree ("$pk")
+    "test_distinct_count_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 SELECT * FROM test_distinct_sw_count;
@@ -69,7 +69,7 @@ SELECT * FROM test_distinct_sw_count;
  count             | hll                      |           | extended |              | 
  $pk               | bigint                   | not null  | plain    |              | 
 Indexes:
-    "test_distinct_sw_count_mrel_$pk_idx" UNIQUE, btree ("$pk")
+    "test_distinct_sw_count_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_distinct_sw_count_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp))
 Options: fillfactor=50
 

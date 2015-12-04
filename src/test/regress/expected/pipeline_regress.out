@@ -101,7 +101,7 @@ CREATE CONTINUOUS VIEW test_view AS
  sum    | double precision |           | plain    |              | 
  $pk    | bigint           | not null  | plain    |              | 
 Indexes:
-    "test_view_mrel_$pk_idx" UNIQUE, btree ("$pk")
+    "test_view_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_view_mrel_expr_idx" btree (hash_group(_0))
 Options: fillfactor=50
 
