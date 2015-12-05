@@ -3,12 +3,12 @@ import random
 from base import pipeline, clean_db
 
 # XXX(usmanm): update this, if it ever changes!
-MAX_CQS = 1024 
+MAX_CQS = 1024
 
 def test_create_views(pipeline, clean_db):
   cvs = []
   q = 'SELECT count(*) FROM stream'
-  
+
   for i in xrange(1, MAX_CQS):
     cvs.append('cv_%d' % i)
     pipeline.create_cv(cvs[-1], q)

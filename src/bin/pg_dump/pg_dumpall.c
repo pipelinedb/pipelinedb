@@ -377,8 +377,8 @@ main(int argc, char *argv[])
 
 	/*
 	 * If there was a database specified on the command line, use that,
-	 * otherwise try to connect to database "postgres", and failing that
-	 * "template1".  "postgres" is the preferred choice for 8.1 and later
+	 * otherwise try to connect to database "pipeline", and failing that
+	 * "template1".  "pipeline" is the preferred choice for 8.1 and later
 	 * servers, but it usually will not exist on older ones.
 	 */
 	if (pgdb)
@@ -395,7 +395,7 @@ main(int argc, char *argv[])
 	}
 	else
 	{
-		conn = connectDatabase("postgres", connstr, pghost, pgport, pguser,
+		conn = connectDatabase("pipeline", connstr, pghost, pgport, pguser,
 							   prompt_password, false);
 		if (!conn)
 			conn = connectDatabase("template1", connstr, pghost, pgport, pguser,
@@ -403,7 +403,7 @@ main(int argc, char *argv[])
 
 		if (!conn)
 		{
-			fprintf(stderr, _("%s: could not connect to databases \"postgres\" or \"template1\"\n"
+			fprintf(stderr, _("%s: could not connect to databases \"pipeline\" or \"template1\"\n"
 							  "Please specify an alternative database.\n"),
 					progname);
 			fprintf(stderr, _("Try \"%s --help\" for more information.\n"),
@@ -1157,12 +1157,12 @@ dropDBs(PGconn *conn)
 		char	   *dbname = PQgetvalue(res, i, 0);
 
 		/*
-		 * Skip "template1" and "postgres"; the restore script is almost
+		 * Skip "template1" and "pipeline"; the restore script is almost
 		 * certainly going to be run in one or the other, and we don't know
 		 * which.  This must agree with dumpCreateDB's choices!
 		 */
 		if (strcmp(dbname, "template1") != 0 &&
-			strcmp(dbname, "postgres") != 0)
+			strcmp(dbname, "pipeline") != 0)
 		{
 			fprintf(OPF, "DROP DATABASE %s%s;\n",
 					if_exists ? "IF EXISTS " : "",
@@ -1343,12 +1343,12 @@ dumpCreateDB(PGconn *conn)
 		resetPQExpBuffer(buf);
 
 		/*
-		 * Skip the CREATE DATABASE commands for "template1" and "postgres",
+		 * Skip the CREATE DATABASE commands for "template1" and "pipeline",
 		 * since they are presumably already there in the destination cluster.
 		 * We do want to emit their ACLs and config options if any, however.
 		 */
 		if (strcmp(dbname, "template1") != 0 &&
-			strcmp(dbname, "postgres") != 0)
+			strcmp(dbname, "pipeline") != 0)
 		{
 			appendPQExpBuffer(buf, "CREATE DATABASE %s", fdbname);
 

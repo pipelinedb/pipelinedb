@@ -67,6 +67,7 @@ class PipelineDB(object):
             if 'data' in dirs:
                 self.data_dir = os.path.join(root, 'data')
 
+        self.bin_dir = install_bin_dir
         self.engine = None
 
     def run(self, params=None):
@@ -207,6 +208,12 @@ class PipelineDB(object):
         Drop a table
         """
         self.execute('DROP TABLE %s' % name)
+
+    def drop_stream(self, name):
+        """
+        Drop a stream
+        """
+        self.execute('DROP STREAM %s' % name)
 
     def drop_cv(self, name):
         """

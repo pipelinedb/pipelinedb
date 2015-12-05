@@ -21,11 +21,11 @@ def test_fss_agg(pipeline, clean_db):
   random.shuffle(items)
   a_items = items
   b_items = list(reversed(items))
-  
+
   values = map(lambda i: ('a', i), get_geometric_dist(a_items))
   values.extend(map(lambda i: ('b', i), get_geometric_dist(b_items)))
   random.shuffle(values)
-  
+
   pipeline.insert('test_fss_stream', desc, values)
   result = list(pipeline.execute('SELECT k, fss_topk_values(fss_agg) FROM test_fss_agg ORDER BY k'))
   topk = map(int, result[0][1].rstrip('}').lstrip('{').split(','))
