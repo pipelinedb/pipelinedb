@@ -160,8 +160,10 @@ CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM withff;
 CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
 WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
 
-DROP CONTINUOUS VIEW ma0 CASCADE;
+CREATE TYPE custom_type AS (integerone integer, integertwo integer);
+CREATE CONTINUOUS VIEW type_cv as SELECT val::custom_type, count(*) FROM my_stream GROUP BY val;
 
+DROP CONTINUOUS VIEW ma0 CASCADE;
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;
