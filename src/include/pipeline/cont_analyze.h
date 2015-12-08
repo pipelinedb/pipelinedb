@@ -89,4 +89,6 @@ extern void ApplyStorageOptions(CreateContViewStmt *stmt);
 extern char *deparse_query_def(Query *query);
 extern char *get_inv_streaming_agg(char *name, bool *is_distinct);
 
+ColumnDef *MakeMatRelColumnDef(char *name, Oid type, Oid typemod);
+
 #endif

@@ -3788,3 +3788,26 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 		select->swStepFactor = 100 + sliding_window_step_factor;
 	}
 }
+
+ColumnDef *
+MakeMatRelColumnDef(char *name, Oid type, Oid typemod)
+{
+	ColumnDef *result;
+	TypeName *typename;
+
+	typename = makeNode(TypeName);
+	typename->typeOid = type;
+	typename->typemod = typemod;
+
+	result = makeNode(ColumnDef);
+	result->colname = name;
+	result->inhcount = 0;
+	result->is_local = true;
+	result->is_not_null = false;
+	result->raw_default = NULL;
+	result->cooked_default = NULL;
+	result->constraints = NIL;
+	result->typeName = typename;
+
+	return result;
+}

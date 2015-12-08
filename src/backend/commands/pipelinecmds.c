@@ -68,29 +68,6 @@
 /* guc params */
 int continuous_view_fillfactor;
 
-static ColumnDef *
-make_cv_columndef(char *name, Oid type, Oid typemod)
-{
-	ColumnDef *result;
-	TypeName *typename;
-
-	typename = makeNode(TypeName);
-	typename->typeOid = type;
-	typename->typemod = typemod;
-
-	result = makeNode(ColumnDef);
-	result->colname = name;
-	result->inhcount = 0;
-	result->is_local = true;
-	result->is_not_null = false;
-	result->raw_default = NULL;
-	result->cooked_default = NULL;
-	result->constraints = NIL;
-	result->typeName = typename;
-
-	return result;
-}
-
 /*
  * make_default_fillfactor
  *
@@ -494,12 +471,12 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		/* Replace void type with a bool type. We need this because of the use of pg_sleep in some CQ tests */
 		if (type == VOIDOID)
 			type = BOOLOID;
-		coldef = make_cv_columndef(colname, type, exprTypmod((Node *) tle->expr));
+		coldef = MakeMatRelColumnDef(colname, type, exprTypmod((Node *) tle->expr));
 		tableElts = lappend(tableElts, coldef);
 	}
 
 	/* Add primary key column */
-	coldef = make_cv_columndef(CQ_MATREL_PKEY, INT8OID, InvalidOid);
+	coldef = MakeMatRelColumnDef(CQ_MATREL_PKEY, INT8OID, InvalidOid);
 	coldef->is_not_null = true;
 	pkey = makeNode(Constraint);
 	pkey->contype = CONSTR_PRIMARY;
