@@ -447,6 +447,18 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
 	tlist = query->targetList;
 
+	foreach(col, query->groupClause)
+	{
+		SortGroupClause *g = (SortGroupClause *) lfirst(col);
+		if (!OidIsValid(g->eqop) || !g->hashable)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("all grouping column types must be associated with equality and hash functions"),
+					 errhint("Ensure that equality and hash functions are implemented for each type used in the grouping clause.")));
+		}
+	}
+
 	/*
 	 * Build a list of columns from the SELECT statement that we
 	 * can use to create a table with
