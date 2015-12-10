@@ -450,12 +450,13 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	foreach(col, query->groupClause)
 	{
 		SortGroupClause *g = (SortGroupClause *) lfirst(col);
+
 		if (!OidIsValid(g->eqop) || !g->hashable)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("all grouping column types must be associated with equality and hash functions"),
-					 errhint("Ensure that equality and hash functions are implemented for each type used in the grouping clause.")));
+					 errmsg("each grouping column type must be associated with an operator class"),
+					 errhint("Define an operator class using CREATE OPERATOR CLASS.")));
 		}
 	}
 

@@ -777,8 +777,8 @@ WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
 ERROR:  cannot specify both "max_age" and a sliding window expression in the WHERE clause
 CREATE TYPE custom_type AS (integerone integer, integertwo integer);
 CREATE CONTINUOUS VIEW type_cv as SELECT val::custom_type, count(*) FROM my_stream GROUP BY val;
-ERROR:  all grouping column types must be associated with equality and hash functions
-HINT:  Ensure that equality and hash functions are implemented for each type used in the grouping clause.
+ERROR:  each grouping column type must be associated with an operator class
+HINT:  Define an operator class using CREATE OPERATOR CLASS.
 DROP CONTINUOUS VIEW ma0 CASCADE;
 NOTICE:  drop cascades to view ma1
 DROP CONTINUOUS VIEW cqcreate0;
