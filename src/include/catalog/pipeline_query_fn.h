@@ -36,7 +36,7 @@ extern SelectStmt *GetContSelectStmt(RangeVar *rv);
 extern bool IsAContinuousView(RangeVar *name);
 extern bool ContainsSlidingWindowContinuousView(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
-extern bool RelIdIsAMatRel(Oid relid);
+extern bool RelIdIsAMatRel(Oid relid, RangeVar **cvname);
 extern bool GetGCFlag(RangeVar *name);
 extern RangeVar *GetMatRelationName(RangeVar *cv);
 extern RangeVar *GetCVNameFromMatRelName(RangeVar *matrel);

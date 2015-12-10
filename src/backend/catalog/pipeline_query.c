@@ -448,7 +448,7 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
  * Returns true if the given oid represents a materialization table
  */
 bool
-RelIdIsAMatRel(Oid relid)
+RelIdIsAMatRel(Oid relid, RangeVar **cvname)
 {
 	Relation rel = heap_open(relid, NoLock);
 	Oid namespace = RelationGetNamespace(rel);
@@ -461,6 +461,12 @@ RelIdIsAMatRel(Oid relid)
 
 	if (!HeapTupleIsValid(tup))
 		return false;
+
+	if (cvname)
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+		*cvname = makeRangeVar(get_namespace_name(namespace), pstrdup(NameStr(row->name)), -1);
+	}
 
 	ReleaseSysCache(tup);
 
