@@ -1,5 +1,0 @@
-# Ideally we'd use a shapefile with an invalid geometry, so you could see that the
-# "don't use a transaction" version successfully inserts every row except that one.
-# However as of this writing, we don't have such a shapefile, so this test just
-# shows that it doesn't break anything to use the flag.
--e

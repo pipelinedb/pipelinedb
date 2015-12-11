@@ -18,10 +18,6 @@ dependencies:
     - sudo pip install -r src/test/py/requirements.txt
     - make
     - make install
-    - (cd src/gis && ./autogen.sh)
-    - (cd src/gis && ./configure CFLAGS="-O0" --with-pgconfig=/home/ubuntu/pdb/bin/pipeline-config)
-    - (cd src/gis && make)
-    - (cd src/gis && make install)
 
 test:
   override:

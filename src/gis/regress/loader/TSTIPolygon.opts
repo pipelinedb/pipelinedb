@@ -1,6 +1,0 @@
-# You cannot create a test tablespace because tablespaces need to be directories that
-# are owned by the postgres user, which is rarely the same as the user running the test,
-# and you can't chown without sudo, so we gave up on trying to have a test that proves
-# the -T and -X parameters work.  However we can at least test that they don't cause
-# any problems, which is what this test is for.
--T pg_default -X pg_default

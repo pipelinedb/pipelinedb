@@ -1,4 +1,0 @@
-*.log
-*.sql
-Makefile
-raster2pgsql

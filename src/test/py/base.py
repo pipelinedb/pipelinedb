@@ -36,13 +36,6 @@ class PipelineDB(object):
                 'install'
             ]
             out, err = subprocess.Popen(make).communicate()
-            gis = os.path.join(os.path.abspath(ROOT), 'src', 'gis')
-            make = [
-                'make', '-C', gis,
-                'DESTDIR=%s' % os.path.abspath(BOOTSTRAPPED_BASE),
-                'install'
-            ]
-            out, err = subprocess.Popen(make).communicate()
             do_initdb = True
 
         # Get the bin dir of our installation

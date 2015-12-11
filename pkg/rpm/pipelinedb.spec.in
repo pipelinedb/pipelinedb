@@ -7,7 +7,6 @@ Group: Applications/Databases
 Vendor: PipelineDB
 Packager: <packaging@pipelinedb.com>
 URL: http://pipelinedb.com
-Requires: libxml2 >= 2.7.4
 
 BuildArch: x86_64
 AutoReqProv: no

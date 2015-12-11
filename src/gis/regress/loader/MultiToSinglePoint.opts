@@ -1,4 +1,0 @@
-# These points are in a multipoint shapefile even though they're all single points.
-# That used to break, so you sould be able to use the -S parameter to force them to
-# load into a POINT table rather than a MULTIPOINT.
--S

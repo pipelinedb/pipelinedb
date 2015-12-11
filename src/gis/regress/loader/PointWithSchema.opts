@@ -1,2 +1,0 @@
-# Test loading a table with a schema.
--g the_geom loader/PointWithSchema pgreg.loadedshp 

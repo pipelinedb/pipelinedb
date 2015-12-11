@@ -19,11 +19,6 @@ def main(args):
         print 'Root directory %s does not exist. Did you run `make install`?' % root
         sys.exit(1)
 
-    gis = os.path.join(root, 'share', 'pipelinedb', 'extension', 'postgis.control')
-    if not os.path.exists(gis):
-        print 'GIS has not been installed. Did you run `make install` from the GIS root (probably src/gis)?'
-        sys.exit(1)
-
     root = os.path.expanduser(root)
     data_dir = os.path.join(root, DATA_DIR)
 

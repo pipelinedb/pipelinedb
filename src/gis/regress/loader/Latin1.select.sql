@@ -1,2 +1,0 @@
-SET CLIENT_ENCODING to UTF8;
-SELECT * FROM loadedshp;

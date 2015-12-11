@@ -30,22 +30,6 @@ make install
 export PATH=/path/to/dev/installation/bin:$PATH
 ```
 
-#### Build the PipelineDB GIS module
-
-First, install its dependencies:
-
-    sudo apt-get install libxml2-dev libgeos-dev libproj-dev libgdal-dev xsltproc autoconf libtool
-
-Now it can be built:
-
-```
-cd src/gis
-./autogen.sh
-./configure CFLAGS="-g -O0" # Note that the --prefix argument isn't necessary here
-make
-make install
-```
-
 #### Bootstrap the PipelineDB environment
 Create PipelineDB's physical data directories, configuration files, etc:
 

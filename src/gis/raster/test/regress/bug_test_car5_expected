@@ -1,8 +1,0 @@
-BEGIN
-NOTICE:  SRID value -1 converted to the officially unknown SRID value 0 at character 41
-NOTICE:  SRID value -1 converted to the officially unknown SRID value 0 at character 41
-NOTICE:  SRID value -1 converted to the officially unknown SRID value 0 at character 41
-1|5|5|8BUI|8BUI|8BUI
-2|5|5|8BUI|8BUI|8BUI
-3|5|5|8BUI|8BUI|8BUI
-COMMIT
