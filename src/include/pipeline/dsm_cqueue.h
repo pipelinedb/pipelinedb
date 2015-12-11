@@ -74,6 +74,7 @@ extern bool dsm_cqueue_is_empty(dsm_cqueue *cq);
 extern bool dsm_cqueue_has_unpopped(dsm_cqueue *cq);
 extern bool dsm_cqueue_has_unread(dsm_cqueue *cq);
 extern void dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms);
+extern void dsm_cqueue_wait_non_empty_with_latch(dsm_cqueue *cq, Latch *latch, int timeoutms);
 
 extern void dsm_cqueue_lock(dsm_cqueue *cq);
 extern bool dsm_cqueue_lock_nowait(dsm_cqueue *cq);
