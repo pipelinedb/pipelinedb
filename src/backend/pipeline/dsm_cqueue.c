@@ -284,8 +284,9 @@ dsm_cqueue_pop_peeked(dsm_cqueue *cq)
 }
 
 void
-dsm_cqueue_wait_non_empty_with_latch(dsm_cqueue *cq, Latch *consumer_latch, int timeoutms)
+dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
 {
+	Latch *consumer_latch;
 	uint64_t head;
 	uint64_t tail;
 	int flags;
@@ -300,6 +301,7 @@ dsm_cqueue_wait_non_empty_with_latch(dsm_cqueue *cq, Latch *consumer_latch, int 
 	if (tail < head)
 		return;
 
+	consumer_latch = &MyProc->procLatch;
 	atomic_store(&cq->consumer_latch, consumer_latch);
 
 	flags = WL_LATCH_SET | WL_POSTMASTER_DEATH;
@@ -319,12 +321,6 @@ dsm_cqueue_wait_non_empty_with_latch(dsm_cqueue *cq, Latch *consumer_latch, int 
 	}
 
 	atomic_store(&cq->consumer_latch, NULL);
-}
-
-void
-dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
-{
-	dsm_cqueue_wait_non_empty_with_latch(cq, &MyProc->procLatch, timeoutms);
 }
 
 void
