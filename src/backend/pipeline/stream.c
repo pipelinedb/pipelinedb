@@ -132,7 +132,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	if (cq)
 		dsm_cqueue_unlock(cq);
 
-	stream_stat_report(RelationGetRelid(stream), ntuples, 1, size);
+	stream_stat_increment(RelationGetRelid(stream), ntuples, 1, size);
 
 	if (batch)
 	{

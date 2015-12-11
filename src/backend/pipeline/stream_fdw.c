@@ -558,7 +558,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 {
 	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
 
-	stream_stat_report(RelationGetRelid(result_info->ri_RelationDesc), sis->count, 1, sis->bytes);
+	stream_stat_increment(RelationGetRelid(result_info->ri_RelationDesc), sis->count, 1, sis->bytes);
 
 	if (sis->worker_queue)
 	{

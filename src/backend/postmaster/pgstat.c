@@ -843,6 +843,9 @@ pgstat_report_stat(bool force)
 
 	/* Now, send function statistics */
 	pgstat_send_funcstats();
+
+	/* PipelineDB stream statistics */
+	stream_stat_report(force);
 }
 
 /*
@@ -5683,22 +5686,41 @@ stream_stat_recv(StreamStatMsg *msg, int len)
 	existing->input_bytes += stats.input_bytes;
 }
 
+static StreamStatEntry MyStreamStats = {0, 0, 0, 0};
+
+/*
+ * stream_stat_increment
+ */
+void
+stream_stat_increment(Oid relid, int ntups, int nbatches, Size nbytes)
+{
+	/* If the current counts are for a different stream, we just force flush them */
+	if (OidIsValid(MyStreamStats.relid) && MyStreamStats.relid != relid)
+		stream_stat_report(true);
+
+	MyStreamStats.relid = relid;
+	MyStreamStats.input_rows += ntups;
+	MyStreamStats.input_batches += nbatches;
+	MyStreamStats.input_bytes += nbytes;
+}
+
 /*
  * stream_stat_report
  */
 void
-stream_stat_report(Oid relid, int ntups, int nbatches, Size nbytes)
+stream_stat_report(bool force)
 {
 	StreamStatMsg msg;
 
 	MemSet(&msg, 0, sizeof(StreamStatMsg));
-	msg.m_entry.relid = relid;
-	msg.m_entry.input_rows = ntups;
-	msg.m_entry.input_batches = nbatches;
-	msg.m_entry.input_bytes = nbytes;
-
+	msg.m_entry.relid = MyStreamStats.relid;
+	msg.m_entry.input_rows = MyStreamStats.input_rows;
+	msg.m_entry.input_batches = MyStreamStats.input_batches;
+	msg.m_entry.input_bytes = MyStreamStats.input_bytes;
 	msg.m_databaseid = MyDatabaseId;
 
 	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_STREAM);
 	pgstat_send(&msg, sizeof(msg));
+
+	MemSet(&MyStreamStats, 0, sizeof(MyStreamStats));
 }
