@@ -254,6 +254,14 @@ class PipelineDB(object):
         """
         return self.execute('COMMIT')
 
+    def reconnect(self):
+        """
+        End the current session and reconnect to the server
+        """
+        self.commit()
+        self.conn.close()
+        self.conn = self.engine.connect()
+
 
 @pytest.fixture
 def clean_db(request):
