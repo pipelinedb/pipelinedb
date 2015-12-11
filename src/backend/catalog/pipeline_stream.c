@@ -520,7 +520,10 @@ GetAllStreamReaders(Oid relid)
 						  Anum_pipeline_stream_queries, &isnull);
 
 	if (isnull)
+	{
+		ReleaseSysCache(tup);
 		return NULL;
+	}
 
 	bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(raw));
 	nbytes = VARSIZE(bytes) - VARHDRSZ;
