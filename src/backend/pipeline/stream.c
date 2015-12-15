@@ -62,7 +62,7 @@ GetStreamReaders(Oid relid)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot insert into stream %s since continuous queries are disabled", name),
-				 errhint("Enable continuous queries using the \"continuous_queries_enabled\" parameter.")));
+				 errhint("Use ACTIVATE to enable continuous queries.")));
 
 	targets = GetLocalStreamReaders(relid);
 
