@@ -333,6 +333,33 @@ GetCVNameFromMatRelName(RangeVar *name)
 }
 
 /*
+ * OpenCVRelFromMatRel
+ */
+Relation
+OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode)
+{
+	HeapTuple tup;
+	Oid namespace = RelationGetNamespace(matrel);
+	Form_pipeline_query row;
+	RangeVar *cv;
+
+	Assert(OidIsValid(namespace));
+
+	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace),
+			RelationGetRelid(matrel));
+
+	if (!HeapTupleIsValid(tup))
+		return NULL;
+
+	row = (Form_pipeline_query) GETSTRUCT(tup);
+	cv = makeRangeVar(get_namespace_name(namespace), pstrdup(NameStr(row->name)), -1);
+
+	ReleaseSysCache(tup);
+
+	return heap_openrv(cv, lockmode);
+}
+
+/*
  * GetContSelectStmt
  */
 SelectStmt *

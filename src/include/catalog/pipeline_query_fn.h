@@ -16,6 +16,7 @@
 #include "nodes/bitmapset.h"
 #include "nodes/parsenodes.h"
 #include "nodes/primnodes.h"
+#include "storage/lock.h"
 #include "utils/relcache.h"
 
 typedef struct ContinuousView
@@ -33,6 +34,7 @@ typedef struct ContinuousView
 extern Oid DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern SelectStmt *GetContSelectStmt(RangeVar *rv);
+extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);
 extern bool IsAContinuousView(RangeVar *name);
 extern bool ContainsSlidingWindowContinuousView(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
