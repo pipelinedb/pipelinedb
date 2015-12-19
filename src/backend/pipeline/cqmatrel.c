@@ -168,7 +168,8 @@ ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 {
 	HeapTuple tup = ExecMaterializeSlot(slot);
 	bool updated = matrel_heap_update(ri->ri_RelationDesc, &tup->t_self, tup);
-	ExecInsertCQMatRelIndexTuples(ri, slot, estate);
+	if (!HeapTupleIsHeapOnly(tup))
+		ExecInsertCQMatRelIndexTuples(ri, slot, estate);
 	return updated;
 }
 
