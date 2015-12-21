@@ -691,7 +691,7 @@ kafka_consume_main(Datum arg)
 				if (messages[i]->payload != NULL)
 				{
 					appendBinaryStringInfo(&buf, messages[i]->payload, messages[i]->len);
-					if (buf.data[buf.len] != '\n')
+					if (buf.len > 0 && buf.data[buf.len - 1] != '\n')
 						appendStringInfoChar(&buf, '\n');
 					messages_buffered++;
 				}
