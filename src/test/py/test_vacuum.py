@@ -14,7 +14,7 @@ DURATION = 2 * 60 # 2 minutes
 Stat = namedtuple('Stat', ['rows', 'matrel_rows', 'disk_pages'])
 
 
-def disable_test_disk_spill(pipeline, clean_db):
+def test_disk_spill(pipeline, clean_db):
   pipeline.create_cv(
     'test_vacuum', '''
     SELECT x::int, COUNT(DISTINCT y::text)
@@ -46,9 +46,10 @@ def disable_test_disk_spill(pipeline, clean_db):
   t.start()
 
   # Wait for SW AV to kick in
-  time.sleep(20)
+  time.sleep(60)
 
   def get_stat():
+    pipeline.execute('ANALYZE test_vacuum')
     rows = pipeline.execute(
       'SELECT COUNT(*) FROM test_vacuum').first()['count']
     matrel_rows = pipeline.execute(
@@ -87,7 +88,7 @@ def disable_test_disk_spill(pipeline, clean_db):
 
   while time.time() - start < DURATION:
     stats.append(get_stat())
-    time.sleep(5)
+    time.sleep(10)
 
   stop = True
   t.join()
