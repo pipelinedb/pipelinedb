@@ -65,6 +65,8 @@ int sliding_window_step_factor;
 #define DATE_TRUNC_HOUR "hour"
 #define DATE_TRUNC_MINUTE "minute"
 #define DATE_TRUNC_SECOND "second"
+#define TO_TIMESTAMP "to_timestamp"
+
 #define SECOND_USEC ((TimeOffset) 1000 * 1000)
 #define MIN_USEC (60 * SECOND_USEC)
 #define HOUR_USEC (60 * MIN_USEC)
@@ -619,7 +621,8 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 					pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_HOUR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MINUTE) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0))
+					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0 ||
+					pg_strcasecmp(name, TO_TIMESTAMP) == 0))
 				return NULL;
 
 			/* Date truncation should happen at the top level */

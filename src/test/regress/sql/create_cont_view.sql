@@ -163,6 +163,9 @@ WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
 CREATE TYPE custom_type AS (integerone integer, integertwo integer);
 CREATE CONTINUOUS VIEW type_cv as SELECT val::custom_type, count(*) FROM my_stream GROUP BY val;
 
+CREATE CONTINUOUS VIEW tts AS SELECT COUNT(*) FROM stream WHERE to_timestamp(x::float8) > clock_timestamp() - interval '3 months';
+DROP CONTINUOUS VIEW tts;
+
 DROP CONTINUOUS VIEW ma0 CASCADE;
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;

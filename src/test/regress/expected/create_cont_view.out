@@ -779,6 +779,8 @@ CREATE TYPE custom_type AS (integerone integer, integertwo integer);
 CREATE CONTINUOUS VIEW type_cv as SELECT val::custom_type, count(*) FROM my_stream GROUP BY val;
 ERROR:  each grouping column type must be associated with an operator class
 HINT:  Define an operator class using CREATE OPERATOR CLASS.
+CREATE CONTINUOUS VIEW tts AS SELECT COUNT(*) FROM stream WHERE to_timestamp(x::float8) > clock_timestamp() - interval '3 months';
+DROP CONTINUOUS VIEW tts;
 DROP CONTINUOUS VIEW ma0 CASCADE;
 NOTICE:  drop cascades to view ma1
 DROP CONTINUOUS VIEW cqcreate0;
