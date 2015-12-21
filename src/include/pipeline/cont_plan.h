@@ -36,6 +36,10 @@ extern FuncExpr *GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri);
 extern PlannedStmt *GetCombinerLookupPlan(ContinuousView *view);
 extern PlannedStmt *GetContinuousViewOverlayPlan(ContinuousView *view);
 
+typedef void (*ViewModFunction)(SelectStmt *sel);
+extern PlannedStmt *GetContinuousViewOverlayPlanMod(ContinuousView *view,
+										 	        ViewModFunction fn);
+
 extern EState *CreateEState(QueryDesc *query_desc);
 extern void SetEStateSnapshot(EState *estate);
 extern void UnsetEStateSnapshot(EState *estate);

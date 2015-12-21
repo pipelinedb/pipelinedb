@@ -128,6 +128,33 @@ get_worker_plan(ContinuousView *view)
 	return get_plan_from_stmt(view->id, (Node *) stmt, view->query, false);
 }
 
+static PlannedStmt*
+get_plan_with_hook(Oid id, Node *node, const char* sql, bool is_combine)
+{
+	PlannedStmt *result;
+	join_search_hook = get_combiner_join_rel;
+
+	PG_TRY();
+	{
+		result = get_plan_from_stmt(id, node, sql, is_combine);
+		join_search_hook = NULL;
+		post_parse_analyze_hook = NULL;
+	}
+	PG_CATCH();
+	{
+		/*
+		 * These hooks won't be reset if there's an error, so we need to make
+		 * sure that they're not set for whatever query is run next in this xact.
+		 */
+		join_search_hook = NULL;
+		post_parse_analyze_hook = NULL;
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	return result;
+}
+
 PlannedStmt*
 GetContinuousViewOverlayPlan(ContinuousView *view)
 {
@@ -138,30 +165,24 @@ GetContinuousViewOverlayPlan(ContinuousView *view)
 	selectstmt = get_worker_select_stmt(view, &viewstmt);
 	selectstmt = viewstmt;
 
-	join_search_hook = get_combiner_join_rel;
+	return get_plan_with_hook(view->id, (Node*) selectstmt,
+							  view->query, false);
+}
 
-	PG_TRY();
-	{
-		result = get_plan_from_stmt(view->id, (Node *) selectstmt, 
-									view->query, false);
-		join_search_hook = NULL;
-		post_parse_analyze_hook = NULL;
-	}
-	PG_CATCH();
-	{
-		/*
-		 * These hooks won't be reset if there's an error, so we need to make
-		 * sure that they're not set for whatever query is run next in 
-		 * this xact.
-		 */
-		join_search_hook = NULL;
-		post_parse_analyze_hook = NULL;
-		PG_RE_THROW();
-	}
+PlannedStmt*
+GetContinuousViewOverlayPlanMod(ContinuousView *view, ViewModFunction mod_fn)
+{
+	PlannedStmt *result;
+	SelectStmt	*selectstmt;
+	SelectStmt	*viewstmt;
 
-	PG_END_TRY();
+	selectstmt = get_worker_select_stmt(view, &viewstmt);
+	selectstmt = viewstmt;
 
-	return result;
+	mod_fn(selectstmt);
+
+	return get_plan_with_hook(view->id, (Node*) selectstmt,
+							  view->query, false);
 }
 
 static PlannedStmt*
@@ -179,25 +200,7 @@ get_combiner_plan(ContinuousView *view)
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Combiner);
 	join_search_hook = get_combiner_join_rel;
 
-	PG_TRY();
-	{
-		result = get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, true);
-		join_search_hook = NULL;
-		post_parse_analyze_hook = NULL;
-	}
-	PG_CATCH();
-	{
-		/*
-		 * These hooks won't be reset if there's an error, so we need to make
-		 * sure that they're not set for whatever query is run next in this xact.
-		 */
-		join_search_hook = NULL;
-		post_parse_analyze_hook = NULL;
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-
-	return result;
+	return get_plan_with_hook(view->id, (Node*) selectstmt, view->query, true);
 }
 
 PlannedStmt *
