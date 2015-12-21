@@ -46,10 +46,9 @@ def test_disk_spill(pipeline, clean_db):
   t.start()
 
   # Wait for SW AV to kick in
-  time.sleep(60)
+  time.sleep(30)
 
   def get_stat():
-    pipeline.execute('ANALYZE test_vacuum')
     rows = pipeline.execute(
       'SELECT COUNT(*) FROM test_vacuum').first()['count']
     matrel_rows = pipeline.execute(
@@ -85,6 +84,8 @@ def test_disk_spill(pipeline, clean_db):
 
   start = time.time()
   stats = []
+
+  pipeline.execute('ANALYZE test_vacuum')
 
   while time.time() - start < DURATION:
     stats.append(get_stat())
