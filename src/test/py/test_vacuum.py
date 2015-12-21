@@ -14,7 +14,7 @@ DURATION = 2 * 60 # 2 minutes
 Stat = namedtuple('Stat', ['rows', 'matrel_rows', 'disk_pages'])
 
 
-def test_disk_spill(pipeline, clean_db):
+def disable_test_disk_spill(pipeline, clean_db):
   pipeline.create_cv(
     'test_vacuum', '''
     SELECT x::int, COUNT(DISTINCT y::text)
