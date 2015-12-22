@@ -8,6 +8,7 @@ HINT:  Use DROP STREAM to remove a stream.
 CREATE TABLE t0 (x integer);
 DROP STREAM t0;
 ERROR:  "t0" is not a stream
+HINT:  Use DROP TABLE to remove a table.
 -- It isn't possible for users to directly read a stream
 SELECT * FROM s0;
 ERROR:  "s0" is a stream
@@ -34,6 +35,9 @@ PREPARE p AS INSERT INTO no_readers (x) VALUES ($1);
 EXECUTE p(0);
 ERROR:  no continuous views are currently reading from stream no_readers
 HINT:  Use CREATE CONTINUOUS VIEW to create a continuous view that includes no_readers in its FROM clause.
+-- Stream doesn't exist
+DROP STREAM IF EXISTS not_here;
+NOTICE:  stream "not_here" does not exist, skipping
 INSERT INTO s0 (x) VALUES (0);
 INSERT INTO test_typed_streams.s0 (x) VALUES (0);
 SELECT * FROM v0;

@@ -1430,6 +1430,7 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_MATVIEW:
 		case OBJECT_FOREIGN_TABLE:
 		case OBJECT_CONTINUOUS_VIEW:
+		case OBJECT_STREAM:
 			RemoveRelations(stmt);
 			break;
 		default:

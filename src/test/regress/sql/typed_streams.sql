@@ -25,6 +25,9 @@ INSERT INTO no_readers (x) VALUES (0);
 PREPARE p AS INSERT INTO no_readers (x) VALUES ($1);
 EXECUTE p(0);
 
+-- Stream doesn't exist
+DROP STREAM IF EXISTS not_here;
+
 INSERT INTO s0 (x) VALUES (0);
 INSERT INTO test_typed_streams.s0 (x) VALUES (0);
 
