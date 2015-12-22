@@ -71,7 +71,6 @@ extern TupleDesc parserGetStreamDescr(Oid relid, ContAnalyzeContext *context);
 extern Node *ParseCombineFuncCall(ParseState *pstate, List *args, List *order, Expr *filter, WindowDef *over, int location);
 extern Node *ParseFinalizeFuncCall(ParseState *pstate, List *args, int location);
 extern Query *RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex);
-extern List *pipeline_rewrite(List *raw_parsetree_list);
 
 extern Query *GetContQuery(RangeVar *rv);
 extern Query *GetContWorkerQuery(RangeVar *rv);

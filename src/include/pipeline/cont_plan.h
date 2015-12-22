@@ -18,10 +18,13 @@
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 #include "pipeline/cont_scheduler.h"
+#include "tcop/utility.h"
 #include "utils/rel.h"
 #include "utils/relcache.h"
 #include "utils/resowner.h"
 #include "utils/tuplestore.h"
+
+extern ProcessUtility_hook_type SaveUtilityHook;
 
 #define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
 	((planner_rt_fetch(relid, root))->relkind == RELKIND_STREAM))
@@ -43,5 +46,8 @@ extern PlannedStmt *GetContinuousViewOverlayPlanMod(ContinuousView *view,
 extern EState *CreateEState(QueryDesc *query_desc);
 extern void SetEStateSnapshot(EState *estate);
 extern void UnsetEStateSnapshot(EState *estate);
+
+extern void ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext context,
+													  ParamListInfo params, DestReceiver *dest, char *tag);
 
 #endif

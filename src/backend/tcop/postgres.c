@@ -615,9 +615,6 @@ pg_parse_query(const char *query_string)
 
 	raw_parsetree_list = raw_parser(query_string);
 
-	/* Do any rewriting needed by PipelineDB */
-	raw_parsetree_list = pipeline_rewrite(raw_parsetree_list);
-
 	if (log_parser_stats)
 		ShowUsage("PARSER STATISTICS");
 

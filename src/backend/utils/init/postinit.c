@@ -971,7 +971,10 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 
 	/* initialize all PipelineDB stuff */
 	if (!bootstrap)
+	{
 		PipelineShmemInit();
+		PipelineInstallHooks();
+	}
 
 	/* close the transaction we started above */
 	if (!bootstrap)

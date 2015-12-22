@@ -40,6 +40,8 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
+ProcessUtility_hook_type SaveUtilityHook = NULL;
+
 /*
  * get_combiner_join_rel
  *
@@ -121,14 +123,14 @@ get_worker_select_stmt(ContinuousView* view, SelectStmt** viewptr)
 	return selectstmt;
 }
 
-static PlannedStmt*
+static PlannedStmt *
 get_worker_plan(ContinuousView *view)
 {
 	SelectStmt* stmt = get_worker_select_stmt(view, NULL);
 	return get_plan_from_stmt(view->id, (Node *) stmt, view->query, false);
 }
 
-static PlannedStmt*
+static PlannedStmt *
 get_plan_with_hook(Oid id, Node *node, const char* sql, bool is_combine)
 {
 	PlannedStmt *result;
@@ -155,7 +157,7 @@ get_plan_with_hook(Oid id, Node *node, const char* sql, bool is_combine)
 	return result;
 }
 
-PlannedStmt*
+PlannedStmt *
 GetContinuousViewOverlayPlan(ContinuousView *view)
 {
 	SelectStmt	*selectstmt;
@@ -168,7 +170,7 @@ GetContinuousViewOverlayPlan(ContinuousView *view)
 							  view->query, false);
 }
 
-PlannedStmt*
+PlannedStmt *
 GetContinuousViewOverlayPlanMod(ContinuousView *view, ViewModFunction mod_fn)
 {
 	SelectStmt	*selectstmt;
@@ -183,7 +185,7 @@ GetContinuousViewOverlayPlanMod(ContinuousView *view, ViewModFunction mod_fn)
 							  view->query, false);
 }
 
-static PlannedStmt*
+static PlannedStmt *
 get_combiner_plan(ContinuousView *view)
 {
 	List		*parsetree_list;
@@ -322,4 +324,105 @@ UnsetEStateSnapshot(EState *estate)
 {
 	PopActiveSnapshot();
 	estate->es_snapshot = NULL;
+}
+
+/*
+ * get_res_target
+ */
+static ResTarget *
+get_res_target(char *name, List *tlist)
+{
+	ListCell *lc;
+
+	Assert(name);
+
+	foreach(lc, tlist)
+	{
+		ResTarget *rt = (ResTarget *) lfirst(lc);
+		if (pg_strcasecmp(rt->name, name) == 0)
+			return rt;
+	}
+
+	elog(ERROR, "column \"%s\" does not exist", name);
+
+	return NULL;
+}
+
+/*
+ * create_index_on_matrel
+ *
+ * Given a CREATE INDEX query on a continuous view, modify it to
+ * create the index on the continuous view's matrel instead.
+ */
+static void
+create_index_on_matrel(IndexStmt *stmt)
+{
+	ContinuousView *cv;
+	RangeVar *cv_name = stmt->relation;
+	SelectStmt	*viewstmt;
+	List *tlist;
+	ListCell *lc;
+	bool is_sw = GetGCFlag(cv_name);
+
+	stmt->relation = GetMatRelationName(cv_name);
+	cv = RangeVarGetContinuousView(cv_name);
+	get_worker_select_stmt(cv, &viewstmt);
+
+	Assert(viewstmt);
+	tlist = viewstmt->targetList;
+
+	foreach(lc, stmt->indexParams)
+	{
+		IndexElem *elem = (IndexElem *) lfirst(lc);
+		ResTarget *res;
+
+		if (!elem->name)
+			continue;
+
+		/*
+		 * If the column isn't a plain column reference, then it's wrapped in
+		 * a finalize call so we need to index on that with an expression index
+		 */
+		res = get_res_target(elem->name, tlist);
+		if (!IsA(res->val, ColumnRef))
+		{
+			if (is_sw)
+				elog(ERROR, "sliding-window aggregate columns cannot be indexed");
+			elem->expr = copyObject(res->val);
+			elem->name = NULL;
+		}
+	}
+}
+
+/*
+ * ProcessUtilityOnContView
+ *
+ * Hook to intercept relevant utility queries run on continuous views
+ */
+void
+ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext context,
+													  ParamListInfo params, DestReceiver *dest, char *tag)
+{
+	if (IsA(parsetree, IndexStmt))
+	{
+		IndexStmt *stmt = (IndexStmt *) parsetree;
+		if (IsAContinuousView(stmt->relation))
+			create_index_on_matrel(stmt);
+	}
+	else if (IsA(parsetree, VacuumStmt))
+	{
+		VacuumStmt *vstmt = (VacuumStmt *) parsetree;
+		/*
+		 * If the user is trying to vacuum a CV, what they're really
+		 * trying to do is create it on the CV's materialization table, so rewrite
+		 * the name of the target relation if we need to.
+		 */
+		if (vstmt->relation && IsAContinuousView(vstmt->relation))
+			vstmt->relation = GetMatRelationName(vstmt->relation);
+	}
+
+	if (SaveUtilityHook != NULL)
+		(*SaveUtilityHook) (parsetree, sql, context, params, dest, tag);
+	else
+		standard_ProcessUtility(parsetree, sql, context, params, dest, tag);
 }
