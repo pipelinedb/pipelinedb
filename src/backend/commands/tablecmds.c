@@ -256,7 +256,7 @@ static const struct dropmsgstrings dropmsgstringarray[] = {
 	{RELKIND_STREAM,
 		ERRCODE_UNDEFINED_OBJECT,
 		gettext_noop("stream \"%s\" does not exist"),
-		gettext_noop("stream\"%s\" does not exist, skipping"),
+		gettext_noop("stream \"%s\" does not exist, skipping"),
 		gettext_noop("\"%s\" is not a stream"),
 	gettext_noop("Use DROP STREAM to remove a stream.")},
 	{'\0', 0, NULL, NULL, NULL, NULL}
