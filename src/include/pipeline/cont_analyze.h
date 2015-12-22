@@ -43,6 +43,7 @@ typedef struct ContAnalyzeContext
 
 #define OPTION_FILLFACTOR "fillfactor"
 #define OPTION_MAX_AGE "max_age"
+#define OPTION_PK "pk"
 #define OPTION_STEP_FACTOR "step_factor"
 
 #define SW_TIMESTAMP_REF 65100
