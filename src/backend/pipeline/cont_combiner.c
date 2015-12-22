@@ -87,6 +87,8 @@ typedef struct
 	/* Stores the hashes of the current batch, in parallel to the order of the batch's tuplestore */
 	int64 *group_hashes;
 	int group_hashes_len;
+	AttrNumber pk;
+	bool seq_pk;
 } ContQueryCombinerState;
 
 /*
@@ -534,7 +536,7 @@ sync_combine(ContQueryCombinerState *state)
 			replace_all[state->groupatts[i] - 1] = false;
 
 		/* Never replace pkey */
-		replace_all[natts - 1] = false;
+		replace_all[state->pk - 1] = false;
 
 		slot_getallattrs(slot);
 
@@ -549,13 +551,16 @@ sync_combine(ContQueryCombinerState *state)
 			 * Figure out which columns actually changed, as those are the only values
 			 * that we want to write to disk.
 			 */
-			for (att = 1; att <= natts - 1; att++)
+			for (att = 1; att <= natts; att++)
 			{
 				Datum prev;
 				Datum new;
 				bool prev_null;
 				bool new_null;
 				Form_pg_attribute attr = state->prev_slot->tts_tupleDescriptor->attrs[att - 1];
+
+				if (att == state->pk)
+					continue;
 
 				prev = slot_getattr(state->prev_slot, att, &prev_null);
 				new = slot_getattr(slot, att, &new_null);
@@ -585,9 +590,10 @@ sync_combine(ContQueryCombinerState *state)
 		}
 		else
 		{
-			/* No existing tuple found, so it's an INSERT. Also generate a primary key for it. */
-			slot->tts_values[natts - 1] = nextval_internal(state->base.view->seqrel);
-			slot->tts_isnull[natts - 1] = false;
+			/* No existing tuple found, so it's an INSERT. Also generate a primary key for it if necessary. */
+			if (state->seq_pk)
+				slot->tts_values[state->pk - 1] = nextval_internal(state->base.view->seqrel);
+			slot->tts_isnull[state->pk - 1] = false;
 			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecCQMatRelInsert(state->ri, slot, estate);
@@ -622,8 +628,20 @@ sync_all(ContExecutor *cont_exec)
 
 		MyCQStats = &state->base.stats;
 
-		if (state->pending_tuples > 0)
-			sync_combine(state);
+		PG_TRY();
+		{
+			if (state->pending_tuples > 0)
+				sync_combine(state);
+		}
+		PG_CATCH();
+		{
+			EmitErrorReport();
+			FlushErrorState();
+
+			AbortCurrentTransaction();
+			StartTransactionCommand();
+		}
+		PG_END_TRY();
 
 		state->pending_tuples = 0;
 		state->matrel = NULL;
@@ -688,6 +706,9 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 {
 	PlannedStmt *pstmt;
 	ContQueryCombinerState *state;
+	Relation matrel;
+	List *indices = NIL;
+	ListCell *lc;
 
 	state = (ContQueryCombinerState *) palloc0(sizeof(ContQueryCombinerState));
 	memcpy(&state->base, base, sizeof(ContQueryState));
@@ -719,10 +740,16 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	state->group_hashes_len = continuous_query_batch_size;
 	state->group_hashes = palloc0(state->group_hashes_len * sizeof(int64));
 
+	matrel = heap_openrv_extended(base->view->matrel, AccessShareLock, true);
+	if (matrel == NULL)
+	{
+		base->view = NULL;
+		return base;
+	}
+
 	if (IsA(state->combine_plan->planTree, Agg))
 	{
 		Agg *agg = (Agg *) state->combine_plan->planTree;
-		Relation matrel;
 		ResultRelInfo *ri;
 
 		state->groupatts = agg->grpColIdx;
@@ -730,25 +757,42 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 		state->groupops = agg->grpOperators;
 		state->isagg = true;
 
-		matrel = heap_openrv_extended(base->view->matrel, AccessShareLock, true);
-
-		if (matrel == NULL)
-		{
-			base->view = NULL;
-			return base;
-		}
-
 		ri = CQMatRelOpen(matrel);
 
 		if (state->ngroupatts)
 			state->hashfunc = GetGroupHashIndexExpr(state->ngroupatts, ri);
 
 		CQMatRelClose(ri);
-		heap_close(matrel, AccessShareLock);
 
 		execTuplesHashPrepare(state->ngroupatts, state->groupops, &state->eq_funcs, &state->hash_funcs);
 		state->existing = build_existing_hashtable(state);
 	}
+
+	/*
+	 * Find the primary key column
+	 */
+	indices = RelationGetIndexList(matrel);
+	foreach(lc, indices)
+	{
+		Oid indexoid = lfirst_oid(lc);
+		HeapTuple tup = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
+		Form_pg_index form;
+
+		if (!HeapTupleIsValid(tup))
+			elog(ERROR, "index %u for matrel %u not found", indexoid, RelationGetRelid(matrel));
+
+		form = (Form_pg_index) GETSTRUCT(tup);
+		if (form->indisprimary)
+		{
+			TupleDesc desc = RelationGetDescr(matrel);
+			Assert(form->indnatts == 1);
+			state->pk = form->indkey.values[0];
+			if (pg_strcasecmp(NameStr(desc->attrs[state->pk - 1]->attname), "$pk") == 0)
+				state->seq_pk = true;
+		}
+		ReleaseSysCache(tup);
+	}
+	heap_close(matrel, AccessShareLock);
 
 	return base;
 }

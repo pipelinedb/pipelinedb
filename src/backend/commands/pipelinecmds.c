@@ -210,14 +210,14 @@ create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query *query, 
 }
 
 static Oid
-create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel)
+create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
 	Oid index_oid;
 
 	indexcol = makeNode(IndexElem);
-	indexcol->name = CQ_MATREL_PKEY;
+	indexcol->name = colname;
 	indexcol->ordering = SORTBY_DEFAULT;
 	indexcol->nulls_ordering = SORTBY_NULLS_DEFAULT;
 
@@ -396,6 +396,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	Oid cvid;
 	ColumnDef *coldef;
 	Constraint *pkey;
+	DefElem *pk;
+	ColumnDef *pk_coldef = NULL;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -460,6 +462,15 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		}
 	}
 
+	pk = GetContinuousViewOption(stmt->into->options, OPTION_PK);
+	if (pk)
+	{
+		if (IsA(pk->arg, String))
+			stmt->into->options = list_delete(stmt->into->options, pk);
+		else
+			elog(ERROR, "continuous view primary keys must be specified with a valid column name");
+	}
+
 	/*
 	 * Build a list of columns from the SELECT statement that we
 	 * can use to create a table with
@@ -486,15 +497,26 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 			type = BOOLOID;
 		coldef = MakeMatRelColumnDef(colname, type, exprTypmod((Node *) tle->expr));
 		tableElts = lappend(tableElts, coldef);
+
+		if (pk && pg_strcasecmp(strVal(pk->arg), colname) == 0)
+			pk_coldef = coldef;
 	}
 
-	/* Add primary key column */
-	coldef = MakeMatRelColumnDef(CQ_MATREL_PKEY, INT8OID, InvalidOid);
-	coldef->is_not_null = true;
+	if (pk && !pk_coldef)
+		elog(ERROR, "primary key column \"%s\" not found", strVal(pk->arg));
+
 	pkey = makeNode(Constraint);
 	pkey->contype = CONSTR_PRIMARY;
-	coldef->constraints = list_make1(pkey);
-	tableElts = lappend(tableElts, coldef);
+
+	if (!pk_coldef)
+	{
+		/* Add primary key column */
+		pk_coldef = MakeMatRelColumnDef(CQ_MATREL_PKEY, INT8OID, InvalidOid);
+		pk_coldef->is_not_null = true;
+		tableElts = lappend(tableElts, pk_coldef);
+	}
+
+	pk_coldef->constraints = list_make1(pkey);
 
 	if (!GetContinuousViewOption(stmt->into->options, OPTION_FILLFACTOR))
 		stmt->into->options = add_default_fillfactor(stmt->into->options);
@@ -550,7 +572,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	/* Create group look up index and record dependencies */
 	indexoid = create_lookup_index(view, matreloid, matrel, query, context->is_sw);
-	pkey_idxoid = create_pkey_index(view, matreloid, matrel);
+	pkey_idxoid = create_pkey_index(view, matreloid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
 	record_dependencies(pqoid, matreloid, seqreloid, viewoid, indexoid, pkey_idxoid, workerselect, query);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
