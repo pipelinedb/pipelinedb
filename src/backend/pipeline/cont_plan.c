@@ -158,7 +158,6 @@ get_plan_with_hook(Oid id, Node *node, const char* sql, bool is_combine)
 PlannedStmt*
 GetContinuousViewOverlayPlan(ContinuousView *view)
 {
-	PlannedStmt *result;
 	SelectStmt	*selectstmt;
 	SelectStmt	*viewstmt;
 
@@ -172,7 +171,6 @@ GetContinuousViewOverlayPlan(ContinuousView *view)
 PlannedStmt*
 GetContinuousViewOverlayPlanMod(ContinuousView *view, ViewModFunction mod_fn)
 {
-	PlannedStmt *result;
 	SelectStmt	*selectstmt;
 	SelectStmt	*viewstmt;
 
@@ -190,7 +188,6 @@ get_combiner_plan(ContinuousView *view)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
-	PlannedStmt *result;
 
 	parsetree_list = pg_parse_query(view->query);
 	Assert(list_length(parsetree_list) == 1);
