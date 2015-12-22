@@ -408,6 +408,7 @@ extern void BaseInit(void);
 
 /* in utils/pipelineinit.c */
 extern void PipelineShmemInit(void);
+extern void PipelineInstallHooks(void);
 
 /* in utils/init/miscinit.c */
 extern bool IgnoreSystemIndexes;
