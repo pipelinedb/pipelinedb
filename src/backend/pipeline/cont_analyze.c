@@ -3473,37 +3473,6 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 }
 
 /*
- * pipeline_rewrite
- *
- * Take the list of parsetrees returned by `pg_parse_query` and
- * output a new list of parsetrees.
- */
-List *
-pipeline_rewrite(List *raw_parsetree_list)
-{
-	ListCell *lc;
-
-	foreach(lc, raw_parsetree_list)
-	{
-		Node *node = lfirst(lc);
-
-		if (IsA(node, VacuumStmt))
-		{
-			VacuumStmt *vstmt = (VacuumStmt *) node;
-			/*
-			 * If the user is trying to vacuum a CV, what they're really
-			 * trying to do is create it on the CV's materialization table, so rewrite
-			 * the name of the target relation if we need to.
-			 */
-			if (vstmt->relation && IsAContinuousView(vstmt->relation))
-				vstmt->relation = GetMatRelationName(vstmt->relation);
-		}
-	}
-
-	return raw_parsetree_list;
-}
-
-/*
  * GetSWExpr
  */
 Node *

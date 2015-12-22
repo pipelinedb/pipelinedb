@@ -187,12 +187,15 @@ HeapTuple
 GetPipelineQueryTuple(RangeVar *name)
 {
 	HeapTuple tuple;
-	Oid namespace;
+	Oid namespace = InvalidOid;
 
 	if (name->schemaname == NULL)
 		namespace = RangeVarGetCreationNamespace(name);
 	else
-		namespace = get_namespace_oid(name->schemaname, false);
+		namespace = get_namespace_oid(name->schemaname, true);
+
+	if (!OidIsValid(namespace))
+		return NULL;
 
 	Assert(OidIsValid(namespace));
 
@@ -556,6 +559,24 @@ GetContinuousView(Oid id)
 	ReleaseSysCache(tup);
 
 	return view;
+}
+
+/*
+ * RangeVarGetContinuousView
+ */
+ContinuousView *
+RangeVarGetContinuousView(RangeVar *cv_name)
+{
+	HeapTuple pq = GetPipelineQueryTuple(cv_name);
+	Oid id;
+
+	if (!HeapTupleIsValid(pq))
+		return NULL;
+
+	id = ((Form_pipeline_query) GETSTRUCT(pq))->id;
+	ReleaseSysCache(pq);
+
+	return GetContinuousView(id);
 }
 
 /*
