@@ -47,7 +47,8 @@
 
 
 static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path);
-static Plan *create_tuplestorescan_plan(PlannerInfo *root, Path *best_path);
+static Plan *create_tuplestorescan_plan(PlannerInfo *root, Path *best_path,
+										List *quals);
 
 static Plan *create_scan_plan(PlannerInfo *root, Path *best_path);
 static List *build_path_tlist(PlannerInfo *root, Path *path);
@@ -289,7 +290,7 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
  *  	Create a plan that simply scans a Tuplestore
  */
 static Plan *
-create_tuplestorescan_plan(PlannerInfo *root, Path *best_path)
+create_tuplestorescan_plan(PlannerInfo *root, Path *best_path, List *scan_clauses)
 {
 	TuplestoreScan *scan = makeNode(TuplestoreScan);
 	List	   *tlist = NIL;
@@ -309,6 +310,21 @@ create_tuplestorescan_plan(PlannerInfo *root, Path *best_path)
 	}
 
 	heap_close(matrel, NoLock);
+
+	if (scan_clauses)
+	{
+		scan_clauses = order_qual_clauses(root, scan_clauses);
+		scan_clauses = extract_actual_clauses(scan_clauses, false);
+
+		/* Replace any outer-relation variables with nestloop params */
+		if (best_path->param_info)
+		{
+			scan_clauses = (List *)
+				replace_nestloop_params(root, (Node *) scan_clauses);
+		}
+
+		plan->qual = scan_clauses;
+	}
 
 	plan->targetlist = tlist;
 
@@ -382,7 +398,8 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 			break;
 
 		case T_TuplestoreScan:
-			plan = (Plan *) create_tuplestorescan_plan(root, best_path);
+			plan = (Plan *) create_tuplestorescan_plan(root, best_path,
+													   scan_clauses);
 			break;
 
 		case T_IndexScan:
