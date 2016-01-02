@@ -1524,6 +1524,9 @@ arrayaggstatesend(PG_FUNCTION_ARGS)
 	ArrayBuildState *state = (ArrayBuildState *) PG_GETARG_POINTER(0);
 	ArrayType *vals;
 
+	if (state == NULL)
+		PG_RETURN_NULL();
+
 	vals = construct_array(state->dvalues, state->nelems, state->element_type,
 			state->typlen, state->typbyval, state->typalign);
 
@@ -1539,7 +1542,7 @@ arrayaggstatesend(PG_FUNCTION_ARGS)
 Datum
 arrayaggstaterecv(PG_FUNCTION_ARGS)
 {
-	ArrayType *vals = (ArrayType *) PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType *vals;
 	ArrayBuildState *result;
 
 	MemoryContext old;
@@ -1547,6 +1550,11 @@ arrayaggstaterecv(PG_FUNCTION_ARGS)
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = fcinfo->flinfo->fn_mcxt;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	vals = (ArrayType *) PG_GETARG_ARRAYTYPE_P(0);
 
 	old = MemoryContextSwitchTo(context);
 
