@@ -33,6 +33,7 @@
 #include "parser/parse_type.h"
 #include "pgstat.h"
 #include "pipeline/combinerReceiver.h"
+#include "pipeline/cont_execute.h"
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
@@ -52,6 +53,8 @@
 #include "utils/timestamp.h"
 
 #define GROUPS_PLAN_LIFESPAN (10 * 1000)
+
+CombinerPostSyncFunc CombinerPostSyncHook = NULL;
 
 /*
  * Flag that indicates whether or not an on-disk tuple has already been added to
@@ -526,7 +529,8 @@ sync_combine(ContQueryCombinerState *state)
 	foreach_tuple(slot, state->combined)
 	{
 		HeapTupleEntry update = NULL;
-		HeapTuple tup = NULL;
+		HeapTuple old_tup = NULL;
+		HeapTuple new_tup = NULL;
 		AttrNumber att = 1;
 		int replaces = 0;
 
@@ -545,7 +549,8 @@ sync_combine(ContQueryCombinerState *state)
 
 		if (update)
 		{
-			ExecStoreTuple(update->tuple, state->prev_slot, InvalidBuffer, false);
+			old_tup = update->tuple;
+			ExecStoreTuple(old_tup, state->prev_slot, InvalidBuffer, false);
 
 			/*
 			 * Figure out which columns actually changed, as those are the only values
@@ -582,11 +587,11 @@ sync_combine(ContQueryCombinerState *state)
 			/*
 			 * The slot has the updated values, so store them in the updatable physical tuple
 			 */
-			tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
+			new_tup = heap_modify_tuple(old_tup, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
-			ExecStoreTuple(tup, slot, InvalidBuffer, false);
+			ExecStoreTuple(new_tup, slot, InvalidBuffer, false);
 			if (ExecCQMatRelUpdate(state->ri, slot, estate))
-				IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
+				IncrementCQUpdate(1, HEAPTUPLESIZE + new_tup->t_len);
 		}
 		else
 		{
@@ -594,13 +599,16 @@ sync_combine(ContQueryCombinerState *state)
 			if (state->seq_pk)
 				slot->tts_values[state->pk - 1] = nextval_internal(state->base.view->seqrel);
 			slot->tts_isnull[state->pk - 1] = false;
-			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
-			ExecStoreTuple(tup, slot, InvalidBuffer, false);
+			new_tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
+			ExecStoreTuple(new_tup, slot, InvalidBuffer, false);
 			ExecCQMatRelInsert(state->ri, slot, estate);
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
 		ResetPerTupleExprContext(estate);
+
+		if (CombinerPostSyncHook)
+			CombinerPostSyncHook(state->matrel, old_tup, new_tup);
 	}
 
 	tuplestore_clear(state->combined);

@@ -105,6 +105,9 @@ extern void PartialTupleStateCopyFn(void *dest, void *src, int len);
 extern dsm_cqueue *GetWorkerQueue(void);
 extern dsm_cqueue *GetCombinerQueue(PartialTupleState *pts);
 
+typedef void (*CombinerPostSyncFunc) (Relation matrel, HeapTuple old_tup, HeapTuple new_tup);
+extern CombinerPostSyncFunc CombinerPostSyncHook;
+
 typedef struct ContQueryState
 {
 	Oid view_id;
