@@ -33,6 +33,7 @@
 #include "parser/parse_type.h"
 #include "pgstat.h"
 #include "pipeline/combinerReceiver.h"
+#include "pipeline/cont_execute.h"
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
@@ -52,6 +53,8 @@
 #include "utils/timestamp.h"
 
 #define GROUPS_PLAN_LIFESPAN (10 * 1000)
+
+CombinerPostSyncFunc CombinerPostSyncHook = NULL;
 
 /*
  * Flag that indicates whether or not an on-disk tuple has already been added to
@@ -89,6 +92,7 @@ typedef struct
 	int group_hashes_len;
 	AttrNumber pk;
 	bool seq_pk;
+	List *matrel_changes;
 } ContQueryCombinerState;
 
 /*
@@ -499,6 +503,21 @@ build_existing_hashtable(ContQueryCombinerState *state)
 }
 
 /*
+ * make_matrel_change
+ */
+static MatRelChange *
+make_matrel_change(Oid matrelid, HeapTuple old_tup, HeapTuple new_tup)
+{
+	MatRelChange *change = palloc0(sizeof(MatRelChange));
+
+	change->matrelid = matrelid;
+	change->old_tup = old_tup;
+	change->new_tup = new_tup;
+
+	return change;
+}
+
+/*
  * sync_combine
  *
  * Writes the combine results to a continuous view's table, performing
@@ -526,7 +545,8 @@ sync_combine(ContQueryCombinerState *state)
 	foreach_tuple(slot, state->combined)
 	{
 		HeapTupleEntry update = NULL;
-		HeapTuple tup = NULL;
+		HeapTuple old_tup = NULL;
+		HeapTuple new_tup = NULL;
 		AttrNumber att = 1;
 		int replaces = 0;
 
@@ -545,7 +565,8 @@ sync_combine(ContQueryCombinerState *state)
 
 		if (update)
 		{
-			ExecStoreTuple(update->tuple, state->prev_slot, InvalidBuffer, false);
+			old_tup = update->tuple;
+			ExecStoreTuple(old_tup, state->prev_slot, InvalidBuffer, false);
 
 			/*
 			 * Figure out which columns actually changed, as those are the only values
@@ -582,11 +603,11 @@ sync_combine(ContQueryCombinerState *state)
 			/*
 			 * The slot has the updated values, so store them in the updatable physical tuple
 			 */
-			tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
+			new_tup = heap_modify_tuple(old_tup, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
-			ExecStoreTuple(tup, slot, InvalidBuffer, false);
+			ExecStoreTuple(new_tup, slot, InvalidBuffer, false);
 			if (ExecCQMatRelUpdate(state->ri, slot, estate))
-				IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
+				IncrementCQUpdate(1, HEAPTUPLESIZE + new_tup->t_len);
 		}
 		else
 		{
@@ -594,16 +615,20 @@ sync_combine(ContQueryCombinerState *state)
 			if (state->seq_pk)
 				slot->tts_values[state->pk - 1] = nextval_internal(state->base.view->seqrel);
 			slot->tts_isnull[state->pk - 1] = false;
-			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
-			ExecStoreTuple(tup, slot, InvalidBuffer, false);
+			new_tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
+			ExecStoreTuple(new_tup, slot, InvalidBuffer, false);
 			ExecCQMatRelInsert(state->ri, slot, estate);
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
 		ResetPerTupleExprContext(estate);
-	}
 
-	tuplestore_clear(state->combined);
+		if (CombinerPostSyncHook)
+		{
+			MatRelChange *change = make_matrel_change(RelationGetRelid(state->matrel), old_tup, new_tup);
+			state->matrel_changes = lappend(state->matrel_changes, change);
+		}
+	}
 
 	CQMatRelClose(state->ri);
 	heap_close(state->matrel, RowExclusiveLock);
@@ -631,7 +656,17 @@ sync_all(ContExecutor *cont_exec)
 		PG_TRY();
 		{
 			if (state->pending_tuples > 0)
+			{
 				sync_combine(state);
+
+				if (CombinerPostSyncHook != NULL)
+				{
+					CombinerPostSyncHook(state->matrel, state->matrel_changes);
+					state->matrel_changes = NIL;
+				}
+
+				tuplestore_clear(state->combined);
+			}
 		}
 		PG_CATCH();
 		{
@@ -735,6 +770,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	state->slot = MakeSingleTupleTableSlot(state->desc);
 	state->prev_slot = MakeSingleTupleTableSlot(state->desc);
 	state->groups_plan = NULL;
+	state->matrel_changes = NIL;
 
 	/* this will grow dynamically when needed, but this is a good starting size */
 	state->group_hashes_len = continuous_query_batch_size;
