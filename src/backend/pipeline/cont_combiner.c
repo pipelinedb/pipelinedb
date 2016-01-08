@@ -743,7 +743,6 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	state->slot = MakeSingleTupleTableSlot(state->desc);
 	state->prev_slot = MakeSingleTupleTableSlot(state->desc);
 	state->groups_plan = NULL;
-	state->matrel_changes = NIL;
 
 	/* this will grow dynamically when needed, but this is a good starting size */
 	state->group_hashes_len = continuous_query_batch_size;
