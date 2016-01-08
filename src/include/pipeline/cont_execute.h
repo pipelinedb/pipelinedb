@@ -105,15 +105,6 @@ extern void PartialTupleStateCopyFn(void *dest, void *src, int len);
 extern dsm_cqueue *GetWorkerQueue(void);
 extern dsm_cqueue *GetCombinerQueue(PartialTupleState *pts);
 
-#define IS_MATREL_UPDATE(change) ((change)->old_tup != NULL)
-
-typedef struct MatRelChange
-{
-	Oid matrelid;
-	HeapTuple old_tup;
-	HeapTuple new_tup;
-} MatRelChange;
-
 typedef void (*CombinerPostSyncFunc) (Relation matrel, HeapTuple old_tup, HeapTuple new_tup);
 extern CombinerPostSyncFunc CombinerPostSyncHook;
 
