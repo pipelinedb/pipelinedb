@@ -114,7 +114,7 @@ typedef struct MatRelChange
 	HeapTuple new_tup;
 } MatRelChange;
 
-typedef void (*CombinerPostSyncFunc) (Relation matrel, List *changes);
+typedef void (*CombinerPostSyncFunc) (Relation matrel, HeapTuple old_tup, HeapTuple new_tup);
 extern CombinerPostSyncFunc CombinerPostSyncHook;
 
 typedef struct ContQueryState

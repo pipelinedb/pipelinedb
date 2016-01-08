@@ -92,7 +92,6 @@ typedef struct
 	int group_hashes_len;
 	AttrNumber pk;
 	bool seq_pk;
-	List *matrel_changes;
 } ContQueryCombinerState;
 
 /*
@@ -503,21 +502,6 @@ build_existing_hashtable(ContQueryCombinerState *state)
 }
 
 /*
- * make_matrel_change
- */
-static MatRelChange *
-make_matrel_change(Oid matrelid, HeapTuple old_tup, HeapTuple new_tup)
-{
-	MatRelChange *change = palloc0(sizeof(MatRelChange));
-
-	change->matrelid = matrelid;
-	change->old_tup = old_tup;
-	change->new_tup = new_tup;
-
-	return change;
-}
-
-/*
  * sync_combine
  *
  * Writes the combine results to a continuous view's table, performing
@@ -624,11 +608,10 @@ sync_combine(ContQueryCombinerState *state)
 		ResetPerTupleExprContext(estate);
 
 		if (CombinerPostSyncHook)
-		{
-			MatRelChange *change = make_matrel_change(RelationGetRelid(state->matrel), old_tup, new_tup);
-			state->matrel_changes = lappend(state->matrel_changes, change);
-		}
+			CombinerPostSyncHook(state->matrel, old_tup, new_tup);
 	}
+
+	tuplestore_clear(state->combined);
 
 	CQMatRelClose(state->ri);
 	heap_close(state->matrel, RowExclusiveLock);
@@ -656,17 +639,7 @@ sync_all(ContExecutor *cont_exec)
 		PG_TRY();
 		{
 			if (state->pending_tuples > 0)
-			{
 				sync_combine(state);
-
-				if (CombinerPostSyncHook != NULL)
-				{
-					CombinerPostSyncHook(state->matrel, state->matrel_changes);
-					state->matrel_changes = NIL;
-				}
-
-				tuplestore_clear(state->combined);
-			}
 		}
 		PG_CATCH();
 		{
