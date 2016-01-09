@@ -3449,11 +3449,6 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 		/* Strip away the finalize func */
 		fexpr = (FuncExpr *) te->expr;
 
-		if (finalfn != fexpr->funcid)
-		{
-			elog(ERROR, "fuck %d %d", finalfn, fexpr->funcid);
-		}
-
 		Assert(fexpr->funcid == finalfn);
 		expr = linitial(fexpr->args);
 
