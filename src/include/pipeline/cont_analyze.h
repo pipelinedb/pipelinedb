@@ -78,6 +78,7 @@ extern Query *GetContCombinerQuery(RangeVar *rv);
 
 extern Node *GetSWExpr(RangeVar *rv);
 extern ColumnRef *GetSWTimeColumn(RangeVar *rv);
+extern Interval *GetSWInterval(RangeVar *rv);
 extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
 extern Node *CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var);
 

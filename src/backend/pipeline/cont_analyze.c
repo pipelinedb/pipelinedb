@@ -23,10 +23,13 @@
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "commands/pipelinecmds.h"
+#include "executor/executor.h"
 #include "lib/stringinfo.h"
+#include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/parsenodes.h"
+#include "optimizer/planner.h"
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
 #include "parser/analyze.h"
@@ -3480,6 +3483,45 @@ GetSWExpr(RangeVar *cv)
 	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
 
 	return view->whereClause;
+}
+
+/*
+ * GetSWInterval
+ *
+ * Returns the interval associated with a SW
+ */
+Interval *
+GetSWInterval(RangeVar *rv)
+{
+	Node *sw_expr = GetSWExpr(rv);
+	ContAnalyzeContext context;
+	Node *rexpr;
+	Node *inode;
+	Expr *expr;
+	ExprState *expr_state;
+	ParseState *ps = make_parsestate(NULL);
+	bool isnull;
+	Datum d;
+	ExprContext *econtext = CreateStandaloneExprContext();
+
+	find_clock_timestamp_expr(sw_expr, &context);
+	Assert(IsA(context.expr, A_Expr));
+
+	/* arrival_timestamp > clock_timestamp() - interval... */
+	rexpr = ((A_Expr *) context.expr)->rexpr;
+	Assert(IsA(rexpr, A_Expr));
+
+	inode = ((A_Expr *) rexpr)->rexpr;
+	inode = transformExpr(ps, inode, EXPR_KIND_OTHER);
+	expr = expression_planner((Expr *) inode);
+
+	expr_state = ExecInitExpr(expr, NULL);
+	d = ExecEvalExpr(expr_state, econtext, &isnull, NULL);
+
+	free_parsestate(ps);
+	FreeExprContext(econtext, false);
+
+	return DatumGetIntervalP(d);
 }
 
 ColumnRef *
