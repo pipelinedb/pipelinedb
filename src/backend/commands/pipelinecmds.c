@@ -600,6 +600,7 @@ ExecTruncateContViewStmt(TruncateContViewStmt *stmt)
 	ListCell *lc;
 	Relation pipeline_query;
 	List *views = NIL;
+	TruncateStmt *trunc = makeNode(TruncateStmt);
 
 	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 
@@ -623,7 +624,7 @@ ExecTruncateContViewStmt(TruncateContViewStmt *stmt)
 		views = lappend_oid(views, row->id);
 		matrel = GetMatRelationName(rv);
 
-		rv->relname = matrel->relname;
+		trunc->relations = lappend(trunc->relations, matrel);
 	}
 
 	/* Reset all CQ level transition state */
@@ -631,7 +632,7 @@ ExecTruncateContViewStmt(TruncateContViewStmt *stmt)
 		ResetTStateEntry(lfirst_oid(lc));
 
 	/* Call TRUNCATE on the backing view table(s). */
-	ExecuteTruncate(stmt);
+	ExecuteTruncate(trunc);
 
 	heap_close(pipeline_query, NoLock);
 }
