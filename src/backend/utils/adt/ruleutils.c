@@ -5253,11 +5253,14 @@ get_insert_query_def(Query *query, deparse_context *context)
 		appendStringInfoChar(buf, '(');
 
 	/*
-	 * If it's an INSERT ... SELECT or multi-row VALUES, the targetList Vars point to
-	 * their corresponding RTE and so while deparsing, we must output column names in
-	 * the order of varattno, not resno.
+	 * If it's an INSERT ... multi-row VALUES, the targetList Vars point to their corresponding RTE
+	 * and so while deparsing, we must output column names in the order of varattno, not resno.
+	 *
+	 * Deparsing is more complicated for INSERT ... SELECT since there can be Consts in the targetList
+	 * which don't have any varattno needed to figure out where in the output column list they need to
+	 * be placed.
 	 */
-	if (select_rte || values_rte)
+	if (values_rte)
 	{
 		sorted_tlist = NIL;
 		foreach(l, query->targetList)
@@ -5271,9 +5274,9 @@ get_insert_query_def(Query *query, deparse_context *context)
 			Assert(IsA(curr_tle->expr, Var));
 			curr_var = (Var *) curr_tle->expr;
 
-			/* All these Vars must belong to the SELECT or VALUES RTE. */
+			/* All these Vars must belong to the VALUES RTE. */
 			rte = (RangeTblEntry *) list_nth(query->rtable, curr_var->varno - 1);
-			Assert(rte == values_rte || rte == select_rte);
+			Assert(rte == values_rte);
 
 			foreach(lc, sorted_tlist)
 			{
