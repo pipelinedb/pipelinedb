@@ -2,11 +2,17 @@
 
 set -e
 
-# check if the data directory already exists
-# if not, create it
-if [ ! -d "/mnt/pipelinedb/data" ]; then
-    mkdir -p /mnt/pipelinedb
-    chmod 777 /mnt/pipelinedb
+# Initialize database if:
+# 1) data directory does not exist
+#    (when data directory volume is not bind-mounted from host;
+#     example: docker run -d pipelinedb), or,
+# 2) data directory already exists, but is empty
+#    (when data directory volume has been bind-mounted from host;
+#     example: docker run -d -v host_volume:/mnt/pipelinedb/data pipelinedb).
+if [ ! -d "/mnt/pipelinedb/data" ] || [ ! "$(ls -A /mnt/pipelinedb/data)" ]; then
+    mkdir -p /mnt/pipelinedb/data
+    sudo chmod 777 /mnt/pipelinedb
+    chown pipeline /mnt/pipelinedb/data
     su - pipeline -c "pipeline-init --encoding=UTF8 -D /mnt/pipelinedb/data"
     su - pipeline -c "pipeline-ctl -D /mnt/pipelinedb/data -w start"
     psql -U pipeline -c "ALTER USER pipeline PASSWORD 'pipeline'"
