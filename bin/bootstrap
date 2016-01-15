@@ -36,6 +36,7 @@ def main(args):
 
     user = getpass.getuser()
     subprocess.call(['pipeline', 'pipeline', '-c', 'CREATE DATABASE %s' % user])
+    subprocess.call(['pipeline', user, '-c', 'ACTIVATE'])
     time.sleep(0.1)
 
     # Cleanup daemons
