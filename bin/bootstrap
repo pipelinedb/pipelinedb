@@ -23,7 +23,12 @@ def main(args):
     data_dir = os.path.join(root, DATA_DIR)
 
     os.path.exists(data_dir) and shutil.rmtree(data_dir)
-    subprocess.call(['pipeline-init', '-D', data_dir])
+    try:
+        subprocess.call(['pipeline-init', '-D', data_dir])
+    except OSError:
+        print 'Looks like you forgot to add your PATH? Run next line and `make bootstrap` again'
+        print '    export PATH=%s/bin:$PATH' % root
+        return
 
     procs = []
     procs.append(subprocess.Popen(['pipeline-server', '-D', data_dir]))
