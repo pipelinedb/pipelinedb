@@ -636,7 +636,7 @@
 
 # amount of shared memory reserved by each continuous query process
 # for IPC
-#continuous_query_ipc_shared_mem = 32mb
+#continuous_query_ipc_shared_mem = 32MB
 
 # the default step factor for sliding window continuous queries (as a percentage
 # of the total window size)
