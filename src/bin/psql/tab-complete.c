@@ -490,6 +490,21 @@ static const SchemaQuery Query_for_list_of_matviews = {
 	NULL
 };
 
+static const SchemaQuery Query_for_list_of_streams = {
+	/* catname */
+	"pg_catalog.pg_class c",
+	/* selcondition */
+	"c.relkind IN ('$')",
+	/* viscondition */
+	"pg_catalog.pg_table_is_visible(c.oid)",
+	/* namespace */
+	"c.relnamespace",
+	/* result */
+	"pg_catalog.quote_ident(c.relname)",
+	/* qualresult */
+	NULL
+};
+
 
 /*
  * Queries to get lists of names of various kinds of things, possibly
@@ -786,6 +801,7 @@ static const pgsql_thing_t words_after_create[] = {
 	{"SCHEMA", Query_for_list_of_schemas},
 	{"SEQUENCE", NULL, &Query_for_list_of_sequences},
 	{"SERVER", Query_for_list_of_servers},
+	{"STREAM", NULL, &Query_for_list_of_streams},
 	{"TABLE", NULL, &Query_for_list_of_tables},
 	{"TABLESPACE", Query_for_list_of_tablespaces},
 	{"TEMP", NULL, NULL, THING_NO_DROP},		/* for CREATE TEMP TABLE ... */
@@ -2612,11 +2628,23 @@ psql_completion(const char *text, int start, int end)
 	}
 
 	/* DROP CONTINUOUS VIEW */
+	else if (pg_strcasecmp(prev2_wd, "DROP") == 0 &&
+				 pg_strcasecmp(prev_wd, "CONTINUOUS") == 0)
+	{
+		COMPLETE_WITH_CONST("VIEW");
+	}
 	else if (pg_strcasecmp(prev3_wd, "DROP") == 0 &&
 			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
 			 pg_strcasecmp(prev_wd, "VIEW") == 0)
 	{
 		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_views, NULL);
+	}
+
+	/* DROP STREAM  */
+	else if (pg_strcasecmp(prev3_wd, "DROP") == 0 &&
+			 pg_strcasecmp(prev2_wd, "STREAM") == 0)
+	{
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_streams, NULL);
 	}
 
 	else if (pg_strcasecmp(prev4_wd, "DROP") == 0 &&
