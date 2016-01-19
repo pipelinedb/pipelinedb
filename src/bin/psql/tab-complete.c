@@ -460,6 +460,21 @@ static const SchemaQuery Query_for_list_of_views = {
 	NULL
 };
 
+static const SchemaQuery Query_for_list_of_continuous_views = {
+	/* catname */
+	"pg_catalog.pg_class c",
+	/* selcondition */
+	"c.relkind IN ('C')",
+	/* viscondition */
+	"pg_catalog.pg_table_is_visible(c.oid)",
+	/* namespace */
+	"c.relnamespace",
+	/* result */
+	"pg_catalog.quote_ident(c.relname)",
+	/* qualresult */
+	NULL
+};
+
 static const SchemaQuery Query_for_list_of_matviews = {
 	/* catname */
 	"pg_catalog.pg_class c",
@@ -748,6 +763,7 @@ static const pgsql_thing_t words_after_create[] = {
 	 * to be used only by pg_dump.
 	 */
 	{"CONFIGURATION", Query_for_list_of_ts_configurations, NULL, THING_NO_SHOW},
+	{"CONTINUOUS VIEW", NULL, &Query_for_list_of_continuous_views},
 	{"CONVERSION", "SELECT pg_catalog.quote_ident(conname) FROM pg_catalog.pg_conversion WHERE substring(pg_catalog.quote_ident(conname),1,%d)='%s'"},
 	{"DATABASE", Query_for_list_of_databases},
 	{"DICTIONARY", Query_for_list_of_ts_dictionaries, NULL, THING_NO_SHOW},
@@ -2593,6 +2609,14 @@ psql_completion(const char *text, int start, int end)
 			 pg_strcasecmp(prev_wd, "VIEW") == 0)
 	{
 		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_matviews, NULL);
+	}
+
+	/* DROP CONTINUOUS VIEW */
+	else if (pg_strcasecmp(prev3_wd, "DROP") == 0 &&
+			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
+			 pg_strcasecmp(prev_wd, "VIEW") == 0)
+	{
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_views, NULL);
 	}
 
 	else if (pg_strcasecmp(prev4_wd, "DROP") == 0 &&
