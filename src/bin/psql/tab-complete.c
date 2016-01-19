@@ -505,7 +505,6 @@ static const SchemaQuery Query_for_list_of_streams = {
 	NULL
 };
 
-
 /*
  * Queries to get lists of names of various kinds of things, possibly
  * restricted to names matching a partially entered name.  In these queries,
@@ -982,12 +981,39 @@ psql_completion(const char *text, int start, int end)
 		{"AGGREGATE", "COLLATION", "CONVERSION", "DATABASE", "DEFAULT PRIVILEGES", "DOMAIN",
 			"EVENT TRIGGER", "EXTENSION", "FOREIGN DATA WRAPPER", "FOREIGN TABLE", "FUNCTION",
 			"GROUP", "INDEX", "LANGUAGE", "LARGE OBJECT", "MATERIALIZED VIEW", "OPERATOR",
-			"ROLE", "RULE", "SCHEMA", "SERVER", "SEQUENCE", "SYSTEM", "TABLE",
+			"ROLE", "RULE", "SCHEMA", "SERVER", "SEQUENCE", "STREAM", "SYSTEM", "TABLE",
 			"TABLESPACE", "TEXT SEARCH", "TRIGGER", "TYPE",
 		"USER", "USER MAPPING FOR", "VIEW", NULL};
 
 		COMPLETE_WITH_LIST(list_ALTER);
 	}
+
+	/* ALTER STREAM */
+	else if (pg_strcasecmp(prev2_wd, "ALTER") == 0 &&
+			 pg_strcasecmp(prev_wd, "STREAM") == 0)
+	{
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_streams, NULL);
+	}
+
+	/*
+	 * ALTER STREAM <name>, suggest sub commands
+	 */
+	else if (pg_strcasecmp(prev3_wd, "ALTER") == 0 &&
+			 pg_strcasecmp(prev2_wd, "STREAM") == 0)
+	{
+		COMPLETE_WITH_CONST("ADD");
+	}
+
+	/*
+	 * ALTER STREAM <name> ADD, provide COLUMN
+	 */
+	else if (pg_strcasecmp(prev4_wd, "ALTER") == 0 &&
+			pg_strcasecmp(prev3_wd, "STREAM") == 0 &&
+			pg_strcasecmp(prev_wd, "ADD") == 0)
+	{
+		COMPLETE_WITH_CONST("COLUMN");
+	}
+
 	/* ALTER TABLE,INDEX,MATERIALIZED VIEW xxx ALL IN TABLESPACE xxx */
 	else if (pg_strcasecmp(prev4_wd, "ALL") == 0 &&
 			 pg_strcasecmp(prev3_wd, "IN") == 0 &&
@@ -2629,7 +2655,7 @@ psql_completion(const char *text, int start, int end)
 
 	/* DROP CONTINUOUS VIEW */
 	else if (pg_strcasecmp(prev2_wd, "DROP") == 0 &&
-				 pg_strcasecmp(prev_wd, "CONTINUOUS") == 0)
+			pg_strcasecmp(prev_wd, "CONTINUOUS") == 0)
 	{
 		COMPLETE_WITH_CONST("VIEW");
 	}
@@ -2697,7 +2723,8 @@ psql_completion(const char *text, int start, int end)
 	else if (pg_strcasecmp(prev_wd, "EXPLAIN") == 0)
 	{
 		static const char *const list_EXPLAIN[] =
-		{"SELECT", "INSERT", "DELETE", "UPDATE", "DECLARE", "ANALYZE", "VERBOSE", NULL};
+		{"SELECT", "INSERT", "DELETE", "UPDATE", "DECLARE", "ANALYZE", "VERBOSE",
+				"CONTINUOUS VIEW", NULL};
 
 		COMPLETE_WITH_LIST(list_EXPLAIN);
 	}
@@ -2719,6 +2746,20 @@ psql_completion(const char *text, int start, int end)
 		{"SELECT", "INSERT", "DELETE", "UPDATE", "DECLARE", NULL};
 
 		COMPLETE_WITH_LIST(list_EXPLAIN);
+	}
+
+	/* EXPLAIN CONTINUOUS VIEW */
+	else if (pg_strcasecmp(prev2_wd, "EXPLAIN") == 0 &&
+			 pg_strcasecmp(prev_wd, "CONTINUOUS") == 0)
+	{
+		COMPLETE_WITH_CONST("VIEW");
+	}
+
+	else if (pg_strcasecmp(prev3_wd, "EXPLAIN") == 0 &&
+			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
+			 pg_strcasecmp(prev_wd, "VIEW") == 0)
+	{
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_views, NULL);
 	}
 
 /* FETCH && MOVE */
@@ -3334,6 +3375,20 @@ psql_completion(const char *text, int start, int end)
 /* TRUNCATE */
 	else if (pg_strcasecmp(prev_wd, "TRUNCATE") == 0)
 		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_tables, NULL);
+
+/* TRUNCATE CONTINUOUS VIEW */
+	else if (pg_strcasecmp(prev2_wd, "TRUNCATE") == 0 &&
+			 pg_strcasecmp(prev_wd, "CONTINUOUS") == 0)
+	{
+		COMPLETE_WITH_CONST("VIEW");
+	}
+
+	else if (pg_strcasecmp(prev3_wd, "TRUNCATE") == 0 &&
+			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
+			 pg_strcasecmp(prev_wd, "VIEW") == 0)
+	{
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_views, NULL);
+	}
 
 /* UNLISTEN */
 	else if (pg_strcasecmp(prev_wd, "UNLISTEN") == 0)
