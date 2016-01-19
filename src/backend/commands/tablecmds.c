@@ -3073,7 +3073,7 @@ ATController(Relation rel, List *cmds, bool recurse, LOCKMODE lockmode)
 				cmd->subtype != AT_AddColumn)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					(errmsg("streams only support ADD COLUMN commands"))));
+					(errmsg("streams only support ADD COLUMN actions"))));
 
 		ATPrepCmd(&wqueue, rel, cmd, recurse, false, lockmode);
 	}
