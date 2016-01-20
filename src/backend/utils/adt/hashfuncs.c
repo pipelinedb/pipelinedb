@@ -129,7 +129,7 @@ ls_hash_group(PG_FUNCTION_ARGS)
 	 * [00:31] - 32 lowest-order bits from hash value
 	 * [31:63] - 32 lowest-order bits of time-based value
 	 */
-	result = (tsval << 32) | (INT32_MAX & hashed);
+	result = (tsval << 32) | (UINT32_MAX & hashed);
 
 	PG_RETURN_INT64(result);
 }
@@ -164,9 +164,7 @@ hash_group(PG_FUNCTION_ARGS)
 		result = hash_combine(result, hash);
 	}
 
-	/* 31 bits are chosen here because PostgreSQL doesn't have unsigned types and searching ranges with signed
-	 * numbers is pretty annoying. */
-	result &= INT32_MAX;
+	result &= UINT32_MAX;
 
 	PG_RETURN_INT32(result);
 }
