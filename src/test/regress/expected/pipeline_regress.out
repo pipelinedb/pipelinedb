@@ -154,9 +154,9 @@ FROM
 GROUP BY uid;
 -- Ensure that hashes colide.
 SELECT hash_group(13362), hash_group(41950);
- hash_group | hash_group 
-------------+------------
- -178094052 | -178094052
+ hash_group  | hash_group  
+-------------+-------------
+ -1818625579 | -1818625579
 (1 row)
 
 INSERT INTO stream (uid) VALUES (13362);

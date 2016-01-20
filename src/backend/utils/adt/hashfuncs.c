@@ -72,6 +72,20 @@ init_hash_group(PG_FUNCTION_ARGS)
 }
 
 /*
+ * hash_combine
+ *
+ * This is a better hash combining function that a simple XOR. Copied from the boost C++ library.
+ * http://www.boost.org/doc/libs/1_35_0/doc/html/boost/hash_combine_id241013.html
+ *
+ * See explanation: http://stackoverflow.com/questions/5889238/why-is-xor-the-default-way-to-combine-hashes
+ */
+static inline uint32
+hash_combine(uint32 seed, uint32 hash)
+{
+	return seed ^ (hash + 0x9e3779b9 + (seed << 6) + (seed >> 2));
+}
+
+/*
  * ls_hash_group
  *
  * Hashes a variadic number of arguments into a single 64-bit integer in a locality sensitive manner.
@@ -85,7 +99,7 @@ ls_hash_group(PG_FUNCTION_ARGS)
 	int64 result = 0;
 	HashGroupState *state;
 	int64 tsval = 0;
-	int32 hashed = 0;
+	uint32 hashed = 0;
 
 	if (fcinfo->flinfo->fn_extra == NULL)
 		init_hash_group(fcinfo);
@@ -101,20 +115,21 @@ ls_hash_group(PG_FUNCTION_ARGS)
 		if (i == state->tsarg)
 			tsval = DatumGetInt64(d);
 
-		hashed = (hashed << 1) | ((hashed & 0x80000000) ? 1 : 0);
-
 		if (PG_ARGISNULL(i))
-			continue;
+			hash = 0;
+		else
+			hash = DatumGetUInt32(FunctionCall1(&(state->hashfuncs[i]), d));
 
-		hash = DatumGetUInt32(FunctionCall1(&(state->hashfuncs[i]), d));
-		hashed ^= hash;
+		hashed = hash_combine(hashed, hash);
 	}
+
+	Assert(tsval > 0);
 
 	/*
 	 * [00:31] - 32 lowest-order bits from hash value
 	 * [31:63] - 32 lowest-order bits of time-based value
 	 */
-	result = (tsval << 32) | (0xFFFFFFFF & hashed);
+	result = (tsval << 32) | (UINT32_MAX & hashed);
 
 	PG_RETURN_INT64(result);
 }
@@ -141,14 +156,15 @@ hash_group(PG_FUNCTION_ARGS)
 		Datum d = (Datum) PG_GETARG_DATUM(i);
 		uint32 hash;
 
-		result = (result << 1) | ((result & 0x80000000) ? 1 : 0);
-
 		if (PG_ARGISNULL(i))
-			continue;
+			hash = 0;
+		else
+			hash = DatumGetUInt32(FunctionCall1(&(state->hashfuncs[i]), d));
 
-		hash = DatumGetUInt32(FunctionCall1(&(state->hashfuncs[i]), d));
-		result ^= hash;
+		result = hash_combine(result, hash);
 	}
+
+	result &= UINT32_MAX;
 
 	PG_RETURN_INT32(result);
 }
