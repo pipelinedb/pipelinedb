@@ -156,7 +156,7 @@ GROUP BY uid;
 SELECT hash_group(13362), hash_group(41950);
  hash_group | hash_group 
 ------------+------------
- -178094052 | -178094052
+  328858069 |  328858069
 (1 row)
 
 INSERT INTO stream (uid) VALUES (13362);
