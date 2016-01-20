@@ -82,7 +82,7 @@ init_hash_group(PG_FUNCTION_ARGS)
 static inline uint32
 hash_combine(uint32 seed, uint32 hash)
 {
-	return hash + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+	return seed ^ (hash + 0x9e3779b9 + (seed << 6) + (seed >> 2));
 }
 
 /*
@@ -115,12 +115,11 @@ ls_hash_group(PG_FUNCTION_ARGS)
 		if (i == state->tsarg)
 			tsval = DatumGetInt64(d);
 
-		hashed = (hashed << 1) | ((hashed & 0x80000000) ? 1 : 0);
-
 		if (PG_ARGISNULL(i))
-			continue;
+			hash = 0;
+		else
+			hash = DatumGetUInt32(FunctionCall1(&(state->hashfuncs[i]), d));
 
-		hash = DatumGetUInt32(FunctionCall1(&(state->hashfuncs[i]), d));
 		hashed = hash_combine(hashed, hash);
 	}
 
@@ -157,12 +156,11 @@ hash_group(PG_FUNCTION_ARGS)
 		Datum d = (Datum) PG_GETARG_DATUM(i);
 		uint32 hash;
 
-		result = (result << 1) | ((result & 0x80000000) ? 1 : 0);
-
 		if (PG_ARGISNULL(i))
-			continue;
+			hash = 0;
+		else
+			hash = DatumGetUInt32(FunctionCall1(&(state->hashfuncs[i]), d));
 
-		hash = DatumGetUInt32(FunctionCall1(&(state->hashfuncs[i]), d));
 		result = hash_combine(result, hash);
 	}
 

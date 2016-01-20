@@ -826,7 +826,8 @@ ExecActivateStmt(ActivateStmt *stmt, ProcessUtilityContext context)
 	set_cq_enabled(true, context);
 }
 
-void ExecDeactivateStmt(DeactivateStmt *stmt, ProcessUtilityContext context)
+void
+ExecDeactivateStmt(DeactivateStmt *stmt, ProcessUtilityContext context)
 {
 	set_cq_enabled(false, context);
 }
