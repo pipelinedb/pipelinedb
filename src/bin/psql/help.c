@@ -278,6 +278,7 @@ slashUsage(unsigned short int pager)
 
 	fprintf(output, _("PipelineDB\n"));
 	fprintf(output, _("  \\|                     list continuous views\n"));
+	fprintf(output, _("  \\d$                    list streams\n"));
 
 	ClosePager(output);
 }
