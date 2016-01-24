@@ -63,6 +63,13 @@ make
 make run
 ```
 
+#### Test PipelineDB
+Run the following command:
+
+```
+make check
+```
+
 #### Send PipelineDB some data
 
 Now let's generate some test data and stream it into a simple continuous view. First, create the continuous view:
