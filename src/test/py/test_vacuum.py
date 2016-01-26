@@ -136,14 +136,17 @@ def test_concurrent_vacuum_full(pipeline, clean_db):
 
   def insert():
     while not stop:
-      values = [(random.randint(0, 100000), ) for _ in xrange(1000)]
+      values = [(random.randint(0, 1000000), ) for _ in xrange(1000)]
       pipeline.insert('test_vacuum_stream', ('x', ), values)
       time.sleep(0.01)
 
-  t = threading.Thread(target=insert)
-  t.start()
+  threads = [threading.Thread(target=insert) for _ in range(4)]
+  map(lambda t: t.start(), threads)
 
+  # Insert data for a little bit so we have enough work to do while
+  # vacuuming.
   time.sleep(20)
+
   conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' %
                           (getpass.getuser(), pipeline.port))
   conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
@@ -151,5 +154,6 @@ def test_concurrent_vacuum_full(pipeline, clean_db):
   cur.execute('VACUUM FULL test_vacuum_full')
   conn.close()
 
+  # Now kill the insert threads.
   stop = True
-  t.join()
+  map(lambda t: t.join(), threads)
