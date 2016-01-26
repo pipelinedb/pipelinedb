@@ -367,9 +367,6 @@ select_existing_groups(ContQueryCombinerState *state)
 	TupleHashTable batchgroups;
 	Relation matrel;
 
-	/*
-
-	 */
 	if (state->isagg && state->ngroupatts > 0)
 	{
 		Assert(state->existing);
