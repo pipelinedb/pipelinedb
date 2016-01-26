@@ -390,7 +390,7 @@ select_existing_groups(ContQueryCombinerState *state)
 			return;
 	}
 
-	matrel = heap_openrv(state->base.view->matrel, AccessExclusiveLock);
+	matrel = heap_openrv(state->base.view->matrel, AccessShareLock);
 
 	plan = get_cached_groups_plan(state, values);
 
