@@ -3,7 +3,7 @@
  * cont_combiner.c
  *
  * Copyright (c) 2013-2015, PipelineDB
- * 
+ *
  * IDENTIFICATION
  *    src/include/pipeline/cont_combiner.c
  *
@@ -78,8 +78,6 @@ typedef struct
 	FmgrInfo *hash_funcs;
 	Oid *groupops;
 	FuncExpr *hashfunc;
-	Relation matrel;
-	ResultRelInfo *ri;
 	TupleHashTable existing;
 	Tuplestorestate *combined;
 	long pending_tuples;
@@ -367,11 +365,8 @@ select_existing_groups(ContQueryCombinerState *state)
 	ListCell *lc;
 	List *values = NIL;
 	TupleHashTable batchgroups;
+	Relation matrel;
 
-	/*
-	 * If we're not grouping on any columns, then there's only one row to look up
-	 * so we don't need to do a VALUES-matrel join.
-	 */
 	if (state->isagg && state->ngroupatts > 0)
 	{
 		Assert(state->existing);
@@ -388,11 +383,14 @@ select_existing_groups(ContQueryCombinerState *state)
 	else if (state->isagg && state->ngroupatts == 0)
 	{
 		/*
-		 * If we only have one group and it's already in existing, we're done
+		 * If we're not grouping on any columns, then there's only one row to look up
+		 * so we don't need to do a VALUES-matrel join. If it's already in existing, we're done
 		 */
 		if (hash_get_num_entries(state->existing->hashtab))
 			return;
 	}
+
+	matrel = heap_openrv(state->base.view->matrel, AccessShareLock);
 
 	plan = get_cached_groups_plan(state, values);
 
@@ -422,6 +420,8 @@ select_existing_groups(ContQueryCombinerState *state)
 					 dest,
 					 NULL);
 	PortalDrop(portal, false);
+
+	heap_close(matrel, NoLock);
 
 finish:
 	batchgroups = hash_groups(state);
@@ -514,13 +514,14 @@ sync_combine(ContQueryCombinerState *state)
 	EState *estate = CreateExecutorState();
 	int i;
 	int natts;
+	Relation matrel;
+	ResultRelInfo *ri;
 
-	state->matrel = heap_openrv_extended(state->base.view->matrel, RowExclusiveLock, true);
-
-	if (state->matrel == NULL)
+	matrel = heap_openrv_extended(state->base.view->matrel, RowExclusiveLock, true);
+	if (matrel == NULL)
 		return;
-	state->ri = CQMatRelOpen(state->matrel);
 
+	ri = CQMatRelOpen(matrel);
 	natts = state->prev_slot->tts_tupleDescriptor->natts;
 
 	foreach_tuple(slot, state->combined)
@@ -585,7 +586,7 @@ sync_combine(ContQueryCombinerState *state)
 			tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
-			if (ExecCQMatRelUpdate(state->ri, slot, estate))
+			if (ExecCQMatRelUpdate(ri, slot, estate))
 				IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
 		}
 		else
@@ -596,7 +597,7 @@ sync_combine(ContQueryCombinerState *state)
 			slot->tts_isnull[state->pk - 1] = false;
 			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
-			ExecCQMatRelInsert(state->ri, slot, estate);
+			ExecCQMatRelInsert(ri, slot, estate);
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
@@ -605,8 +606,8 @@ sync_combine(ContQueryCombinerState *state)
 
 	tuplestore_clear(state->combined);
 
-	CQMatRelClose(state->ri);
-	heap_close(state->matrel, RowExclusiveLock);
+	CQMatRelClose(ri);
+	heap_close(matrel, NoLock);
 	FreeExecutorState(estate);
 }
 
@@ -644,7 +645,6 @@ sync_all(ContExecutor *cont_exec)
 		PG_END_TRY();
 
 		state->pending_tuples = 0;
-		state->matrel = NULL;
 		state->existing = NULL;
 		MemSet(state->group_hashes, 0, state->group_hashes_len);
 		MemoryContextResetAndDeleteChildren(state->combine_cxt);
@@ -877,7 +877,7 @@ ContinuousQueryCombinerMain(void)
 {
 	ContExecutor *cont_exec = ContExecutorNew(Combiner, &init_query_state);
 	Oid query_id;
-	TimestampTz first_combine = GetCurrentTimestamp();
+	TimestampTz first_seen = GetCurrentTimestamp();
 	bool do_commit = false;
 	long total_pending = 0;
 
@@ -914,8 +914,8 @@ ContinuousQueryCombinerMain(void)
 
 					combine(state);
 
-					if (first_combine == 0)
-						first_combine = GetCurrentTimestamp();
+					if (first_seen == 0)
+						first_seen = GetCurrentTimestamp();
 				}
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
@@ -943,11 +943,11 @@ next:
 
 		if (total_pending == 0)
 			do_commit = true;
-		else if (need_sync(cont_exec, first_combine))
+		else if (need_sync(cont_exec, first_seen))
 		{
 			sync_all(cont_exec);
 			do_commit = true;
-			first_combine = 0;
+			first_seen = 0;
 			total_pending = 0;
 		}
 		else

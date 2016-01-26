@@ -138,7 +138,8 @@ class PipelineDB(object):
       """
       Stops the PipelineDB instance
       """
-      self.conn.close()
+      if self.conn:
+        self.conn.close()
       if self.proc:
         self.proc.send_signal(signal.SIGINT)
         self.proc.wait()
