@@ -126,3 +126,30 @@ def test_disk_spill(pipeline, clean_db):
   assert after.disk_pages <= before.disk_pages
 
   conn.close()
+
+
+def test_concurrent_vacuum_full(pipeline, clean_db):
+  pipeline.create_cv(
+    'test_vacuum_full',
+    'SELECT x::int, COUNT(*) FROM test_vacuum_stream GROUP BY x')
+  stop = False
+
+  def insert():
+    while not stop:
+      values = [(random.randint(0, 100000), ) for _ in xrange(1000)]
+      pipeline.insert('test_vacuum_stream', ('x', ), values)
+      time.sleep(0.01)
+
+  t = threading.Thread(target=insert)
+  t.start()
+
+  time.sleep(20)
+  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' %
+                          (getpass.getuser(), pipeline.port))
+  conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+  cur = conn.cursor()
+  cur.execute('VACUUM FULL test_vacuum_full')
+  conn.close()
+
+  stop = True
+  t.join()
