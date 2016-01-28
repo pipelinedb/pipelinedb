@@ -2051,3 +2051,63 @@ cq_percentile_cont_float8_final(PG_FUNCTION_ARGS)
 
 	PG_RETURN_DATUM(result_datum[0]);
 }
+
+typedef struct FirstValuesQueryState
+{
+	Aggref *aggref;
+	int needs_tuples;
+
+	/* These fields are used only when accumulating datums: */
+	Oid			sortColType;
+	int16		typLen;
+	bool		typByVal;
+	char		typAlign;
+	/* Info about sort ordering: */
+	Oid			sortOperator;
+	Oid			eqOperator;
+	Oid			sortCollation;
+	bool		sortNullsFirst;
+
+	/* These fields are used only when accumulating tuples: */
+	TupleDesc tupdesc;
+	TupleTableSlot *tupslot1;
+	TupleTableSlot *tupslot2;
+	SortSupport sort;
+} FirstValuesQueryState;
+
+static FirstValuesQueryState *
+first_values_startup(PG_FUNCTION_ARGS)
+{
+	FirstValuesQueryState *qstate = (FirstValuesQueryState *) palloc0(sizeof(FirstValuesQueryState));
+
+	return NULL;
+}
+
+Datum
+first_values_trans(PG_FUNCTION_ARGS)
+{
+	MemoryContext old;
+	MemoryContext context;
+	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	CQHSPerQueryState *qstate;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(context);
+
+	if (state == NULL)
+		first_values_startup(fcinfo);
+
+	qstate = (CQHSPerQueryState *) fcinfo->flinfo->fn_extra;
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(state);
+}
+
+Datum
+first_values_combine(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_NULL();
+}

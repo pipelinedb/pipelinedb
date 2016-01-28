@@ -5581,6 +5581,13 @@ DESCR("set print function");
 DATA(insert OID = 4467 ( exact_count_distinct	PGNSP PGUID 12 1 0 0 0 t f f f t f i 1 0 23 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("exact count distinct aggregate");
 
+DATA(insert OID = 4469 ( first_values	PGNSP PGUID 12 1 0 0 0 t f f f t f i 2 0 2277 "23 2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("first_values aggregate");
+DATA(insert OID = 4470 ( first_values_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2283" _null_ _null_ _null_ _null_ first_values_trans _null_ _null_ _null_ ));
+DESCR("first_values transition function");
+DATA(insert OID = 4471 ( first_values_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ first_values_combine _null_ _null_ _null_ ));
+DESCR("first_values combine function");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
