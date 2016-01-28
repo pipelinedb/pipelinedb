@@ -2055,32 +2055,107 @@ cq_percentile_cont_float8_final(PG_FUNCTION_ARGS)
 typedef struct FirstValuesQueryState
 {
 	Aggref *aggref;
-	int needs_tuples;
+
+	bool accum_tuples;
+	int num_values;
 
 	/* These fields are used only when accumulating datums: */
-	Oid			sortColType;
-	int16		typLen;
-	bool		typByVal;
-	char		typAlign;
-	/* Info about sort ordering: */
-	Oid			sortOperator;
-	Oid			eqOperator;
-	Oid			sortCollation;
-	bool		sortNullsFirst;
+	Oid	typ;
+	int16 typlen;
+	bool typval;
+	char typalign;
+	Oid sortop;
+	Oid	eqop;
+	Oid	sort_collation;
+	bool nulls_first;
 
 	/* These fields are used only when accumulating tuples: */
-	TupleDesc tupdesc;
-	TupleTableSlot *tupslot1;
-	TupleTableSlot *tupslot2;
+	TupleDesc tup_desc;
+	TupleTableSlot *tup_slot1;
+	TupleTableSlot *tup_slot2;
 	SortSupport sort;
 } FirstValuesQueryState;
 
-static FirstValuesQueryState *
+static void
 first_values_startup(PG_FUNCTION_ARGS)
 {
-	FirstValuesQueryState *qstate = (FirstValuesQueryState *) palloc0(sizeof(FirstValuesQueryState));
+	FirstValuesQueryState *qstate;
+	Aggref *aggref;
+	int num_sort;
 
-	return NULL;
+	/* Already initialized? */
+	if (fcinfo->flinfo->fn_extra)
+		return;
+
+	/* Get the Aggref so we can examine aggregate's arguments */
+	aggref = AggGetAggref(fcinfo);
+	if (!aggref)
+		elog(ERROR, "ordered-set aggregate called in non-aggregate context");
+	if (!AGGKIND_IS_ORDERED_SET(aggref->aggkind))
+		elog(ERROR, "ordered-set aggregate support function called for non-ordered-set aggregate");
+
+	qstate = (FirstValuesQueryState *) palloc0(sizeof(FirstValuesQueryState));
+
+	qstate->aggref = aggref;
+
+	num_sort = list_length(aggref->aggorder);
+	qstate->accum_tuples = num_sort > 1;
+
+	if (qstate->accum_tuples)
+	{
+		ListCell *lc;
+		int i;
+
+		qstate->tup_desc = CreateTemplateTupleDesc(num_sort, false);
+		qstate->sort = (SortSupport) palloc0(num_sort * sizeof(SortSupportData));
+
+		i = 0;
+		foreach(lc, aggref->aggorder)
+		{
+			SortGroupClause *sortcl = (SortGroupClause *) lfirst(lc);
+			TargetEntry *tle = get_sortgroupclause_tle(sortcl, aggref->args);
+			SortSupport sortkey = &qstate->sort[i];
+
+			/* the parser should have made sure of this */
+			Assert(OidIsValid(sortcl->sortop));
+
+			TupleDescInitEntry(qstate->tup_desc, i + 1, NULL, exprType((Node *) tle->expr), -1, 0);
+
+			sortkey->ssup_cxt = CurrentMemoryContext;
+			sortkey->ssup_collation = exprCollation((Node *) tle->expr);
+			sortkey->ssup_nulls_first = sortcl->nulls_first;
+			sortkey->ssup_attno = tle->resno;
+			PrepareSortSupportFromOrderingOp(sortcl->sortop, sortkey);
+
+			i++;
+		}
+
+		qstate->tup_slot1 = MakeSingleTupleTableSlot(qstate->tup_desc);
+		qstate->tup_slot2 = MakeSingleTupleTableSlot(qstate->tup_desc);
+	}
+	else
+	{
+		SortGroupClause *sortcl = (SortGroupClause *) linitial(aggref->aggorder);
+		TargetEntry *tle = get_sortgroupclause_tle(sortcl, aggref->args);
+
+		/* the parser should have made sure of this */
+		Assert(OidIsValid(sortcl->sortop));
+
+		/* Save sort ordering info */
+		qstate->typ = exprType((Node *) tle->expr);
+		qstate->sortop = sortcl->sortop;
+		qstate->eqop = sortcl->eqop;
+		qstate->sort_collation = exprCollation((Node *) tle->expr);
+		qstate->nulls_first = sortcl->nulls_first;
+
+		/* Save datatype info */
+		get_typlenbyvalalign(qstate->typ,
+							 &qstate->typlen,
+							 &qstate->typval,
+							 &qstate->typalign);
+	}
+
+	fcinfo->flinfo->fn_extra = (void *) qstate;
 }
 
 Datum
@@ -2089,7 +2164,7 @@ first_values_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
-	CQHSPerQueryState *qstate;
+	FirstValuesQueryState *qstate;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 			elog(ERROR, "aggregate function called in non-aggregate context");
@@ -2099,7 +2174,7 @@ first_values_trans(PG_FUNCTION_ARGS)
 	if (state == NULL)
 		first_values_startup(fcinfo);
 
-	qstate = (CQHSPerQueryState *) fcinfo->flinfo->fn_extra;
+	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
 
 	MemoryContextSwitchTo(old);
 
