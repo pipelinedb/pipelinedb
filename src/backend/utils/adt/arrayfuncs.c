@@ -1523,11 +1523,16 @@ arrayaggstatesend(PG_FUNCTION_ARGS)
 {
 	ArrayBuildState *state = (ArrayBuildState *) PG_GETARG_POINTER(0);
 	ArrayType *vals;
+	int	dims[1];
+	int	lbs[1];
+
+	dims[0] = state->nelems;
+	lbs[0] = 1;
 
 	if (state == NULL)
 		PG_RETURN_NULL();
 
-	vals = construct_array(state->dvalues, state->nelems, state->element_type,
+	vals = construct_md_array(state->dvalues, state->dnulls, 1, dims, lbs, state->element_type,
 			state->typlen, state->typbyval, state->typalign);
 
 	PG_RETURN_ARRAYTYPE_P(vals);
