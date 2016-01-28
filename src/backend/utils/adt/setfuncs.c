@@ -33,6 +33,7 @@ typedef struct SetAggState
 {
 	HTAB *htab;
 	TypeCacheEntry *typ;
+	bool has_null;
 } SetAggState;
 
 /*
@@ -84,6 +85,7 @@ set_agg_startup(FunctionCallInfo fcinfo, Oid type)
 	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
 	state = palloc0(sizeof(SetAggState));
 
+	state->has_null = false;
 	state->typ = lookup_type_cache(type,
 			TYPECACHE_HASH_PROC | TYPECACHE_HASH_PROC_FINFO | TYPECACHE_CMP_PROC | TYPECACHE_CMP_PROC_FINFO);
 
@@ -116,6 +118,18 @@ set_add(FunctionCallInfo fcinfo, MemoryContext aggcontext, Datum d, bool isnull,
 	Datum copy;
 
 	sas = (SetAggState *) fcinfo->flinfo->fn_extra;
+
+	if (isnull)
+	{
+		if (!sas->has_null)
+		{
+			state = accumArrayResult(state, 0, true, sas->typ->type_id, aggcontext);
+			sas->has_null = true;
+		}
+
+		return state;
+	}
+
 	copy = datumCopy(d, sas->typ->typbyval, sas->typ->typlen);
 
 	initStringInfo(&buf);
@@ -132,11 +146,7 @@ set_add(FunctionCallInfo fcinfo, MemoryContext aggcontext, Datum d, bool isnull,
 	hash_search_with_hash_value(sas->htab, &key, h, HASH_ENTER, &found);
 
 	if (!found)
-		state = accumArrayResult(state,
-								 d,
-								 PG_ARGISNULL(1),
-								 sas->typ->type_id,
-								 aggcontext);
+		state = accumArrayResult(state, d, false, sas->typ->type_id, aggcontext);
 
 	return state;
 }
@@ -148,7 +158,6 @@ Datum
 set_agg_trans(PG_FUNCTION_ARGS)
 {
 	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
-	Datum incoming = PG_GETARG_DATUM(1);
 	MemoryContext old;
 	MemoryContext context;
 
@@ -160,7 +169,7 @@ set_agg_trans(PG_FUNCTION_ARGS)
 	if (state == NULL)
 		set_agg_startup(fcinfo, AggGetInitialArgType(fcinfo));
 
-	state = set_add(fcinfo, context, incoming, PG_ARGISNULL(1), state);
+	state = set_add(fcinfo, context, PG_GETARG_DATUM(1), PG_ARGISNULL(1), state);
 
 	MemoryContextSwitchTo(old);
 

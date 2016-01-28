@@ -36,3 +36,13 @@ INSERT INTO test_set_agg_stream (x) VALUES (1), (2), (4);
 SELECT * FROM test_set_agg4;
 \d+ test_set_agg4
 DROP CONTINUOUS VIEW test_set_agg4;
+
+-- Check for NULLs
+CREATE CONTINUOUS VIEW test_set_agg5 AS SELECT set_agg(x::text) FROM test_set_agg_stream;
+
+INSERT INTO test_set_agg_stream (x) VALUES ('a'), (1), (NULL);
+INSERT INTO test_set_agg_stream (x) VALUES ('a'), (1), (NULL);
+
+SELECT * FROM test_set_agg5;
+
+DROP CONTINUOUS VIEW test_set_agg5;
