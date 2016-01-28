@@ -2176,6 +2176,15 @@ first_values_trans(PG_FUNCTION_ARGS)
 
 	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
 
+	if (qstate->accum_tuples)
+	{
+
+	}
+	else
+	{
+
+	}
+
 	MemoryContextSwitchTo(old);
 
 	PG_RETURN_POINTER(state);
@@ -2184,5 +2193,31 @@ first_values_trans(PG_FUNCTION_ARGS)
 Datum
 first_values_combine(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_NULL();
+	MemoryContext old;
+	MemoryContext context;
+	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	FirstValuesQueryState *qstate;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(context);
+
+	if (state == NULL)
+		first_values_startup(fcinfo);
+
+	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
+
+	if (qstate->accum_tuples)
+	{
+
+	}
+	else
+	{
+
+	}
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(state);
 }
