@@ -23,6 +23,7 @@
 #include "catalog/pg_type.h"
 #include "executor/executor.h"
 #include "executor/nodeContinuousUnique.h"
+#include "funcapi.h"
 #include "miscadmin.h"
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
@@ -2155,14 +2156,21 @@ Datum
 first_values_final(PG_FUNCTION_ARGS)
 {
 	FirstValuesPerGroupState *state;
+	ArrayBuildState *array;
 
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
 	state = (FirstValuesPerGroupState *) PG_GETARG_POINTER(0);
+	array = state->array;
 
-	if (state->array == NULL)
+	if (array == NULL)
 		PG_RETURN_NULL();
+
+	if (array->nelems && array->element_type == RECORDOID)
+	{
+		/* TODO(usmanm): ERROR:  record type has not been registered */
+	}
 
 	return DirectFunctionCall2(array_agg_finalfn, PointerGetDatum(state->array), PointerGetDatum(NULL));
 }
@@ -2252,10 +2260,10 @@ first_values_startup(PG_FUNCTION_ARGS)
 			i++;
 		}
 
+		BlessTupleDesc(qstate->tup_desc);
+
 		qstate->tup_slot1 = MakeSingleTupleTableSlot(qstate->tup_desc);
 		qstate->tup_slot2 = MakeSingleTupleTableSlot(qstate->tup_desc);
-
-		assign_record_type_typmod(qstate->tup_desc);
 
 		fvstate->sortkey = qstate->sortkey;
 	}
