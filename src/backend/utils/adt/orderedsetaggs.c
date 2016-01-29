@@ -2056,36 +2056,107 @@ typedef struct FirstValuesQueryState
 {
 	Aggref *aggref;
 
-	bool accum_tuples;
+	int num_sort;
 	int num_values;
+	SortSupport sortkey;
+	Oid	type;
 
-	/* These fields are used only when accumulating datums: */
-	Oid	typ;
-	int16 typlen;
-	bool typval;
-	char typalign;
-	Oid sortop;
-	Oid	eqop;
-	Oid	sort_collation;
-	bool nulls_first;
-
-	/* These fields are used only when accumulating tuples: */
+	/* These fields are used only when accumulating tuples */
 	TupleDesc tup_desc;
 	TupleTableSlot *tup_slot1;
 	TupleTableSlot *tup_slot2;
-	SortSupport sort;
 } FirstValuesQueryState;
 
-static void
+typedef struct FirstValuesTransitionState
+{
+	int num_sort;
+	int num_values;
+	SortSupport sortkey;
+	ArrayBuildState *array;
+} FirstValuesTransitionState;
+
+Datum
+first_values_send(PG_FUNCTION_ARGS)
+{
+	FirstValuesTransitionState *state = (FirstValuesTransitionState *) PG_GETARG_POINTER(0);
+	bytea *result;
+	int nbytes;
+	char *pos;
+	bytea *array = NULL;
+
+	if (state->array)
+		array = DatumGetByteaP(DirectFunctionCall1(arrayaggstatesend, PointerGetDatum(state->array)));
+
+	nbytes = sizeof(FirstValuesTransitionState) + (sizeof(SortSupportData) * state->num_sort);
+	if (array)
+		nbytes += VARSIZE(array);
+
+	result = (bytea *) palloc0(nbytes + VARHDRSZ);
+	SET_VARSIZE(result, nbytes + VARHDRSZ);
+
+	pos = VARDATA(result);
+	memcpy(pos, state, sizeof(FirstValuesTransitionState));
+	pos += sizeof(FirstValuesTransitionState);
+
+	memcpy(pos, state->sortkey, sizeof(SortSupportData) * state->num_sort);
+	pos += sizeof(SortSupportData) * state->num_sort;
+
+	if (array)
+		memcpy(pos, array, VARSIZE(array));
+
+	PG_RETURN_BYTEA_P(result);
+}
+
+Datum
+first_values_recv(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_NULL();
+}
+
+Datum
+first_values_final(PG_FUNCTION_ARGS)
+{
+	FirstValuesTransitionState *state;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	state = (FirstValuesTransitionState *) PG_GETARG_POINTER(0);
+
+	if (state->array == NULL)
+		PG_RETURN_NULL();
+
+	return DirectFunctionCall2(array_agg_finalfn, PointerGetDatum(state->array), PointerGetDatum(NULL));
+}
+
+static FirstValuesTransitionState *
 first_values_startup(PG_FUNCTION_ARGS)
 {
 	FirstValuesQueryState *qstate;
 	Aggref *aggref;
 	int num_sort;
+	bool isnull;
+	ExprContext *econtext;
+	ExprState *expr;
+	MemoryContext old;
+	FirstValuesTransitionState *state;
 
-	/* Already initialized? */
+	state = (FirstValuesTransitionState *) palloc0(sizeof(FirstValuesTransitionState));
+
+	/* Is per-query state already initialized? */
 	if (fcinfo->flinfo->fn_extra)
-		return;
+	{
+		qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
+
+		state->num_sort = list_length(qstate->aggref->aggorder);
+		state->num_values = qstate->num_values;
+		state->sortkey = qstate->sortkey;
+
+		return state;
+	}
+
+	/* Create in long term per query context */
+	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
 
 	/* Get the Aggref so we can examine aggregate's arguments */
 	aggref = AggGetAggref(fcinfo);
@@ -2095,26 +2166,34 @@ first_values_startup(PG_FUNCTION_ARGS)
 		elog(ERROR, "ordered-set aggregate support function called for non-ordered-set aggregate");
 
 	qstate = (FirstValuesQueryState *) palloc0(sizeof(FirstValuesQueryState));
-
 	qstate->aggref = aggref;
 
 	num_sort = list_length(aggref->aggorder);
-	qstate->accum_tuples = num_sort > 1;
+	Assert(num_sort);
 
-	if (qstate->accum_tuples)
+	qstate->num_sort = num_sort;
+	state->num_sort = num_sort;
+
+	econtext = CreateStandaloneExprContext();
+	expr = (ExprState *) linitial((List *) ExecInitExpr((Expr *) aggref->aggdirectargs, NULL));
+	qstate->num_values = DatumGetInt32(ExecEvalExpr(expr, econtext, &isnull, NULL));
+	Assert(!isnull);
+	state->num_values = qstate->num_values;
+
+	if (num_sort > 1)
 	{
 		ListCell *lc;
 		int i;
 
 		qstate->tup_desc = CreateTemplateTupleDesc(num_sort, false);
-		qstate->sort = (SortSupport) palloc0(num_sort * sizeof(SortSupportData));
+		qstate->sortkey = (SortSupport) palloc0(num_sort * sizeof(SortSupportData));
 
 		i = 0;
 		foreach(lc, aggref->aggorder)
 		{
 			SortGroupClause *sortcl = (SortGroupClause *) lfirst(lc);
 			TargetEntry *tle = get_sortgroupclause_tle(sortcl, aggref->args);
-			SortSupport sortkey = &qstate->sort[i];
+			SortSupport sortkey = &qstate->sortkey[i];
 
 			/* the parser should have made sure of this */
 			Assert(OidIsValid(sortcl->sortop));
@@ -2132,30 +2211,37 @@ first_values_startup(PG_FUNCTION_ARGS)
 
 		qstate->tup_slot1 = MakeSingleTupleTableSlot(qstate->tup_desc);
 		qstate->tup_slot2 = MakeSingleTupleTableSlot(qstate->tup_desc);
+
+		state->sortkey = qstate->sortkey;
 	}
 	else
 	{
 		SortGroupClause *sortcl = (SortGroupClause *) linitial(aggref->aggorder);
 		TargetEntry *tle = get_sortgroupclause_tle(sortcl, aggref->args);
+		SortSupport sortkey;
 
 		/* the parser should have made sure of this */
 		Assert(OidIsValid(sortcl->sortop));
 
 		/* Save sort ordering info */
-		qstate->typ = exprType((Node *) tle->expr);
-		qstate->sortop = sortcl->sortop;
-		qstate->eqop = sortcl->eqop;
-		qstate->sort_collation = exprCollation((Node *) tle->expr);
-		qstate->nulls_first = sortcl->nulls_first;
+		sortkey = palloc0(sizeof(SortSupportData));
+		sortkey->ssup_cxt = CurrentMemoryContext;
+		sortkey->ssup_collation = exprCollation((Node *) tle->expr);
+		sortkey->ssup_nulls_first = sortcl->nulls_first;
+		sortkey->ssup_attno = tle->resno;
+		PrepareSortSupportFromOrderingOp(sortcl->sortop, sortkey);
+		qstate->sortkey = sortkey;
+		state->sortkey = sortkey;
 
 		/* Save datatype info */
-		get_typlenbyvalalign(qstate->typ,
-							 &qstate->typlen,
-							 &qstate->typval,
-							 &qstate->typalign);
+		qstate->type = exprType((Node *) tle->expr);
 	}
 
 	fcinfo->flinfo->fn_extra = (void *) qstate;
+
+	MemoryContextSwitchTo(old);
+
+	return state;
 }
 
 Datum
@@ -2163,8 +2249,10 @@ first_values_trans(PG_FUNCTION_ARGS)
 {
 	MemoryContext old;
 	MemoryContext context;
-	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	FirstValuesTransitionState *state = PG_ARGISNULL(0) ? NULL : (FirstValuesTransitionState *) PG_GETARG_POINTER(0);
 	FirstValuesQueryState *qstate;
+	ArrayBuildState *astate;
+	Datum d;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 			elog(ERROR, "aggregate function called in non-aggregate context");
@@ -2172,20 +2260,69 @@ first_values_trans(PG_FUNCTION_ARGS)
 	old = MemoryContextSwitchTo(context);
 
 	if (state == NULL)
-		first_values_startup(fcinfo);
+		state = first_values_startup(fcinfo);
 
 	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
+	astate = state->array;
 
-	if (qstate->accum_tuples)
+	/* We ignore NULLs */
+	if (PG_ARGISNULL(1))
+	{
+		MemoryContextSwitchTo(old);
+		PG_RETURN_POINTER(state);
+	}
+
+	d = PG_GETARG_DATUM(1);
+
+	if (qstate->num_sort > 1)
 	{
 
 	}
 	else
 	{
+		if (astate == NULL)
+			astate = accumArrayResult(astate, d, false, qstate->type, context);
+		else
+		{
+			bool needs_sort = false;
 
+			/* Insert in sorted order */
+			if (astate->nelems < qstate->num_values)
+			{
+				astate = accumArrayResult(astate, d, false, qstate->type, context);
+				needs_sort = true;
+			}
+			else
+			{
+				/* Value should only be inserted if its smaller than the last element */
+				if (ApplySortComparator(d, false, astate->dvalues[astate->nelems - 1], false, qstate->sortkey) < 0)
+				{
+					astate->dvalues[astate->nelems - 1] = d;
+					needs_sort = true;
+				}
+			}
+
+			/* Do we need to fix the position of the last element in the list? */
+			if (needs_sort)
+			{
+				int i;
+				for (i = 0; i < astate->nelems - 1; i++)
+				{
+					if (ApplySortComparator(d, false, astate->dvalues[i], false, qstate->sortkey) < 0)
+					{
+						memmove(&astate->dvalues[i + 1], &astate->dvalues[i], sizeof(Datum) * (astate->nelems - 1 - i));
+						astate->dvalues[i] = d;
+						break;
+					}
+				}
+			}
+		}
 	}
 
 	MemoryContextSwitchTo(old);
+
+	Assert(state);
+	state->array = astate;
 
 	PG_RETURN_POINTER(state);
 }
@@ -2196,6 +2333,8 @@ first_values_combine(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	ArrayBuildState *incoming = PG_ARGISNULL(1) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(1);
+	ArrayBuildState *merged = NULL;
 	FirstValuesQueryState *qstate;
 
 	if (!AggCheckCallContext(fcinfo, &context))
@@ -2208,16 +2347,54 @@ first_values_combine(PG_FUNCTION_ARGS)
 
 	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
 
-	if (qstate->accum_tuples)
+	if (incoming == NULL)
+		PG_RETURN_POINTER(state);
+
+	/* This is basically a merge routine */
+	if (qstate->num_sort > 1)
 	{
 
 	}
 	else
 	{
+		int i;
+		int j;
 
+		for (i = 0, j = 0; i < state->nelems && j < incoming->nelems; )
+		{
+			if ((merged && merged->nelems == qstate->num_values) || (i == state->nelems && j == incoming->nelems))
+				break;
+
+			if (i == state->nelems)
+			{
+				merged = accumArrayResult(merged, incoming->dvalues[j], false, qstate->type, context);
+				j++;
+			}
+			else if (j == incoming->nelems)
+			{
+				merged = accumArrayResult(merged, state->dvalues[i], false, qstate->type, context);
+				i++;
+			}
+			else
+			{
+				Datum d1 = state->dvalues[i];
+				Datum d2 = incoming->dvalues[j];
+
+				if (ApplySortComparator(d1, false, d2, false, qstate->sortkey) < 0)
+				{
+					merged = accumArrayResult(merged, d1, false, qstate->type, context);
+					i++;
+				}
+				else
+				{
+					merged = accumArrayResult(merged, d1, false, qstate->type, context);
+					j++;
+				}
+			}
+		}
 	}
 
 	MemoryContextSwitchTo(old);
 
-	PG_RETURN_POINTER(state);
+	PG_RETURN_POINTER(merged);
 }

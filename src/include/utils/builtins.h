@@ -550,6 +550,9 @@ extern Datum cq_percentile_cont_float8_transition_multi(PG_FUNCTION_ARGS);
 extern Datum cq_percentile_cont_float8_combine(PG_FUNCTION_ARGS);
 extern Datum cq_percentile_cont_float8_final(PG_FUNCTION_ARGS);
 
+extern Datum first_values_send(PG_FUNCTION_ARGS);
+extern Datum first_values_recv(PG_FUNCTION_ARGS);
+extern Datum first_values_final(PG_FUNCTION_ARGS);
 extern Datum first_values_trans(PG_FUNCTION_ARGS);
 extern Datum first_values_combine(PG_FUNCTION_ARGS);
 
