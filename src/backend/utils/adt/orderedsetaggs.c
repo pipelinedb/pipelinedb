@@ -2061,6 +2061,7 @@ typedef struct FirstValuesQueryState
 	int num_sort;
 	int num_values;
 	SortSupport sortkey;
+	Oid *sortop;
 	Oid	type;
 
 	/* These fields are used only when accumulating tuples */
@@ -2197,6 +2198,7 @@ first_values_startup(PG_FUNCTION_ARGS)
 		fvstate->num_sort = list_length(qstate->aggref->aggorder);
 		fvstate->num_values = qstate->num_values;
 		fvstate->sortkey = qstate->sortkey;
+		fvstate->sortop = qstate->sortop;
 
 		return fvstate;
 	}
@@ -2234,8 +2236,7 @@ first_values_startup(PG_FUNCTION_ARGS)
 		qstate->type = RECORDOID;
 		qstate->tup_desc = CreateTemplateTupleDesc(num_sort, false);
 		qstate->sortkey = (SortSupport) palloc0(num_sort * sizeof(SortSupportData));
-
-		fvstate->sortop = palloc0(sizeof(Oid) * num_sort);
+		qstate->sortop = palloc0(sizeof(Oid) * num_sort);
 
 		i = 0;
 		foreach(lc, aggref->aggorder)
@@ -2255,7 +2256,7 @@ first_values_startup(PG_FUNCTION_ARGS)
 			sortkey->ssup_attno = tle->resno;
 			PrepareSortSupportFromOrderingOp(sortcl->sortop, sortkey);
 
-			fvstate->sortop[i] = sortcl->sortop;
+			qstate->sortop[i] = sortcl->sortop;
 
 			i++;
 		}
@@ -2266,6 +2267,7 @@ first_values_startup(PG_FUNCTION_ARGS)
 		qstate->tup_slot2 = MakeSingleTupleTableSlot(qstate->tup_desc);
 
 		fvstate->sortkey = qstate->sortkey;
+		fvstate->sortop = qstate->sortop;
 	}
 	else
 	{
@@ -2284,10 +2286,11 @@ first_values_startup(PG_FUNCTION_ARGS)
 		sortkey->ssup_attno = tle->resno;
 		PrepareSortSupportFromOrderingOp(sortcl->sortop, sortkey);
 		qstate->sortkey = sortkey;
+		qstate->sortop = palloc0(sizeof(Oid));
+		*qstate->sortop = sortcl->sortop;
 
 		fvstate->sortkey = sortkey;
-		fvstate->sortop = palloc0(sizeof(Oid));
-		*fvstate->sortop = sortcl->sortop;
+		fvstate->sortop = qstate->sortop;
 
 		/* Save datatype info */
 		qstate->type = exprType((Node *) tle->expr);
