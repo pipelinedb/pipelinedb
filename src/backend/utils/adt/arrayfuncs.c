@@ -1549,7 +1549,6 @@ arrayaggstaterecv(PG_FUNCTION_ARGS)
 {
 	ArrayType *vals;
 	ArrayBuildState *result;
-
 	MemoryContext old;
 	MemoryContext context;
 

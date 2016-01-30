@@ -209,4 +209,7 @@ DATA(insert (keyed_min_max_finalize keyed_max_trans  0 0 keyed_max_combine 17));
 DATA(insert (array_agg_finalfn set_agg_trans  arrayaggstatesend arrayaggstaterecv set_agg_combine 17));
 DATA(insert (set_cardinality set_agg_trans  arrayaggstatesend arrayaggstaterecv set_agg_combine 17));
 
+/* first_values */
+DATA(insert (first_values_final first_values_trans first_values_send first_values_recv first_values_combine 17));
+
 #endif

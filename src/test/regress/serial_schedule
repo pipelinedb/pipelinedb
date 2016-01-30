@@ -205,3 +205,4 @@ test: pipeline_regress
 test: cont_fss_agg
 test: cont_matrel
 test: pipeline_stats
+test: first_values
