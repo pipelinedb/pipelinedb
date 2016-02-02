@@ -285,15 +285,13 @@ logical_read_local_xlog_page_non_block(XLogReaderState *state,
 
 	loc = targetPagePtr + reqLen;
 
+	if (!RecoveryInProgress())
 	{
-		if (!RecoveryInProgress())
-		{
-			*pageTLI = ThisTimeLineID;
-			flushptr = GetFlushRecPtr();
-		}
-		else
-			flushptr = GetXLogReplayRecPtr(pageTLI);
+		*pageTLI = ThisTimeLineID;
+		flushptr = GetFlushRecPtr();
 	}
+	else
+		flushptr = GetXLogReplayRecPtr(pageTLI);
 
 	/* more than one block available */
 	if (targetPagePtr + XLOG_BLCKSZ <= flushptr)
