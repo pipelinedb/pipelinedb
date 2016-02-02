@@ -269,6 +269,48 @@ logical_read_local_xlog_page(XLogReaderState *state, XLogRecPtr targetPagePtr,
 }
 
 /*
+ * logical_read_local_xlog_page_non_block
+ *
+ * Non-blocking version of above. Does not wait for WAL.
+ * The assumption is that the external loops will handle a -1 return.
+ */
+int
+logical_read_local_xlog_page_non_block(XLogReaderState *state,
+		XLogRecPtr targetPagePtr, int reqLen, XLogRecPtr targetRecPtr,
+		char *cur_page, TimeLineID *pageTLI)
+{
+	XLogRecPtr	flushptr,
+				loc;
+	int			count;
+
+	loc = targetPagePtr + reqLen;
+
+	{
+		if (!RecoveryInProgress())
+		{
+			*pageTLI = ThisTimeLineID;
+			flushptr = GetFlushRecPtr();
+		}
+		else
+			flushptr = GetXLogReplayRecPtr(pageTLI);
+	}
+
+	/* more than one block available */
+	if (targetPagePtr + XLOG_BLCKSZ <= flushptr)
+		count = XLOG_BLCKSZ;
+	/* not enough data there */
+	else if (targetPagePtr + reqLen > flushptr)
+		return -1;
+	/* part of the page available */
+	else
+		count = flushptr - targetPagePtr;
+
+	XLogRead(cur_page, *pageTLI, targetPagePtr, XLOG_BLCKSZ);
+
+	return count;
+}
+
+/*
  * Helper function for the various SQL callable logical decoding functions.
  */
 static Datum
