@@ -131,7 +131,7 @@ GetDistinctBloomFilter(Oid id)
 	BloomFilter *bloom;
 	bool isnull = true;
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
-	Datum datum = NULL;
+	Datum datum = 0;
 
 	if (HeapTupleIsValid(tuple))
 		datum = SysCacheGetAttr(PIPELINETSTATEID, tuple, Anum_pipeline_tstate_distinct, &isnull);
