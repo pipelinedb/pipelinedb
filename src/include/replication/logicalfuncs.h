@@ -16,6 +16,11 @@ extern int logical_read_local_xlog_page(XLogReaderState *state,
 							 int reqLen, XLogRecPtr targetRecPtr,
 							 char *cur_page, TimeLineID *pageTLI);
 
+extern int logical_read_local_xlog_page_non_block(XLogReaderState *state,
+							 XLogRecPtr targetPagePtr,
+							 int reqLen, XLogRecPtr targetRecPtr,
+							 char *cur_page, TimeLineID *pageTLI);
+
 extern Datum pg_logical_slot_get_changes(PG_FUNCTION_ARGS);
 extern Datum pg_logical_slot_get_binary_changes(PG_FUNCTION_ARGS);
 extern Datum pg_logical_slot_peek_changes(PG_FUNCTION_ARGS);
