@@ -279,11 +279,8 @@ logical_read_local_xlog_page_non_block(XLogReaderState *state,
 		XLogRecPtr targetPagePtr, int reqLen, XLogRecPtr targetRecPtr,
 		char *cur_page, TimeLineID *pageTLI)
 {
-	XLogRecPtr	flushptr,
-				loc;
+	XLogRecPtr	flushptr;
 	int			count;
-
-	loc = targetPagePtr + reqLen;
 
 	if (!RecoveryInProgress())
 	{
