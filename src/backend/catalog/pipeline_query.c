@@ -672,3 +672,21 @@ GetAdhocContinuousViewIds(void)
 
 	return result;
 }
+
+
+Oid
+GetContViewId(RangeVar *name)
+{
+	HeapTuple tuple = GetPipelineQueryTuple(name);
+	Form_pipeline_query row;
+	Oid row_id = InvalidOid;
+
+	if (HeapTupleIsValid(tuple))
+	{
+		row = (Form_pipeline_query) GETSTRUCT(tuple);
+		row_id = row->id;
+		ReleaseSysCache(tuple);
+	}
+
+	return row_id;
+}

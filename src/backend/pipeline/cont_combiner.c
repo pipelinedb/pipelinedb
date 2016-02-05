@@ -14,6 +14,7 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/namespace.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pg_proc.h"
@@ -45,6 +46,7 @@
 #include "utils/hsearch.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/pipelinefuncs.h"
 #include "utils/resowner.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
@@ -1037,4 +1039,33 @@ GetCombinerLookupPlan(ContinuousView *view)
 	tuplestore_end(state->batch);
 
 	return plan;
+}
+
+Datum
+pipeline_combine_table(PG_FUNCTION_ARGS)
+{
+	text *cv_name = PG_GETARG_TEXT_P(0);
+	RangeVar *cv_rv = makeRangeVarFromNameList(textToQualifiedNameList(cv_name));
+	text *relname = PG_GETARG_TEXT_P(1);
+	RangeVar *rel_rv = makeRangeVarFromNameList(textToQualifiedNameList(relname));
+	ContinuousView *cv = GetContinuousView(GetContViewId(cv_rv));
+	Relation matrel;
+	Relation srcrel;
+
+	if (cv == NULL)
+		elog(ERROR, "continuous view \"%s\" does not exist", text_to_cstring(cv_name));
+
+	matrel = heap_openrv(cv->matrel, RowExclusiveLock);
+	srcrel = heap_openrv(rel_rv, RowExclusiveLock);
+
+	if (!equalTupleDescs(RelationGetDescr(matrel), RelationGetDescr(srcrel)))
+		elog(ERROR, "schema of \"%s\" does not match the schema of \"%s\"",
+				text_to_cstring(relname), quote_qualified_identifier(cv->matrel->schemaname, cv->matrel->relname));
+
+
+
+	heap_close(matrel, NoLock);
+	heap_close(srcrel, NoLock);
+
+	PG_RETURN_BOOL(true);
 }

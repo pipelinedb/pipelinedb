@@ -5594,6 +5594,9 @@ DESCR("first_values recv");
 DATA(insert OID = 4474 ( first_values_final	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2277 "2281 23" _null_ _null_ _null_ _null_ first_values_final _null_ _null_ _null_ ));
 DESCR("first_values final");
 
+DATA(insert OID = 4475 ( pipeline_combine_table	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 16 "25 25" _null_ _null_ _null_ _null_ pipeline_combine_table _null_ _null_ _null_ ));
+DESCR("combine a table into a continuous view");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
