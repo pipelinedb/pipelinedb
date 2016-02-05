@@ -173,7 +173,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	else
 		pos = slot->bytes;
 
-	memset(pos, 0, len);
+	MemSet(pos, 0, len);
 
 	/* Copy over data. */
 	if (cq->copy_fn)

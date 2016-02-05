@@ -255,7 +255,7 @@ init_cont_view(ContinuousViewData *view_data, SelectStmt *stmt,
 	ExecCreateContViewStmt(create_stmt, querystring);
 	PopActiveSnapshot();
 
-	memset(view_data, 0, sizeof(ContinuousViewData));
+	MemSet(view_data, 0, sizeof(ContinuousViewData));
 
 	view_data->view_id = get_cont_view_id(view_name);
 	view_data->view = GetContinuousView(view_data->view_id);
