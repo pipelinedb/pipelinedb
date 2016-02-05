@@ -3080,6 +3080,12 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		Relation rel;
 		RangeTblEntry *rte = list_nth(pstate->p_rtable, var->varno - 1);
 
+		if (rte->relkind != RELKIND_RELATION)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("the FROM clause is not a continuous view"),
+					 errhint("Only aggregate continuous view columns can be combined.")));
+
 		rel = heap_open(rte->relid, NoLock);
 		matrelrv = makeRangeVar(get_namespace_name(RelationGetNamespace(rel)), RelationGetRelationName(rel), -1);
 		relation_close(rel, NoLock);
