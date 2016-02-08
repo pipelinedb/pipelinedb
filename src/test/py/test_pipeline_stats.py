@@ -53,4 +53,3 @@ def test_cq_stats(pipeline, clean_db):
 
     result = pipeline.execute("SELECT * FROM pipeline_query_stats WHERE name = 'test_1_group' AND type = 'combiner'").first()
     assert result['output_rows'] == 1
-

@@ -24,7 +24,7 @@ extern bool continuous_query_materialization_table_updatable;
 extern ResultRelInfo *CQMatRelOpen(Relation matrel);
 extern void CQMatRelClose(ResultRelInfo *rinfo);
 extern void ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot, EState *estate);
-extern bool ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
+extern void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
 extern void ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
 
 extern char *CVNameToMatRelName(char *cv_name);

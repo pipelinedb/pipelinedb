@@ -392,7 +392,7 @@ select_existing_groups(ContQueryCombinerState *state)
 			return;
 	}
 
-	matrel = heap_openrv(state->base.view->matrel, AccessShareLock);
+	matrel = heap_openrv(state->base.view->matrel, RowShareLock);
 
 	plan = get_cached_groups_plan(state, values);
 
@@ -413,7 +413,7 @@ select_existing_groups(ContQueryCombinerState *state)
 	dest = CreateDestReceiver(DestTupleTable);
 	SetTupleTableDestReceiverParams(dest, existing, existing->tablecxt, true);
 
-	PortalStart(portal, NULL, EXEC_NO_MATREL_LOCKING, NULL);
+	PortalStart(portal, NULL, 0, NULL);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,
@@ -588,8 +588,8 @@ sync_combine(ContQueryCombinerState *state)
 			tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
-			if (ExecCQMatRelUpdate(ri, slot, estate))
-				IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
+			ExecCQMatRelUpdate(ri, slot, estate);
+			IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
 		}
 		else
 		{
@@ -1065,6 +1065,68 @@ hash_group(ContQueryCombinerState *state, FunctionCallInfo fcinfo)
 	return DatumGetInt64(result);
 }
 
+/*
+ * equal_tupdesc
+ *
+ * This is less strict than equalTupleDescs and enforces enough similarity that we can merge tuples.
+ */
+static bool
+equal_tupdesc(TupleDesc tupdesc1, TupleDesc tupdesc2)
+{
+	int	i;
+
+	if (tupdesc1->natts != tupdesc2->natts)
+		return false;
+	if (tupdesc1->tdhasoid != tupdesc2->tdhasoid)
+		return false;
+
+	for (i = 0; i < tupdesc1->natts; i++)
+	{
+		Form_pg_attribute attr1 = tupdesc1->attrs[i];
+		Form_pg_attribute attr2 = tupdesc2->attrs[i];
+
+		/*
+		 * We do not need to check every single field here: we can disregard
+		 * attrelid and attnum (which were used to place the row in the attrs
+		 * array in the first place).  It might look like we could dispense
+		 * with checking attlen/attbyval/attalign, since these are derived
+		 * from atttypid; but in the case of dropped columns we must check
+		 * them (since atttypid will be zero for all dropped columns) and in
+		 * general it seems safer to check them always.
+		 *
+		 * attcacheoff must NOT be checked since it's possibly not set in both
+		 * copies.
+		 */
+		if (strcmp(NameStr(attr1->attname), NameStr(attr2->attname)) != 0)
+			return false;
+		if (attr1->atttypid != attr2->atttypid)
+			return false;
+		if (attr1->attstattarget != attr2->attstattarget)
+			return false;
+		if (attr1->attlen != attr2->attlen)
+			return false;
+		if (attr1->attndims != attr2->attndims)
+			return false;
+		if (attr1->atttypmod != attr2->atttypmod)
+			return false;
+		if (attr1->attbyval != attr2->attbyval)
+			return false;
+		if (attr1->attstorage != attr2->attstorage)
+			return false;
+		if (attr1->attalign != attr2->attalign)
+			return false;
+		if (attr1->atthasdef != attr2->atthasdef)
+			return false;
+		if (attr1->attisdropped != attr2->attisdropped)
+			return false;
+		if (attr1->attcollation != attr2->attcollation)
+			return false;
+		/* attacl, attoptions and attfdwoptions are not even present... */
+	}
+
+	return true;
+}
+
 Datum
 pipeline_combine_table(PG_FUNCTION_ARGS)
 {
@@ -1088,7 +1150,7 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	matrel = heap_openrv(cv->matrel, RowExclusiveLock);
 	srcrel = heap_openrv(rel_rv, RowExclusiveLock);
 
-	if (!equalTupleDescs(RelationGetDescr(matrel), RelationGetDescr(srcrel)))
+	if (!equal_tupdesc(RelationGetDescr(matrel), RelationGetDescr(srcrel)))
 		elog(ERROR, "schema of \"%s\" does not match the schema of \"%s\"",
 				text_to_cstring(relname), quote_qualified_identifier(cv->matrel->schemaname, cv->matrel->relname));
 
