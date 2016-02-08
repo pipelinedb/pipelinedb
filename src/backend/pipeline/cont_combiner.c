@@ -400,7 +400,7 @@ select_existing_groups(ContQueryCombinerState *state)
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
 	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
 	 */
-	portal = CreatePortal("", true, true);
+	portal = CreatePortal("select_existing_groups", true, true);
 	portal->visible = false;
 
 	PortalDefineQuery(portal,
@@ -677,7 +677,7 @@ combine(ContQueryCombinerState *state)
 	}
 	tuplestore_clear(state->combined);
 
-	portal = CreatePortal("", true, true);
+	portal = CreatePortal("combine", true, true);
 	portal->visible = false;
 
 	PortalDefineQuery(portal,
@@ -1041,6 +1041,30 @@ GetCombinerLookupPlan(ContinuousView *view)
 	return plan;
 }
 
+static uint64
+hash_group(ContQueryCombinerState *state, FunctionCallInfo fcinfo)
+{
+	ListCell *lc;
+	Datum result;
+	int i = 0;
+
+	foreach(lc, state->hashfunc->args)
+	{
+		AttrNumber attno = ((Var *) lfirst(lc))->varattno;
+		bool isnull;
+		Datum d;
+
+		d = slot_getattr(state->slot, attno, &isnull);
+		fcinfo->arg[i] = d;
+		fcinfo->argnull[i] = isnull;
+		i++;
+	}
+
+	result = FunctionCallInvoke(fcinfo);
+
+	return DatumGetInt64(result);
+}
+
 Datum
 pipeline_combine_table(PG_FUNCTION_ARGS)
 {
@@ -1051,6 +1075,12 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	ContinuousView *cv = GetContinuousView(GetContViewId(cv_rv));
 	Relation matrel;
 	Relation srcrel;
+	ContExecutor exec;
+	ContQueryState *base;
+	ContQueryCombinerState *state;
+	HeapScanDesc scan;
+	HeapTuple tup;
+	FunctionCallInfo hashfcinfo = palloc0(sizeof(FunctionCallInfoData));
 
 	if (cv == NULL)
 		elog(ERROR, "continuous view \"%s\" does not exist", text_to_cstring(cv_name));
@@ -1062,7 +1092,63 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 		elog(ERROR, "schema of \"%s\" does not match the schema of \"%s\"",
 				text_to_cstring(relname), quote_qualified_identifier(cv->matrel->schemaname, cv->matrel->relname));
 
+	exec.cxt = CurrentMemoryContext;
+	exec.current_query_id = cv->id;
+	exec.queries = bms_make_singleton(cv->id);
 
+	base = palloc0(sizeof(ContQueryState));
+
+	base->view_id = cv->id;
+	base->view = cv;
+	base->state_cxt = CurrentMemoryContext;
+	base->tmp_cxt = AllocSetContextCreate(CurrentMemoryContext, "pipeline_combine_table temp cxt",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	state = (ContQueryCombinerState *) init_query_state(&exec, base);
+	base = &state->base;
+	exec.states[cv->id] = base;
+
+	hashfcinfo->flinfo = palloc0(sizeof(FmgrInfo));
+	hashfcinfo->flinfo->fn_mcxt = base->tmp_cxt;
+
+	fmgr_info(state->hashfunc->funcid, hashfcinfo->flinfo);
+	fmgr_info_set_expr((Node *) state->hashfunc, hashfcinfo->flinfo);
+
+	hashfcinfo->fncollation = state->hashfunc->funccollid;
+	hashfcinfo->nargs = list_length(state->hashfunc->args);
+
+	scan = heap_beginscan_catalog(srcrel, 0, NULL);
+	state->pending_tuples = 0;
+
+	Assert(base->tmp_cxt);
+	MemoryContextSwitchTo(base->tmp_cxt);
+
+	while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
+	{
+		ExecStoreTuple(heap_copytuple(tup), state->slot, InvalidBuffer, false);
+		tuplestore_puttupleslot(state->batch, state->slot);
+		set_group_hash(state, state->pending_tuples, hash_group(state, hashfcinfo));
+
+		if (++state->pending_tuples < continuous_query_batch_size)
+			continue;
+
+		combine(state);
+		sync_all(&exec);
+
+		MemoryContextResetAndDeleteChildren(base->tmp_cxt);
+
+		state->pending_tuples = 0;
+	}
+
+	if (state->pending_tuples)
+	{
+		combine(state);
+		sync_all(&exec);
+	}
+
+	heap_endscan(scan);
 
 	heap_close(matrel, NoLock);
 	heap_close(srcrel, NoLock);

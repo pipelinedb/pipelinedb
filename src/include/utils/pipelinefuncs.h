@@ -11,8 +11,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef PIPELINEFUNC_H
-#define PIPELINEFUNC_H
+#ifndef PIPELINEFUNCS_H
+#define PIPELINEFUNCS_H
 
 
 #define DISPLAY_OVERLAY_VIEW -2
