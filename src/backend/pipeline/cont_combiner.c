@@ -1150,8 +1150,8 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 
 	heap_endscan(scan);
 
-	heap_close(matrel, NoLock);
 	heap_close(srcrel, NoLock);
+	heap_close(matrel, NoLock);
 
 	PG_RETURN_BOOL(true);
 }
