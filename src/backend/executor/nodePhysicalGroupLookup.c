@@ -93,16 +93,12 @@ lnext:
 			/*
 			 * The target tuple was already updated or deleted by the
 			 * current command, or by a later command in the current
-			 * transaction.  We *must* ignore the tuple in the former
-			 * case, so as to avoid the "Halloween problem" of repeated
-			 * update attempts.  In the latter case it might be sensible
-			 * to fetch the updated tuple instead, but doing so would
-			 * require changing heap_lock_tuple as well as heap_update and
-			 * heap_delete to not complain about updating "invisible"
-			 * tuples, which seems pretty scary.  So for now, treat the
-			 * tuple as deleted and do not process.
+			 * transaction.
+			 *
+			 * This should NEVER happen.
 			 */
-			goto lnext;
+			elog(ERROR, "tuple updated again in the same transaction");
+			break;
 
 		case HeapTupleMayBeUpdated:
 			/* Got the lock successfully! */
