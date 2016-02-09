@@ -832,14 +832,6 @@ ExecOpenScanRelation(EState *estate, Index scanrelid, int eflags)
 		}
 	}
 
-	/*
-	 * When performing the combiner lookup query, we have already acquired a RowExclusiveLock
-	 * on the materialzation table and any indices that might be used while executing the
-	 * query. See cont_combiner.c:combine.
-	 */
-	if (eflags & EXEC_NO_MATREL_LOCKING)
-		lockmode = NoLock;
-
 	/* Open the relation and acquire lock as needed */
 	reloid = getrelid(scanrelid, estate->es_range_table);
 

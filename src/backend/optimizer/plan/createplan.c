@@ -2681,13 +2681,12 @@ create_physical_group_lookup_plan(PlannerInfo *root, PhysicalGroupLookupPath *be
 					 Plan *outer_plan, Plan *inner_plan)
 {
 	PhysicalGroupLookup *node = makeNode(PhysicalGroupLookup);
-	Plan *tmp;
 	NestLoop *nl;
 
 	/* make sure the VALUES scan is the outer */
 	if (!IsA(outer_plan, ValuesScan))
 	{
-		tmp = inner_plan;
+		Plan *tmp = inner_plan;
 		inner_plan = outer_plan;
 		outer_plan = tmp;
 	}

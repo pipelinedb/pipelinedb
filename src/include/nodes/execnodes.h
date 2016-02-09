@@ -1996,7 +1996,6 @@ typedef struct LimitState
 typedef struct PhysicalGroupLookupState
 {
 	PlanState ps;
-	TupleTableSlot *slot;
 } PhysicalGroupLookupState;
 
 #endif   /* EXECNODES_H */
