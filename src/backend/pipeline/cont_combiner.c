@@ -14,6 +14,7 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/namespace.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pg_proc.h"
@@ -45,6 +46,7 @@
 #include "utils/hsearch.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/pipelinefuncs.h"
 #include "utils/resowner.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
@@ -398,7 +400,7 @@ select_existing_groups(ContQueryCombinerState *state)
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
 	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
 	 */
-	portal = CreatePortal("", true, true);
+	portal = CreatePortal("select_existing_groups", true, true);
 	portal->visible = false;
 
 	PortalDefineQuery(portal,
@@ -586,8 +588,8 @@ sync_combine(ContQueryCombinerState *state)
 			tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
-			if (ExecCQMatRelUpdate(ri, slot, estate))
-				IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
+			ExecCQMatRelUpdate(ri, slot, estate);
+			IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
 		}
 		else
 		{
@@ -675,7 +677,7 @@ combine(ContQueryCombinerState *state)
 	}
 	tuplestore_clear(state->combined);
 
-	portal = CreatePortal("", true, true);
+	portal = CreatePortal("combine", true, true);
 	portal->visible = false;
 
 	PortalDefineQuery(portal,
@@ -1037,4 +1039,161 @@ GetCombinerLookupPlan(ContinuousView *view)
 	tuplestore_end(state->batch);
 
 	return plan;
+}
+
+static uint64
+hash_group(ContQueryCombinerState *state, FunctionCallInfo fcinfo)
+{
+	ListCell *lc;
+	Datum result;
+	int i = 0;
+
+	foreach(lc, state->hashfunc->args)
+	{
+		AttrNumber attno = ((Var *) lfirst(lc))->varattno;
+		bool isnull;
+		Datum d;
+
+		d = slot_getattr(state->slot, attno, &isnull);
+		fcinfo->arg[i] = d;
+		fcinfo->argnull[i] = isnull;
+		i++;
+	}
+
+	result = FunctionCallInvoke(fcinfo);
+
+	return DatumGetInt64(result);
+}
+
+/*
+ * equal_tupdesc
+ *
+ * This is less strict than equalTupleDescs and enforces enough similarity that we can merge tuples.
+ */
+static bool
+equal_tupdesc(TupleDesc tupdesc1, TupleDesc tupdesc2)
+{
+	int	i;
+
+	if (tupdesc1->natts != tupdesc2->natts)
+		return false;
+	if (tupdesc1->tdhasoid != tupdesc2->tdhasoid)
+		return false;
+
+	for (i = 0; i < tupdesc1->natts; i++)
+	{
+		Form_pg_attribute attr1 = tupdesc1->attrs[i];
+		Form_pg_attribute attr2 = tupdesc2->attrs[i];
+
+		if (strcmp(NameStr(attr1->attname), NameStr(attr2->attname)) != 0)
+			return false;
+		if (attr1->atttypid != attr2->atttypid)
+			return false;
+		if (attr1->attstattarget != attr2->attstattarget)
+			return false;
+		if (attr1->attndims != attr2->attndims)
+			return false;
+		if (attr1->attstorage != attr2->attstorage)
+			return false;
+		if (attr1->atthasdef != attr2->atthasdef)
+			return false;
+		if (attr1->attisdropped != attr2->attisdropped)
+			return false;
+		if (attr1->attcollation != attr2->attcollation)
+			return false;
+		/* attacl, attoptions and attfdwoptions are not even present... */
+	}
+
+	return true;
+}
+
+Datum
+pipeline_combine_table(PG_FUNCTION_ARGS)
+{
+	text *cv_name = PG_GETARG_TEXT_P(0);
+	RangeVar *cv_rv = makeRangeVarFromNameList(textToQualifiedNameList(cv_name));
+	text *relname = PG_GETARG_TEXT_P(1);
+	RangeVar *rel_rv = makeRangeVarFromNameList(textToQualifiedNameList(relname));
+	ContinuousView *cv = GetContinuousView(GetContViewId(cv_rv));
+	Relation matrel;
+	Relation srcrel;
+	ContExecutor exec;
+	ContQueryState *base;
+	ContQueryCombinerState *state;
+	HeapScanDesc scan;
+	HeapTuple tup;
+	FunctionCallInfo hashfcinfo = palloc0(sizeof(FunctionCallInfoData));
+
+	if (cv == NULL)
+		elog(ERROR, "continuous view \"%s\" does not exist", text_to_cstring(cv_name));
+
+	matrel = heap_openrv(cv->matrel, RowExclusiveLock);
+	srcrel = heap_openrv(rel_rv, RowExclusiveLock);
+
+	if (!equal_tupdesc(RelationGetDescr(matrel), RelationGetDescr(srcrel)))
+		elog(ERROR, "schema of \"%s\" does not match the schema of \"%s\"",
+				text_to_cstring(relname), quote_qualified_identifier(cv->matrel->schemaname, cv->matrel->relname));
+
+	exec.cxt = CurrentMemoryContext;
+	exec.current_query_id = cv->id;
+	exec.queries = bms_make_singleton(cv->id);
+
+	base = palloc0(sizeof(ContQueryState));
+
+	base->view_id = cv->id;
+	base->view = cv;
+	base->state_cxt = CurrentMemoryContext;
+	base->tmp_cxt = AllocSetContextCreate(CurrentMemoryContext, "pipeline_combine_table temp cxt",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	state = (ContQueryCombinerState *) init_query_state(&exec, base);
+	base = &state->base;
+	exec.states[cv->id] = base;
+
+	hashfcinfo->flinfo = palloc0(sizeof(FmgrInfo));
+	hashfcinfo->flinfo->fn_mcxt = base->tmp_cxt;
+
+	fmgr_info(state->hashfunc->funcid, hashfcinfo->flinfo);
+	fmgr_info_set_expr((Node *) state->hashfunc, hashfcinfo->flinfo);
+
+	hashfcinfo->fncollation = state->hashfunc->funccollid;
+	hashfcinfo->nargs = list_length(state->hashfunc->args);
+
+	scan = heap_beginscan_catalog(srcrel, 0, NULL);
+	state->pending_tuples = 0;
+
+	Assert(base->tmp_cxt);
+	MemoryContextSwitchTo(base->tmp_cxt);
+
+	while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
+	{
+		ExecStoreTuple(heap_copytuple(tup), state->slot, InvalidBuffer, false);
+		tuplestore_puttupleslot(state->batch, state->slot);
+		set_group_hash(state, state->pending_tuples, hash_group(state, hashfcinfo));
+
+		if (++state->pending_tuples < continuous_query_batch_size)
+			continue;
+
+		combine(state);
+		sync_all(&exec);
+
+		MemoryContextResetAndDeleteChildren(base->tmp_cxt);
+
+		state->pending_tuples = 0;
+	}
+
+	if (state->pending_tuples)
+	{
+		combine(state);
+		sync_all(&exec);
+	}
+
+	heap_endscan(scan);
+
+	heap_close(srcrel, NoLock);
+	heap_close(matrel, NoLock);
+
+	PG_RETURN_BOOL(true);
 }

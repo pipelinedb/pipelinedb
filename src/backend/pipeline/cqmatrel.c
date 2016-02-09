@@ -118,59 +118,18 @@ ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot, ESt
 	}
 }
 
-static bool
-matrel_heap_update(Relation relation, ItemPointer otid, HeapTuple tup)
-{
-	HTSU_Result result;
-	HeapUpdateFailureData hufd;
-	LockTupleMode lockmode;
-
-	result = heap_update(relation, otid, tup,
-						 GetCurrentCommandId(true), InvalidSnapshot,
-						 true /* wait for commit */ ,
-						 &hufd, &lockmode);
-	switch (result)
-	{
-		case HeapTupleSelfUpdated:
-			/* Tuple was already updated in current command? */
-			elog(ERROR, "tuple already updated by self");
-			break;
-
-		case HeapTupleMayBeUpdated:
-			/* done successfully */
-			break;
-
-		case HeapTupleUpdated:
-			/*
-			 * Tuple updated by a concurrent transaction? The only legal case is if the tuple was deleted
-			 * which can happen if the auto-vacuumer deletes the tuple while we were trying to update it.
-			 */
-			if (memcmp(&hufd.ctid, otid, sizeof(ItemPointerData)) == 0)
-				return false;
-			elog(ERROR, "tuple concurrently updated");
-			break;
-
-		default:
-			elog(ERROR, "unrecognized heap_update status: %u", result);
-			break;
-	}
-
-	return true;
-}
-
 /*
  * ExecCQMatViewUpdate
  *
  * Update an existing row of a CV materialization table.
  */
-bool
+void
 ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 {
 	HeapTuple tup = ExecMaterializeSlot(slot);
-	bool updated = matrel_heap_update(ri->ri_RelationDesc, &tup->t_self, tup);
+	simple_heap_update(ri->ri_RelationDesc, &tup->t_self, tup);
 	if (!HeapTupleIsHeapOnly(tup))
 		ExecInsertCQMatRelIndexTuples(ri, slot, estate);
-	return updated;
 }
 
 /*

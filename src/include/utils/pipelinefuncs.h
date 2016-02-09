@@ -11,8 +11,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef CQSTATFUNCS_H
-#define CQSTATFUNCS_H
+#ifndef PIPELINEFUNCS_H
+#define PIPELINEFUNCS_H
 
 
 #define DISPLAY_OVERLAY_VIEW -2
@@ -46,5 +46,7 @@ extern Datum pipeline_get_worker_querydef(PG_FUNCTION_ARGS);
 extern Datum pipeline_get_combiner_querydef(PG_FUNCTION_ARGS);
 
 extern Datum pipeline_exec_adhoc_query(PG_FUNCTION_ARGS);
+
+extern Datum pipeline_combine_table(PG_FUNCTION_ARGS);
 
 #endif

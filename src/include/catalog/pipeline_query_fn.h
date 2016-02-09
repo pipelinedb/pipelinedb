@@ -44,6 +44,7 @@ extern RangeVar *GetMatRelationName(RangeVar *cv);
 extern RangeVar *GetCVNameFromMatRelName(RangeVar *matrel);
 extern void RemoveContinuousViewById(Oid oid);
 
+extern Oid GetContViewId(RangeVar *name);
 extern ContinuousView *GetContinuousView(Oid id);
 extern ContinuousView *RangeVarGetContinuousView(RangeVar *cv_name);
 extern Bitmapset *GetAllContinuousViewIds(void);
