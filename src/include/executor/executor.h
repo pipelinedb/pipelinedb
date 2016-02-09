@@ -66,8 +66,7 @@
 #define EXEC_FLAG_WITHOUT_OIDS	0x0040	/* force no OIDs in returned tuples */
 #define EXEC_FLAG_WITH_NO_DATA	0x0080	/* rel scannability doesn't matter */
 #define EXEC_FLAG_COMBINE 		0x0100	/* executing a combine query */
-#define EXEC_NO_MATREL_LOCKING 0x0200		/* we don't need to lock the matrel for group lookups */
-#define EXEC_NO_STREAM_LOCKING 0x0400		/* worker don't need to lock streams */
+#define EXEC_NO_STREAM_LOCKING 0x0200		/* worker don't need to lock streams */
 
 
 /*

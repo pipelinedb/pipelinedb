@@ -390,7 +390,7 @@ select_existing_groups(ContQueryCombinerState *state)
 			return;
 	}
 
-	matrel = heap_openrv(state->base.view->matrel, AccessShareLock);
+	matrel = heap_openrv(state->base.view->matrel, RowShareLock);
 
 	plan = get_cached_groups_plan(state, values);
 
@@ -411,7 +411,7 @@ select_existing_groups(ContQueryCombinerState *state)
 	dest = CreateDestReceiver(DestTupleTable);
 	SetTupleTableDestReceiverParams(dest, existing, existing->tablecxt, true);
 
-	PortalStart(portal, NULL, EXEC_NO_MATREL_LOCKING, NULL);
+	PortalStart(portal, NULL, 0, NULL);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,

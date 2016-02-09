@@ -254,14 +254,7 @@ ExecInitBitmapIndexScan(BitmapIndexScan *node, EState *estate, int eflags)
 	 */
 	relistarget = ExecRelationIsTargetRelation(estate, node->scan.scanrelid);
 
-	/*
-	 * When performing the combiner lookup query, we have already acquired a RowExclusiveLock
-	 * on the materialzation table and any indices that might be used while executing the
-	 * query. See cont_combiner.c:combine.
-	 */
-	if (eflags & EXEC_NO_MATREL_LOCKING)
-		lockmode = NoLock;
-	else if (relistarget)
+	if (relistarget)
 		lockmode = AccessShareLock;
 	else
 		lockmode = NoLock;
