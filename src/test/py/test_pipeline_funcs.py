@@ -17,15 +17,15 @@ def test_combine_table(pipeline, clean_db):
 
   stop = False
   ninserts = [0]
-  return
+
   def insert():
     while not stop:
       pipeline.insert('stream', ('x', ), values)
       ninserts[0] +=1
       time.sleep(0.01)
 
-  t = threading.Thread(target=insert)
-  t.start()
+#  t = threading.Thread(target=insert)
+#  t.start()
 
   time.sleep(2)
 
@@ -36,7 +36,7 @@ def test_combine_table(pipeline, clean_db):
   conn.close()
 
   stop = True
-  t.join()
+#  t.join()
 
   rows = list(pipeline.execute('SELECT count FROM combine_table'))
   assert len(rows) == 1000
