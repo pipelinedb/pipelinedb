@@ -12,7 +12,7 @@ def test_combine_table(pipeline, clean_db):
   values = [(i, ) for i in xrange(1000)]
   pipeline.insert('stream', ('x', ), values)
 
-  pipeline.execute('CREATE TABLE tmprel () INHERITS (combine_table_mrel)')
+  pipeline.execute('CREATE TABLE tmprel (x integer, count bigint, "$pk" bigint NOT NULL)')
   pipeline.execute('INSERT INTO tmprel SELECT * FROM combine_table_mrel')
 
   stop = False
@@ -24,8 +24,8 @@ def test_combine_table(pipeline, clean_db):
       ninserts[0] +=1
       time.sleep(0.01)
 
-#  t = threading.Thread(target=insert)
-#  t.start()
+  t = threading.Thread(target=insert)
+  t.start()
 
   time.sleep(2)
 
@@ -33,14 +33,17 @@ def test_combine_table(pipeline, clean_db):
                           (getpass.getuser(), pipeline.port))
   cur = conn.cursor()
   cur.execute("SELECT pipeline_combine_table('combine_table', 'tmprel')")
+  conn.commit()
   conn.close()
 
   stop = True
-#  t.join()
+  t.join()
+
+  assert ninserts[0] > 0
 
   rows = list(pipeline.execute('SELECT count FROM combine_table'))
   assert len(rows) == 1000
   for row in rows:
-    assert row[0] == ninserts + 2
+    assert row[0] == ninserts[0] + 2
 
   pipeline.execute('DROP TABLE tmprel')

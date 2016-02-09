@@ -1085,35 +1085,15 @@ equal_tupdesc(TupleDesc tupdesc1, TupleDesc tupdesc2)
 		Form_pg_attribute attr1 = tupdesc1->attrs[i];
 		Form_pg_attribute attr2 = tupdesc2->attrs[i];
 
-		/*
-		 * We do not need to check every single field here: we can disregard
-		 * attrelid and attnum (which were used to place the row in the attrs
-		 * array in the first place).  It might look like we could dispense
-		 * with checking attlen/attbyval/attalign, since these are derived
-		 * from atttypid; but in the case of dropped columns we must check
-		 * them (since atttypid will be zero for all dropped columns) and in
-		 * general it seems safer to check them always.
-		 *
-		 * attcacheoff must NOT be checked since it's possibly not set in both
-		 * copies.
-		 */
 		if (strcmp(NameStr(attr1->attname), NameStr(attr2->attname)) != 0)
 			return false;
 		if (attr1->atttypid != attr2->atttypid)
 			return false;
 		if (attr1->attstattarget != attr2->attstattarget)
 			return false;
-		if (attr1->attlen != attr2->attlen)
-			return false;
 		if (attr1->attndims != attr2->attndims)
 			return false;
-		if (attr1->atttypmod != attr2->atttypmod)
-			return false;
-		if (attr1->attbyval != attr2->attbyval)
-			return false;
 		if (attr1->attstorage != attr2->attstorage)
-			return false;
-		if (attr1->attalign != attr2->attalign)
 			return false;
 		if (attr1->atthasdef != attr2->atthasdef)
 			return false;

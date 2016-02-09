@@ -63,7 +63,7 @@ ExecPhysicalGroupLookup(PhysicalGroupLookupState *node)
 	HeapTuple tup;
 	Relation rel;
 	TupleTableSlot *slot = NULL;
-	BitmapHeapScanState *scan;
+	ScanState *scan;
 
 	/* Get next tuple from subplan, if any. */
 lnext:
@@ -79,8 +79,8 @@ lnext:
 	tup = inner->tts_tuple;
 	Assert(inner->tts_tuple);
 
-	scan = (BitmapHeapScanState *) outer->js.ps.righttree;
-	rel = scan->ss.ss_currentRelation;
+	scan = (ScanState *) outer->js.ps.righttree;
+	rel = scan->ss_currentRelation;
 
 	/* lock the physical tuple for update */
 	res = heap_lock_tuple(rel, tup, estate->es_output_cid,
