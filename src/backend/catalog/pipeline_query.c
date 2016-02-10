@@ -549,6 +549,9 @@ GetContinuousView(Oid id)
 	view->matrel = makeRangeVar(get_namespace_name(row->namespace), get_rel_name(row->matrel), -1);
 	view->seqrel = row->seqrel;
 
+	/* Ignore inherited tables when working with the matrel */
+	view->matrel->inhOpt = INH_NO;
+
 	namestrcpy(&view->name, NameStr(row->name));
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
