@@ -12,8 +12,7 @@ def test_combine_table(pipeline, clean_db):
   values = [(i, ) for i in xrange(1000)]
   pipeline.insert('stream', ('x', ), values)
 
-  pipeline.execute('CREATE TABLE tmprel (x integer, count bigint, "$pk" bigint NOT NULL)')
-  pipeline.execute('INSERT INTO tmprel SELECT * FROM combine_table_mrel')
+  pipeline.execute('SELECT * INTO tmprel FROM combine_table_mrel')
 
   stop = False
   ninserts = [0]
