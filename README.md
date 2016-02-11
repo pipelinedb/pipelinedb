@@ -30,6 +30,13 @@ make install
 export PATH=/path/to/dev/installation/bin:$PATH
 ```
 
+#### Test PipelineDB *(optional)*
+Run the following command:
+
+```
+make check
+```
+
 #### Bootstrap the PipelineDB environment
 Create PipelineDB's physical data directories, configuration files, etc:
 
@@ -61,13 +68,6 @@ make run
 # Make some code changes...
 make
 make run
-```
-
-#### Test PipelineDB
-Run the following command:
-
-```
-make check
 ```
 
 #### Send PipelineDB some data
