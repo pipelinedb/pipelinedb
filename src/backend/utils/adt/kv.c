@@ -241,7 +241,7 @@ keyed_min_max_trans_internal(FunctionCallInfo fcinfo, int sign)
 	cmp = sign * compare_keys(state, kv, incoming_key,
 			PG_ARGISNULL(1), PG_GET_COLLATION(), &isnull);
 
-	if (!isnull && cmp < 0)
+	if (!isnull && cmp <= 0)
 		kv = set_kv(state, kv, incoming_key, PG_ARGISNULL(1), incoming_value, PG_ARGISNULL(2));
 
 	MemoryContextSwitchTo(old);
@@ -296,7 +296,7 @@ keyed_min_max_combine_internal(FunctionCallInfo fcinfo, int sign)
 	cmp = sign * compare_keys(kas, state, incoming->key,
 			KV_KEY_IS_NULL(incoming), state->key_collation, &isnull);
 
-	if (!isnull && cmp < 0)
+	if (!isnull && cmp <= 0)
 		state = copy_kv(kas, incoming);
 
 	MemoryContextSwitchTo(old);
