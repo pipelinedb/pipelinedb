@@ -1127,7 +1127,7 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	if (cv == NULL)
 		elog(ERROR, "continuous view \"%s\" does not exist", text_to_cstring(cv_name));
 
-	matrel = heap_openrv(cv->matrel, RowExclusiveLock);
+	matrel = heap_openrv(cv->matrel, ExclusiveLock);
 	srcrel = heap_openrv(rel_rv, RowExclusiveLock);
 
 	if (!equal_tupdesc(RelationGetDescr(matrel), RelationGetDescr(srcrel)))
