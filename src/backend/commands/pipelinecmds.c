@@ -68,6 +68,9 @@
 /* guc params */
 int continuous_view_fillfactor;
 
+/* hooks */
+bool use_ls_hash_group_index = true;
+
 /*
  * make_default_fillfactor
  *
@@ -131,7 +134,7 @@ make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 		if (!found)
 			elog(ERROR, "could not find index attribute in tuple descriptor");
 
-		if (TypeCategory(attr->atttypid) == TYPCATEGORY_DATETIME)
+		if (use_ls_hash_group_index && TypeCategory(attr->atttypid) == TYPCATEGORY_DATETIME)
 			hashoid = LS_HASH_GROUP_OID;
 
 		var = makeVar(1, attr->attnum, attr->atttypid, attr->atttypmod,
