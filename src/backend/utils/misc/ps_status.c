@@ -7,7 +7,7 @@
  *
  * src/backend/utils/misc/ps_status.c
  *
- * Portions Copyright (c) 2000-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2000-2015, PostgreSQL Global Development Group
  * various details abducted from various places
  * Portions Copyright (c) 2013-2015, PipelineDB
  *--------------------------------------------------------------------
@@ -30,6 +30,7 @@
 #include "libpq/libpq.h"
 #include "miscadmin.h"
 #include "utils/ps_status.h"
+#include "utils/guc.h"
 
 extern char **environ;
 bool		update_process_title = true;
@@ -67,7 +68,7 @@ bool		update_process_title = true;
 #define PS_USE_PS_STRINGS
 #elif (defined(BSD) || defined(__hurd__)) && !defined(__darwin__)
 #define PS_USE_CHANGE_ARGV
-#elif defined(__linux__) || defined(_AIX) || defined(__sgi) || (defined(sun) && !defined(BSD)) || defined(ultrix) || defined(__ksr__) || defined(__osf__) || defined(__svr5__) || defined(__darwin__)
+#elif defined(__linux__) || defined(_AIX) || defined(__sgi) || (defined(sun) && !defined(BSD)) || defined(__svr5__) || defined(__darwin__)
 #define PS_USE_CLOBBER_ARGV
 #elif defined(WIN32)
 #define PS_USE_WIN32
@@ -265,14 +266,23 @@ init_ps_display(const char *username, const char *dbname,
 	 * apparently setproctitle() already adds a `progname:' prefix to the ps
 	 * line
 	 */
-	snprintf(ps_buffer, ps_buffer_size,
-			 "%s %s %s ",
-			 username, dbname, host_info);
+#define PROGRAM_NAME_PREFIX ""
 #else
-	snprintf(ps_buffer, ps_buffer_size,
-			 "pipeline: %s %s %s ",
-			 username, dbname, host_info);
+#define PROGRAM_NAME_PREFIX "pipeline-server: "
 #endif
+
+	if (*cluster_name == '\0')
+	{
+		snprintf(ps_buffer, ps_buffer_size,
+				 PROGRAM_NAME_PREFIX "%s %s %s ",
+				 username, dbname, host_info);
+	}
+	else
+	{
+		snprintf(ps_buffer, ps_buffer_size,
+				 PROGRAM_NAME_PREFIX "%s: %s %s %s ",
+				 cluster_name, username, dbname, host_info);
+	}
 
 	ps_buffer_cur_len = ps_buffer_fixed_size = strlen(ps_buffer);
 

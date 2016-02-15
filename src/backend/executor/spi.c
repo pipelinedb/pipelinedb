@@ -3,7 +3,7 @@
  * spi.c
  *				Server Programming Interface
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -23,6 +23,7 @@
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "executor/spi_priv.h"
+#include "miscadmin.h"
 #include "tcop/pquery.h"
 #include "tcop/utility.h"
 #include "utils/builtins.h"
@@ -1014,6 +1015,27 @@ SPI_pfree(void *pointer)
 	pfree(pointer);
 }
 
+Datum
+SPI_datumTransfer(Datum value, bool typByVal, int typLen)
+{
+	MemoryContext oldcxt = NULL;
+	Datum		result;
+
+	if (_SPI_curid + 1 == _SPI_connected)		/* connected */
+	{
+		if (_SPI_current != &(_SPI_stack[_SPI_curid + 1]))
+			elog(ERROR, "SPI stack corrupted");
+		oldcxt = MemoryContextSwitchTo(_SPI_current->savedcxt);
+	}
+
+	result = datumTransfer(value, typByVal, typLen);
+
+	if (oldcxt)
+		MemoryContextSwitchTo(oldcxt);
+
+	return result;
+}
+
 void
 SPI_freetuple(HeapTuple tuple)
 {
@@ -1322,13 +1344,14 @@ SPI_cursor_open_internal(const char *name, SPIPlanPtr plan,
 	}
 
 	/*
-	 * If told to be read-only, we'd better check for read-only queries. This
-	 * can't be done earlier because we need to look at the finished, planned
-	 * queries.  (In particular, we don't want to do it between GetCachedPlan
-	 * and PortalDefineQuery, because throwing an error between those steps
-	 * would result in leaking our plancache refcount.)
+	 * If told to be read-only, or in parallel mode, verify that this query is
+	 * in fact read-only.  This can't be done earlier because we need to look
+	 * at the finished, planned queries.  (In particular, we don't want to do
+	 * it between GetCachedPlan and PortalDefineQuery, because throwing an
+	 * error between those steps would result in leaking our plancache
+	 * refcount.)
 	 */
-	if (read_only)
+	if (read_only || IsInParallelMode())
 	{
 		ListCell   *lc;
 
@@ -1337,11 +1360,16 @@ SPI_cursor_open_internal(const char *name, SPIPlanPtr plan,
 			Node	   *pstmt = (Node *) lfirst(lc);
 
 			if (!CommandIsReadOnly(pstmt))
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				/* translator: %s is a SQL statement name */
+			{
+				if (read_only)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					/* translator: %s is a SQL statement name */
 					   errmsg("%s is not allowed in a non-volatile function",
 							  CreateCommandTag(pstmt))));
+				else
+					PreventCommandIfParallelMode(CreateCommandTag(pstmt));
+			}
 		}
 	}
 
@@ -1769,7 +1797,8 @@ spi_printtup(TupleTableSlot *slot, DestReceiver *self)
 
 	if (tuptable->free == 0)
 	{
-		tuptable->free = 256;
+		/* Double the size of the pointer array */
+		tuptable->free = tuptable->alloced;
 		tuptable->alloced += tuptable->free;
 		tuptable->vals = (HeapTuple *) repalloc(tuptable->vals,
 									  tuptable->alloced * sizeof(HeapTuple));
@@ -2129,6 +2158,9 @@ _SPI_execute_plan(SPIPlanPtr plan, ParamListInfo paramLI,
 					   errmsg("%s is not allowed in a non-volatile function",
 							  CreateCommandTag(stmt))));
 
+			if (IsInParallelMode() && !CommandIsReadOnly(stmt))
+				PreventCommandIfParallelMode(CreateCommandTag(stmt));
+
 			/*
 			 * If not read-only mode, advance the command counter before each
 			 * command and update the snapshot.
@@ -2290,9 +2322,8 @@ _SPI_convert_params(int nargs, Oid *argtypes,
 	{
 		int			i;
 
-		/* sizeof(ParamListInfoData) includes the first array element */
-		paramLI = (ParamListInfo) palloc(sizeof(ParamListInfoData) +
-									  (nargs - 1) * sizeof(ParamExternData));
+		paramLI = (ParamListInfo) palloc(offsetof(ParamListInfoData, params) +
+										 nargs * sizeof(ParamExternData));
 		/* we have static list of params, so no hooks needed */
 		paramLI->paramFetch = NULL;
 		paramLI->paramFetchArg = NULL;

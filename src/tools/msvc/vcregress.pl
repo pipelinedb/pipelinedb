@@ -7,7 +7,9 @@ use strict;
 our $config;
 
 use Cwd;
+use File::Basename;
 use File::Copy;
+use File::Find ();
 
 use Install qw(Install);
 
@@ -15,7 +17,8 @@ my $startdir = getcwd();
 
 chdir "../../.." if (-d "../../../src/tools/msvc");
 
-my $topdir = getcwd();
+my $topdir         = getcwd();
+my $tmp_installdir = "$topdir/tmp_install";
 
 require 'src/tools/msvc/config_default.pl';
 require 'src/tools/msvc/config.pl' if (-f 'src/tools/msvc/config.pl');
@@ -31,7 +34,7 @@ if (-e "src/tools/msvc/buildenv.pl")
 
 my $what = shift || "";
 if ($what =~
-/^(check|installcheck|plcheck|contribcheck|ecpgcheck|isolationcheck|upgradecheck)$/i
+/^(check|installcheck|plcheck|contribcheck|modulescheck|ecpgcheck|isolationcheck|upgradecheck|bincheck)$/i
   )
 {
 	$what = uc $what;
@@ -49,7 +52,7 @@ copy("$Config/autoinc/autoinc.dll",               "src/test/regress");
 copy("$Config/regress/regress.dll",               "src/test/regress");
 copy("$Config/dummy_seclabel/dummy_seclabel.dll", "src/test/regress");
 
-$ENV{PATH} = "../../../$Config/libpq;../../$Config/libpq;$ENV{PATH}";
+$ENV{PATH} = "$topdir/$Config/libpq;$ENV{PATH}";
 
 my $schedule = shift;
 unless ($schedule)
@@ -58,7 +61,14 @@ unless ($schedule)
 	$schedule = "parallel" if ($what eq 'CHECK' || $what =~ /PARALLEL/);
 }
 
-$ENV{PERL5LIB} = "$topdir/src/tools/msvc";
+if ($ENV{PERL5LIB})
+{
+	$ENV{PERL5LIB} = "$topdir/src/tools/msvc;$ENV{PERL5LIB}";
+}
+else
+{
+	$ENV{PERL5LIB} = "$topdir/src/tools/msvc";
+}
 
 my $maxconn = "";
 $maxconn = "--max_connections=$ENV{MAX_CONNECTIONS}"
@@ -76,7 +86,9 @@ my %command = (
 	INSTALLCHECK   => \&installcheck,
 	ECPGCHECK      => \&ecpgcheck,
 	CONTRIBCHECK   => \&contribcheck,
+	MODULESCHECK   => \&modulescheck,
 	ISOLATIONCHECK => \&isolationcheck,
+	BINCHECK       => \&bincheck,
 	UPGRADECHECK   => \&upgradecheck,);
 
 my $proc = $command{$what};
@@ -94,7 +106,7 @@ sub installcheck
 	my @args = (
 		"../../../$Config/pg_regress/pg_regress",
 		"--dlpath=.",
-		"--psqldir=../../../$Config/psql",
+		"--bindir=../../../$Config/psql",
 		"--schedule=${schedule}_schedule",
 		"--encoding=SQL_ASCII",
 		"--no-locale");
@@ -106,15 +118,16 @@ sub installcheck
 
 sub check
 {
+	InstallTemp();
+	chdir "${topdir}/src/test/regress";
 	my @args = (
 		"../../../$Config/pg_regress/pg_regress",
 		"--dlpath=.",
-		"--psqldir=../../../$Config/psql",
+		"--bindir=",
 		"--schedule=${schedule}_schedule",
 		"--encoding=SQL_ASCII",
 		"--no-locale",
-		"--temp-install=./tmp_check",
-		"--top-builddir=\"$topdir\"");
+		"--temp-instance=./tmp_check");
 	push(@args, $maxconn)     if $maxconn;
 	push(@args, $temp_config) if $temp_config;
 	system(@args);
@@ -128,18 +141,18 @@ sub ecpgcheck
 	system("msbuild ecpg_regression.proj /p:config=$Config");
 	my $status = $? >> 8;
 	exit $status if $status;
+	InstallTemp();
 	chdir "$topdir/src/interfaces/ecpg/test";
 	$schedule = "ecpg";
 	my @args = (
 		"../../../../$Config/pg_regress_ecpg/pg_regress_ecpg",
-		"--psqldir=../../../$Config/psql",
+		"--bindir=",
 		"--dbname=regress1,connectdb",
 		"--create-role=connectuser,connectdb",
 		"--schedule=${schedule}_schedule",
 		"--encoding=SQL_ASCII",
 		"--no-locale",
-		"--temp-install=./tmp_chk",
-		"--top-builddir=\"$topdir\"");
+		"--temp-instance=./tmp_chk");
 	push(@args, $maxconn) if $maxconn;
 	system(@args);
 	$status = $? >> 8;
@@ -153,13 +166,55 @@ sub isolationcheck
 		"../../../$Config/pg_isolation_regress");
 	my @args = (
 		"../../../$Config/pg_isolation_regress/pg_isolation_regress",
-		"--psqldir=../../../$Config/psql",
+		"--bindir=../../../$Config/psql",
 		"--inputdir=.",
 		"--schedule=./isolation_schedule");
 	push(@args, $maxconn) if $maxconn;
 	system(@args);
 	my $status = $? >> 8;
 	exit $status if $status;
+}
+
+sub tap_check
+{
+	die "Tap tests not enabled in configuration"
+	  unless $config->{tap_tests};
+
+	my $dir = shift;
+	chdir $dir;
+
+	my @args = ( "prove", "--verbose", "t/*.pl");
+
+	# adjust the environment for just this test
+	local %ENV = %ENV;
+	$ENV{PERL5LIB} = "$topdir/src/test/perl;$ENV{PERL5LIB}";
+	$ENV{PG_REGRESS} = "$topdir/$Config/pg_regress/pg_regress";
+
+	$ENV{TESTDIR} = "$dir";
+
+	system(@args);
+	my $status = $? >> 8;
+	return $status;
+}
+
+sub bincheck
+{
+	InstallTemp();
+
+	my $mstat = 0;
+
+	# Find out all the existing TAP tests by looking for t/ directories
+	# in the tree.
+	my @bin_dirs = glob("$topdir/src/bin/*");
+
+	# Process each test
+	foreach my $dir (@bin_dirs)
+	{
+		next unless -d "$dir/t";
+		my $status = tap_check($dir);
+		$mstat ||= $status;
+	}
+	exit $mstat if $mstat;
 }
 
 sub plcheck
@@ -202,7 +257,7 @@ sub plcheck
 		print "Checking $lang\n";
 		my @args = (
 			"../../../$Config/pg_regress/pg_regress",
-			"--psqldir=../../../$Config/psql",
+			"--bindir=../../../$Config/psql",
 			"--dbname=pl_regression", @lang_args, @tests);
 		system(@args);
 		my $status = $? >> 8;
@@ -213,6 +268,63 @@ sub plcheck
 	chdir "../../..";
 }
 
+sub subdircheck
+{
+	my $subdir = shift;
+	my $module = shift;
+
+	if (   !-d "$module/sql"
+		|| !-d "$module/expected"
+		|| (!-f "$module/GNUmakefile" && !-f "$module/Makefile"))
+	{
+		return;
+	}
+
+	chdir $module;
+	my @tests = fetchTests();
+	my @opts  = fetchRegressOpts();
+
+	# Add some options for transform modules, see their respective
+	# Makefile for more details regarding Python-version specific
+	# dependencies.
+	if (   $module eq "hstore_plpython"
+		|| $module eq "ltree_plpython")
+	{
+		die "Python not enabled in configuration"
+		  if !defined($config->{python});
+
+		# Attempt to get python version and location.
+		# Assume python.exe in specified dir.
+		my $pythonprog = "import sys;" . "print(str(sys.version_info[0]))";
+		my $prefixcmd  = $config->{python} . "\\python -c \"$pythonprog\"";
+		my $pyver      = `$prefixcmd`;
+		die "Could not query for python version!\n" if $?;
+		chomp($pyver);
+		if ($pyver eq "2")
+		{
+			push @opts, "--load-extension=plpythonu";
+			push @opts, '--load-extension=' . $module . 'u';
+		}
+		else
+		{
+
+			# disable tests on python3 for now.
+			chdir "..";
+			return;
+		}
+	}
+
+
+	print "============================================================\n";
+	print "Checking $module\n";
+	my @args = (
+		"$topdir/$Config/pg_regress/pg_regress",
+		"--bindir=${topdir}/${Config}/psql",
+		"--dbname=contrib_regression", @opts, @tests);
+	system(@args);
+	chdir "..";
+}
+
 sub contribcheck
 {
 	chdir "../../../contrib";
@@ -220,29 +332,30 @@ sub contribcheck
 	foreach my $module (glob("*"))
 	{
 		# these configuration-based exclusions must match Install.pm
-		next if ($module eq "uuid-ossp" && !defined($config->{uuid}));
-		next if ($module eq "sslinfo"   && !defined($config->{openssl}));
-		next if ($module eq "xml2"      && !defined($config->{xml}));
+		next if ($module eq "uuid-ossp"     && !defined($config->{uuid}));
+		next if ($module eq "sslinfo"       && !defined($config->{openssl}));
+		next if ($module eq "xml2"          && !defined($config->{xml}));
+		next if ($module eq "hstore_plperl" && !defined($config->{perl}));
+		next if ($module eq "hstore_plpython" && !defined($config->{python}));
+		next if ($module eq "ltree_plpython"  && !defined($config->{python}));
 		next if ($module eq "sepgsql");
 
-		next
-		  unless -d "$module/sql"
-			  && -d "$module/expected"
-			  && (-f "$module/GNUmakefile" || -f "$module/Makefile");
-		chdir $module;
-		print
-		  "============================================================\n";
-		print "Checking $module\n";
-		my @tests = fetchTests();
-		my @opts  = fetchRegressOpts();
-		my @args  = (
-			"../../$Config/pg_regress/pg_regress",
-			"--psqldir=../../$Config/psql",
-			"--dbname=contrib_regression", @opts, @tests);
-		system(@args);
+		subdircheck("$topdir/contrib", $module);
 		my $status = $? >> 8;
 		$mstat ||= $status;
-		chdir "..";
+	}
+	exit $mstat if $mstat;
+}
+
+sub modulescheck
+{
+	chdir "../../../src/test/modules";
+	my $mstat = 0;
+	foreach my $module (glob("*"))
+	{
+		subdircheck("$topdir/src/test/modules", $module);
+		my $status = $? >> 8;
+		$mstat ||= $status;
 	}
 	exit $mstat if $mstat;
 }
@@ -269,20 +382,20 @@ sub upgradecheck
 
 	$ENV{PGHOST} = 'localhost';
 	$ENV{PGPORT} ||= 50432;
-	my $tmp_root = "$topdir/contrib/pg_upgrade/tmp_check";
+	my $tmp_root = "$topdir/src/bin/pg_upgrade/tmp_check";
 	(mkdir $tmp_root || die $!) unless -d $tmp_root;
-	my $tmp_install = "$tmp_root/install";
+	my $upg_tmp_install = "$tmp_root/install";    # unshared temp install
 	print "Setting up temp install\n\n";
-	Install($tmp_install, "all", $config);
+	Install($upg_tmp_install, "all", $config);
 
 	# Install does a chdir, so change back after that
 	chdir $cwd;
 	my ($bindir, $libdir, $oldsrc, $newsrc) =
-	  ("$tmp_install/bin", "$tmp_install/lib", $topdir, $topdir);
+	  ("$upg_tmp_install/bin", "$upg_tmp_install/lib", $topdir, $topdir);
 	$ENV{PATH} = "$bindir;$ENV{PATH}";
 	my $data = "$tmp_root/data";
 	$ENV{PGDATA} = "$data.old";
-	my $logdir = "$topdir/contrib/pg_upgrade/log";
+	my $logdir = "$topdir/src/bin/pg_upgrade/log";
 	(mkdir $logdir || die $!) unless -d $logdir;
 	print "\nRunning initdb on old cluster\n\n";
 	standard_initdb() or exit 1;
@@ -292,7 +405,7 @@ sub upgradecheck
 	installcheck();
 
 	# now we can chdir into the source dir
-	chdir "$topdir/contrib/pg_upgrade";
+	chdir "$topdir/src/bin/pg_upgrade";
 	print "\nDumping old cluster\n\n";
 	system("pg_dumpall -f $tmp_root/dump1.sql") == 0 or exit 1;
 	print "\nStopping old cluster\n\n";
@@ -340,7 +453,7 @@ sub fetchRegressOpts
 	my @opts;
 
 	$m =~ s{\\\r?\n}{}g;
-	if ($m =~ /^\s*REGRESS_OPTS\s*=(.*)/m)
+	if ($m =~ /^\s*REGRESS_OPTS\s*\+?=(.*)/m)
 	{
 
 		# Substitute known Makefile variables, then ignore options that retain
@@ -374,7 +487,7 @@ sub fetchTests
 	close($handle);
 	my $t = "";
 
-	$m =~ s/\\[\r\n]*//gs;
+	$m =~ s{\\\r?\n}{}g;
 	if ($m =~ /^REGRESS\s*=\s*(.*)$/gm)
 	{
 		$t = $1;
@@ -413,10 +526,17 @@ sub GetTests
 	return "";
 }
 
+sub InstallTemp
+{
+	print "Setting up temp install\n\n";
+	Install("$tmp_installdir", "all", $config);
+	$ENV{PATH} = "$tmp_installdir/bin;$ENV{PATH}";
+}
+
 sub usage
 {
 	print STDERR
 	  "Usage: vcregress.pl ",
-	  "<check|installcheck|plcheck|contribcheck|isolationcheck|ecpgcheck|upgradecheck> [schedule]\n";
+"<check|installcheck|plcheck|contribcheck|isolationcheck|ecpgcheck|upgradecheck> [schedule]\n";
 	exit(1);
 }

@@ -3,7 +3,7 @@
  * pg_constraint.c
  *	  routines to support manipulation of the pg_constraint relation
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -40,6 +40,8 @@
  * Subsidiary records (such as triggers or indexes to implement the
  * constraint) are *not* created here.  But we do make dependency links
  * from the constraint to the things it depends on.
+ *
+ * The new constraint's OID is returned.
  */
 Oid
 CreateConstraintEntry(const char *constraintName,
@@ -749,25 +751,6 @@ AlterConstraintNamespaces(Oid ownerId, Oid oldNspId,
 	systable_endscan(scan);
 
 	heap_close(conRel, RowExclusiveLock);
-}
-
-/*
- * get_constraint_relation_oids
- *		Find the IDs of the relations to which a constraint refers.
- */
-void
-get_constraint_relation_oids(Oid constraint_oid, Oid *conrelid, Oid *confrelid)
-{
-	HeapTuple	tup;
-	Form_pg_constraint con;
-
-	tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(constraint_oid));
-	if (!HeapTupleIsValid(tup)) /* should not happen */
-		elog(ERROR, "cache lookup failed for constraint %u", constraint_oid);
-	con = (Form_pg_constraint) GETSTRUCT(tup);
-	*conrelid = con->conrelid;
-	*confrelid = con->confrelid;
-	ReleaseSysCache(tup);
 }
 
 /*

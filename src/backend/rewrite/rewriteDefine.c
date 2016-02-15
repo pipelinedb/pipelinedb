@@ -3,9 +3,9 @@
  * rewriteDefine.c
  *	  routines for defining a rewrite rule
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- *
+ * Portions Copyright (c) 2013-2016, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/rewrite/rewriteDefine.c
@@ -27,6 +27,7 @@
 #include "catalog/objectaccess.h"
 #include "catalog/pg_rewrite.h"
 #include "catalog/storage.h"
+#include "commands/policy.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_utilcmd.h"
@@ -191,7 +192,7 @@ InsertRule(char *rulname,
  * DefineRule
  *		Execute a CREATE RULE command.
  */
-Oid
+ObjectAddress
 DefineRule(RuleStmt *stmt, const char *queryString)
 {
 	List	   *actions;
@@ -225,7 +226,7 @@ DefineRule(RuleStmt *stmt, const char *queryString)
  * This is essentially the same as DefineRule() except that the rule's
  * action and qual have already been passed through parse analysis.
  */
-Oid
+ObjectAddress
 DefineQueryRewrite(char *rulename,
 				   Oid event_relid,
 				   Node *event_qual,
@@ -239,6 +240,7 @@ DefineQueryRewrite(char *rulename,
 	Query	   *query;
 	bool		RelisBecomingView = false;
 	Oid			ruleId = InvalidOid;
+	ObjectAddress address;
 
 	/*
 	 * If we are installing an ON SELECT rule, we had better grab
@@ -410,11 +412,12 @@ DefineQueryRewrite(char *rulename,
 		 *
 		 * If so, check that the relation is empty because the storage for the
 		 * relation is going to be deleted.  Also insist that the rel not have
-		 * any triggers, indexes, or child tables.  (Note: these tests are too
-		 * strict, because they will reject relations that once had such but
-		 * don't anymore.  But we don't really care, because this whole
-		 * business of converting relations to views is just a kluge to allow
-		 * dump/reload of views that participate in circular dependencies.)
+		 * any triggers, indexes, child tables, policies, or RLS enabled.
+		 * (Note: these tests are too strict, because they will reject
+		 * relations that once had such but don't anymore.  But we don't
+		 * really care, because this whole business of converting relations
+		 * to views is just a kluge to allow dump/reload of views that
+		 * participate in circular dependencies.)
 		 */
 		if (event_relation->rd_rel->relkind != RELKIND_VIEW &&
 			event_relation->rd_rel->relkind != RELKIND_MATVIEW &&
@@ -450,6 +453,18 @@ DefineQueryRewrite(char *rulename,
 				ereport(ERROR,
 						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						 errmsg("could not convert table \"%s\" to a view because it has child tables",
+								RelationGetRelationName(event_relation))));
+
+			if (event_relation->rd_rel->relrowsecurity)
+				ereport(ERROR,
+						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+						 errmsg("could not convert table \"%s\" to a view because it has row security enabled",
+								RelationGetRelationName(event_relation))));
+
+			if (relation_has_policies(event_relation))
+				ereport(ERROR,
+						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+						 errmsg("could not convert table \"%s\" to a view because it has row security policies",
 								RelationGetRelationName(event_relation))));
 
 			RelisBecomingView = true;
@@ -607,10 +622,12 @@ DefineQueryRewrite(char *rulename,
 		heap_close(relationRelation, RowExclusiveLock);
 	}
 
+	ObjectAddressSet(address, RewriteRelationId, ruleId);
+
 	/* Close rel, but keep lock till commit... */
 	heap_close(event_relation, NoLock);
 
-	return ruleId;
+	return address;
 }
 
 /*
@@ -900,7 +917,7 @@ RangeVarCallbackForRenameRule(const RangeVar *rv, Oid relid, Oid oldrelid,
 /*
  * Rename an existing rewrite rule.
  */
-Oid
+ObjectAddress
 RenameRewriteRule(RangeVar *relation, const char *oldName,
 				  const char *newName)
 {
@@ -910,6 +927,7 @@ RenameRewriteRule(RangeVar *relation, const char *oldName,
 	HeapTuple	ruletup;
 	Form_pg_rewrite ruleform;
 	Oid			ruleOid;
+	ObjectAddress address;
 
 	/*
 	 * Look up name, check permissions, and acquire lock (which we will NOT
@@ -972,10 +990,12 @@ RenameRewriteRule(RangeVar *relation, const char *oldName,
 	 */
 	CacheInvalidateRelcache(targetrel);
 
+	ObjectAddressSet(address, RewriteRelationId, ruleOid);
+
 	/*
 	 * Close rel, but keep exclusive lock!
 	 */
 	relation_close(targetrel, NoLock);
 
-	return ruleOid;
+	return address;
 }

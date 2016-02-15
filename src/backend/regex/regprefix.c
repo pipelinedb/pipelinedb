@@ -4,7 +4,7 @@
  *	  Extract a common prefix, if any, from a compiled regex.
  *
  *
- * Portions Copyright (c) 2012-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2012-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1998, 1999 Henry Spencer
  *
  * IDENTIFICATION
@@ -162,14 +162,12 @@ findprefix(struct cnfa * cnfa,
 		thiscolor = COLORLESS;
 		for (ca = cnfa->states[st]; ca->co != COLORLESS; ca++)
 		{
-			/* We ignore lookahead constraints */
-			if (ca->co >= cnfa->ncolors)
-				continue;
-			/* We can also ignore BOS/BOL arcs */
+			/* We can ignore BOS/BOL arcs */
 			if (ca->co == cnfa->bos[0] || ca->co == cnfa->bos[1])
 				continue;
-			/* ... but EOS/EOL arcs terminate the search */
-			if (ca->co == cnfa->eos[0] || ca->co == cnfa->eos[1])
+			/* ... but EOS/EOL arcs terminate the search, as do LACONs */
+			if (ca->co == cnfa->eos[0] || ca->co == cnfa->eos[1] ||
+				ca->co >= cnfa->ncolors)
 			{
 				thiscolor = COLORLESS;
 				break;

@@ -1,6 +1,6 @@
 /*
  * Encoding names and routines for work with it. All
- * in this file is shared bedween FE and BE.
+ * in this file is shared between FE and BE.
  *
  * src/backend/utils/mb/encnames.c
  */
@@ -344,7 +344,7 @@ const pg_enc2name pg_enc2name_tbl[] =
 	DEF_ENC2NAME(SJIS, 932),
 	DEF_ENC2NAME(BIG5, 950),
 	DEF_ENC2NAME(GBK, 936),
-	DEF_ENC2NAME(UHC, 0),
+	DEF_ENC2NAME(UHC, 949),
 	DEF_ENC2NAME(GB18030, 54936),
 	DEF_ENC2NAME(JOHAB, 0),
 	DEF_ENC2NAME(SHIFT_JIS_2004, 932)

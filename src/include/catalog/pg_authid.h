@@ -7,7 +7,7 @@
  *	  pg_shadow and pg_group are now publicly accessible views on pg_authid.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_authid.h
@@ -49,14 +49,16 @@ CATALOG(pg_authid,1260) BKI_SHARED_RELATION BKI_ROWTYPE_OID(2842) BKI_SCHEMA_MAC
 	bool		rolinherit;		/* inherit privileges from other roles? */
 	bool		rolcreaterole;	/* allowed to create more roles? */
 	bool		rolcreatedb;	/* allowed to create databases? */
-	bool		rolcatupdate;	/* allowed to alter catalogs manually? */
 	bool		rolcanlogin;	/* allowed to log in as session user? */
 	bool		rolreplication; /* role used for streaming replication */
+	bool		rolbypassrls;	/* bypasses row level security? */
 	int32		rolconnlimit;	/* max connections allowed (-1=no limit) */
 
 	/* remaining fields may be null; use heap_getattr to read them! */
+#ifdef CATALOG_VARLEN			/* variable-length fields start here */
 	text		rolpassword;	/* password, if any */
 	timestamptz rolvaliduntil;	/* password expiration time, if any */
+#endif
 } FormData_pg_authid;
 
 #undef timestamptz
@@ -79,9 +81,9 @@ typedef FormData_pg_authid *Form_pg_authid;
 #define Anum_pg_authid_rolinherit		3
 #define Anum_pg_authid_rolcreaterole	4
 #define Anum_pg_authid_rolcreatedb		5
-#define Anum_pg_authid_rolcatupdate		6
-#define Anum_pg_authid_rolcanlogin		7
-#define Anum_pg_authid_rolreplication	8
+#define Anum_pg_authid_rolcanlogin		6
+#define Anum_pg_authid_rolreplication	7
+#define Anum_pg_authid_rolbypassrls		8
 #define Anum_pg_authid_rolconnlimit		9
 #define Anum_pg_authid_rolpassword		10
 #define Anum_pg_authid_rolvaliduntil	11
@@ -93,7 +95,7 @@ typedef FormData_pg_authid *Form_pg_authid;
  * user choices.
  * ----------------
  */
-DATA(insert OID = 10 ( "POSTGRES" t t t t t t t -1 _null_ _null_ ));
+DATA(insert OID = 10 ( "POSTGRES" t t t t t t t -1 _null_ _null_));
 
 #define BOOTSTRAP_SUPERUSERID 10
 

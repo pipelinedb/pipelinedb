@@ -3,6 +3,8 @@
  * hllfuncs.c
  *		HyperLogLog-based functions
  *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
  * IDENTIFICATION
  *	  src/backend/utils/adt/hllfuncs.c
  *

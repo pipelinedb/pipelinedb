@@ -19,7 +19,7 @@
  * routines.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -744,13 +744,14 @@ retry3:
 	 * the file selected for reading already.
 	 *
 	 * In SSL mode it's even worse: SSL_read() could say WANT_READ and then
-	 * data could arrive before we make the pqReadReady() test.  So we must
-	 * play dumb and assume there is more data, relying on the SSL layer to
-	 * detect true EOF.
+	 * data could arrive before we make the pqReadReady() test, but the second
+	 * SSL_read() could still say WANT_READ because the data received was not
+	 * a complete SSL record.  So we must play dumb and assume there is more
+	 * data, relying on the SSL layer to detect true EOF.
 	 */
 
 #ifdef USE_SSL
-	if (conn->ssl)
+	if (conn->ssl_in_use)
 		return 0;
 #endif
 
@@ -814,7 +815,8 @@ definitelyEOF:
 
 	/* Come here if lower-level code already set a suitable errorMessage */
 definitelyFailed:
-	pqDropConnection(conn);
+	/* Do *not* drop any already-read data; caller still wants it */
+	pqDropConnection(conn, false);
 	conn->status = CONNECTION_BAD;		/* No more connection to backend */
 	return -1;
 }
@@ -915,9 +917,9 @@ pqSendSome(PGconn *conn, int len)
 			 * might not arrive until after we've gone to sleep.  Therefore,
 			 * we wait for either read ready or write ready.
 			 *
-			 * In non-blocking mode, we don't wait here directly, but return
-			 * 1 to indicate that data is still pending.  The caller should
-			 * wait for both read and write ready conditions, and call
+			 * In non-blocking mode, we don't wait here directly, but return 1
+			 * to indicate that data is still pending.  The caller should wait
+			 * for both read and write ready conditions, and call
 			 * PQconsumeInput() on read ready, but just in case it doesn't, we
 			 * call pqReadData() ourselves before returning.  That's not
 			 * enough if the data has not arrived yet, but it's the best we
@@ -1062,7 +1064,7 @@ pqSocketCheck(PGconn *conn, int forRead, int forWrite, time_t end_time)
 
 #ifdef USE_SSL
 	/* Check for SSL library buffering read bytes */
-	if (forRead && conn->ssl && SSL_pending(conn->ssl) > 0)
+	if (forRead && conn->ssl_in_use && pgtls_read_pending(conn) > 0)
 	{
 		/* short-circuit the select */
 		return 1;
@@ -1219,14 +1221,14 @@ PQenv2encoding(void)
 
 #ifdef ENABLE_NLS
 
-char *
-libpq_gettext(const char *msgid)
+static void
+libpq_binddomain()
 {
 	static bool already_bound = false;
 
 	if (!already_bound)
 	{
-		/* dgettext() preserves errno, but bindtextdomain() doesn't */
+		/* bindtextdomain() does not preserve errno */
 #ifdef WIN32
 		int			save_errno = GetLastError();
 #else
@@ -1246,8 +1248,20 @@ libpq_gettext(const char *msgid)
 		errno = save_errno;
 #endif
 	}
+}
 
+char *
+libpq_gettext(const char *msgid)
+{
+	libpq_binddomain();
 	return dgettext(PG_TEXTDOMAIN("libpq"), msgid);
+}
+
+char *
+libpq_ngettext(const char *msgid, const char *msgid_plural, unsigned long n)
+{
+	libpq_binddomain();
+	return dngettext(PG_TEXTDOMAIN("libpq"), msgid, msgid_plural, n);
 }
 
 #endif   /* ENABLE_NLS */

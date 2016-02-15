@@ -5,7 +5,7 @@
  *	Lately it's also being used by psql and bin/scripts/ ...
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/pg_dump/dumputils.c
@@ -1216,9 +1216,8 @@ simple_string_list_append(SimpleStringList *list, const char *val)
 {
 	SimpleStringListCell *cell;
 
-	/* this calculation correctly accounts for the null trailing byte */
 	cell = (SimpleStringListCell *)
-		pg_malloc(sizeof(SimpleStringListCell) + strlen(val));
+		pg_malloc(offsetof(SimpleStringListCell, val) +strlen(val) + 1);
 
 	cell->next = NULL;
 	strcpy(cell->val, val);

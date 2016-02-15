@@ -146,7 +146,7 @@ next_insert(char *text, int pos, bool questionmarks)
 }
 
 static bool
-ecpg_type_infocache_push(struct ECPGtype_information_cache ** cache, int oid, bool isarray, int lineno)
+ecpg_type_infocache_push(struct ECPGtype_information_cache ** cache, int oid, enum ARRAY_TYPE isarray, int lineno)
 {
 	struct ECPGtype_information_cache *new_entry
 	= (struct ECPGtype_information_cache *) ecpg_alloc(sizeof(struct ECPGtype_information_cache), lineno);
@@ -398,11 +398,10 @@ ecpg_store_result(const PGresult *results, int act_field,
 		}
 
 		ecpg_log("ecpg_store_result on line %d: allocating memory for %d tuples\n", stmt->lineno, ntuples);
-		var->value = (char *) ecpg_alloc(len, stmt->lineno);
+		var->value = (char *) ecpg_auto_alloc(len, stmt->lineno);
 		if (!var->value)
 			return false;
 		*((char **) var->pointer) = var->value;
-		ecpg_add_mem(var->value, stmt->lineno);
 	}
 
 	/* allocate indicator variable if needed */
@@ -410,11 +409,10 @@ ecpg_store_result(const PGresult *results, int act_field,
 	{
 		int			len = var->ind_offset * ntuples;
 
-		var->ind_value = (char *) ecpg_alloc(len, stmt->lineno);
+		var->ind_value = (char *) ecpg_auto_alloc(len, stmt->lineno);
 		if (!var->ind_value)
 			return false;
 		*((char **) var->ind_pointer) = var->ind_value;
-		ecpg_add_mem(var->ind_value, stmt->lineno);
 	}
 
 	/* fill the variable with the tuple(s) */
@@ -501,9 +499,9 @@ ecpg_store_input(const int lineno, const bool force_indicator, const struct vari
 	char	   *newcopy = NULL;
 
 	/*
-	 * arrays are not possible unless the column is an array, too
-	 * FIXME: we do not know if the column is an array here
-	 * array input to singleton column will result in a runtime error
+	 * arrays are not possible unless the column is an array, too FIXME: we do
+	 * not know if the column is an array here array input to singleton column
+	 * will result in a runtime error
 	 */
 
 	/*
@@ -754,18 +752,8 @@ ecpg_store_input(const int lineno, const bool force_indicator, const struct vari
 				{
 					strcpy(mallocedval, "{");
 
-					if (var->offset == sizeof(char))
-						for (element = 0; element < asize; element++)
-							sprintf(mallocedval + strlen(mallocedval), "%c,", (((char *) var->value)[element]) ? 't' : 'f');
-
-					/*
-					 * this is necessary since sizeof(C++'s bool)==sizeof(int)
-					 */
-					else if (var->offset == sizeof(int))
-						for (element = 0; element < asize; element++)
-							sprintf(mallocedval + strlen(mallocedval), "%c,", (((int *) var->value)[element]) ? 't' : 'f');
-					else
-						ecpg_raise(lineno, ECPG_CONVERT_BOOL, ECPG_SQLSTATE_DATATYPE_MISMATCH, NULL);
+					for (element = 0; element < asize; element++)
+						sprintf(mallocedval + strlen(mallocedval), "%c,", (((bool *) var->value)[element]) ? 't' : 'f');
 
 					strcpy(mallocedval + strlen(mallocedval) - 1, "}");
 				}
@@ -797,7 +785,10 @@ ecpg_store_input(const int lineno, const bool force_indicator, const struct vari
 
 					mallocedval = quote_postgres(newcopy, quote, lineno);
 					if (!mallocedval)
+					{
+						ecpg_free(newcopy);
 						return false;
+					}
 
 					*tobeinserted_p = mallocedval;
 				}
@@ -829,7 +820,10 @@ ecpg_store_input(const int lineno, const bool force_indicator, const struct vari
 
 					mallocedval = quote_postgres(newcopy, quote, lineno);
 					if (!mallocedval)
+					{
+						ecpg_free(newcopy);
 						return false;
+					}
 
 					*tobeinserted_p = mallocedval;
 				}
@@ -848,7 +842,7 @@ ecpg_store_input(const int lineno, const bool force_indicator, const struct vari
 						mallocedval = ecpg_strdup("", lineno);
 
 					if (!mallocedval)
-							return false;
+						return false;
 
 					for (element = 0; element < asize; element++)
 					{
@@ -911,7 +905,7 @@ ecpg_store_input(const int lineno, const bool force_indicator, const struct vari
 						mallocedval = ecpg_strdup("", lineno);
 
 					if (!mallocedval)
-							return false;
+						return false;
 
 					for (element = 0; element < asize; element++)
 					{
@@ -958,7 +952,7 @@ ecpg_store_input(const int lineno, const bool force_indicator, const struct vari
 						mallocedval = ecpg_strdup("", lineno);
 
 					if (!mallocedval)
-							return false;
+						return false;
 
 					for (element = 0; element < asize; element++)
 					{
@@ -1005,7 +999,7 @@ ecpg_store_input(const int lineno, const bool force_indicator, const struct vari
 						mallocedval = ecpg_strdup("", lineno);
 
 					if (!mallocedval)
-							return false;
+						return false;
 
 					for (element = 0; element < asize; element++)
 					{
@@ -1488,6 +1482,13 @@ ecpg_process_output(struct statement * stmt, bool clear_result)
 	int			nfields,
 				ntuples,
 				act_field;
+
+	if (sqlca == NULL)
+	{
+		ecpg_raise(stmt->lineno, ECPG_OUT_OF_MEMORY,
+				   ECPG_SQLSTATE_ECPG_OUT_OF_MEMORY, NULL);
+		return (false);
+	}
 
 	var = stmt->outlist;
 	switch (PQresultStatus(stmt->results))

@@ -36,7 +36,6 @@
 #include "utils/builtins.h"
 #include "utils/tqual.h"
 
-
 PG_MODULE_MAGIC;
 
 PG_FUNCTION_INFO_V1(pgstattuple);
@@ -152,7 +151,6 @@ build_pgstattuple_type(pgstattuple_type *stat, FunctionCallInfo fcinfo)
  *
  * C FUNCTION definition
  * pgstattuple(text) returns pgstattuple_type
- * see pgstattuple.sql for pgstattuple_type
  * ----------
  */
 
@@ -234,6 +232,9 @@ pgstat_relation(Relation rel, FunctionCallInfo fcinfo)
 					break;
 				case SPGIST_AM_OID:
 					err = "spgist index";
+					break;
+				case BRIN_AM_OID:
+					err = "brin index";
 					break;
 				default:
 					err = "unknown index";

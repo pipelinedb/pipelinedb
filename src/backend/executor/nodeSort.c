@@ -3,9 +3,9 @@
  * nodeSort.c
  *	  Routines to handle sorting of relations.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- *
+ * Portions Copyright (c) 2013-2016, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/executor/nodeSort.c
@@ -120,7 +120,7 @@ ExecSort(SortState *node)
 		estate->es_direction = dir;
 
 		/*
-		 * finally set the sorted flag to true iff its not a stream scan.
+		 * finally set the sorted flag to true
 		 */
 		node->sort_Done = true;
 		node->bounded_Done = node->bounded;
@@ -295,6 +295,8 @@ ExecSortRestrPos(SortState *node)
 void
 ExecReScanSort(SortState *node)
 {
+	PlanState  *outerPlan = outerPlanState(node);
+
 	/*
 	 * If we haven't sorted yet, just return. If outerplan's chgParam is not
 	 * NULL then it will be re-scanned by ExecProcNode, else no reason to
@@ -313,7 +315,7 @@ ExecReScanSort(SortState *node)
 	 *
 	 * Otherwise we can just rewind and rescan the sorted output.
 	 */
-	if (node->ss.ps.lefttree->chgParam != NULL ||
+	if (outerPlan->chgParam != NULL ||
 		node->bounded != node->bounded_Done ||
 		node->bound != node->bound_Done ||
 		!node->randomAccess)
@@ -326,8 +328,8 @@ ExecReScanSort(SortState *node)
 		 * if chgParam of subnode is not null then plan will be re-scanned by
 		 * first ExecProcNode.
 		 */
-		if (node->ss.ps.lefttree->chgParam == NULL)
-			ExecReScan(node->ss.ps.lefttree);
+		if (outerPlan->chgParam == NULL)
+			ExecReScan(outerPlan);
 	}
 	else
 		tuplesort_rescan((Tuplesortstate *) node->tuplesortstate);

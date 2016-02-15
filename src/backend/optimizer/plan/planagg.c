@@ -17,7 +17,7 @@
  * scan all the rows anyway.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -96,7 +96,7 @@ preprocess_minmax_aggregates(PlannerInfo *root, List *tlist)
 	 * performs assorted processing related to these features between calling
 	 * preprocess_minmax_aggregates and optimize_minmax_aggregates.)
 	 */
-	if (parse->groupClause || parse->hasWindowFuncs)
+	if (parse->groupClause || list_length(parse->groupingSets) > 1 || parse->hasWindowFuncs)
 		return;
 
 	/*
@@ -423,9 +423,8 @@ build_minmax_path(PlannerInfo *root, MinMaxAggInfo *mminfo,
 	subroot->parse = parse = (Query *) copyObject(root->parse);
 	/* make sure subroot planning won't change root->init_plans contents */
 	subroot->init_plans = list_copy(root->init_plans);
-	/* There shouldn't be any OJ or LATERAL info to translate, as yet */
+	/* There shouldn't be any OJ info to translate, as yet */
 	Assert(subroot->join_info_list == NIL);
-	Assert(subroot->lateral_info_list == NIL);
 	/* and we haven't created PlaceHolderInfos, either */
 	Assert(subroot->placeholder_list == NIL);
 
@@ -449,6 +448,7 @@ build_minmax_path(PlannerInfo *root, MinMaxAggInfo *mminfo,
 	ntest->arg = copyObject(mminfo->target);
 	/* we checked it wasn't a rowtype in find_minmax_aggs_walker */
 	ntest->argisrow = false;
+	ntest->location = -1;
 
 	/* User might have had that in WHERE already */
 	if (!list_member((List *) parse->jointree->quals, ntest))

@@ -106,7 +106,7 @@ SELECT pipeline_get_worker_querydef('cqwindow1');
      key::text,                                                                   +
      avg(x::integer) AS avg                                                       +
     FROM ONLY cqwindow_stream                                                     +
-   GROUP BY key::text, second(arrival_timestamp::timestamp with time zone)
+   GROUP BY key::text, (second(arrival_timestamp::timestamp with time zone))
 (1 row)
 
 SELECT pipeline_get_combiner_querydef('cqwindow1');
@@ -190,7 +190,7 @@ SELECT pipeline_get_worker_querydef('cqwindow4');
      count(*) AS count                                                                                      +
     FROM ONLY cqwindow_stream                                                                               +
    WHERE (arrival_timestamp::timestamp with time zone > (clock_timestamp() - '@ 1 hour'::interval))         +
-   GROUP BY date_round(arrival_timestamp::timestamp with time zone, '@ 3 mins'::interval)
+   GROUP BY (date_round(arrival_timestamp::timestamp with time zone, '@ 3 mins'::interval))
 (1 row)
 
 DROP CONTINUOUS VIEW cqwindow0;

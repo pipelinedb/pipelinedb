@@ -6,6 +6,12 @@
 -- BTREE
 --
 CREATE INDEX onek_unique1 ON onek USING btree(unique1 int4_ops);
+CREATE INDEX IF NOT EXISTS onek_unique1 ON onek USING btree(unique1 int4_ops);
+NOTICE:  relation "onek_unique1" already exists, skipping
+CREATE INDEX IF NOT EXISTS ON onek USING btree(unique1 int4_ops);
+ERROR:  syntax error at or near "ON"
+LINE 1: CREATE INDEX IF NOT EXISTS ON onek USING btree(unique1 int4_...
+                                   ^
 CREATE INDEX onek_unique2 ON onek USING btree(unique2 int4_ops);
 CREATE INDEX onek_hundred ON onek USING btree(hundred int4_ops);
 CREATE INDEX onek_stringu1 ON onek USING btree(stringu1 name_ops);
@@ -366,6 +372,36 @@ SELECT count(*) FROM radix_text_tbl WHERE t ~>~  'Worth                         
     48
 (1 row)
 
+SELECT * FROM gpolygon_tbl ORDER BY f1 <-> '(0,0)'::point LIMIT 10;
+                       f1                        
+-------------------------------------------------
+ ((240,359),(240,455),(337,455),(337,359))
+ ((662,163),(662,187),(759,187),(759,163))
+ ((1000,0),(0,1000))
+ ((0,1000),(1000,1000))
+ ((1346,344),(1346,403),(1444,403),(1444,344))
+ ((278,1409),(278,1457),(369,1457),(369,1409))
+ ((907,1156),(907,1201),(948,1201),(948,1156))
+ ((1517,971),(1517,1043),(1594,1043),(1594,971))
+ ((175,1820),(175,1850),(259,1850),(259,1820))
+ ((2424,81),(2424,160),(2424,160),(2424,81))
+(10 rows)
+
+SELECT circle_center(f1), round(radius(f1)) as radius FROM gcircle_tbl ORDER BY f1 <-> '(200,300)'::point LIMIT 10;
+ circle_center  | radius 
+----------------+--------
+ (288.5,407)    |     68
+ (710.5,175)    |     50
+ (323.5,1433)   |     51
+ (927.5,1178.5) |     30
+ (1395,373.5)   |     57
+ (1555.5,1007)  |     53
+ (217,1835)     |     45
+ (489,2421.5)   |     22
+ (2424,120.5)   |     40
+ (751.5,2655)   |     20
+(10 rows)
+
 -- Now check the results from plain indexscan
 SET enable_seqscan = OFF;
 SET enable_indexscan = ON;
@@ -378,7 +414,7 @@ SELECT * FROM fast_emp4000
 ----------------------------------------------------------------
  Sort
    Sort Key: ((home_base[0])[0])
-   ->  Index Scan using grect2ind on fast_emp4000
+   ->  Index Only Scan using grect2ind on fast_emp4000
          Index Cond: (home_base @ '(2000,1000),(200,200)'::box)
 (4 rows)
 
@@ -396,7 +432,7 @@ SELECT count(*) FROM fast_emp4000 WHERE home_base && '(1000,1000,0,0)'::box;
                          QUERY PLAN                          
 -------------------------------------------------------------
  Aggregate
-   ->  Index Scan using grect2ind on fast_emp4000
+   ->  Index Only Scan using grect2ind on fast_emp4000
          Index Cond: (home_base && '(1000,1000),(0,0)'::box)
 (3 rows)
 
@@ -408,10 +444,10 @@ SELECT count(*) FROM fast_emp4000 WHERE home_base && '(1000,1000,0,0)'::box;
 
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM fast_emp4000 WHERE home_base IS NULL;
-                    QUERY PLAN                    
---------------------------------------------------
+                      QUERY PLAN                       
+-------------------------------------------------------
  Aggregate
-   ->  Index Scan using grect2ind on fast_emp4000
+   ->  Index Only Scan using grect2ind on fast_emp4000
          Index Cond: (home_base IS NULL)
 (3 rows)
 
@@ -495,7 +531,7 @@ SELECT count(*) FROM point_tbl WHERE f1 <@ box '(0,0,100,100)';
                      QUERY PLAN                     
 ----------------------------------------------------
  Aggregate
-   ->  Index Scan using gpointind on point_tbl
+   ->  Index Only Scan using gpointind on point_tbl
          Index Cond: (f1 <@ '(100,100),(0,0)'::box)
 (3 rows)
 
@@ -510,8 +546,8 @@ SELECT count(*) FROM point_tbl WHERE box '(0,0,100,100)' @> f1;
                      QUERY PLAN                     
 ----------------------------------------------------
  Aggregate
-   ->  Index Scan using gpointind on point_tbl
-         Index Cond: ('(100,100),(0,0)'::box @> f1)
+   ->  Index Only Scan using gpointind on point_tbl
+         Index Cond: (f1 <@ '(100,100),(0,0)'::box)
 (3 rows)
 
 SELECT count(*) FROM point_tbl WHERE box '(0,0,100,100)' @> f1;
@@ -525,7 +561,7 @@ SELECT count(*) FROM point_tbl WHERE f1 <@ polygon '(0,0),(0,100),(100,100),(50,
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Aggregate
-   ->  Index Scan using gpointind on point_tbl
+   ->  Index Only Scan using gpointind on point_tbl
          Index Cond: (f1 <@ '((0,0),(0,100),(100,100),(50,50),(100,0),(0,0))'::polygon)
 (3 rows)
 
@@ -540,7 +576,7 @@ SELECT count(*) FROM point_tbl WHERE f1 <@ circle '<(50,50),50>';
                      QUERY PLAN                     
 ----------------------------------------------------
  Aggregate
-   ->  Index Scan using gpointind on point_tbl
+   ->  Index Only Scan using gpointind on point_tbl
          Index Cond: (f1 <@ '<(50,50),50>'::circle)
 (3 rows)
 
@@ -552,10 +588,10 @@ SELECT count(*) FROM point_tbl WHERE f1 <@ circle '<(50,50),50>';
 
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM point_tbl p WHERE p.f1 << '(0.0, 0.0)';
-                   QUERY PLAN                    
--------------------------------------------------
+                      QUERY PLAN                      
+------------------------------------------------------
  Aggregate
-   ->  Index Scan using gpointind on point_tbl p
+   ->  Index Only Scan using gpointind on point_tbl p
          Index Cond: (f1 << '(0,0)'::point)
 (3 rows)
 
@@ -567,10 +603,10 @@ SELECT count(*) FROM point_tbl p WHERE p.f1 << '(0.0, 0.0)';
 
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM point_tbl p WHERE p.f1 >> '(0.0, 0.0)';
-                   QUERY PLAN                    
--------------------------------------------------
+                      QUERY PLAN                      
+------------------------------------------------------
  Aggregate
-   ->  Index Scan using gpointind on point_tbl p
+   ->  Index Only Scan using gpointind on point_tbl p
          Index Cond: (f1 >> '(0,0)'::point)
 (3 rows)
 
@@ -582,10 +618,10 @@ SELECT count(*) FROM point_tbl p WHERE p.f1 >> '(0.0, 0.0)';
 
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM point_tbl p WHERE p.f1 <^ '(0.0, 0.0)';
-                   QUERY PLAN                    
--------------------------------------------------
+                      QUERY PLAN                      
+------------------------------------------------------
  Aggregate
-   ->  Index Scan using gpointind on point_tbl p
+   ->  Index Only Scan using gpointind on point_tbl p
          Index Cond: (f1 <^ '(0,0)'::point)
 (3 rows)
 
@@ -597,10 +633,10 @@ SELECT count(*) FROM point_tbl p WHERE p.f1 <^ '(0.0, 0.0)';
 
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM point_tbl p WHERE p.f1 >^ '(0.0, 0.0)';
-                   QUERY PLAN                    
--------------------------------------------------
+                      QUERY PLAN                      
+------------------------------------------------------
  Aggregate
-   ->  Index Scan using gpointind on point_tbl p
+   ->  Index Only Scan using gpointind on point_tbl p
          Index Cond: (f1 >^ '(0,0)'::point)
 (3 rows)
 
@@ -612,10 +648,10 @@ SELECT count(*) FROM point_tbl p WHERE p.f1 >^ '(0.0, 0.0)';
 
 EXPLAIN (COSTS OFF)
 SELECT count(*) FROM point_tbl p WHERE p.f1 ~= '(-5, -12)';
-                   QUERY PLAN                    
--------------------------------------------------
+                      QUERY PLAN                      
+------------------------------------------------------
  Aggregate
-   ->  Index Scan using gpointind on point_tbl p
+   ->  Index Only Scan using gpointind on point_tbl p
          Index Cond: (f1 ~= '(-5,-12)'::point)
 (3 rows)
 
@@ -627,9 +663,9 @@ SELECT count(*) FROM point_tbl p WHERE p.f1 ~= '(-5, -12)';
 
 EXPLAIN (COSTS OFF)
 SELECT * FROM point_tbl ORDER BY f1 <-> '0,1';
-               QUERY PLAN                
------------------------------------------
- Index Scan using gpointind on point_tbl
+                  QUERY PLAN                  
+----------------------------------------------
+ Index Only Scan using gpointind on point_tbl
    Order By: (f1 <-> '(0,1)'::point)
 (2 rows)
 
@@ -647,9 +683,9 @@ SELECT * FROM point_tbl ORDER BY f1 <-> '0,1';
 
 EXPLAIN (COSTS OFF)
 SELECT * FROM point_tbl WHERE f1 IS NULL;
-               QUERY PLAN                
------------------------------------------
- Index Scan using gpointind on point_tbl
+                  QUERY PLAN                  
+----------------------------------------------
+ Index Only Scan using gpointind on point_tbl
    Index Cond: (f1 IS NULL)
 (2 rows)
 
@@ -661,9 +697,9 @@ SELECT * FROM point_tbl WHERE f1 IS NULL;
 
 EXPLAIN (COSTS OFF)
 SELECT * FROM point_tbl WHERE f1 IS NOT NULL ORDER BY f1 <-> '0,1';
-               QUERY PLAN                
------------------------------------------
- Index Scan using gpointind on point_tbl
+                  QUERY PLAN                  
+----------------------------------------------
+ Index Only Scan using gpointind on point_tbl
    Index Cond: (f1 IS NOT NULL)
    Order By: (f1 <-> '(0,1)'::point)
 (3 rows)
@@ -683,7 +719,7 @@ EXPLAIN (COSTS OFF)
 SELECT * FROM point_tbl WHERE f1 <@ '(-10,-10),(10,10)':: box ORDER BY f1 <-> '0,1';
                    QUERY PLAN                   
 ------------------------------------------------
- Index Scan using gpointind on point_tbl
+ Index Only Scan using gpointind on point_tbl
    Index Cond: (f1 <@ '(10,10),(-10,-10)'::box)
    Order By: (f1 <-> '(0,1)'::point)
 (3 rows)
@@ -1145,6 +1181,54 @@ SELECT count(*) FROM radix_text_tbl WHERE t ~>~  'Worth                         
 -------
     48
 (1 row)
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM gpolygon_tbl ORDER BY f1 <-> '(0,0)'::point LIMIT 10;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Limit
+   ->  Index Scan using ggpolygonind on gpolygon_tbl
+         Order By: (f1 <-> '(0,0)'::point)
+(3 rows)
+
+SELECT * FROM gpolygon_tbl ORDER BY f1 <-> '(0,0)'::point LIMIT 10;
+                       f1                        
+-------------------------------------------------
+ ((240,359),(240,455),(337,455),(337,359))
+ ((662,163),(662,187),(759,187),(759,163))
+ ((1000,0),(0,1000))
+ ((0,1000),(1000,1000))
+ ((1346,344),(1346,403),(1444,403),(1444,344))
+ ((278,1409),(278,1457),(369,1457),(369,1409))
+ ((907,1156),(907,1201),(948,1201),(948,1156))
+ ((1517,971),(1517,1043),(1594,1043),(1594,971))
+ ((175,1820),(175,1850),(259,1850),(259,1820))
+ ((2424,81),(2424,160),(2424,160),(2424,81))
+(10 rows)
+
+EXPLAIN (COSTS OFF)
+SELECT circle_center(f1), round(radius(f1)) as radius FROM gcircle_tbl ORDER BY f1 <-> '(200,300)'::point LIMIT 10;
+                    QUERY PLAN                     
+---------------------------------------------------
+ Limit
+   ->  Index Scan using ggcircleind on gcircle_tbl
+         Order By: (f1 <-> '(200,300)'::point)
+(3 rows)
+
+SELECT circle_center(f1), round(radius(f1)) as radius FROM gcircle_tbl ORDER BY f1 <-> '(200,300)'::point LIMIT 10;
+ circle_center  | radius 
+----------------+--------
+ (288.5,407)    |     68
+ (710.5,175)    |     50
+ (323.5,1433)   |     51
+ (927.5,1178.5) |     30
+ (1395,373.5)   |     57
+ (1555.5,1007)  |     53
+ (217,1835)     |     45
+ (489,2421.5)   |     22
+ (2424,120.5)   |     40
+ (751.5,2655)   |     20
+(10 rows)
 
 -- Now check the results from bitmap indexscan
 SET enable_seqscan = OFF;
@@ -2235,12 +2319,32 @@ SELECT COUNT(*) FROM array_gin_test WHERE a @> '{2}';
 
 DROP TABLE array_gin_test;
 --
+-- Test GIN index's reloptions
+--
+CREATE INDEX gin_relopts_test ON array_index_op_test USING gin (i)
+  WITH (FASTUPDATE=on, GIN_PENDING_LIST_LIMIT=128);
+\d+ gin_relopts_test
+     Index "public.gin_relopts_test"
+ Column |  Type   | Definition | Storage 
+--------+---------+------------+---------
+ i      | integer | i          | plain
+gin, for table "public.array_index_op_test"
+Options: fastupdate=on, gin_pending_list_limit=128
+
+--
 -- HASH
 --
 CREATE INDEX hash_i4_index ON hash_i4_heap USING hash (random int4_ops);
+WARNING:  hash indexes are not WAL-logged and their use is discouraged
 CREATE INDEX hash_name_index ON hash_name_heap USING hash (random name_ops);
+WARNING:  hash indexes are not WAL-logged and their use is discouraged
 CREATE INDEX hash_txt_index ON hash_txt_heap USING hash (random text_ops);
+WARNING:  hash indexes are not WAL-logged and their use is discouraged
 CREATE INDEX hash_f8_index ON hash_f8_heap USING hash (random float8_ops);
+WARNING:  hash indexes are not WAL-logged and their use is discouraged
+CREATE UNLOGGED TABLE unlogged_hash_table (id int4);
+CREATE INDEX unlogged_hash_index ON unlogged_hash_table USING hash (id int4_ops);
+DROP TABLE unlogged_hash_table;
 -- CREATE INDEX hash_ovfl_index ON hash_ovfl_heap USING hash (x int4_ops);
 --
 -- Test functional index
@@ -2286,10 +2390,14 @@ create unique index hash_f8_index_3 on hash_f8_heap(random) where seqno > 1000;
 CREATE TABLE concur_heap (f1 text, f2 text);
 -- empty table
 CREATE INDEX CONCURRENTLY concur_index1 ON concur_heap(f2,f1);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS concur_index1 ON concur_heap(f2,f1);
+NOTICE:  relation "concur_index1" already exists, skipping
 INSERT INTO concur_heap VALUES  ('a','b');
 INSERT INTO concur_heap VALUES  ('b','b');
 -- unique index
 CREATE UNIQUE INDEX CONCURRENTLY concur_index2 ON concur_heap(f1);
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS concur_index2 ON concur_heap(f1);
+NOTICE:  relation "concur_index2" already exists, skipping
 -- check if constraint is set up properly to be enforced
 INSERT INTO concur_heap VALUES ('b','x');
 ERROR:  duplicate key value violates unique constraint "concur_index2"
@@ -2804,3 +2912,81 @@ explain (costs off)
    Index Cond: ((thousand = 1) AND (tenthous = 1001))
 (2 rows)
 
+--
+-- REINDEX (VERBOSE)
+--
+CREATE TABLE reindex_verbose(id integer primary key);
+\set VERBOSITY terse
+REINDEX (VERBOSE) TABLE reindex_verbose;
+INFO:  index "reindex_verbose_pkey" was reindexed
+DROP TABLE reindex_verbose;
+--
+-- REINDEX SCHEMA
+--
+REINDEX SCHEMA schema_to_reindex; -- failure, schema does not exist
+ERROR:  schema "schema_to_reindex" does not exist
+CREATE SCHEMA schema_to_reindex;
+SET search_path = 'schema_to_reindex';
+CREATE TABLE table1(col1 SERIAL PRIMARY KEY);
+INSERT INTO table1 SELECT generate_series(1,400);
+CREATE TABLE table2(col1 SERIAL PRIMARY KEY, col2 TEXT NOT NULL);
+INSERT INTO table2 SELECT generate_series(1,400), 'abc';
+CREATE INDEX ON table2(col2);
+CREATE MATERIALIZED VIEW matview AS SELECT col1 FROM table2;
+CREATE INDEX ON matview(col1);
+CREATE VIEW view AS SELECT col2 FROM table2;
+CREATE TABLE reindex_before AS
+SELECT oid, relname, relfilenode, relkind, reltoastrelid
+	FROM pg_class
+	where relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'schema_to_reindex');
+INSERT INTO reindex_before
+SELECT oid, 'pg_toast_TABLE', relfilenode, relkind, reltoastrelid
+FROM pg_class WHERE oid IN
+	(SELECT reltoastrelid FROM reindex_before WHERE reltoastrelid > 0);
+INSERT INTO reindex_before
+SELECT oid, 'pg_toast_TABLE_index', relfilenode, relkind, reltoastrelid
+FROM pg_class where oid in
+	(select indexrelid from pg_index where indrelid in
+		(select reltoastrelid from reindex_before where reltoastrelid > 0));
+REINDEX SCHEMA schema_to_reindex;
+CREATE TABLE reindex_after AS SELECT oid, relname, relfilenode, relkind
+	FROM pg_class
+	where relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'schema_to_reindex');
+SELECT  b.relname,
+        b.relkind,
+        CASE WHEN a.relfilenode = b.relfilenode THEN 'relfilenode is unchanged'
+        ELSE 'relfilenode has changed' END
+  FROM reindex_before b JOIN pg_class a ON b.oid = a.oid
+  ORDER BY 1;
+       relname        | relkind |           case           
+----------------------+---------+--------------------------
+ matview              | m       | relfilenode is unchanged
+ matview_col1_idx     | i       | relfilenode has changed
+ pg_toast_TABLE       | t       | relfilenode is unchanged
+ pg_toast_TABLE_index | i       | relfilenode has changed
+ table1               | r       | relfilenode is unchanged
+ table1_col1_seq      | S       | relfilenode is unchanged
+ table1_pkey          | i       | relfilenode has changed
+ table2               | r       | relfilenode is unchanged
+ table2_col1_seq      | S       | relfilenode is unchanged
+ table2_col2_idx      | i       | relfilenode has changed
+ table2_pkey          | i       | relfilenode has changed
+ view                 | v       | relfilenode is unchanged
+(12 rows)
+
+REINDEX SCHEMA schema_to_reindex;
+BEGIN;
+REINDEX SCHEMA schema_to_reindex; -- failure, cannot run in a transaction
+ERROR:  REINDEX SCHEMA cannot run inside a transaction block
+END;
+-- Failure for unauthorized user
+CREATE ROLE regression_reindexuser NOLOGIN;
+SET SESSION ROLE regression_reindexuser;
+REINDEX SCHEMA schema_to_reindex;
+ERROR:  must be owner of schema schema_to_reindex
+-- Clean up
+RESET ROLE;
+DROP ROLE regression_reindexuser;
+SET client_min_messages TO 'warning';
+DROP SCHEMA schema_to_reindex CASCADE;
+RESET client_min_messages;

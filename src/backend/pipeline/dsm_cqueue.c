@@ -137,7 +137,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	 * reader reads the value for producer_latch before the writer sets it, the writer is guaranteed to see the
 	 * updated value for tail and therefore the effect is the same as being woken up after that change was made.
 	 */
-	producer_latch = &MyProc->procLatch;
+	producer_latch = MyLatch;
 	atomic_store(&cq->producer_latch, producer_latch);
 
 	/* FIXME(usmanm): On postmaster shutdown, this stays looping, we must break out. */
@@ -301,7 +301,7 @@ dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
 	if (tail < head)
 		return;
 
-	consumer_latch = &MyProc->procLatch;
+	consumer_latch = MyLatch;
 	atomic_store(&cq->consumer_latch, consumer_latch);
 
 	flags = WL_LATCH_SET | WL_POSTMASTER_DEATH;

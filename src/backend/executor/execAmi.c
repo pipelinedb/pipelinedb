@@ -3,7 +3,7 @@
  * execAmi.c
  *	  miscellaneous executor access method routines
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -23,6 +23,7 @@
 #include "executor/nodeBitmapOr.h"
 #include "executor/nodeContinuousUnique.h"
 #include "executor/nodeCtescan.h"
+#include "executor/nodeCustom.h"
 #include "executor/nodeForeignscan.h"
 #include "executor/nodeFunctionscan.h"
 #include "executor/nodeGroup.h"
@@ -40,6 +41,7 @@
 #include "executor/nodeNestloop.h"
 #include "executor/nodeRecursiveunion.h"
 #include "executor/nodeResult.h"
+#include "executor/nodeSamplescan.h"
 #include "executor/nodeSeqscan.h"
 #include "executor/nodeSetOp.h"
 #include "executor/nodeSort.h"
@@ -52,6 +54,7 @@
 #include "executor/nodeWindowAgg.h"
 #include "executor/nodeWorktablescan.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/relation.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
@@ -156,6 +159,10 @@ ExecReScan(PlanState *node)
 			ExecReScanSeqScan((SeqScanState *) node);
 			break;
 
+		case T_SampleScanState:
+			ExecReScanSampleScan((SampleScanState *) node);
+			break;
+
 		case T_IndexScanState:
 			ExecReScanIndexScan((IndexScanState *) node);
 			break;
@@ -198,6 +205,10 @@ ExecReScan(PlanState *node)
 
 		case T_ForeignScanState:
 			ExecReScanForeignScan((ForeignScanState *) node);
+			break;
+
+		case T_CustomScanState:
+			ExecReScanCustomScan((CustomScanState *) node);
 			break;
 
 		case T_NestLoopState:
@@ -276,16 +287,20 @@ ExecReScan(PlanState *node)
  * ExecMarkPos
  *
  * Marks the current scan position.
+ *
+ * NOTE: mark/restore capability is currently needed only for plan nodes
+ * that are the immediate inner child of a MergeJoin node.  Since MergeJoin
+ * requires sorted input, there is never any need to support mark/restore in
+ * node types that cannot produce sorted output.  There are some cases in
+ * which a node can pass through sorted data from its child; if we don't
+ * implement mark/restore for such a node type, the planner compensates by
+ * inserting a Material node above that node.
  */
 void
 ExecMarkPos(PlanState *node)
 {
 	switch (nodeTag(node))
 	{
-		case T_SeqScanState:
-			ExecSeqMarkPos((SeqScanState *) node);
-			break;
-
 		case T_IndexScanState:
 			ExecIndexMarkPos((IndexScanState *) node);
 			break;
@@ -294,12 +309,8 @@ ExecMarkPos(PlanState *node)
 			ExecIndexOnlyMarkPos((IndexOnlyScanState *) node);
 			break;
 
-		case T_TidScanState:
-			ExecTidMarkPos((TidScanState *) node);
-			break;
-
-		case T_ValuesScanState:
-			ExecValuesMarkPos((ValuesScanState *) node);
+		case T_CustomScanState:
+			ExecCustomMarkPos((CustomScanState *) node);
 			break;
 
 		case T_MaterialState:
@@ -339,10 +350,6 @@ ExecRestrPos(PlanState *node)
 {
 	switch (nodeTag(node))
 	{
-		case T_SeqScanState:
-			ExecSeqRestrPos((SeqScanState *) node);
-			break;
-
 		case T_IndexScanState:
 			ExecIndexRestrPos((IndexScanState *) node);
 			break;
@@ -351,12 +358,8 @@ ExecRestrPos(PlanState *node)
 			ExecIndexOnlyRestrPos((IndexOnlyScanState *) node);
 			break;
 
-		case T_TidScanState:
-			ExecTidRestrPos((TidScanState *) node);
-			break;
-
-		case T_ValuesScanState:
-			ExecValuesRestrPos((ValuesScanState *) node);
+		case T_CustomScanState:
+			ExecCustomRestrPos((CustomScanState *) node);
 			break;
 
 		case T_MaterialState:
@@ -378,40 +381,47 @@ ExecRestrPos(PlanState *node)
 }
 
 /*
- * ExecSupportsMarkRestore - does a plan type support mark/restore?
+ * ExecSupportsMarkRestore - does a Path support mark/restore?
  *
- * XXX Ideally, all plan node types would support mark/restore, and this
- * wouldn't be needed.  For now, this had better match the routines above.
- * But note the test is on Plan nodetype, not PlanState nodetype.
- *
- * (However, since the only present use of mark/restore is in mergejoin,
- * there is no need to support mark/restore in any plan type that is not
- * capable of generating ordered output.  So the seqscan, tidscan,
- * and valuesscan support is actually useless code at present.)
+ * This is used during planning and so must accept a Path, not a Plan.
+ * We keep it here to be adjacent to the routines above, which also must
+ * know which plan types support mark/restore.
  */
 bool
-ExecSupportsMarkRestore(NodeTag plantype)
+ExecSupportsMarkRestore(Path *pathnode)
 {
-	switch (plantype)
+	/*
+	 * For consistency with the routines above, we do not examine the nodeTag
+	 * but rather the pathtype, which is the Plan node type the Path would
+	 * produce.
+	 */
+	switch (pathnode->pathtype)
 	{
-		case T_SeqScan:
 		case T_IndexScan:
 		case T_IndexOnlyScan:
-		case T_TidScan:
-		case T_ValuesScan:
 		case T_Material:
 		case T_Sort:
 			return true;
 
+		case T_CustomScan:
+			Assert(IsA(pathnode, CustomPath));
+			if (((CustomPath *) pathnode)->flags & CUSTOMPATH_SUPPORT_MARK_RESTORE)
+				return true;
+			return false;
+
 		case T_Result:
 
 			/*
-			 * T_Result only supports mark/restore if it has a child plan that
-			 * does, so we do not have enough information to give a really
-			 * correct answer.  However, for current uses it's enough to
-			 * always say "false", because this routine is not asked about
-			 * gating Result plans, only base-case Results.
+			 * Although Result supports mark/restore if it has a child plan
+			 * that does, we presently come here only for ResultPath nodes,
+			 * which represent Result plans without a child plan.  So there is
+			 * nothing to recurse to and we can just say "false".  (This means
+			 * that Result's support for mark/restore is in fact dead code. We
+			 * keep it since it's not much code, and someday the planner might
+			 * be smart enough to use it.  That would require making this
+			 * function smarter too, of course.)
 			 */
+			Assert(IsA(pathnode, ResultPath));
 			return false;
 
 		default:
@@ -464,6 +474,10 @@ ExecSupportsBackwardScan(Plan *node)
 		case T_CteScan:
 			return TargetListSupportsBackwardScan(node->targetlist);
 
+		case T_SampleScan:
+			/* Simplify life for tablesample methods by disallowing this */
+			return false;
+
 		case T_IndexScan:
 			return IndexSupportsBackwardScan(((IndexScan *) node)->indexid) &&
 				TargetListSupportsBackwardScan(node->targetlist);
@@ -475,6 +489,16 @@ ExecSupportsBackwardScan(Plan *node)
 		case T_SubqueryScan:
 			return ExecSupportsBackwardScan(((SubqueryScan *) node)->subplan) &&
 				TargetListSupportsBackwardScan(node->targetlist);
+
+		case T_CustomScan:
+			{
+				uint32		flags = ((CustomScan *) node)->flags;
+
+				if ((flags & CUSTOMPATH_SUPPORT_BACKWARD_SCAN) &&
+					TargetListSupportsBackwardScan(node->targetlist))
+					return true;
+			}
+			return false;
 
 		case T_Material:
 		case T_Sort:

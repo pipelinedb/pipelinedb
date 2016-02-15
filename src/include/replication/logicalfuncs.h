@@ -2,7 +2,8 @@
  * logicalfuncs.h
  *	   PostgreSQL WAL to logical transformation support functions
  *
- * Copyright (c) 2012-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2012-2015, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2016, PipelineDB
  *
  *-------------------------------------------------------------------------
  */

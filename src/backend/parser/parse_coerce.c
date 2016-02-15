@@ -3,7 +3,7 @@
  * parse_coerce.c
  *		handle type coercions/conversions for parser
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -247,7 +247,7 @@ coerce_type(ParseState *pstate, Node *node,
 		Oid			baseTypeId;
 		int32		baseTypeMod;
 		int32		inputTypeMod;
-		Type		targetType;
+		Type		baseType;
 		ParseCallbackState pcbstate;
 
 		/*
@@ -275,13 +275,13 @@ coerce_type(ParseState *pstate, Node *node,
 		else
 			inputTypeMod = -1;
 
-		targetType = typeidType(baseTypeId);
+		baseType = typeidType(baseTypeId);
 
 		newcon->consttype = baseTypeId;
 		newcon->consttypmod = inputTypeMod;
-		newcon->constcollid = typeTypeCollation(targetType);
-		newcon->constlen = typeLen(targetType);
-		newcon->constbyval = typeByVal(targetType);
+		newcon->constcollid = typeTypeCollation(baseType);
+		newcon->constlen = typeLen(baseType);
+		newcon->constbyval = typeByVal(baseType);
 		newcon->constisnull = con->constisnull;
 
 		/*
@@ -302,11 +302,11 @@ coerce_type(ParseState *pstate, Node *node,
 		 * as CSTRING.
 		 */
 		if (!con->constisnull)
-			newcon->constvalue = stringTypeDatum(targetType,
+			newcon->constvalue = stringTypeDatum(baseType,
 											DatumGetCString(con->constvalue),
 												 inputTypeMod);
 		else
-			newcon->constvalue = stringTypeDatum(targetType,
+			newcon->constvalue = stringTypeDatum(baseType,
 												 NULL,
 												 inputTypeMod);
 
@@ -321,7 +321,7 @@ coerce_type(ParseState *pstate, Node *node,
 									  targetTypeId,
 									  cformat, location, false, false);
 
-		ReleaseSysCache(targetType);
+		ReleaseSysCache(baseType);
 
 		return result;
 	}

@@ -8,7 +8,7 @@
  * and only the receiver may receive.  This is intended to allow a user
  * backend to communicate with worker backends that it has registered.
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/shm_mq.h
@@ -139,9 +139,11 @@ struct shm_mq_handle
 };
 
 static shm_mq_result shm_mq_send_bytes(shm_mq_handle *mq, Size nbytes,
-				  void *data, bool nowait, Size *bytes_written);
+				  const void *data, bool nowait, Size *bytes_written);
 static shm_mq_result shm_mq_receive_bytes(shm_mq *mq, Size bytes_needed,
 					 bool nowait, Size *nbytesp, void **datap);
+static bool shm_mq_counterparty_gone(volatile shm_mq *mq,
+						 BackgroundWorkerHandle *handle);
 static bool shm_mq_wait_internal(volatile shm_mq *mq, PGPROC *volatile * ptr,
 					 BackgroundWorkerHandle *handle);
 static uint64 shm_mq_get_bytes_read(volatile shm_mq *mq, bool *detached);
@@ -301,7 +303,33 @@ shm_mq_attach(shm_mq *mq, dsm_segment *seg, BackgroundWorkerHandle *handle)
 }
 
 /*
+ * Associate a BackgroundWorkerHandle with a shm_mq_handle just as if it had
+ * been passed to shm_mq_attach.
+ */
+void
+shm_mq_set_handle(shm_mq_handle *mqh, BackgroundWorkerHandle *handle)
+{
+	Assert(mqh->mqh_handle == NULL);
+	mqh->mqh_handle = handle;
+}
+
+/*
  * Write a message into a shared message queue.
+ */
+shm_mq_result
+shm_mq_send(shm_mq_handle *mqh, Size nbytes, const void *data, bool nowait)
+{
+	shm_mq_iovec iov;
+
+	iov.data = data;
+	iov.len = nbytes;
+
+	return shm_mq_sendv(mqh, &iov, 1, nowait);
+}
+
+/*
+ * Write a message into a shared message queue, gathered from multiple
+ * addresses.
  *
  * When nowait = false, we'll wait on our process latch when the ring buffer
  * fills up, and then continue writing once the receiver has drained some data.
@@ -315,13 +343,21 @@ shm_mq_attach(shm_mq *mq, dsm_segment *seg, BackgroundWorkerHandle *handle)
  * the length or payload will corrupt the queue.)
  */
 shm_mq_result
-shm_mq_send(shm_mq_handle *mqh, Size nbytes, void *data, bool nowait)
+shm_mq_sendv(shm_mq_handle *mqh, shm_mq_iovec *iov, int iovcnt, bool nowait)
 {
 	shm_mq_result res;
 	shm_mq	   *mq = mqh->mqh_queue;
+	Size		nbytes = 0;
 	Size		bytes_written;
+	int			i;
+	int			which_iov = 0;
+	Size		offset;
 
 	Assert(mq->mq_sender == MyProc);
+
+	/* Compute total size of write. */
+	for (i = 0; i < iovcnt; ++i)
+		nbytes += iov[i].len;
 
 	/* Try to write, or finish writing, the length word into the buffer. */
 	while (!mqh->mqh_length_word_complete)
@@ -348,18 +384,80 @@ shm_mq_send(shm_mq_handle *mqh, Size nbytes, void *data, bool nowait)
 
 	/* Write the actual data bytes into the buffer. */
 	Assert(mqh->mqh_partial_bytes <= nbytes);
-	res = shm_mq_send_bytes(mqh, nbytes - mqh->mqh_partial_bytes,
-							((char *) data) + mqh->mqh_partial_bytes,
-							nowait, &bytes_written);
-	if (res == SHM_MQ_WOULD_BLOCK)
-		mqh->mqh_partial_bytes += bytes_written;
-	else
+	offset = mqh->mqh_partial_bytes;
+	do
 	{
-		mqh->mqh_partial_bytes = 0;
-		mqh->mqh_length_word_complete = false;
-	}
-	if (res != SHM_MQ_SUCCESS)
-		return res;
+		Size		chunksize;
+
+		/* Figure out which bytes need to be sent next. */
+		if (offset >= iov[which_iov].len)
+		{
+			offset -= iov[which_iov].len;
+			++which_iov;
+			if (which_iov >= iovcnt)
+				break;
+			continue;
+		}
+
+		/*
+		 * We want to avoid copying the data if at all possible, but every
+		 * chunk of bytes we write into the queue has to be MAXALIGN'd, except
+		 * the last.  Thus, if a chunk other than the last one ends on a
+		 * non-MAXALIGN'd boundary, we have to combine the tail end of its
+		 * data with data from one or more following chunks until we either
+		 * reach the last chunk or accumulate a number of bytes which is
+		 * MAXALIGN'd.
+		 */
+		if (which_iov + 1 < iovcnt &&
+			offset + MAXIMUM_ALIGNOF > iov[which_iov].len)
+		{
+			char		tmpbuf[MAXIMUM_ALIGNOF];
+			int			j = 0;
+
+			for (;;)
+			{
+				if (offset < iov[which_iov].len)
+				{
+					tmpbuf[j] = iov[which_iov].data[offset];
+					j++;
+					offset++;
+					if (j == MAXIMUM_ALIGNOF)
+						break;
+				}
+				else
+				{
+					offset -= iov[which_iov].len;
+					which_iov++;
+					if (which_iov >= iovcnt)
+						break;
+				}
+			}
+			res = shm_mq_send_bytes(mqh, j, tmpbuf, nowait, &bytes_written);
+			mqh->mqh_partial_bytes += bytes_written;
+			if (res != SHM_MQ_SUCCESS)
+				return res;
+			continue;
+		}
+
+		/*
+		 * If this is the last chunk, we can write all the data, even if it
+		 * isn't a multiple of MAXIMUM_ALIGNOF.  Otherwise, we need to
+		 * MAXALIGN_DOWN the write size.
+		 */
+		chunksize = iov[which_iov].len - offset;
+		if (which_iov + 1 < iovcnt)
+			chunksize = MAXALIGN_DOWN(chunksize);
+		res = shm_mq_send_bytes(mqh, chunksize, &iov[which_iov].data[offset],
+								nowait, &bytes_written);
+		mqh->mqh_partial_bytes += bytes_written;
+		offset += bytes_written;
+		if (res != SHM_MQ_SUCCESS)
+			return res;
+	} while (mqh->mqh_partial_bytes < nbytes);
+
+	/* Reset for next message. */
+	mqh->mqh_partial_bytes = 0;
+	mqh->mqh_length_word_complete = false;
 
 	/* Notify receiver of the newly-written data, and return. */
 	return shm_mq_notify_receiver(mq);
@@ -403,8 +501,27 @@ shm_mq_receive(shm_mq_handle *mqh, Size *nbytesp, void **datap, bool nowait)
 	{
 		if (nowait)
 		{
+			int			counterparty_gone;
+
+			/*
+			 * We shouldn't return at this point at all unless the sender
+			 * hasn't attached yet.  However, the correct return value depends
+			 * on whether the sender is still attached.  If we first test
+			 * whether the sender has ever attached and then test whether the
+			 * sender has detached, there's a race condition: a sender that
+			 * attaches and detaches very quickly might fool us into thinking
+			 * the sender never attached at all.  So, test whether our
+			 * counterparty is definitively gone first, and only afterwards
+			 * check whether the sender ever attached in the first place.
+			 */
+			counterparty_gone = shm_mq_counterparty_gone(mq, mqh->mqh_handle);
 			if (shm_mq_get_sender(mq) == NULL)
-				return SHM_MQ_WOULD_BLOCK;
+			{
+				if (counterparty_gone)
+					return SHM_MQ_DETACHED;
+				else
+					return SHM_MQ_WOULD_BLOCK;
+			}
 		}
 		else if (!shm_mq_wait_internal(mq, &mq->mq_sender, mqh->mqh_handle)
 				 && shm_mq_get_sender(mq) == NULL)
@@ -488,7 +605,7 @@ shm_mq_receive(shm_mq_handle *mqh, Size *nbytesp, void **datap, bool nowait)
 			if (mqh->mqh_partial_bytes + rb > sizeof(Size))
 				lengthbytes = sizeof(Size) - mqh->mqh_partial_bytes;
 			else
-				lengthbytes = rb - mqh->mqh_partial_bytes;
+				lengthbytes = rb;
 			memcpy(&mqh->mqh_buffer[mqh->mqh_partial_bytes], rawdata,
 				   lengthbytes);
 			mqh->mqh_partial_bytes += lengthbytes;
@@ -650,11 +767,20 @@ shm_mq_detach(shm_mq *mq)
 }
 
 /*
+ * Get the shm_mq from handle.
+ */
+shm_mq *
+shm_mq_get_queue(shm_mq_handle *mqh)
+{
+	return mqh->mqh_queue;
+}
+
+/*
  * Write bytes into a shared message queue.
  */
 static shm_mq_result
-shm_mq_send_bytes(shm_mq_handle *mqh, Size nbytes, void *data, bool nowait,
-				  Size *bytes_written)
+shm_mq_send_bytes(shm_mq_handle *mqh, Size nbytes, const void *data,
+				  bool nowait, Size *bytes_written)
 {
 	shm_mq	   *mq = mqh->mqh_queue;
 	Size		sent = 0;
@@ -681,33 +807,42 @@ shm_mq_send_bytes(shm_mq_handle *mqh, Size nbytes, void *data, bool nowait,
 			return SHM_MQ_DETACHED;
 		}
 
-		if (available == 0)
+		if (available == 0 && !mqh->mqh_counterparty_attached)
 		{
-			shm_mq_result res;
-
 			/*
 			 * The queue is full, so if the receiver isn't yet known to be
 			 * attached, we must wait for that to happen.
 			 */
-			if (!mqh->mqh_counterparty_attached)
+			if (nowait)
 			{
-				if (nowait)
+				if (shm_mq_counterparty_gone(mq, mqh->mqh_handle))
 				{
-					if (shm_mq_get_receiver(mq) == NULL)
-					{
-						*bytes_written = sent;
-						return SHM_MQ_WOULD_BLOCK;
-					}
-				}
-				else if (!shm_mq_wait_internal(mq, &mq->mq_receiver,
-											   mqh->mqh_handle))
-				{
-					mq->mq_detached = true;
 					*bytes_written = sent;
 					return SHM_MQ_DETACHED;
 				}
-				mqh->mqh_counterparty_attached = true;
+				if (shm_mq_get_receiver(mq) == NULL)
+				{
+					*bytes_written = sent;
+					return SHM_MQ_WOULD_BLOCK;
+				}
 			}
+			else if (!shm_mq_wait_internal(mq, &mq->mq_receiver,
+										   mqh->mqh_handle))
+			{
+				mq->mq_detached = true;
+				*bytes_written = sent;
+				return SHM_MQ_DETACHED;
+			}
+			mqh->mqh_counterparty_attached = true;
+
+			/*
+			 * The receiver may have read some data after attaching, so we
+			 * must not wait without rechecking the queue state.
+			 */
+		}
+		else if (available == 0)
+		{
+			shm_mq_result res;
 
 			/* Let the receiver know that we need them to read some data. */
 			res = shm_mq_notify_receiver(mq);
@@ -731,13 +866,13 @@ shm_mq_send_bytes(shm_mq_handle *mqh, Size nbytes, void *data, bool nowait,
 			 * at top of loop, because setting an already-set latch is much
 			 * cheaper than setting one that has been reset.
 			 */
-			WaitLatch(&MyProc->procLatch, WL_LATCH_SET, 0);
+			WaitLatch(MyLatch, WL_LATCH_SET, 0);
 
 			/* An interrupt may have occurred while we were waiting. */
 			CHECK_FOR_INTERRUPTS();
 
 			/* Reset the latch so we don't spin. */
-			ResetLatch(&MyProc->procLatch);
+			ResetLatch(MyLatch);
 		}
 		else
 		{
@@ -828,14 +963,53 @@ shm_mq_receive_bytes(shm_mq *mq, Size bytes_needed, bool nowait,
 		 * loop, because setting an already-set latch is much cheaper than
 		 * setting one that has been reset.
 		 */
-		WaitLatch(&MyProc->procLatch, WL_LATCH_SET, 0);
+		WaitLatch(MyLatch, WL_LATCH_SET, 0);
 
 		/* An interrupt may have occurred while we were waiting. */
 		CHECK_FOR_INTERRUPTS();
 
 		/* Reset the latch so we don't spin. */
-		ResetLatch(&MyProc->procLatch);
+		ResetLatch(MyLatch);
 	}
+}
+
+/*
+ * Test whether a counterparty who may not even be alive yet is definitely gone.
+ */
+static bool
+shm_mq_counterparty_gone(volatile shm_mq *mq, BackgroundWorkerHandle *handle)
+{
+	bool	detached;
+	pid_t	pid;
+
+	/* Acquire the lock just long enough to check the pointer. */
+	SpinLockAcquire(&mq->mq_mutex);
+	detached = mq->mq_detached;
+	SpinLockRelease(&mq->mq_mutex);
+
+	/* If the queue has been detached, counterparty is definitely gone. */
+	if (detached)
+		return true;
+
+	/* If there's a handle, check worker status. */
+	if (handle != NULL)
+	{
+		BgwHandleStatus status;
+
+		/* Check for unexpected worker death. */
+		status = GetBackgroundWorkerPid(handle, &pid);
+		if (status != BGWH_STARTED && status != BGWH_NOT_YET_STARTED)
+		{
+			/* Mark it detached, just to make it official. */
+			SpinLockAcquire(&mq->mq_mutex);
+			mq->mq_detached = true;
+			SpinLockRelease(&mq->mq_mutex);
+			return true;
+		}
+	}
+
+	/* Counterparty is not definitively gone. */
+	return false;
 }
 
 /*
@@ -895,13 +1069,13 @@ shm_mq_wait_internal(volatile shm_mq *mq, PGPROC *volatile * ptr,
 			}
 
 			/* Wait to be signalled. */
-			WaitLatch(&MyProc->procLatch, WL_LATCH_SET, 0);
+			WaitLatch(MyLatch, WL_LATCH_SET, 0);
 
 			/* An interrupt may have occurred while we were waiting. */
 			CHECK_FOR_INTERRUPTS();
 
 			/* Reset the latch so we don't spin. */
-			ResetLatch(&MyProc->procLatch);
+			ResetLatch(MyLatch);
 		}
 	}
 	PG_CATCH();
@@ -951,7 +1125,7 @@ shm_mq_inc_bytes_read(volatile shm_mq *mq, Size n)
 
 /*
  * Get the number of bytes written.  The sender need not use this to access
- * the count of bytes written, but the reciever must.
+ * the count of bytes written, but the receiver must.
  */
 static uint64
 shm_mq_get_bytes_written(volatile shm_mq *mq, bool *detached)

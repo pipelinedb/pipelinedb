@@ -3,7 +3,7 @@
  * miscinit.c
  *	  miscellaneous initialization support stuff
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -16,9 +16,11 @@
 
 #include <sys/param.h>
 #include <signal.h>
+#include <time.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <grp.h>
@@ -37,6 +39,7 @@
 #include "postmaster/postmaster.h"
 #include "storage/fd.h"
 #include "storage/ipc.h"
+#include "storage/latch.h"
 #include "storage/pg_shmem.h"
 #include "storage/proc.h"
 #include "storage/procarray.h"
@@ -53,6 +56,7 @@ ProcessingMode Mode = InitProcessing;
 /* List of lock files to be removed at proc exit */
 static List *lock_files = NIL;
 
+static Latch LocalLatchData;
 
 /* ----------------------------------------------------------------
  *		ignoring system indexes support stuff
@@ -160,6 +164,106 @@ static int	SecurityRestrictionContext = 0;
 /* We also remember if a SET ROLE is currently active */
 static bool SetRoleIsActive = false;
 
+/*
+ * Initialize the basic environment for a postmaster child
+ *
+ * Should be called as early as possible after the child's startup.
+ */
+void
+InitPostmasterChild(void)
+{
+	IsUnderPostmaster = true;	/* we are a postmaster subprocess now */
+
+	MyProcPid = getpid();		/* reset MyProcPid */
+
+	MyStartTime = time(NULL);	/* set our start time in case we call elog */
+
+	/*
+	 * make sure stderr is in binary mode before anything can possibly be
+	 * written to it, in case it's actually the syslogger pipe, so the pipe
+	 * chunking protocol isn't disturbed. Non-logpipe data gets translated on
+	 * redirection (e.g. via pg_ctl -l) anyway.
+	 */
+#ifdef WIN32
+	_setmode(fileno(stderr), _O_BINARY);
+#endif
+
+	/* We don't want the postmaster's proc_exit() handlers */
+	on_exit_reset();
+
+	/* Initialize process-local latch support */
+	InitializeLatchSupport();
+	MyLatch = &LocalLatchData;
+	InitLatch(MyLatch);
+
+	/*
+	 * If possible, make this process a group leader, so that the postmaster
+	 * can signal any child processes too. Not all processes will have
+	 * children, but for consistency we make all postmaster child processes do
+	 * this.
+	 */
+#ifdef HAVE_SETSID
+	if (setsid() < 0)
+		elog(FATAL, "setsid() failed: %m");
+#endif
+}
+
+/*
+ * Initialize the basic environment for a standalone process.
+ *
+ * argv0 has to be suitable to find the program's executable.
+ */
+void
+InitStandaloneProcess(const char *argv0)
+{
+	Assert(!IsPostmasterEnvironment);
+
+	MyProcPid = getpid();		/* reset MyProcPid */
+
+	MyStartTime = time(NULL);	/* set our start time in case we call elog */
+
+	/* Initialize process-local latch support */
+	InitializeLatchSupport();
+	MyLatch = &LocalLatchData;
+	InitLatch(MyLatch);
+
+	/* Compute paths, no postmaster to inherit from */
+	if (my_exec_path[0] == '\0')
+	{
+		if (find_my_exec(argv0, my_exec_path) < 0)
+			elog(FATAL, "%s: could not locate my own executable path",
+				 argv0);
+	}
+
+	if (pkglib_path[0] == '\0')
+		get_pkglib_path(my_exec_path, pkglib_path);
+}
+
+void
+SwitchToSharedLatch(void)
+{
+	Assert(MyLatch == &LocalLatchData);
+	Assert(MyProc != NULL);
+
+	MyLatch = &MyProc->procLatch;
+
+	/*
+	 * Set the shared latch as the local one might have been set. This
+	 * shouldn't normally be necessary as code is supposed to check the
+	 * condition before waiting for the latch, but a bit care can't hurt.
+	 */
+	SetLatch(MyLatch);
+}
+
+void
+SwitchBackToLocalLatch(void)
+{
+	Assert(MyLatch != &LocalLatchData);
+	Assert(MyProc != NULL && MyLatch == &MyProc->procLatch);
+
+	MyLatch = &LocalLatchData;
+	SetLatch(MyLatch);
+}
 
 /*
  * GetUserId - get the current effective user ID.
@@ -222,12 +326,22 @@ SetSessionUserId(Oid userid, bool is_superuser)
 	CurrentUserId = userid;
 }
 
+/*
+ * GetAuthenticatedUserId - get the authenticated user ID
+ */
+Oid
+GetAuthenticatedUserId(void)
+{
+	AssertState(OidIsValid(AuthenticatedUserId));
+	return AuthenticatedUserId;
+}
+
 
 /*
  * GetUserIdAndSecContext/SetUserIdAndSecContext - get/set the current user ID
  * and the SecurityRestrictionContext flags.
  *
- * Currently there are two valid bits in SecurityRestrictionContext:
+ * Currently there are three valid bits in SecurityRestrictionContext:
  *
  * SECURITY_LOCAL_USERID_CHANGE indicates that we are inside an operation
  * that is temporarily changing CurrentUserId via these functions.  This is
@@ -244,6 +358,13 @@ SetSessionUserId(Oid userid, bool is_superuser)
  * these restrictions are fairly draconian, we apply them only in contexts
  * where the called functions are really supposed to be side-effect-free
  * anyway, such as VACUUM/ANALYZE/REINDEX.
+ *
+ * SECURITY_NOFORCE_RLS indicates that we are inside an operation which should
+ * ignore the FORCE ROW LEVEL SECURITY per-table indication.  This is used to
+ * ensure that FORCE RLS does not mistakenly break referential integrity
+ * checks.  Note that this is intentionally only checked when running as the
+ * owner of the table (which should always be the case for referential
+ * integrity checks).
  *
  * Unlike GetUserId, GetUserIdAndSecContext does *not* Assert that the current
  * value of CurrentUserId is valid; nor does SetUserIdAndSecContext require
@@ -285,6 +406,15 @@ bool
 InSecurityRestrictedOperation(void)
 {
 	return (SecurityRestrictionContext & SECURITY_RESTRICTED_OPERATION) != 0;
+}
+
+/*
+ * InNoForceRLSOperation - are we ignoring FORCE ROW LEVEL SECURITY ?
+ */
+bool
+InNoForceRLSOperation(void)
+{
+	return (SecurityRestrictionContext & SECURITY_NOFORCE_RLS) != 0;
 }
 
 
@@ -340,11 +470,10 @@ has_rolreplication(Oid roleid)
  * Initialize user identity during normal backend startup
  */
 void
-InitializeSessionUserId(const char *rolename)
+InitializeSessionUserId(const char *rolename, Oid roleid)
 {
 	HeapTuple	roleTup;
 	Form_pg_authid rform;
-	Oid			roleid;
 
 	/*
 	 * Don't do scans if we're bootstrapping, none of the system catalogs
@@ -355,7 +484,10 @@ InitializeSessionUserId(const char *rolename)
 	/* call only once */
 	AssertState(!OidIsValid(AuthenticatedUserId));
 
-	roleTup = SearchSysCache1(AUTHNAME, PointerGetDatum(rolename));
+	if (rolename != NULL)
+		roleTup = SearchSysCache1(AUTHNAME, PointerGetDatum(rolename));
+	else
+		roleTup = SearchSysCache1(AUTHOID, ObjectIdGetDatum(roleid));
 	if (!HeapTupleIsValid(roleTup))
 		ereport(FATAL,
 				(errcode(ERRCODE_INVALID_AUTHORIZATION_SPECIFICATION),
@@ -533,23 +665,29 @@ SetCurrentRoleId(Oid roleid, bool is_superuser)
 
 
 /*
- * Get user name from user oid
+ * Get user name from user oid, returns NULL for nonexistent roleid if noerr
+ * is true.
  */
 char *
-GetUserNameFromId(Oid roleid)
+GetUserNameFromId(Oid roleid, bool noerr)
 {
 	HeapTuple	tuple;
 	char	   *result;
 
 	tuple = SearchSysCache1(AUTHOID, ObjectIdGetDatum(roleid));
 	if (!HeapTupleIsValid(tuple))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("invalid role OID: %u", roleid)));
-
-	result = pstrdup(NameStr(((Form_pg_authid) GETSTRUCT(tuple))->rolname));
-
-	ReleaseSysCache(tuple);
+	{
+		if (!noerr)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("invalid role OID: %u", roleid)));
+		result = NULL;
+	}
+	else
+	{
+		result = pstrdup(NameStr(((Form_pg_authid) GETSTRUCT(tuple))->rolname));
+		ReleaseSysCache(tuple);
+	}
 	return result;
 }
 
@@ -884,7 +1022,11 @@ CreateLockFile(const char *filename, bool amPostmaster,
 	if (lock_files == NIL)
 		on_proc_exit(UnlinkLockFiles, 0);
 
-	lock_files = lappend(lock_files, pstrdup(filename));
+	/*
+	 * Use lcons so that the lock files are unlinked in reverse order of
+	 * creation; this is critical!
+	 */
+	lock_files = lcons(pstrdup(filename), lock_files);
 }
 
 /*
@@ -1073,6 +1215,76 @@ AddToDataDirLockFile(int target_line, const char *str)
 				 errmsg("could not write to file \"%s\": %m",
 						DIRECTORY_LOCK_FILE)));
 	}
+}
+
+
+/*
+ * Recheck that the data directory lock file still exists with expected
+ * content.  Return TRUE if the lock file appears OK, FALSE if it isn't.
+ *
+ * We call this periodically in the postmaster.  The idea is that if the
+ * lock file has been removed or replaced by another postmaster, we should
+ * do a panic database shutdown.  Therefore, we should return TRUE if there
+ * is any doubt: we do not want to cause a panic shutdown unnecessarily.
+ * Transient failures like EINTR or ENFILE should not cause us to fail.
+ * (If there really is something wrong, we'll detect it on a future recheck.)
+ */
+bool
+RecheckDataDirLockFile(void)
+{
+	int			fd;
+	int			len;
+	long		file_pid;
+	char		buffer[BLCKSZ];
+
+	fd = open(DIRECTORY_LOCK_FILE, O_RDWR | PG_BINARY, 0);
+	if (fd < 0)
+	{
+		/*
+		 * There are many foreseeable false-positive error conditions.  For
+		 * safety, fail only on enumerated clearly-something-is-wrong
+		 * conditions.
+		 */
+		switch (errno)
+		{
+			case ENOENT:
+			case ENOTDIR:
+				/* disaster */
+				ereport(LOG,
+						(errcode_for_file_access(),
+						 errmsg("could not open file \"%s\": %m",
+								DIRECTORY_LOCK_FILE)));
+				return false;
+			default:
+				/* non-fatal, at least for now */
+				ereport(LOG,
+						(errcode_for_file_access(),
+				  errmsg("could not open file \"%s\": %m; continuing anyway",
+						 DIRECTORY_LOCK_FILE)));
+				return true;
+		}
+	}
+	len = read(fd, buffer, sizeof(buffer) - 1);
+	if (len < 0)
+	{
+		ereport(LOG,
+				(errcode_for_file_access(),
+				 errmsg("could not read from file \"%s\": %m",
+						DIRECTORY_LOCK_FILE)));
+		close(fd);
+		return true;			/* treat read failure as nonfatal */
+	}
+	buffer[len] = '\0';
+	close(fd);
+	file_pid = atol(buffer);
+	if (file_pid == getpid())
+		return true;			/* all is well */
+
+	/* Trouble: someone's overwritten the lock file */
+	ereport(LOG,
+			(errmsg("lock file \"%s\" contains wrong PID: %ld instead of %ld",
+					DIRECTORY_LOCK_FILE, file_pid, (long) getpid())));
+	return false;
 }
 
 

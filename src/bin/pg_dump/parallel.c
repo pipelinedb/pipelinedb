@@ -4,7 +4,7 @@
  *
  *	Parallel support for the pg_dump archiver
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	The author is not responsible for loss or damages that may
@@ -18,8 +18,8 @@
 
 #include "postgres_fe.h"
 
-#include "pg_backup_utils.h"
 #include "parallel.h"
+#include "pg_backup_utils.h"
 
 #ifndef WIN32
 #include <sys/types.h>
@@ -47,6 +47,7 @@ typedef struct
 {
 	ArchiveHandle *AH;
 	RestoreOptions *ropt;
+	DumpOptions *dopt;
 	int			worker;
 	int			pipeRead;
 	int			pipeWrite;
@@ -77,10 +78,8 @@ static ShutdownInformation shutdown_info;
 static const char *modulename = gettext_noop("parallel archiver");
 
 static ParallelSlot *GetMyPSlot(ParallelState *pstate);
-static void
-parallel_msg_master(ParallelSlot *slot, const char *modulename,
-					const char *fmt, va_list ap)
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 3, 0)));
+static void parallel_msg_master(ParallelSlot *slot, const char *modulename,
+					const char *fmt, va_list ap) pg_attribute_printf(3, 0);
 static void archive_close_connection(int code, void *arg);
 static void ShutdownWorkersHard(ParallelState *pstate);
 static void WaitForTerminatingWorkers(ParallelState *pstate);
@@ -89,11 +88,12 @@ static void WaitForTerminatingWorkers(ParallelState *pstate);
 static void sigTermHandler(int signum);
 #endif
 static void SetupWorker(ArchiveHandle *AH, int pipefd[2], int worker,
+			DumpOptions *dopt,
 			RestoreOptions *ropt);
 static bool HasEveryWorkerTerminated(ParallelState *pstate);
 
 static void lockTableNoWait(ArchiveHandle *AH, TocEntry *te);
-static void WaitForCommands(ArchiveHandle *AH, int pipefd[2]);
+static void WaitForCommands(ArchiveHandle *AH, DumpOptions *dopt, int pipefd[2]);
 static char *getMessageFromMaster(int pipefd[2]);
 static void sendMessageToMaster(int pipefd[2], const char *str);
 static int	select_loop(int maxFd, fd_set *workerset);
@@ -436,6 +436,7 @@ sigTermHandler(int signum)
  */
 static void
 SetupWorker(ArchiveHandle *AH, int pipefd[2], int worker,
+			DumpOptions *dopt,
 			RestoreOptions *ropt)
 {
 	/*
@@ -445,11 +446,11 @@ SetupWorker(ArchiveHandle *AH, int pipefd[2], int worker,
 	 * properly when we shut down. This happens only that way when it is
 	 * brought down because of an error.
 	 */
-	(AH->SetupWorkerPtr) ((Archive *) AH, ropt);
+	(AH->SetupWorkerPtr) ((Archive *) AH, dopt, ropt);
 
 	Assert(AH->connection != NULL);
 
-	WaitForCommands(AH, pipefd);
+	WaitForCommands(AH, dopt, pipefd);
 
 	closesocket(pipefd[PIPE_READ]);
 	closesocket(pipefd[PIPE_WRITE]);
@@ -462,12 +463,13 @@ init_spawned_worker_win32(WorkerInfo *wi)
 	ArchiveHandle *AH;
 	int			pipefd[2] = {wi->pipeRead, wi->pipeWrite};
 	int			worker = wi->worker;
+	DumpOptions *dopt = wi->dopt;
 	RestoreOptions *ropt = wi->ropt;
 
 	AH = CloneArchive(wi->AH);
 
 	free(wi);
-	SetupWorker(AH, pipefd, worker, ropt);
+	SetupWorker(AH, pipefd, worker, dopt, ropt);
 
 	DeCloneArchive(AH);
 	_endthreadex(0);
@@ -481,7 +483,7 @@ init_spawned_worker_win32(WorkerInfo *wi)
  * of threads while it does a fork() on Unix.
  */
 ParallelState *
-ParallelBackupStart(ArchiveHandle *AH, RestoreOptions *ropt)
+ParallelBackupStart(ArchiveHandle *AH, DumpOptions *dopt, RestoreOptions *ropt)
 {
 	ParallelState *pstate;
 	int			i;
@@ -544,6 +546,7 @@ ParallelBackupStart(ArchiveHandle *AH, RestoreOptions *ropt)
 		wi = (WorkerInfo *) pg_malloc(sizeof(WorkerInfo));
 
 		wi->ropt = ropt;
+		wi->dopt = dopt;
 		wi->worker = i;
 		wi->AH = AH;
 		wi->pipeRead = pstate->parallelSlot[i].pipeRevRead = pipeMW[PIPE_READ];
@@ -598,7 +601,7 @@ ParallelBackupStart(ArchiveHandle *AH, RestoreOptions *ropt)
 				closesocket(pstate->parallelSlot[j].pipeWrite);
 			}
 
-			SetupWorker(pstate->parallelSlot[i].args->AH, pipefd, i, ropt);
+			SetupWorker(pstate->parallelSlot[i].args->AH, pipefd, i, dopt, ropt);
 
 			exit(0);
 		}
@@ -856,7 +859,7 @@ lockTableNoWait(ArchiveHandle *AH, TocEntry *te)
  * exit.
  */
 static void
-WaitForCommands(ArchiveHandle *AH, int pipefd[2])
+WaitForCommands(ArchiveHandle *AH, DumpOptions *dopt, int pipefd[2])
 {
 	char	   *command;
 	DumpId		dumpId;
@@ -896,7 +899,7 @@ WaitForCommands(ArchiveHandle *AH, int pipefd[2])
 			 * The message we return here has been pg_malloc()ed and we are
 			 * responsible for free()ing it.
 			 */
-			str = (AH->WorkerJobDumpPtr) (AH, te);
+			str = (AH->WorkerJobDumpPtr) (AH, dopt, te);
 			Assert(AH->connection != NULL);
 			sendMessageToMaster(pipefd, str);
 			free(str);
@@ -1155,7 +1158,7 @@ select_loop(int maxFd, fd_set *workerset)
 		i = select(maxFd + 1, workerset, NULL, NULL, NULL);
 
 		/*
-		 * If we Ctrl-C the master process , it's likely that we interrupt
+		 * If we Ctrl-C the master process, it's likely that we interrupt
 		 * select() here. The signal handler will set wantAbort == true and
 		 * the shutdown journey starts from here. Note that we'll come back
 		 * here later when we tell all workers to terminate and read their
@@ -1326,7 +1329,8 @@ readMessageFromPipe(int fd)
 static int
 pgpipe(int handles[2])
 {
-	pgsocket		s, tmp_sock;
+	pgsocket	s,
+				tmp_sock;
 	struct sockaddr_in serv_addr;
 	int			len = sizeof(serv_addr);
 

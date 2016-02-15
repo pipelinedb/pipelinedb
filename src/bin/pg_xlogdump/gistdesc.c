@@ -1,0 +1,1 @@
+../../../src/backend/access/rmgrdesc/gistdesc.c

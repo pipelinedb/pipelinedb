@@ -29,6 +29,8 @@ ERROR:  type "shell" already exists
 DROP TYPE shell;
 DROP TYPE shell;     -- fail, type not exist
 ERROR:  type "shell" does not exist
+-- also, let's leave one around for purposes of pg_dump testing
+CREATE TYPE myshell;
 --
 -- Test type-related default values (broken in releases before PG 7.2)
 --
@@ -41,22 +43,22 @@ CREATE TYPE text_w_default;
 CREATE FUNCTION int42_in(cstring)
    RETURNS int42
    AS 'int4in'
-   LANGUAGE internal STRICT;
+   LANGUAGE internal STRICT IMMUTABLE;
 NOTICE:  return type int42 is only a shell
 CREATE FUNCTION int42_out(int42)
    RETURNS cstring
    AS 'int4out'
-   LANGUAGE internal STRICT;
+   LANGUAGE internal STRICT IMMUTABLE;
 NOTICE:  argument type int42 is only a shell
 CREATE FUNCTION text_w_default_in(cstring)
    RETURNS text_w_default
    AS 'textin'
-   LANGUAGE internal STRICT;
+   LANGUAGE internal STRICT IMMUTABLE;
 NOTICE:  return type text_w_default is only a shell
 CREATE FUNCTION text_w_default_out(text_w_default)
    RETURNS cstring
    AS 'textout'
-   LANGUAGE internal STRICT;
+   LANGUAGE internal STRICT IMMUTABLE;
 NOTICE:  argument type text_w_default is only a shell
 CREATE TYPE int42 (
    internallength = 4,
@@ -107,6 +109,12 @@ ERROR:  type "text_w_default" already exists
 DROP TYPE default_test_row CASCADE;
 NOTICE:  drop cascades to function get_default_test()
 DROP TABLE default_test;
+-- Check type create with input/output incompatibility
+CREATE TYPE not_existing_type (INPUT = array_in,
+    OUTPUT = array_out,
+    ELEMENT = int,
+    INTERNALLENGTH = 32);
+ERROR:  function array_out(not_existing_type) does not exist
 -- Check usage of typmod with a user-defined type
 -- (we have borrowed numeric's typmod functions)
 CREATE TEMP TABLE mytab (foo widget(42,13,7));     -- should fail

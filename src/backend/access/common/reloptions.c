@@ -3,9 +3,9 @@
  * reloptions.c
  *	  Core support for relation options (pg_class.reloptions)
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- *
+ * Portions Copyright (c) 2013-2016, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/access/common/reloptions.c
@@ -185,7 +185,7 @@ static relopt_int intRelOpts[] =
 			"Age at which to autovacuum a table to prevent transaction ID wraparound",
 			RELOPT_KIND_HEAP | RELOPT_KIND_TOAST
 		},
-		-1, 100000000, 2000000000
+		-1, 100000, 2000000000
 	},
 	{
 		{
@@ -193,7 +193,7 @@ static relopt_int intRelOpts[] =
 			"Multixact age at which to autovacuum a table to prevent multixact wraparound",
 			RELOPT_KIND_HEAP | RELOPT_KIND_TOAST
 		},
-		-1, 100000000, 2000000000
+		-1, 10000, 2000000000
 	},
 	{
 		{
@@ -208,6 +208,29 @@ static relopt_int intRelOpts[] =
 			"Age of multixact at which VACUUM should perform a full table sweep to freeze row versions",
 			RELOPT_KIND_HEAP | RELOPT_KIND_TOAST
 		}, -1, 0, 2000000000
+	},
+	{
+		{
+			"log_autovacuum_min_duration",
+			"Sets the minimum execution time above which autovacuum actions will be logged",
+			RELOPT_KIND_HEAP | RELOPT_KIND_TOAST
+		},
+		-1, -1, INT_MAX
+	},
+	{
+		{
+			"pages_per_range",
+			"Number of pages that each page range covers in a BRIN index",
+			RELOPT_KIND_BRIN
+		}, 128, 1, 131072
+	},
+	{
+		{
+			"gin_pending_list_limit",
+			"Maximum size of the pending list for this GIN index, in kilobytes.",
+			RELOPT_KIND_GIN
+		},
+		-1, 64, MAX_KILOBYTES
 	},
 
 	/* list terminator */
@@ -461,7 +484,7 @@ allocate_reloption(bits32 kinds, int type, char *name, char *desc)
 			size = sizeof(relopt_string);
 			break;
 		default:
-			elog(ERROR, "unsupported option type");
+			elog(ERROR, "unsupported reloption type %d", type);
 			return NULL;		/* keep compiler quiet */
 	}
 
@@ -620,8 +643,6 @@ transformRelOptions(Datum oldOptions, List *defList, char *namspace,
 		int			noldoptions;
 		int			i;
 
-		Assert(ARR_ELEMTYPE(array) == TEXTOID);
-
 		deconstruct_array(array, TEXTOID, -1, false, 'i',
 						  &oldoptions, NULL, &noldoptions);
 
@@ -777,8 +798,6 @@ untransformRelOptions(Datum options)
 
 	array = DatumGetArrayTypeP(options);
 
-	Assert(ARR_ELEMTYPE(array) == TEXTOID);
-
 	deconstruct_array(array, TEXTOID, -1, false, 'i',
 					  &optiondatums, NULL, &noptions);
 
@@ -845,6 +864,8 @@ extractRelOptions(HeapTuple tuple, TupleDesc tupdesc, Oid amoptions)
 			options = index_reloptions(amoptions, datum, false);
 			break;
 		case RELKIND_FOREIGN_TABLE:
+			options = NULL;
+			break;
 		case RELKIND_STREAM:
 			options = NULL;
 			break;
@@ -914,13 +935,9 @@ parseRelOptions(Datum options, bool validate, relopt_kind kind,
 	/* Done if no options */
 	if (PointerIsValid(DatumGetPointer(options)))
 	{
-		ArrayType  *array;
+		ArrayType  *array = DatumGetArrayTypeP(options);
 		Datum	   *optiondatums;
 		int			noptions;
-
-		array = DatumGetArrayTypeP(options);
-
-		Assert(ARR_ELEMTYPE(array) == TEXTOID);
 
 		deconstruct_array(array, TEXTOID, -1, false, 'i',
 						  &optiondatums, NULL, &noptions);
@@ -961,6 +978,11 @@ parseRelOptions(Datum options, bool validate, relopt_kind kind,
 						 errmsg("unrecognized parameter \"%s\"", s)));
 			}
 		}
+
+		/* It's worth avoiding memory leaks in this function */
+		pfree(optiondatums);
+		if (((void *) array) != DatumGetPointer(options))
+			pfree(array);
 	}
 
 	*numrelopts = numoptions;
@@ -998,7 +1020,8 @@ parse_one_reloption(relopt_value *option, char *text_str, int text_len,
 				parsed = parse_bool(value, &option->values.bool_val);
 				if (validate && !parsed)
 					ereport(ERROR,
-					   (errmsg("invalid value for boolean option \"%s\": %s",
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						errmsg("invalid value for boolean option \"%s\": %s",
 							   option->gen->name, value)));
 			}
 			break;
@@ -1009,12 +1032,14 @@ parse_one_reloption(relopt_value *option, char *text_str, int text_len,
 				parsed = parse_int(value, &option->values.int_val, 0, NULL);
 				if (validate && !parsed)
 					ereport(ERROR,
-					   (errmsg("invalid value for integer option \"%s\": %s",
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						errmsg("invalid value for integer option \"%s\": %s",
 							   option->gen->name, value)));
 				if (validate && (option->values.int_val < optint->min ||
 								 option->values.int_val > optint->max))
 					ereport(ERROR,
-						  (errmsg("value %s out of bounds for option \"%s\"",
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						   errmsg("value %s out of bounds for option \"%s\"",
 								  value, option->gen->name),
 					 errdetail("Valid values are between \"%d\" and \"%d\".",
 							   optint->min, optint->max)));
@@ -1027,12 +1052,14 @@ parse_one_reloption(relopt_value *option, char *text_str, int text_len,
 				parsed = parse_real(value, &option->values.real_val);
 				if (validate && !parsed)
 					ereport(ERROR,
-							(errmsg("invalid value for floating point option \"%s\": %s",
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("invalid value for floating point option \"%s\": %s",
 									option->gen->name, value)));
 				if (validate && (option->values.real_val < optreal->min ||
 								 option->values.real_val > optreal->max))
 					ereport(ERROR,
-						  (errmsg("value %s out of bounds for option \"%s\"",
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						   errmsg("value %s out of bounds for option \"%s\"",
 								  value, option->gen->name),
 					 errdetail("Valid values are between \"%f\" and \"%f\".",
 							   optreal->min, optreal->max)));
@@ -1150,7 +1177,7 @@ fillRelOptions(void *rdopts, Size basesize,
 						}
 						break;
 					default:
-						elog(ERROR, "unrecognized reloption type %c",
+						elog(ERROR, "unsupported reloption type %d",
 							 options[i].gen->type);
 						break;
 				}
@@ -1200,6 +1227,8 @@ default_reloptions(Datum reloptions, bool validate, relopt_kind kind)
 		offsetof(StdRdOptions, autovacuum) +offsetof(AutoVacOpts, multixact_freeze_max_age)},
 		{"autovacuum_multixact_freeze_table_age", RELOPT_TYPE_INT,
 		offsetof(StdRdOptions, autovacuum) +offsetof(AutoVacOpts, multixact_freeze_table_age)},
+		{"log_autovacuum_min_duration", RELOPT_TYPE_INT,
+		offsetof(StdRdOptions, autovacuum) +offsetof(AutoVacOpts, log_min_duration)},
 		{"autovacuum_vacuum_scale_factor", RELOPT_TYPE_REAL,
 		offsetof(StdRdOptions, autovacuum) +offsetof(AutoVacOpts, vacuum_scale_factor)},
 		{"autovacuum_analyze_scale_factor", RELOPT_TYPE_REAL,

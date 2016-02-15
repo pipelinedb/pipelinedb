@@ -5,7 +5,7 @@
  *
  * See src/backend/utils/misc/README for design notes.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  *
  *	  src/include/utils/guc_tables.h
  *
@@ -81,6 +81,7 @@ enum config_group
 	LOGGING_WHERE,
 	LOGGING_WHEN,
 	LOGGING_WHAT,
+	PROCESS_TITLE,
 	STATS,
 	STATS_MONITORING,
 	STATS_COLLECTOR,
@@ -167,6 +168,7 @@ struct config_generic
  * Caution: the GUC_IS_IN_FILE bit is transient state for ProcessConfigFile.
  * Do not assume that its value represents useful information elsewhere.
  */
+#define GUC_PENDING_RESTART 0x0002
 
 
 /* GUC records for specific variable types */

@@ -3,8 +3,9 @@
  * seclabel.c
  *	  routines to support security label feature.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
+ * Portions Copyright (c) 2013-2016, PipelineDB
  *
  * -------------------------------------------------------------------------
  */
@@ -37,8 +38,10 @@ static List *label_provider_list = NIL;
  * ExecSecLabelStmt --
  *
  * Apply a security label to a database object.
+ *
+ * Returns the ObjectAddress of the object to which the policy was applied.
  */
-Oid
+ObjectAddress
 ExecSecLabelStmt(SecLabelStmt *stmt)
 {
 	LabelProvider *provider = NULL;
@@ -135,7 +138,7 @@ ExecSecLabelStmt(SecLabelStmt *stmt)
 	if (relation != NULL)
 		relation_close(relation, NoLock);
 
-	return address.objectId;
+	return address;
 }
 
 /*

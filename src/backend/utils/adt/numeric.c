@@ -11,7 +11,7 @@
  * Transactions on Mathematical Software, Vol. 24, No. 4, December 1998,
  * pages 359-367.
  *
- * Portions Copyright (c) 1998-2014, PostgreSQL Global Development Group
+ * Copyright (c) 1998-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
@@ -29,15 +29,17 @@
 
 #include "access/hash.h"
 #include "catalog/pg_type.h"
+#include "funcapi.h"
+#include "lib/hyperloglog.h"
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
-#include "nodes/execnodes.h"
 #include "nodes/nodeFuncs.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
+#include "utils/guc.h"
 #include "utils/int8.h"
 #include "utils/numeric.h"
-#include "utils/palloc.h"
+#include "utils/sortsupport.h"
 
 /* ----------
  * Uncomment the following to enable compilation of dump_numeric()
@@ -59,6 +61,12 @@
  * are easy.  Also, it's actually more efficient if NBASE is rather less than
  * sqrt(INT_MAX), so that there is "headroom" for mul_var and div_var_fast to
  * postpone processing carries.
+ *
+ * Values of NBASE other than 10000 are considered of historical interest only
+ * and are no longer supported in any sense; no mechanism exists for the client
+ * to discover the base, so every client supporting binary mode expects the
+ * base-10000 format.  If you plan to change this, also note the numeric
+ * abbreviation code, which assumes NBASE=10000.
  * ----------
  */
 
@@ -125,14 +133,14 @@ typedef int16 NumericDigit;
 struct NumericShort
 {
 	uint16		n_header;		/* Sign + display scale + weight */
-	NumericDigit n_data[1];		/* Digits */
+	NumericDigit n_data[FLEXIBLE_ARRAY_MEMBER]; /* Digits */
 };
 
 struct NumericLong
 {
 	uint16		n_sign_dscale;	/* Sign + display scale */
 	int16		n_weight;		/* Weight of 1st digit	*/
-	NumericDigit n_data[1];		/* Digits */
+	NumericDigit n_data[FLEXIBLE_ARRAY_MEMBER]; /* Digits */
 };
 
 union NumericChoice
@@ -263,17 +271,48 @@ typedef struct NumericVar
 	NumericDigit *digits;		/* base-NBASE digits */
 } NumericVar;
 
-typedef struct NumericAggState
+
+/* ----------
+ * Data for generate_series
+ * ----------
+ */
+typedef struct
 {
-	bool		calcSumX2;		/* if true, calculate sumX2 */
-	MemoryContext agg_context;	/* context we're calculating in */
-	int64		N;				/* count of processed numbers */
-	NumericVar	sumX;			/* sum of processed numbers */
-	NumericVar	sumX2;			/* sum of squares of processed numbers */
-	int			maxScale;		/* maximum scale seen so far */
-	int64		maxScaleCount;	/* number of values seen with maximum scale */
-	int64		NaNcount;		/* count of NaN values (not included in N!) */
-} NumericAggState;
+	NumericVar	current;
+	NumericVar	stop;
+	NumericVar	step;
+} generate_series_numeric_fctx;
+
+
+/* ----------
+ * Sort support.
+ * ----------
+ */
+typedef struct
+{
+	void	   *buf;			/* buffer for short varlenas */
+	int64		input_count;	/* number of non-null values seen */
+	bool		estimating;		/* true if estimating cardinality */
+
+	hyperLogLogState abbr_card; /* cardinality estimator */
+} NumericSortSupport;
+
+/*
+ * We define our own macros for packing and unpacking abbreviated-key
+ * representations for numeric values in order to avoid depending on
+ * USE_FLOAT8_BYVAL.  The type of abbreviation we use is based only on
+ * the size of a datum, not the argument-passing convention for float8.
+ */
+#define NUMERIC_ABBREV_BITS (SIZEOF_DATUM * BITS_PER_BYTE)
+#if SIZEOF_DATUM == 8
+#define NumericAbbrevGetDatum(X) ((Datum) SET_8_BYTES(X))
+#define DatumGetNumericAbbrev(X) ((int64) GET_8_BYTES(X))
+#define NUMERIC_ABBREV_NAN		 NumericAbbrevGetDatum(PG_INT64_MIN)
+#else
+#define NumericAbbrevGetDatum(X) ((Datum) SET_4_BYTES(X))
+#define DatumGetNumericAbbrev(X) ((int32) GET_4_BYTES(X))
+#define NUMERIC_ABBREV_NAN		 NumericAbbrevGetDatum(PG_INT32_MIN)
+#endif
 
 
 /* ----------
@@ -402,11 +441,21 @@ static Numeric make_result(NumericVar *var);
 
 static void apply_typmod(NumericVar *var, int32 typmod);
 
-static int32 numericvar_to_int4(NumericVar *var);
-static bool numericvar_to_int8(NumericVar *var, int64 *result);
-static void int8_to_numericvar(int64 val, NumericVar *var);
+static int32 numericvar_to_int32(NumericVar *var);
+static bool numericvar_to_int64(NumericVar *var, int64 *result);
+static void int64_to_numericvar(int64 val, NumericVar *var);
+#ifdef HAVE_INT128
+static void int128_to_numericvar(int128 val, NumericVar *var);
+#endif
 static double numeric_to_double_no_overflow(Numeric num);
 static double numericvar_to_double_no_overflow(NumericVar *var);
+
+static Datum numeric_abbrev_convert(Datum original_datum, SortSupport ssup);
+static bool numeric_abbrev_abort(int memtupcount, SortSupport ssup);
+static int	numeric_fast_cmp(Datum x, Datum y, SortSupport ssup);
+static int	numeric_cmp_abbrev(Datum x, Datum y, SortSupport ssup);
+
+static Datum numeric_abbrev_convert_var(NumericVar *var, NumericSortSupport *nss);
 
 static int	cmp_numerics(Numeric num1, Numeric num2);
 static int	cmp_var(NumericVar *var1, NumericVar *var2);
@@ -449,7 +498,6 @@ static void strip_var(NumericVar *var);
 static void compute_bucket(Numeric operand, Numeric bound1, Numeric bound2,
 			   NumericVar *count_var, NumericVar *result_var);
 
-static NumericAggState *makeNumericAggState(FunctionCallInfo fcinfo, bool calcSumX2);
 
 /* ----------------------------------------------------------------------
  *
@@ -457,112 +505,6 @@ static NumericAggState *makeNumericAggState(FunctionCallInfo fcinfo, bool calcSu
  *
  * ----------------------------------------------------------------------
  */
-
-/*
- * naggstaterecv() -
- *
- *	Input function for numeric aggregation states, used by combiners to
- *	deserialize partial transition states sent to it by a worker process
- */
-Datum
-naggstaterecv(PG_FUNCTION_ARGS)
-{
-	MemoryContext context;
-	MemoryContext old;
-	bytea *bytesin;
-	NumericAggState *result;
-	StringInfoData buf;
-	int nbytes;
-	int digitssize;
-	int i;
-
-	if (!AggCheckCallContext(fcinfo, &context))
-		context = fcinfo->flinfo->fn_mcxt;
-
-	old = MemoryContextSwitchTo(context);
-
-	bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
-	result = (NumericAggState *) palloc0(sizeof(NumericAggState));
-	nbytes = VARSIZE(bytesin);
-
-	initStringInfo(&buf);
-	appendBinaryStringInfo(&buf, VARDATA(bytesin), nbytes);
-
-	result->agg_context = CurrentMemoryContext;
-	result->calcSumX2 = pq_getmsgint(&buf, 1);
-	result->N = pq_getmsgint64(&buf);
-	result->maxScale = pq_getmsgint(&buf, sizeof(int));
-	result->maxScaleCount = pq_getmsgint64(&buf);
-	result->NaNcount = pq_getmsgint64(&buf);
-
-	result->sumX.ndigits = pq_getmsgint(&buf, sizeof(int));
-	result->sumX.weight = pq_getmsgint(&buf, sizeof(int));
-	result->sumX.sign = pq_getmsgint(&buf, sizeof(int));
-	result->sumX.dscale = pq_getmsgint(&buf, sizeof(int));
-	digitssize = result->sumX.ndigits * sizeof(NumericDigit);
-	result->sumX.digits = palloc0(digitssize);
-	for (i=0; i<result->sumX.ndigits; i++)
-		result->sumX.digits[i] = pq_getmsgint(&buf, sizeof(NumericDigit));
-
-	result->sumX2.ndigits = pq_getmsgint(&buf, sizeof(int));
-	result->sumX2.weight = pq_getmsgint(&buf, sizeof(int));
-	result->sumX2.sign = pq_getmsgint(&buf, sizeof(int));
-	result->sumX2.dscale = pq_getmsgint(&buf, sizeof(int));
-	digitssize = result->sumX2.ndigits * sizeof(NumericDigit);
-	result->sumX2.digits = palloc0(digitssize);
-	for (i=0; i<result->sumX2.ndigits; i++)
-		result->sumX2.digits[i] = pq_getmsgint(&buf, sizeof(NumericDigit));
-
-	MemoryContextSwitchTo(old);
-
-	PG_RETURN_POINTER(result);
-}
-
-/*
- * naggstatesend() -
- *
- *	Output function for numeric aggregation states, used by CQ workers to
- *	send their transition states to a combiner process
- */
-Datum
-naggstatesend(PG_FUNCTION_ARGS)
-{
-	NumericAggState *nagg = (NumericAggState *) PG_GETARG_POINTER(0);
-	StringInfoData buf;
-	bytea *result;
-	int nbytes;
-	int i;
-
-	initStringInfo(&buf);
-
-	pq_sendint(&buf, nagg->calcSumX2, sizeof(bool));
-	pq_sendint64(&buf, nagg->N);
-	pq_sendint(&buf, nagg->maxScale, sizeof(int));
-	pq_sendint64(&buf, nagg->maxScaleCount);
-	pq_sendint64(&buf, nagg->NaNcount);
-
-	pq_sendint(&buf, nagg->sumX.ndigits, sizeof(int));
-	pq_sendint(&buf, nagg->sumX.weight, sizeof(int));
-	pq_sendint(&buf, nagg->sumX.sign, sizeof(int));
-	pq_sendint(&buf, nagg->sumX.dscale, sizeof(int));
-	for (i=0; i<nagg->sumX.ndigits; i++)
-		pq_sendint(&buf,  nagg->sumX.digits[i], sizeof(NumericDigit));
-
-	pq_sendint(&buf, nagg->sumX2.ndigits, sizeof(int));
-	pq_sendint(&buf, nagg->sumX2.weight, sizeof(int));
-	pq_sendint(&buf, nagg->sumX2.sign, sizeof(int));
-	pq_sendint(&buf, nagg->sumX2.dscale, sizeof(int));
-	for (i=0; i<nagg->sumX2.ndigits; i++)
-		pq_sendint(&buf,  nagg->sumX2.digits[i], sizeof(NumericDigit));
-
-	nbytes = buf.len - buf.cursor;
-	result = (bytea *) palloc(nbytes + VARHDRSZ);
-	SET_VARSIZE(result, nbytes + VARHDRSZ);
-
-	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
-
-	PG_RETURN_BYTEA_P(result);
-}
 
 /*
  * numeric_in() -
@@ -1366,6 +1308,122 @@ numeric_floor(PG_FUNCTION_ARGS)
 	PG_RETURN_NUMERIC(res);
 }
 
+
+/*
+ * generate_series_numeric() -
+ *
+ *	Generate series of numeric.
+ */
+Datum
+generate_series_numeric(PG_FUNCTION_ARGS)
+{
+	return generate_series_step_numeric(fcinfo);
+}
+
+Datum
+generate_series_step_numeric(PG_FUNCTION_ARGS)
+{
+	generate_series_numeric_fctx *fctx;
+	FuncCallContext *funcctx;
+	MemoryContext oldcontext;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		Numeric		start_num = PG_GETARG_NUMERIC(0);
+		Numeric		stop_num = PG_GETARG_NUMERIC(1);
+		NumericVar	steploc = const_one;
+
+		/* handle NaN in start and stop values */
+		if (NUMERIC_IS_NAN(start_num))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("start value cannot be NaN")));
+
+		if (NUMERIC_IS_NAN(stop_num))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("stop value cannot be NaN")));
+
+		/* see if we were given an explicit step size */
+		if (PG_NARGS() == 3)
+		{
+			Numeric		step_num = PG_GETARG_NUMERIC(2);
+
+			if (NUMERIC_IS_NAN(step_num))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("step size cannot be NaN")));
+
+			init_var_from_num(step_num, &steploc);
+
+			if (cmp_var(&steploc, &const_zero) == 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("step size cannot equal zero")));
+		}
+
+		/* create a function context for cross-call persistence */
+		funcctx = SRF_FIRSTCALL_INIT();
+
+		/*
+		 * Switch to memory context appropriate for multiple function calls.
+		 */
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		/* allocate memory for user context */
+		fctx = (generate_series_numeric_fctx *)
+			palloc(sizeof(generate_series_numeric_fctx));
+
+		/*
+		 * Use fctx to keep state from call to call. Seed current with the
+		 * original start value. We must copy the start_num and stop_num
+		 * values rather than pointing to them, since we may have detoasted
+		 * them in the per-call context.
+		 */
+		init_var(&fctx->current);
+		init_var(&fctx->stop);
+		init_var(&fctx->step);
+
+		set_var_from_num(start_num, &fctx->current);
+		set_var_from_num(stop_num, &fctx->stop);
+		set_var_from_var(&steploc, &fctx->step);
+
+		funcctx->user_fctx = fctx;
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	/* stuff done on every call of the function */
+	funcctx = SRF_PERCALL_SETUP();
+
+	/*
+	 * Get the saved state and use current state as the result of this
+	 * iteration.
+	 */
+	fctx = funcctx->user_fctx;
+
+	if ((fctx->step.sign == NUMERIC_POS &&
+		 cmp_var(&fctx->current, &fctx->stop) <= 0) ||
+		(fctx->step.sign == NUMERIC_NEG &&
+		 cmp_var(&fctx->current, &fctx->stop) >= 0))
+	{
+		Numeric		result = make_result(&fctx->current);
+
+		/* switch to memory context appropriate for iteration calculation */
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		/* increment current in preparation for next iteration */
+		add_var(&fctx->current, &fctx->step, &fctx->current);
+		MemoryContextSwitchTo(oldcontext);
+
+		/* do when there is more left to send */
+		SRF_RETURN_NEXT(funcctx, NumericGetDatum(result));
+	}
+	else
+		/* do when there is no more left */
+		SRF_RETURN_DONE(funcctx);
+}
+
+
 /*
  * Implements the numeric version of the width_bucket() function
  * defined by SQL2003. See also width_bucket_float8().
@@ -1406,7 +1464,7 @@ width_bucket_numeric(PG_FUNCTION_ARGS)
 	init_var(&count_var);
 
 	/* Convert 'count' to a numeric, for ease of use later */
-	int8_to_numericvar((int64) count, &count_var);
+	int64_to_numericvar((int64) count, &count_var);
 
 	switch (cmp_numerics(bound1, bound2))
 	{
@@ -1439,7 +1497,7 @@ width_bucket_numeric(PG_FUNCTION_ARGS)
 	}
 
 	/* if result exceeds the range of a legal int4, we ereport here */
-	result = numericvar_to_int4(&result_var);
+	result = numericvar_to_int32(&result_var);
 
 	free_var(&count_var);
 	free_var(&result_var);
@@ -1496,9 +1554,428 @@ compute_bucket(Numeric operand, Numeric bound1, Numeric bound2,
  * Note: btree indexes need these routines not to leak memory; therefore,
  * be careful to free working copies of toasted datums.  Most places don't
  * need to be so careful.
+ *
+ * Sort support:
+ *
+ * We implement the sortsupport strategy routine in order to get the benefit of
+ * abbreviation. The ordinary numeric comparison can be quite slow as a result
+ * of palloc/pfree cycles (due to detoasting packed values for alignment);
+ * while this could be worked on itself, the abbreviation strategy gives more
+ * speedup in many common cases.
+ *
+ * Two different representations are used for the abbreviated form, one in
+ * int32 and one in int64, whichever fits into a by-value Datum.  In both cases
+ * the representation is negated relative to the original value, because we use
+ * the largest negative value for NaN, which sorts higher than other values. We
+ * convert the absolute value of the numeric to a 31-bit or 63-bit positive
+ * value, and then negate it if the original number was positive.
+ *
+ * We abort the abbreviation process if the abbreviation cardinality is below
+ * 0.01% of the row count (1 per 10k non-null rows).  The actual break-even
+ * point is somewhat below that, perhaps 1 per 30k (at 1 per 100k there's a
+ * very small penalty), but we don't want to build up too many abbreviated
+ * values before first testing for abort, so we take the slightly pessimistic
+ * number.  We make no attempt to estimate the cardinality of the real values,
+ * since it plays no part in the cost model here (if the abbreviation is equal,
+ * the cost of comparing equal and unequal underlying values is comparable).
+ * We discontinue even checking for abort (saving us the hashing overhead) if
+ * the estimated cardinality gets to 100k; that would be enough to support many
+ * billions of rows while doing no worse than breaking even.
+ *
  * ----------------------------------------------------------------------
  */
 
+/*
+ * Sort support strategy routine.
+ */
+Datum
+numeric_sortsupport(PG_FUNCTION_ARGS)
+{
+	SortSupport ssup = (SortSupport) PG_GETARG_POINTER(0);
+
+	ssup->comparator = numeric_fast_cmp;
+
+	if (ssup->abbreviate)
+	{
+		NumericSortSupport *nss;
+		MemoryContext oldcontext = MemoryContextSwitchTo(ssup->ssup_cxt);
+
+		nss = palloc(sizeof(NumericSortSupport));
+
+		/*
+		 * palloc a buffer for handling unaligned packed values in addition to
+		 * the support struct
+		 */
+		nss->buf = palloc(VARATT_SHORT_MAX + VARHDRSZ + 1);
+
+		nss->input_count = 0;
+		nss->estimating = true;
+		initHyperLogLog(&nss->abbr_card, 10);
+
+		ssup->ssup_extra = nss;
+
+		ssup->abbrev_full_comparator = ssup->comparator;
+		ssup->comparator = numeric_cmp_abbrev;
+		ssup->abbrev_converter = numeric_abbrev_convert;
+		ssup->abbrev_abort = numeric_abbrev_abort;
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * Abbreviate a numeric datum, handling NaNs and detoasting
+ * (must not leak memory!)
+ */
+static Datum
+numeric_abbrev_convert(Datum original_datum, SortSupport ssup)
+{
+	NumericSortSupport *nss = ssup->ssup_extra;
+	void	   *original_varatt = PG_DETOAST_DATUM_PACKED(original_datum);
+	Numeric		value;
+	Datum		result;
+
+	nss->input_count += 1;
+
+	/*
+	 * This is to handle packed datums without needing a palloc/pfree cycle;
+	 * we keep and reuse a buffer large enough to handle any short datum.
+	 */
+	if (VARATT_IS_SHORT(original_varatt))
+	{
+		void	   *buf = nss->buf;
+		Size		sz = VARSIZE_SHORT(original_varatt) - VARHDRSZ_SHORT;
+
+		Assert(sz <= VARATT_SHORT_MAX - VARHDRSZ_SHORT);
+
+		SET_VARSIZE(buf, VARHDRSZ + sz);
+		memcpy(VARDATA(buf), VARDATA_SHORT(original_varatt), sz);
+
+		value = (Numeric) buf;
+	}
+	else
+		value = (Numeric) original_varatt;
+
+	if (NUMERIC_IS_NAN(value))
+	{
+		result = NUMERIC_ABBREV_NAN;
+	}
+	else
+	{
+		NumericVar	var;
+
+		init_var_from_num(value, &var);
+
+		result = numeric_abbrev_convert_var(&var, nss);
+	}
+
+	/* should happen only for external/compressed toasts */
+	if ((Pointer) original_varatt != DatumGetPointer(original_datum))
+		pfree(original_varatt);
+
+	return result;
+}
+
+/*
+ * Consider whether to abort abbreviation.
+ *
+ * We pay no attention to the cardinality of the non-abbreviated data. There is
+ * no reason to do so: unlike text, we have no fast check for equal values, so
+ * we pay the full overhead whenever the abbreviations are equal regardless of
+ * whether the underlying values are also equal.
+ */
+static bool
+numeric_abbrev_abort(int memtupcount, SortSupport ssup)
+{
+	NumericSortSupport *nss = ssup->ssup_extra;
+	double		abbr_card;
+
+	if (memtupcount < 10000 || nss->input_count < 10000 || !nss->estimating)
+		return false;
+
+	abbr_card = estimateHyperLogLog(&nss->abbr_card);
+
+	/*
+	 * If we have >100k distinct values, then even if we were sorting many
+	 * billion rows we'd likely still break even, and the penalty of undoing
+	 * that many rows of abbrevs would probably not be worth it. Stop even
+	 * counting at that point.
+	 */
+	if (abbr_card > 100000.0)
+	{
+#ifdef TRACE_SORT
+		if (trace_sort)
+			elog(LOG,
+				 "numeric_abbrev: estimation ends at cardinality %f"
+				 " after " INT64_FORMAT " values (%d rows)",
+				 abbr_card, nss->input_count, memtupcount);
+#endif
+		nss->estimating = false;
+		return false;
+	}
+
+	/*
+	 * Target minimum cardinality is 1 per ~10k of non-null inputs.  (The
+	 * break even point is somewhere between one per 100k rows, where
+	 * abbreviation has a very slight penalty, and 1 per 10k where it wins by
+	 * a measurable percentage.)  We use the relatively pessimistic 10k
+	 * threshold, and add a 0.5 row fudge factor, because it allows us to
+	 * abort earlier on genuinely pathological data where we've had exactly
+	 * one abbreviated value in the first 10k (non-null) rows.
+	 */
+	if (abbr_card < nss->input_count / 10000.0 + 0.5)
+	{
+#ifdef TRACE_SORT
+		if (trace_sort)
+			elog(LOG,
+				 "numeric_abbrev: aborting abbreviation at cardinality %f"
+			   " below threshold %f after " INT64_FORMAT " values (%d rows)",
+				 abbr_card, nss->input_count / 10000.0 + 0.5,
+				 nss->input_count, memtupcount);
+#endif
+		return true;
+	}
+
+#ifdef TRACE_SORT
+	if (trace_sort)
+		elog(LOG,
+			 "numeric_abbrev: cardinality %f"
+			 " after " INT64_FORMAT " values (%d rows)",
+			 abbr_card, nss->input_count, memtupcount);
+#endif
+
+	return false;
+}
+
+/*
+ * Non-fmgr interface to the comparison routine to allow sortsupport to elide
+ * the fmgr call.  The saving here is small given how slow numeric comparisons
+ * are, but it is a required part of the sort support API when abbreviations
+ * are performed.
+ *
+ * Two palloc/pfree cycles could be saved here by using persistent buffers for
+ * aligning short-varlena inputs, but this has not so far been considered to
+ * be worth the effort.
+ */
+static int
+numeric_fast_cmp(Datum x, Datum y, SortSupport ssup)
+{
+	Numeric		nx = DatumGetNumeric(x);
+	Numeric		ny = DatumGetNumeric(y);
+	int			result;
+
+	result = cmp_numerics(nx, ny);
+
+	if ((Pointer) nx != DatumGetPointer(x))
+		pfree(nx);
+	if ((Pointer) ny != DatumGetPointer(y))
+		pfree(ny);
+
+	return result;
+}
+
+/*
+ * Compare abbreviations of values. (Abbreviations may be equal where the true
+ * values differ, but if the abbreviations differ, they must reflect the
+ * ordering of the true values.)
+ */
+static int
+numeric_cmp_abbrev(Datum x, Datum y, SortSupport ssup)
+{
+	/*
+	 * NOTE WELL: this is intentionally backwards, because the abbreviation is
+	 * negated relative to the original value, to handle NaN.
+	 */
+	if (DatumGetNumericAbbrev(x) < DatumGetNumericAbbrev(y))
+		return 1;
+	if (DatumGetNumericAbbrev(x) > DatumGetNumericAbbrev(y))
+		return -1;
+	return 0;
+}
+
+/*
+ * Abbreviate a NumericVar according to the available bit size.
+ *
+ * The 31-bit value is constructed as:
+ *
+ *	0 + 7bits digit weight + 24 bits digit value
+ *
+ * where the digit weight is in single decimal digits, not digit words, and
+ * stored in excess-44 representation[1]. The 24-bit digit value is the 7 most
+ * significant decimal digits of the value converted to binary. Values whose
+ * weights would fall outside the representable range are rounded off to zero
+ * (which is also used to represent actual zeros) or to 0x7FFFFFFF (which
+ * otherwise cannot occur). Abbreviation therefore fails to gain any advantage
+ * where values are outside the range 10^-44 to 10^83, which is not considered
+ * to be a serious limitation, or when values are of the same magnitude and
+ * equal in the first 7 decimal digits, which is considered to be an
+ * unavoidable limitation given the available bits. (Stealing three more bits
+ * to compare another digit would narrow the range of representable weights by
+ * a factor of 8, which starts to look like a real limiting factor.)
+ *
+ * (The value 44 for the excess is essentially arbitrary)
+ *
+ * The 63-bit value is constructed as:
+ *
+ *	0 + 7bits weight + 4 x 14-bit packed digit words
+ *
+ * The weight in this case is again stored in excess-44, but this time it is
+ * the original weight in digit words (i.e. powers of 10000). The first four
+ * digit words of the value (if present; trailing zeros are assumed as needed)
+ * are packed into 14 bits each to form the rest of the value. Again,
+ * out-of-range values are rounded off to 0 or 0x7FFFFFFFFFFFFFFF. The
+ * representable range in this case is 10^-176 to 10^332, which is considered
+ * to be good enough for all practical purposes, and comparison of 4 words
+ * means that at least 13 decimal digits are compared, which is considered to
+ * be a reasonable compromise between effectiveness and efficiency in computing
+ * the abbreviation.
+ *
+ * (The value 44 for the excess is even more arbitrary here, it was chosen just
+ * to match the value used in the 31-bit case)
+ *
+ * [1] - Excess-k representation means that the value is offset by adding 'k'
+ * and then treated as unsigned, so the smallest representable value is stored
+ * with all bits zero. This allows simple comparisons to work on the composite
+ * value.
+ */
+
+#if NUMERIC_ABBREV_BITS == 64
+
+static Datum
+numeric_abbrev_convert_var(NumericVar *var, NumericSortSupport *nss)
+{
+	int			ndigits = var->ndigits;
+	int			weight = var->weight;
+	int64		result;
+
+	if (ndigits == 0 || weight < -44)
+	{
+		result = 0;
+	}
+	else if (weight > 83)
+	{
+		result = PG_INT64_MAX;
+	}
+	else
+	{
+		result = ((int64) (weight + 44) << 56);
+
+		switch (ndigits)
+		{
+			default:
+				result |= ((int64) var->digits[3]);
+				/* FALLTHROUGH */
+			case 3:
+				result |= ((int64) var->digits[2]) << 14;
+				/* FALLTHROUGH */
+			case 2:
+				result |= ((int64) var->digits[1]) << 28;
+				/* FALLTHROUGH */
+			case 1:
+				result |= ((int64) var->digits[0]) << 42;
+				break;
+		}
+	}
+
+	/* the abbrev is negated relative to the original */
+	if (var->sign == NUMERIC_POS)
+		result = -result;
+
+	if (nss->estimating)
+	{
+		uint32		tmp = ((uint32) result
+						   ^ (uint32) ((uint64) result >> 32));
+
+		addHyperLogLog(&nss->abbr_card, DatumGetUInt32(hash_uint32(tmp)));
+	}
+
+	return NumericAbbrevGetDatum(result);
+}
+
+#endif   /* NUMERIC_ABBREV_BITS == 64 */
+
+#if NUMERIC_ABBREV_BITS == 32
+
+static Datum
+numeric_abbrev_convert_var(NumericVar *var, NumericSortSupport *nss)
+{
+	int			ndigits = var->ndigits;
+	int			weight = var->weight;
+	int32		result;
+
+	if (ndigits == 0 || weight < -11)
+	{
+		result = 0;
+	}
+	else if (weight > 20)
+	{
+		result = PG_INT32_MAX;
+	}
+	else
+	{
+		NumericDigit nxt1 = (ndigits > 1) ? var->digits[1] : 0;
+
+		weight = (weight + 11) * 4;
+
+		result = var->digits[0];
+
+		/*
+		 * "result" now has 1 to 4 nonzero decimal digits. We pack in more
+		 * digits to make 7 in total (largest we can fit in 24 bits)
+		 */
+
+		if (result > 999)
+		{
+			/* already have 4 digits, add 3 more */
+			result = (result * 1000) + (nxt1 / 10);
+			weight += 3;
+		}
+		else if (result > 99)
+		{
+			/* already have 3 digits, add 4 more */
+			result = (result * 10000) + nxt1;
+			weight += 2;
+		}
+		else if (result > 9)
+		{
+			NumericDigit nxt2 = (ndigits > 2) ? var->digits[2] : 0;
+
+			/* already have 2 digits, add 5 more */
+			result = (result * 100000) + (nxt1 * 10) + (nxt2 / 1000);
+			weight += 1;
+		}
+		else
+		{
+			NumericDigit nxt2 = (ndigits > 2) ? var->digits[2] : 0;
+
+			/* already have 1 digit, add 6 more */
+			result = (result * 1000000) + (nxt1 * 100) + (nxt2 / 100);
+		}
+
+		result = result | (weight << 24);
+	}
+
+	/* the abbrev is negated relative to the original */
+	if (var->sign == NUMERIC_POS)
+		result = -result;
+
+	if (nss->estimating)
+	{
+		uint32		tmp = (uint32) result;
+
+		addHyperLogLog(&nss->abbr_card, DatumGetUInt32(hash_uint32(tmp)));
+	}
+
+	return NumericAbbrevGetDatum(result);
+}
+
+#endif   /* NUMERIC_ABBREV_BITS == 32 */
+
+/*
+ * Ordinary (non-sortsupport) comparisons follow.
+ */
 
 Datum
 numeric_cmp(PG_FUNCTION_ARGS)
@@ -2075,14 +2552,14 @@ numeric_fac(PG_FUNCTION_ARGS)
 	init_var(&fact);
 	init_var(&result);
 
-	int8_to_numericvar(num, &result);
+	int64_to_numericvar(num, &result);
 
 	for (num = num - 1; num > 1; num--)
 	{
 		/* this loop can take awhile, so allow it to be interrupted */
 		CHECK_FOR_INTERRUPTS();
 
-		int8_to_numericvar(num, &fact);
+		int64_to_numericvar(num, &fact);
 
 		mul_var(&result, &fact, &result, 0);
 	}
@@ -2380,7 +2857,7 @@ int4_numeric(PG_FUNCTION_ARGS)
 
 	init_var(&result);
 
-	int8_to_numericvar((int64) val, &result);
+	int64_to_numericvar((int64) val, &result);
 
 	res = make_result(&result);
 
@@ -2405,7 +2882,7 @@ numeric_int4(PG_FUNCTION_ARGS)
 
 	/* Convert to variable format, then convert to int4 */
 	init_var_from_num(num, &x);
-	result = numericvar_to_int4(&x);
+	result = numericvar_to_int32(&x);
 	PG_RETURN_INT32(result);
 }
 
@@ -2415,12 +2892,12 @@ numeric_int4(PG_FUNCTION_ARGS)
  * ereport(). The input NumericVar is *not* free'd.
  */
 static int32
-numericvar_to_int4(NumericVar *var)
+numericvar_to_int32(NumericVar *var)
 {
 	int32		result;
 	int64		val;
 
-	if (!numericvar_to_int8(var, &val))
+	if (!numericvar_to_int64(var, &val))
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 				 errmsg("integer out of range")));
@@ -2446,7 +2923,7 @@ int8_numeric(PG_FUNCTION_ARGS)
 
 	init_var(&result);
 
-	int8_to_numericvar(val, &result);
+	int64_to_numericvar(val, &result);
 
 	res = make_result(&result);
 
@@ -2472,7 +2949,7 @@ numeric_int8(PG_FUNCTION_ARGS)
 	/* Convert to variable format and thence to int8 */
 	init_var_from_num(num, &x);
 
-	if (!numericvar_to_int8(&x, &result))
+	if (!numericvar_to_int64(&x, &result))
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 				 errmsg("bigint out of range")));
@@ -2490,7 +2967,7 @@ int2_numeric(PG_FUNCTION_ARGS)
 
 	init_var(&result);
 
-	int8_to_numericvar((int64) val, &result);
+	int64_to_numericvar((int64) val, &result);
 
 	res = make_result(&result);
 
@@ -2517,7 +2994,7 @@ numeric_int2(PG_FUNCTION_ARGS)
 	/* Convert to variable format and thence to int8 */
 	init_var_from_num(num, &x);
 
-	if (!numericvar_to_int8(&x, &val))
+	if (!numericvar_to_int64(&x, &val))
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 				 errmsg("smallint out of range")));
@@ -2652,8 +3129,23 @@ numeric_float4(PG_FUNCTION_ARGS)
  * Actually, it's a pointer to a NumericAggState allocated in the aggregate
  * context.  The digit buffers for the NumericVars will be there too.
  *
+ * On platforms which support 128-bit integers some aggregates instead use a
+ * 128-bit integer based transition datatype to speed up calculations.
+ *
  * ----------------------------------------------------------------------
  */
+
+typedef struct NumericAggState
+{
+	bool		calcSumX2;		/* if true, calculate sumX2 */
+	MemoryContext agg_context;	/* context we're calculating in */
+	int64		N;				/* count of processed numbers */
+	NumericVar	sumX;			/* sum of processed numbers */
+	NumericVar	sumX2;			/* sum of squares of processed numbers */
+	int			maxScale;		/* maximum scale seen so far */
+	int64		maxScaleCount;	/* number of values seen with maximum scale */
+	int64		NaNcount;		/* count of NaN values (not included in N!) */
+} NumericAggState;
 
 /*
  * Prepare state data for a numeric aggregate function that needs to compute
@@ -2874,34 +3366,6 @@ numeric_avg_accum(PG_FUNCTION_ARGS)
 }
 
 /*
- * Combines two NumericAggStates into one
- */
-Datum
-numeric_combine(PG_FUNCTION_ARGS)
-{
-	NumericAggState  *state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
-	NumericAggState	 *incoming = (NumericAggState *) PG_GETARG_POINTER(1);
-	MemoryContext old;
-
-	if (state == NULL)
-		state = makeNumericAggState(fcinfo, false);
-
-	old = MemoryContextSwitchTo(state->agg_context);
-
-	state->N += incoming->N;
-	state->maxScale = Max(state->maxScale, incoming->maxScale);
-	state->maxScaleCount += incoming->maxScaleCount;
-	state->NaNcount += incoming->NaNcount;
-
-	add_var(&(state->sumX), &(incoming->sumX), &(state->sumX));
-	add_var(&(state->sumX2), &(incoming->sumX2), &(state->sumX2));
-
-	MemoryContextSwitchTo(old);
-
-	PG_RETURN_POINTER(state);
-}
-
-/*
  * Generic inverse transition function for numeric aggregates
  * (with or without requirement for X^2).
  */
@@ -2928,32 +3392,107 @@ numeric_accum_inv(PG_FUNCTION_ARGS)
 
 
 /*
- * Integer data types all use Numeric accumulators to share code and
- * avoid risk of overflow.  For int2 and int4 inputs, Numeric accumulation
- * is overkill for the N and sum(X) values, but definitely not overkill
- * for the sum(X*X) value.  Hence, we use int2_accum and int4_accum only
- * for stddev/variance --- there are faster special-purpose accumulator
- * routines for SUM and AVG of these datatypes.
+ * Integer data types in general use Numeric accumulators to share code
+ * and avoid risk of overflow.
+ *
+ * However for performance reasons optimized special-purpose accumulator
+ * routines are used when possible.
+ *
+ * On platforms with 128-bit integer support, the 128-bit routines will be
+ * used when sum(X) or sum(X*X) fit into 128-bit.
+ *
+ * For 16 and 32 bit inputs, the N and sum(X) fit into 64-bit so the 64-bit
+ * accumulators will be used for SUM and AVG of these data types.
  */
+
+#ifdef HAVE_INT128
+typedef struct Int128AggState
+{
+	bool		calcSumX2;		/* if true, calculate sumX2 */
+	int64		N;				/* count of processed numbers */
+	int128		sumX;			/* sum of processed numbers */
+	int128		sumX2;			/* sum of squares of processed numbers */
+} Int128AggState;
+
+/*
+ * Prepare state data for a 128-bit aggregate function that needs to compute
+ * sum, count and optionally sum of squares of the input.
+ */
+static Int128AggState *
+makeInt128AggState(FunctionCallInfo fcinfo, bool calcSumX2)
+{
+	Int128AggState *state;
+	MemoryContext agg_context;
+	MemoryContext old_context;
+
+	if (!AggCheckCallContext(fcinfo, &agg_context))
+		elog(ERROR, "aggregate function called in non-aggregate context");
+
+	old_context = MemoryContextSwitchTo(agg_context);
+
+	state = (Int128AggState *) palloc0(sizeof(Int128AggState));
+	state->calcSumX2 = calcSumX2;
+
+	MemoryContextSwitchTo(old_context);
+
+	return state;
+}
+
+/*
+ * Accumulate a new input value for 128-bit aggregate functions.
+ */
+static void
+do_int128_accum(Int128AggState *state, int128 newval)
+{
+	if (state->calcSumX2)
+		state->sumX2 += newval * newval;
+
+	state->sumX += newval;
+	state->N++;
+}
+
+/*
+ * Remove an input value from the aggregated state.
+ */
+static void
+do_int128_discard(Int128AggState *state, int128 newval)
+{
+	if (state->calcSumX2)
+		state->sumX2 -= newval * newval;
+
+	state->sumX -= newval;
+	state->N--;
+}
+
+typedef Int128AggState PolyNumAggState;
+#define makePolyNumAggState makeInt128AggState
+#else
+typedef NumericAggState PolyNumAggState;
+#define makePolyNumAggState makeNumericAggState
+#endif
 
 Datum
 int2_accum(PG_FUNCTION_ARGS)
 {
-	NumericAggState *state;
+	PolyNumAggState *state;
 
-	state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
 
 	/* Create the state data on the first call */
 	if (state == NULL)
-		state = makeNumericAggState(fcinfo, true);
+		state = makePolyNumAggState(fcinfo, true);
 
 	if (!PG_ARGISNULL(1))
 	{
+#ifdef HAVE_INT128
+		do_int128_accum(state, (int128) PG_GETARG_INT16(1));
+#else
 		Numeric		newval;
 
 		newval = DatumGetNumeric(DirectFunctionCall1(int2_numeric,
 													 PG_GETARG_DATUM(1)));
 		do_numeric_accum(state, newval);
+#endif
 	}
 
 	PG_RETURN_POINTER(state);
@@ -2962,21 +3501,25 @@ int2_accum(PG_FUNCTION_ARGS)
 Datum
 int4_accum(PG_FUNCTION_ARGS)
 {
-	NumericAggState *state;
+	PolyNumAggState *state;
 
-	state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
 
 	/* Create the state data on the first call */
 	if (state == NULL)
-		state = makeNumericAggState(fcinfo, true);
+		state = makePolyNumAggState(fcinfo, true);
 
 	if (!PG_ARGISNULL(1))
 	{
+#ifdef HAVE_INT128
+		do_int128_accum(state, (int128) PG_GETARG_INT32(1));
+#else
 		Numeric		newval;
 
 		newval = DatumGetNumeric(DirectFunctionCall1(int4_numeric,
 													 PG_GETARG_DATUM(1)));
 		do_numeric_accum(state, newval);
+#endif
 	}
 
 	PG_RETURN_POINTER(state);
@@ -3011,21 +3554,25 @@ int8_accum(PG_FUNCTION_ARGS)
 Datum
 int8_avg_accum(PG_FUNCTION_ARGS)
 {
-	NumericAggState *state;
+	PolyNumAggState *state;
 
-	state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
 
 	/* Create the state data on the first call */
 	if (state == NULL)
-		state = makeNumericAggState(fcinfo, false);
+		state = makePolyNumAggState(fcinfo, false);
 
 	if (!PG_ARGISNULL(1))
 	{
+#ifdef HAVE_INT128
+		do_int128_accum(state, (int128) PG_GETARG_INT64(1));
+#else
 		Numeric		newval;
 
 		newval = DatumGetNumeric(DirectFunctionCall1(int8_numeric,
 													 PG_GETARG_DATUM(1)));
 		do_numeric_accum(state, newval);
+#endif
 	}
 
 	PG_RETURN_POINTER(state);
@@ -3039,9 +3586,9 @@ int8_avg_accum(PG_FUNCTION_ARGS)
 Datum
 int2_accum_inv(PG_FUNCTION_ARGS)
 {
-	NumericAggState *state;
+	PolyNumAggState *state;
 
-	state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
 
 	/* Should not get here with no state */
 	if (state == NULL)
@@ -3049,6 +3596,9 @@ int2_accum_inv(PG_FUNCTION_ARGS)
 
 	if (!PG_ARGISNULL(1))
 	{
+#ifdef HAVE_INT128
+		do_int128_discard(state, (int128) PG_GETARG_INT16(1));
+#else
 		Numeric		newval;
 
 		newval = DatumGetNumeric(DirectFunctionCall1(int2_numeric,
@@ -3057,6 +3607,7 @@ int2_accum_inv(PG_FUNCTION_ARGS)
 		/* Should never fail, all inputs have dscale 0 */
 		if (!do_numeric_discard(state, newval))
 			elog(ERROR, "do_numeric_discard failed unexpectedly");
+#endif
 	}
 
 	PG_RETURN_POINTER(state);
@@ -3065,9 +3616,9 @@ int2_accum_inv(PG_FUNCTION_ARGS)
 Datum
 int4_accum_inv(PG_FUNCTION_ARGS)
 {
-	NumericAggState *state;
+	PolyNumAggState *state;
 
-	state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
 
 	/* Should not get here with no state */
 	if (state == NULL)
@@ -3075,6 +3626,9 @@ int4_accum_inv(PG_FUNCTION_ARGS)
 
 	if (!PG_ARGISNULL(1))
 	{
+#ifdef HAVE_INT128
+		do_int128_discard(state, (int128) PG_GETARG_INT32(1));
+#else
 		Numeric		newval;
 
 		newval = DatumGetNumeric(DirectFunctionCall1(int4_numeric,
@@ -3083,6 +3637,7 @@ int4_accum_inv(PG_FUNCTION_ARGS)
 		/* Should never fail, all inputs have dscale 0 */
 		if (!do_numeric_discard(state, newval))
 			elog(ERROR, "do_numeric_discard failed unexpectedly");
+#endif
 	}
 
 	PG_RETURN_POINTER(state);
@@ -3112,6 +3667,95 @@ int8_accum_inv(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_POINTER(state);
+}
+
+Datum
+int8_avg_accum_inv(PG_FUNCTION_ARGS)
+{
+	PolyNumAggState *state;
+
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
+
+	/* Should not get here with no state */
+	if (state == NULL)
+		elog(ERROR, "int8_avg_accum_inv called with NULL state");
+
+	if (!PG_ARGISNULL(1))
+	{
+#ifdef HAVE_INT128
+		do_int128_discard(state, (int128) PG_GETARG_INT64(1));
+#else
+		Numeric		newval;
+
+		newval = DatumGetNumeric(DirectFunctionCall1(int8_numeric,
+													 PG_GETARG_DATUM(1)));
+
+		/* Should never fail, all inputs have dscale 0 */
+		if (!do_numeric_discard(state, newval))
+			elog(ERROR, "do_numeric_discard failed unexpectedly");
+#endif
+	}
+
+	PG_RETURN_POINTER(state);
+}
+
+Datum
+numeric_poly_sum(PG_FUNCTION_ARGS)
+{
+#ifdef HAVE_INT128
+	PolyNumAggState *state;
+	Numeric		res;
+	NumericVar	result;
+
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
+
+	/* If there were no non-null inputs, return NULL */
+	if (state == NULL || state->N == 0)
+		PG_RETURN_NULL();
+
+	init_var(&result);
+
+	int128_to_numericvar(state->sumX, &result);
+
+	res = make_result(&result);
+
+	free_var(&result);
+
+	PG_RETURN_NUMERIC(res);
+#else
+	return numeric_sum(fcinfo);
+#endif
+}
+
+Datum
+numeric_poly_avg(PG_FUNCTION_ARGS)
+{
+#ifdef HAVE_INT128
+	PolyNumAggState *state;
+	NumericVar	result;
+	Datum		countd,
+				sumd;
+
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
+
+	/* If there were no non-null inputs, return NULL */
+	if (state == NULL || state->N == 0)
+		PG_RETURN_NULL();
+
+	init_var(&result);
+
+	int128_to_numericvar(state->sumX, &result);
+
+	countd = DirectFunctionCall1(int8_numeric,
+								 Int64GetDatumFast(state->N));
+	sumd = NumericGetDatum(make_result(&result));
+
+	free_var(&result);
+
+	PG_RETURN_DATUM(DirectFunctionCall2(numeric_div, sumd, countd));
+#else
+	return numeric_avg(fcinfo);
+#endif
 }
 
 Datum
@@ -3193,7 +3837,7 @@ numeric_stddev_internal(NumericAggState *state,
 	init_var(&vsumX);
 	init_var(&vsumX2);
 
-	int8_to_numericvar(state->N, &vN);
+	int64_to_numericvar(state->N, &vN);
 	set_var_from_var(&(state->sumX), &vsumX);
 	set_var_from_var(&(state->sumX2), &vsumX2);
 
@@ -3314,6 +3958,124 @@ numeric_stddev_pop(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	else
 		PG_RETURN_NUMERIC(res);
+}
+
+#ifdef HAVE_INT128
+static Numeric
+numeric_poly_stddev_internal(Int128AggState *state,
+							 bool variance, bool sample,
+							 bool *is_null)
+{
+	NumericAggState numstate;
+	Numeric		res;
+
+	init_var(&numstate.sumX);
+	init_var(&numstate.sumX2);
+	numstate.NaNcount = 0;
+	numstate.agg_context = NULL;
+
+	if (state)
+	{
+		numstate.N = state->N;
+		int128_to_numericvar(state->sumX, &numstate.sumX);
+		int128_to_numericvar(state->sumX2, &numstate.sumX2);
+	}
+	else
+	{
+		numstate.N = 0;
+	}
+
+	res = numeric_stddev_internal(&numstate, variance, sample, is_null);
+
+	free_var(&numstate.sumX);
+	free_var(&numstate.sumX2);
+
+	return res;
+}
+#endif
+
+Datum
+numeric_poly_var_samp(PG_FUNCTION_ARGS)
+{
+#ifdef HAVE_INT128
+	PolyNumAggState *state;
+	Numeric		res;
+	bool		is_null;
+
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
+
+	res = numeric_poly_stddev_internal(state, true, true, &is_null);
+
+	if (is_null)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_NUMERIC(res);
+#else
+	return numeric_var_samp(fcinfo);
+#endif
+}
+
+Datum
+numeric_poly_stddev_samp(PG_FUNCTION_ARGS)
+{
+#ifdef HAVE_INT128
+	PolyNumAggState *state;
+	Numeric		res;
+	bool		is_null;
+
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
+
+	res = numeric_poly_stddev_internal(state, false, true, &is_null);
+
+	if (is_null)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_NUMERIC(res);
+#else
+	return numeric_stddev_samp(fcinfo);
+#endif
+}
+
+Datum
+numeric_poly_var_pop(PG_FUNCTION_ARGS)
+{
+#ifdef HAVE_INT128
+	PolyNumAggState *state;
+	Numeric		res;
+	bool		is_null;
+
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
+
+	res = numeric_poly_stddev_internal(state, true, false, &is_null);
+
+	if (is_null)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_NUMERIC(res);
+#else
+	return numeric_var_pop(fcinfo);
+#endif
+}
+
+Datum
+numeric_poly_stddev_pop(PG_FUNCTION_ARGS)
+{
+#ifdef HAVE_INT128
+	PolyNumAggState *state;
+	Numeric		res;
+	bool		is_null;
+
+	state = PG_ARGISNULL(0) ? NULL : (PolyNumAggState *) PG_GETARG_POINTER(0);
+
+	res = numeric_poly_stddev_internal(state, false, false, &is_null);
+
+	if (is_null)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_NUMERIC(res);
+#else
+	return numeric_stddev_pop(fcinfo);
+#endif
 }
 
 /*
@@ -3487,45 +4249,6 @@ typedef struct Int8TransTypeData
 	int64		count;
 	int64		sum;
 } Int8TransTypeData;
-
-/*
- * Combines two array-based aggregation states into one
- */
-Datum
-int_avg_combine(PG_FUNCTION_ARGS)
-{
-	ArrayType  *collectarray;
-	ArrayType  *transarray = PG_GETARG_ARRAYTYPE_P(1);
-	Int8TransTypeData *collectdata;
-	Int8TransTypeData *transdata;
-
-	/*
-	 * If we're invoked by nodeAgg, we can cheat and modify our first
-	 * parameter in-place to reduce palloc overhead. Otherwise we need to make
-	 * a copy of it before scribbling on it.
-	 */
-	if (fcinfo->context &&
-		(IsA(fcinfo->context, AggState) ||
-		 IsA(fcinfo->context, WindowAggState)))
-		collectarray = PG_GETARG_ARRAYTYPE_P(0);
-	else
-		collectarray = PG_GETARG_ARRAYTYPE_P_COPY(0);
-
-	if (ARR_HASNULL(collectarray) ||
-		ARR_SIZE(collectarray) != ARR_OVERHEAD_NONULLS(1) + sizeof(Int8TransTypeData))
-		elog(ERROR, "expected 2-element int8 array");
-	collectdata = (Int8TransTypeData *) ARR_DATA_PTR(collectarray);
-
-	if (ARR_HASNULL(transarray) ||
-		ARR_SIZE(transarray) != ARR_OVERHEAD_NONULLS(1) + sizeof(Int8TransTypeData))
-		elog(ERROR, "expected 2-element int8 array");
-	transdata = (Int8TransTypeData *) ARR_DATA_PTR(transarray);
-
-	collectdata->count += transdata->count;
-	collectdata->sum += transdata->sum;
-
-	PG_RETURN_ARRAYTYPE_P(collectarray);
-}
 
 Datum
 int2_avg_accum(PG_FUNCTION_ARGS)
@@ -4046,7 +4769,9 @@ set_var_from_var(NumericVar *value, NumericVar *dest)
 
 	newbuf = digitbuf_alloc(value->ndigits + 1);
 	newbuf[0] = 0;				/* spare digit for rounding */
-	memcpy(newbuf + 1, value->digits, value->ndigits * sizeof(NumericDigit));
+	if (value->ndigits > 0)		/* else value->digits might be null */
+		memcpy(newbuf + 1, value->digits,
+			   value->ndigits * sizeof(NumericDigit));
 
 	digitbuf_free(dest->buf);
 
@@ -4367,8 +5092,9 @@ make_result(NumericVar *var)
 		result->choice.n_long.n_weight = weight;
 	}
 
-	memcpy(NUMERIC_DIGITS(result), digits, n * sizeof(NumericDigit));
 	Assert(NUMERIC_NDIGITS(result) == n);
+	if (n > 0)
+		memcpy(NUMERIC_DIGITS(result), digits, n * sizeof(NumericDigit));
 
 	/* Check for overflow of int16 fields */
 	if (NUMERIC_WEIGHT(result) != weight ||
@@ -4465,7 +5191,7 @@ apply_typmod(NumericVar *var, int32 typmod)
  * If overflow, return FALSE (no error is raised).  Return TRUE if okay.
  */
 static bool
-numericvar_to_int8(NumericVar *var, int64 *result)
+numericvar_to_int64(NumericVar *var, int64 *result)
 {
 	NumericDigit *digits;
 	int			ndigits;
@@ -4536,14 +5262,14 @@ numericvar_to_int8(NumericVar *var, int64 *result)
  * Convert int8 value to numeric.
  */
 static void
-int8_to_numericvar(int64 val, NumericVar *var)
+int64_to_numericvar(int64 val, NumericVar *var)
 {
 	uint64		uval,
 				newuval;
 	NumericDigit *ptr;
 	int			ndigits;
 
-	/* int8 can require at most 19 decimal digits; add one for safety */
+	/* int64 can require at most 19 decimal digits; add one for safety */
 	alloc_var(var, 20 / DEC_DIGITS);
 	if (val < 0)
 	{
@@ -4576,6 +5302,53 @@ int8_to_numericvar(int64 val, NumericVar *var)
 	var->ndigits = ndigits;
 	var->weight = ndigits - 1;
 }
+
+#ifdef HAVE_INT128
+/*
+ * Convert 128 bit integer to numeric.
+ */
+static void
+int128_to_numericvar(int128 val, NumericVar *var)
+{
+	uint128		uval,
+				newuval;
+	NumericDigit *ptr;
+	int			ndigits;
+
+	/* int128 can require at most 39 decimal digits; add one for safety */
+	alloc_var(var, 40 / DEC_DIGITS);
+	if (val < 0)
+	{
+		var->sign = NUMERIC_NEG;
+		uval = -val;
+	}
+	else
+	{
+		var->sign = NUMERIC_POS;
+		uval = val;
+	}
+	var->dscale = 0;
+	if (val == 0)
+	{
+		var->ndigits = 0;
+		var->weight = 0;
+		return;
+	}
+	ptr = var->digits + var->ndigits;
+	ndigits = 0;
+	do
+	{
+		ptr--;
+		ndigits++;
+		newuval = uval / NBASE;
+		*ptr = uval - newuval * NBASE;
+		uval = newuval;
+	} while (uval);
+	var->digits = ptr;
+	var->ndigits = ndigits;
+	var->weight = ndigits - 1;
+}
+#endif
 
 /*
  * Convert numeric to float8; if out of range, return +/- HUGE_VAL
@@ -5016,9 +5789,15 @@ mul_var(NumericVar *var1, NumericVar *var2, NumericVar *result,
 	 * to avoid normalizing carries immediately.
 	 *
 	 * maxdig tracks the maximum possible value of any dig[] entry; when this
-	 * threatens to exceed INT_MAX, we take the time to propagate carries. To
-	 * avoid overflow in maxdig itself, it actually represents the max
-	 * possible value divided by NBASE-1.
+	 * threatens to exceed INT_MAX, we take the time to propagate carries.
+	 * Furthermore, we need to ensure that overflow doesn't occur during the
+	 * carry propagation passes either.  The carry values could be as much as
+	 * INT_MAX/NBASE, so really we must normalize when digits threaten to
+	 * exceed INT_MAX - INT_MAX/NBASE.
+	 *
+	 * To avoid overflow in maxdig itself, it actually represents the max
+	 * possible value divided by NBASE-1, ie, at the top of the loop it is
+	 * known that no dig[] entry exceeds maxdig * (NBASE-1).
 	 */
 	dig = (int *) palloc0(res_ndigits * sizeof(int));
 	maxdig = 0;
@@ -5033,7 +5812,7 @@ mul_var(NumericVar *var1, NumericVar *var2, NumericVar *result,
 
 		/* Time to normalize? */
 		maxdig += var1digit;
-		if (maxdig > INT_MAX / (NBASE - 1))
+		if (maxdig > (INT_MAX - INT_MAX / NBASE) / (NBASE - 1))
 		{
 			/* Yes, do it */
 			carry = 0;
@@ -5481,8 +6260,14 @@ div_var_fast(NumericVar *var1, NumericVar *var2, NumericVar *result,
 	/*
 	 * maxdiv tracks the maximum possible absolute value of any div[] entry;
 	 * when this threatens to exceed INT_MAX, we take the time to propagate
-	 * carries.  To avoid overflow in maxdiv itself, it actually represents
-	 * the max possible abs. value divided by NBASE-1.
+	 * carries.  Furthermore, we need to ensure that overflow doesn't occur
+	 * during the carry propagation passes either.  The carry values may have
+	 * an absolute value as high as INT_MAX/NBASE + 1, so really we must
+	 * normalize when digits threaten to exceed INT_MAX - INT_MAX/NBASE - 1.
+	 *
+	 * To avoid overflow in maxdiv itself, it represents the max absolute
+	 * value divided by NBASE-1, ie, at the top of the loop it is known that
+	 * no div[] entry has an absolute value exceeding maxdiv * (NBASE-1).
 	 */
 	maxdiv = 1;
 
@@ -5508,7 +6293,7 @@ div_var_fast(NumericVar *var1, NumericVar *var2, NumericVar *result,
 		{
 			/* Do we need to normalize now? */
 			maxdiv += Abs(qdigit);
-			if (maxdiv > INT_MAX / (NBASE - 1))
+			if (maxdiv > (INT_MAX - INT_MAX / NBASE - 1) / (NBASE - 1))
 			{
 				/* Yes, do it */
 				carry = 0;
@@ -6183,7 +6968,7 @@ power_var(NumericVar *base, NumericVar *exp, NumericVar *result)
 		/* exact integer, but does it fit in int? */
 		int64		expval64;
 
-		if (numericvar_to_int8(exp, &expval64))
+		if (numericvar_to_int64(exp, &expval64))
 		{
 			int			expval = (int) expval64;
 
@@ -6819,4 +7604,177 @@ strip_var(NumericVar *var)
 
 	var->digits = digits;
 	var->ndigits = ndigits;
+}
+
+/*
+ * Combines two NumericAggStates into one
+ */
+Datum
+numeric_combine(PG_FUNCTION_ARGS)
+{
+	NumericAggState  *state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
+	NumericAggState	 *incoming = (NumericAggState *) PG_GETARG_POINTER(1);
+	MemoryContext old;
+
+	if (state == NULL)
+		state = makeNumericAggState(fcinfo, false);
+
+	old = MemoryContextSwitchTo(state->agg_context);
+
+	state->N += incoming->N;
+	state->maxScale = Max(state->maxScale, incoming->maxScale);
+	state->maxScaleCount += incoming->maxScaleCount;
+	state->NaNcount += incoming->NaNcount;
+
+	add_var(&(state->sumX), &(incoming->sumX), &(state->sumX));
+	add_var(&(state->sumX2), &(incoming->sumX2), &(state->sumX2));
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
+ * Combines two array-based aggregation states into one
+ */
+Datum
+int_avg_combine(PG_FUNCTION_ARGS)
+{
+	ArrayType  *collectarray;
+	ArrayType  *transarray = PG_GETARG_ARRAYTYPE_P(1);
+	Int8TransTypeData *collectdata;
+	Int8TransTypeData *transdata;
+
+	/*
+	 * If we're invoked by nodeAgg, we can cheat and modify our first
+	 * parameter in-place to reduce palloc overhead. Otherwise we need to make
+	 * a copy of it before scribbling on it.
+	 */
+	if (fcinfo->context &&
+		(IsA(fcinfo->context, AggState) ||
+		 IsA(fcinfo->context, WindowAggState)))
+		collectarray = PG_GETARG_ARRAYTYPE_P(0);
+	else
+		collectarray = PG_GETARG_ARRAYTYPE_P_COPY(0);
+
+	if (ARR_HASNULL(collectarray) ||
+		ARR_SIZE(collectarray) != ARR_OVERHEAD_NONULLS(1) + sizeof(Int8TransTypeData))
+		elog(ERROR, "expected 2-element int8 array");
+	collectdata = (Int8TransTypeData *) ARR_DATA_PTR(collectarray);
+
+	if (ARR_HASNULL(transarray) ||
+		ARR_SIZE(transarray) != ARR_OVERHEAD_NONULLS(1) + sizeof(Int8TransTypeData))
+		elog(ERROR, "expected 2-element int8 array");
+	transdata = (Int8TransTypeData *) ARR_DATA_PTR(transarray);
+
+	collectdata->count += transdata->count;
+	collectdata->sum += transdata->sum;
+
+	PG_RETURN_ARRAYTYPE_P(collectarray);
+}
+
+/*
+ * naggstaterecv() -
+ *
+ *	Input function for numeric aggregation states, used by combiners to
+ *	deserialize partial transition states sent to it by a worker process
+ */
+Datum
+naggstaterecv(PG_FUNCTION_ARGS)
+{
+	MemoryContext context;
+	MemoryContext old;
+	bytea *bytesin;
+	NumericAggState *result;
+	StringInfoData buf;
+	int nbytes;
+	int digitssize;
+	int i;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	old = MemoryContextSwitchTo(context);
+
+	bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
+	result = (NumericAggState *) palloc0(sizeof(NumericAggState));
+	nbytes = VARSIZE(bytesin);
+
+	initStringInfo(&buf);
+	appendBinaryStringInfo(&buf, VARDATA(bytesin), nbytes);
+
+	result->agg_context = CurrentMemoryContext;
+	result->calcSumX2 = pq_getmsgint(&buf, 1);
+	result->N = pq_getmsgint64(&buf);
+	result->maxScale = pq_getmsgint(&buf, sizeof(int));
+	result->maxScaleCount = pq_getmsgint64(&buf);
+	result->NaNcount = pq_getmsgint64(&buf);
+
+	result->sumX.ndigits = pq_getmsgint(&buf, sizeof(int));
+	result->sumX.weight = pq_getmsgint(&buf, sizeof(int));
+	result->sumX.sign = pq_getmsgint(&buf, sizeof(int));
+	result->sumX.dscale = pq_getmsgint(&buf, sizeof(int));
+	digitssize = result->sumX.ndigits * sizeof(NumericDigit);
+	result->sumX.digits = palloc0(digitssize);
+	for (i=0; i<result->sumX.ndigits; i++)
+		result->sumX.digits[i] = pq_getmsgint(&buf, sizeof(NumericDigit));
+
+	result->sumX2.ndigits = pq_getmsgint(&buf, sizeof(int));
+	result->sumX2.weight = pq_getmsgint(&buf, sizeof(int));
+	result->sumX2.sign = pq_getmsgint(&buf, sizeof(int));
+	result->sumX2.dscale = pq_getmsgint(&buf, sizeof(int));
+	digitssize = result->sumX2.ndigits * sizeof(NumericDigit);
+	result->sumX2.digits = palloc0(digitssize);
+	for (i=0; i<result->sumX2.ndigits; i++)
+		result->sumX2.digits[i] = pq_getmsgint(&buf, sizeof(NumericDigit));
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(result);
+}
+
+/*
+ * naggstatesend() -
+ *
+ *	Output function for numeric aggregation states, used by CQ workers to
+ *	send their transition states to a combiner process
+ */
+Datum
+naggstatesend(PG_FUNCTION_ARGS)
+{
+	NumericAggState *nagg = (NumericAggState *) PG_GETARG_POINTER(0);
+	StringInfoData buf;
+	bytea *result;
+	int nbytes;
+	int i;
+
+	initStringInfo(&buf);
+
+	pq_sendint(&buf, nagg->calcSumX2, sizeof(bool));
+	pq_sendint64(&buf, nagg->N);
+	pq_sendint(&buf, nagg->maxScale, sizeof(int));
+	pq_sendint64(&buf, nagg->maxScaleCount);
+	pq_sendint64(&buf, nagg->NaNcount);
+
+	pq_sendint(&buf, nagg->sumX.ndigits, sizeof(int));
+	pq_sendint(&buf, nagg->sumX.weight, sizeof(int));
+	pq_sendint(&buf, nagg->sumX.sign, sizeof(int));
+	pq_sendint(&buf, nagg->sumX.dscale, sizeof(int));
+	for (i=0; i<nagg->sumX.ndigits; i++)
+		pq_sendint(&buf,  nagg->sumX.digits[i], sizeof(NumericDigit));
+
+	pq_sendint(&buf, nagg->sumX2.ndigits, sizeof(int));
+	pq_sendint(&buf, nagg->sumX2.weight, sizeof(int));
+	pq_sendint(&buf, nagg->sumX2.sign, sizeof(int));
+	pq_sendint(&buf, nagg->sumX2.dscale, sizeof(int));
+	for (i=0; i<nagg->sumX2.ndigits; i++)
+		pq_sendint(&buf,  nagg->sumX2.digits[i], sizeof(NumericDigit));
+
+	nbytes = buf.len - buf.cursor;
+	result = (bytea *) palloc(nbytes + VARHDRSZ);
+	SET_VARSIZE(result, nbytes + VARHDRSZ);
+
+	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
+
+	PG_RETURN_BYTEA_P(result);
 }

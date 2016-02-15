@@ -487,6 +487,57 @@ select array_elem_check(-1);
 
 drop function array_elem_check(int);
 
+--
+-- Check enforcement of changing constraints in plpgsql
+--
+
+create domain di as int;
+
+create function dom_check(int) returns di as $$
+declare d di;
+begin
+  d := $1;
+  return d;
+end
+$$ language plpgsql immutable;
+
+select dom_check(0);
+
+alter domain di add constraint pos check (value > 0);
+
+select dom_check(0); -- fail
+
+alter domain di drop constraint pos;
+
+select dom_check(0);
+
+drop function dom_check(int);
+
+drop domain di;
+
+--
+-- Check use of a (non-inline-able) SQL function in a domain constraint;
+-- this has caused issues in the past
+--
+
+create function sql_is_distinct_from(anyelement, anyelement)
+returns boolean language sql
+as 'select $1 is distinct from $2 limit 1';
+
+create domain inotnull int
+  check (sql_is_distinct_from(value, null));
+
+select 1::inotnull;
+select null::inotnull;
+
+create table dom_table (x inotnull);
+insert into dom_table values ('1');
+insert into dom_table values (1);
+insert into dom_table values (null);
+
+drop table dom_table;
+drop domain inotnull;
+drop function sql_is_distinct_from(anyelement, anyelement);
 
 --
 -- Renaming

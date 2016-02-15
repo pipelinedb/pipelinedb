@@ -3,7 +3,7 @@
  * prepsecurity.c
  *	  Routines for preprocessing security barrier quals.
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -56,6 +56,12 @@ static bool security_barrier_replace_vars_walker(Node *node,
  * the others, providing protection against malicious user-defined security
  * barriers.  The first security barrier qual in the list will be used in the
  * innermost subquery.
+ *
+ * In practice, the only RTEs that will have security barrier quals are those
+ * that refer to tables with row-level security, or which are the target
+ * relation of an update to an auto-updatable security barrier view.  RTEs
+ * that read from a security barrier view will have already been expanded by
+ * the rewriter.
  */
 void
 expand_security_quals(PlannerInfo *root, List *tlist)
@@ -73,8 +79,8 @@ expand_security_quals(PlannerInfo *root, List *tlist)
 	rt_index = 0;
 	foreach(cell, parse->rtable)
 	{
-		bool			targetRelation = false;
-		RangeTblEntry  *rte = (RangeTblEntry *) lfirst(cell);
+		bool		targetRelation = false;
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(cell);
 
 		rt_index++;
 
@@ -125,7 +131,8 @@ expand_security_quals(PlannerInfo *root, List *tlist)
 			rte->requiredPerms = 0;
 			rte->checkAsUser = InvalidOid;
 			rte->selectedCols = NULL;
-			rte->modifiedCols = NULL;
+			rte->insertedCols = NULL;
+			rte->updatedCols = NULL;
 
 			/*
 			 * For the most part, Vars referencing the original relation
@@ -224,7 +231,8 @@ expand_security_qual(PlannerInfo *root, List *tlist, int rt_index,
 			rte->requiredPerms = 0;
 			rte->checkAsUser = InvalidOid;
 			rte->selectedCols = NULL;
-			rte->modifiedCols = NULL;
+			rte->insertedCols = NULL;
+			rte->updatedCols = NULL;
 
 			/*
 			 * Now deal with any PlanRowMark on this RTE by requesting a lock
@@ -241,30 +249,10 @@ expand_security_qual(PlannerInfo *root, List *tlist, int rt_index,
 			rc = get_plan_rowmark(root->rowMarks, rt_index);
 			if (rc != NULL)
 			{
-				switch (rc->markType)
-				{
-					case ROW_MARK_EXCLUSIVE:
-						applyLockingClause(subquery, 1, LCS_FORUPDATE,
-										   rc->noWait, false);
-						break;
-					case ROW_MARK_NOKEYEXCLUSIVE:
-						applyLockingClause(subquery, 1, LCS_FORNOKEYUPDATE,
-										   rc->noWait, false);
-						break;
-					case ROW_MARK_SHARE:
-						applyLockingClause(subquery, 1, LCS_FORSHARE,
-										   rc->noWait, false);
-						break;
-					case ROW_MARK_KEYSHARE:
-						applyLockingClause(subquery, 1, LCS_FORKEYSHARE,
-										   rc->noWait, false);
-						break;
-					case ROW_MARK_REFERENCE:
-					case ROW_MARK_COPY:
-						/* No locking needed */
-						break;
-				}
-				root->rowMarks = list_delete(root->rowMarks, rc);
+				if (rc->strength != LCS_NONE)
+					applyLockingClause(subquery, 1, rc->strength,
+									   rc->waitPolicy, false);
+				root->rowMarks = list_delete_ptr(root->rowMarks, rc);
 			}
 
 			/*
@@ -275,12 +263,14 @@ expand_security_qual(PlannerInfo *root, List *tlist, int rt_index,
 			 */
 			if (targetRelation)
 				applyLockingClause(subquery, 1, LCS_FORUPDATE,
-								   false, false);
+								   LockWaitBlock, false);
+
 			/*
 			 * Replace any variables in the outer query that refer to the
 			 * original relation RTE with references to columns that we will
 			 * expose in the new subquery, building the subquery's targetlist
-			 * as we go.
+			 * as we go.  Also replace any references in the translated_vars
+			 * lists of any appendrels.
 			 */
 			context.rt_index = rt_index;
 			context.sublevels_up = 0;
@@ -291,6 +281,8 @@ expand_security_qual(PlannerInfo *root, List *tlist, int rt_index,
 
 			security_barrier_replace_vars((Node *) parse, &context);
 			security_barrier_replace_vars((Node *) tlist, &context);
+			security_barrier_replace_vars((Node *) root->append_rel_list,
+										  &context);
 
 			heap_close(context.rel, NoLock);
 

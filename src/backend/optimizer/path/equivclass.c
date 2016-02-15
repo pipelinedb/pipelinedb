@@ -6,7 +6,7 @@
  * See src/backend/optimizer/README for discussion of EquivalenceClasses.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -16,7 +16,7 @@
  */
 #include "postgres.h"
 
-#include "access/skey.h"
+#include "access/stratnum.h"
 #include "catalog/pg_type.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -867,9 +867,8 @@ generate_base_implied_equalities_no_const(PlannerInfo *root,
 		int			relid;
 
 		Assert(!cur_em->em_is_child);	/* no children yet */
-		if (bms_membership(cur_em->em_relids) != BMS_SINGLETON)
+		if (!bms_get_singleton_member(cur_em->em_relids, &relid))
 			continue;
-		relid = bms_singleton_member(cur_em->em_relids);
 		Assert(relid < root->simple_rel_array_size);
 
 		if (prev_ems[relid] != NULL)
@@ -2286,9 +2285,11 @@ has_relevant_eclass_joinclause(PlannerInfo *root, RelOptInfo *rel1)
  * from actually being generated.
  */
 bool
-eclass_useful_for_merging(EquivalenceClass *eclass,
+eclass_useful_for_merging(PlannerInfo *root,
+						  EquivalenceClass *eclass,
 						  RelOptInfo *rel)
 {
+	Relids		relids;
 	ListCell   *lc;
 
 	Assert(!eclass->ec_merged);
@@ -2306,8 +2307,14 @@ eclass_useful_for_merging(EquivalenceClass *eclass,
 	 * possibly-overoptimistic heuristic.
 	 */
 
+	/* If specified rel is a child, we must consider the topmost parent rel */
+	if (rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
+		relids = find_childrel_top_parent(root, rel)->relids;
+	else
+		relids = rel->relids;
+
 	/* If rel already includes all members of eclass, no point in searching */
-	if (bms_is_subset(eclass->ec_relids, rel->relids))
+	if (bms_is_subset(eclass->ec_relids, relids))
 		return false;
 
 	/* To join, we need a member not in the given rel */
@@ -2318,7 +2325,7 @@ eclass_useful_for_merging(EquivalenceClass *eclass,
 		if (cur_em->em_is_child)
 			continue;			/* ignore children here */
 
-		if (!bms_overlap(cur_em->em_relids, rel->relids))
+		if (!bms_overlap(cur_em->em_relids, relids))
 			return true;
 	}
 

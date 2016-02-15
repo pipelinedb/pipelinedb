@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Portions Copyright (c) 2000-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2000-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/bin/psql/command.c
@@ -30,9 +30,6 @@
 #include <direct.h>
 #include <sys/types.h>			/* for umask() */
 #include <sys/stat.h>			/* for stat() */
-#endif
-#ifdef USE_SSL
-#include <openssl/ssl.h>
 #endif
 
 #include "portability/instr_time.h"
@@ -64,8 +61,8 @@ static bool do_edit(const char *filename_arg, PQExpBuffer query_buf,
 static bool do_connect(char *dbname, char *user, char *host, char *port);
 static bool do_shell(const char *command);
 static bool do_watch(PQExpBuffer query_buf, long sleep);
-static bool lookup_function_oid(PGconn *conn, const char *desc, Oid *foid);
-static bool get_create_function_cmd(PGconn *conn, Oid oid, PQExpBuffer buf);
+static bool lookup_function_oid(const char *desc, Oid *foid);
+static bool get_create_function_cmd(Oid oid, PQExpBuffer buf);
 static int	strip_lineno_from_funcdesc(char *func);
 static void minimal_error_message(PGresult *res);
 
@@ -635,12 +632,12 @@ exec_command(const char *cmd,
 								  "AS $function$\n"
 								  "\n$function$\n");
 			}
-			else if (!lookup_function_oid(pset.db, func, &foid))
+			else if (!lookup_function_oid(func, &foid))
 			{
 				/* error already reported */
 				status = PSQL_CMD_ERROR;
 			}
-			else if (!get_create_function_cmd(pset.db, foid, query_buf))
+			else if (!get_create_function_cmd(foid, query_buf))
 			{
 				/* error already reported */
 				status = PSQL_CMD_ERROR;
@@ -991,7 +988,7 @@ exec_command(const char *cmd,
 				printfPQExpBuffer(&buf, "ALTER USER %s PASSWORD ",
 								  fmtId(user));
 				appendStringLiteralConn(&buf, encrypted_password, pset.db);
-				res = PSQLexec(buf.data, false);
+				res = PSQLexec(buf.data);
 				termPQExpBuffer(&buf);
 				if (!res)
 					success = false;
@@ -1077,15 +1074,20 @@ exec_command(const char *cmd,
 			static const char *const my_list[] = {
 				"border", "columns", "expanded", "fieldsep", "fieldsep_zero",
 				"footer", "format", "linestyle", "null",
-				"numericlocale", "pager", "recordsep", "recordsep_zero",
+				"numericlocale", "pager", "pager_min_lines",
+				"recordsep", "recordsep_zero",
 				"tableattr", "title", "tuples_only",
+				"unicode_border_linestyle",
+				"unicode_column_linestyle",
+				"unicode_header_linestyle",
 				NULL
 			};
 
 			for (i = 0; my_list[i] != NULL; i++)
 			{
-				char   *val = pset_value_string(my_list[i], &pset.popt);
-				printf("%-14s %s\n", my_list[i], val);
+				char	   *val = pset_value_string(my_list[i], &pset.popt);
+
+				printf("%-24s %s\n", my_list[i], val);
 				free(val);
 			}
 
@@ -1236,12 +1238,12 @@ exec_command(const char *cmd,
 			psql_error("function name is required\n");
 			status = PSQL_CMD_ERROR;
 		}
-		else if (!lookup_function_oid(pset.db, func, &foid))
+		else if (!lookup_function_oid(func, &foid))
 		{
 			/* error already reported */
 			status = PSQL_CMD_ERROR;
 		}
-		else if (!get_create_function_cmd(pset.db, foid, func_buf))
+		else if (!get_create_function_cmd(foid, func_buf))
 		{
 			/* error already reported */
 			status = PSQL_CMD_ERROR;
@@ -1268,7 +1270,7 @@ exec_command(const char *cmd,
 					lines++;
 				}
 
-				output = PageOutput(lineno, pset.popt.topt.pager);
+				output = PageOutput(lineno, &(pset.popt.topt));
 				is_pager = true;
 			}
 			else
@@ -1422,6 +1424,7 @@ exec_command(const char *cmd,
 				if (fname[0] == '|')
 				{
 					is_pipe = true;
+					disable_sigpipe_trap();
 					fd = popen(&fname[1], "w");
 				}
 				else
@@ -1455,6 +1458,9 @@ exec_command(const char *cmd,
 				success = false;
 			}
 		}
+
+		if (is_pipe)
+			restore_sigpipe_trap();
 
 		free(fname);
 	}
@@ -1515,7 +1521,19 @@ exec_command(const char *cmd,
 
 	/* \? -- slash command help */
 	else if (strcmp(cmd, "?") == 0)
-		slashUsage(pset.popt.topt.pager);
+	{
+		char	   *opt0 = psql_scan_slash_option(scan_state,
+												  OT_NORMAL, NULL, false);
+
+		if (!opt0 || strcmp(opt0, "commands") == 0)
+			slashUsage(pset.popt.topt.pager);
+		else if (strcmp(opt0, "options") == 0)
+			usage(pset.popt.topt.pager);
+		else if (strcmp(opt0, "variables") == 0)
+			helpVariables(pset.popt.topt.pager);
+		else
+			slashUsage(pset.popt.topt.pager);
+	}
 
 	/* \zq -- PipelineDB */
 	else if (strcmp(cmd, "|") == 0)
@@ -1630,14 +1648,18 @@ do_connect(char *dbname, char *user, char *host, char *port)
 
 	/*
 	 * Any change in the parameters read above makes us discard the password.
-	 * We also discard it if we're to use a conninfo rather than the positional
-	 * syntax.
+	 * We also discard it if we're to use a conninfo rather than the
+	 * positional syntax.  Note that currently, PQhost() can return NULL for a
+	 * default Unix-socket connection, so we have to allow NULL for host.
 	 */
-	keep_password =
-		((strcmp(user, PQuser(o_conn)) == 0) &&
-		 (!host || strcmp(host, PQhost(o_conn)) == 0) &&
-		 (strcmp(port, PQport(o_conn)) == 0) &&
-		 !has_connection_string);
+	if (has_connection_string)
+		keep_password = false;
+	else
+		keep_password =
+			(user && PQuser(o_conn) && strcmp(user, PQuser(o_conn)) == 0) &&
+			((host && PQhost(o_conn) && strcmp(host, PQhost(o_conn)) == 0) ||
+			 (host == NULL && PQhost(o_conn) == NULL)) &&
+			(port && PQport(o_conn) && strcmp(port, PQport(o_conn)) == 0);
 
 	/*
 	 * Grab dbname from old connection unless supplied by caller.  No password
@@ -1649,8 +1671,8 @@ do_connect(char *dbname, char *user, char *host, char *port)
 	/*
 	 * If the user asked to be prompted for a password, ask for one now. If
 	 * not, use the password from the old connection, provided the username
-	 * has not changed. Otherwise, try to connect without a password first,
-	 * and then ask for a password if needed.
+	 * etc have not changed. Otherwise, try to connect without a password
+	 * first, and then ask for a password if needed.
 	 *
 	 * XXX: this behavior leads to spurious connection attempts recorded in
 	 * the postmaster's log.  But libpq offers no API that would let us obtain
@@ -1761,7 +1783,8 @@ do_connect(char *dbname, char *user, char *host, char *port)
 	/* Tell the user about the new connection */
 	if (!pset.quiet)
 	{
-		if (param_is_newly_set(PQhost(o_conn), PQhost(pset.db)) ||
+		if (!o_conn ||
+			param_is_newly_set(PQhost(o_conn), PQhost(pset.db)) ||
 			param_is_newly_set(PQport(o_conn), PQport(pset.db)))
 		{
 			char	   *host = PQhost(pset.db);
@@ -1840,28 +1863,24 @@ connection_warnings(bool in_startup)
 static void
 printSSLInfo(void)
 {
-#ifdef USE_SSL
-	int			sslbits = -1;
-	SSL		   *ssl;
+	const char *protocol;
+	const char *cipher;
+	const char *bits;
+	const char *compression;
 
-	ssl = PQgetssl(pset.db);
-	if (!ssl)
+	if (!PQsslInUse(pset.db))
 		return;					/* no SSL */
 
-	SSL_get_cipher_bits(ssl, &sslbits);
-	printf(_("SSL connection (protocol: %s, cipher: %s, bits: %d, compression: %s)\n"),
-		   SSL_get_version(ssl), SSL_get_cipher(ssl), sslbits,
-		   SSL_get_current_compression(ssl) ? _("on") : _("off"));
-#else
+	protocol = PQsslAttribute(pset.db, "protocol");
+	cipher = PQsslAttribute(pset.db, "cipher");
+	bits = PQsslAttribute(pset.db, "key_bits");
+	compression = PQsslAttribute(pset.db, "compression");
 
-	/*
-	 * If psql is compiled without SSL but is using a libpq with SSL, we
-	 * cannot figure out the specifics about the connection. But we know it's
-	 * SSL secured.
-	 */
-	if (PQgetssl(pset.db))
-		printf(_("SSL connection (unknown cipher)\n"));
-#endif
+	printf(_("SSL connection (protocol: %s, cipher: %s, bits: %s, compression: %s)\n"),
+		   protocol ? protocol : _("unknown"),
+		   cipher ? cipher : _("unknown"),
+		   bits ? bits : _("unknown"),
+	  (compression && strcmp(compression, "off") != 0) ? _("on") : _("off"));
 }
 
 
@@ -2222,7 +2241,7 @@ process_file(char *filename, bool single_txn, bool use_relative_path)
 
 	if (single_txn)
 	{
-		if ((res = PSQLexec("BEGIN", false)) == NULL)
+		if ((res = PSQLexec("BEGIN")) == NULL)
 		{
 			if (pset.on_error_stop)
 			{
@@ -2238,7 +2257,7 @@ process_file(char *filename, bool single_txn, bool use_relative_path)
 
 	if (single_txn)
 	{
-		if ((res = PSQLexec("COMMIT", false)) == NULL)
+		if ((res = PSQLexec("COMMIT")) == NULL)
 		{
 			if (pset.on_error_stop)
 			{
@@ -2280,6 +2299,9 @@ _align2string(enum printFormat in)
 		case PRINT_HTML:
 			return "html";
 			break;
+		case PRINT_ASCIIDOC:
+			return "asciidoc";
+			break;
 		case PRINT_LATEX:
 			return "latex";
 			break;
@@ -2293,6 +2315,37 @@ _align2string(enum printFormat in)
 	return "unknown";
 }
 
+/*
+ * Parse entered Unicode linestyle.  If ok, update *linestyle and return
+ * true, else return false.
+ */
+static bool
+set_unicode_line_style(const char *value, size_t vallen,
+					   unicode_linestyle *linestyle)
+{
+	if (pg_strncasecmp("single", value, vallen) == 0)
+		*linestyle = UNICODE_LINESTYLE_SINGLE;
+	else if (pg_strncasecmp("double", value, vallen) == 0)
+		*linestyle = UNICODE_LINESTYLE_DOUBLE;
+	else
+		return false;
+	return true;
+}
+
+static const char *
+_unicode_linestyle2string(int linestyle)
+{
+	switch (linestyle)
+	{
+		case UNICODE_LINESTYLE_SINGLE:
+			return "single";
+			break;
+		case UNICODE_LINESTYLE_DOUBLE:
+			return "double";
+			break;
+	}
+	return "unknown";
+}
 
 /*
  * do_pset
@@ -2321,6 +2374,8 @@ do_pset(const char *param, const char *value, printQueryOpt *popt, bool quiet)
 			popt->topt.format = PRINT_WRAPPED;
 		else if (pg_strncasecmp("html", value, vallen) == 0)
 			popt->topt.format = PRINT_HTML;
+		else if (pg_strncasecmp("asciidoc", value, vallen) == 0)
+			popt->topt.format = PRINT_ASCIIDOC;
 		else if (pg_strncasecmp("latex", value, vallen) == 0)
 			popt->topt.format = PRINT_LATEX;
 		else if (pg_strncasecmp("latex-longtable", value, vallen) == 0)
@@ -2329,7 +2384,7 @@ do_pset(const char *param, const char *value, printQueryOpt *popt, bool quiet)
 			popt->topt.format = PRINT_TROFF_MS;
 		else
 		{
-			psql_error("\\pset: allowed formats are unaligned, aligned, wrapped, html, latex, troff-ms\n");
+			psql_error("\\pset: allowed formats are unaligned, aligned, wrapped, html, asciidoc, latex, latex-longtable, troff-ms\n");
 			return false;
 		}
 
@@ -2352,6 +2407,51 @@ do_pset(const char *param, const char *value, printQueryOpt *popt, bool quiet)
 			return false;
 		}
 
+	}
+
+	/* set unicode border line style */
+	else if (strcmp(param, "unicode_border_linestyle") == 0)
+	{
+		if (!value)
+			;
+		else if (set_unicode_line_style(value, vallen,
+										&popt->topt.unicode_border_linestyle))
+			refresh_utf8format(&(popt->topt));
+		else
+		{
+			psql_error("\\pset: allowed Unicode border line styles are single, double\n");
+			return false;
+		}
+	}
+
+	/* set unicode column line style */
+	else if (strcmp(param, "unicode_column_linestyle") == 0)
+	{
+		if (!value)
+			;
+		else if (set_unicode_line_style(value, vallen,
+										&popt->topt.unicode_column_linestyle))
+			refresh_utf8format(&(popt->topt));
+		else
+		{
+			psql_error("\\pset: allowed Unicode column line styles are single, double\n");
+			return false;
+		}
+	}
+
+	/* set unicode header line style */
+	else if (strcmp(param, "unicode_header_linestyle") == 0)
+	{
+		if (!value)
+			;
+		else if (set_unicode_line_style(value, vallen,
+										&popt->topt.unicode_header_linestyle))
+			refresh_utf8format(&(popt->topt));
+		else
+		{
+			psql_error("\\pset: allowed Unicode header line styles are single, double\n");
+			return false;
+		}
 	}
 
 	/* set border style/width */
@@ -2477,6 +2577,13 @@ do_pset(const char *param, const char *value, printQueryOpt *popt, bool quiet)
 			popt->topt.pager = 1;
 	}
 
+	/* set minimum lines for pager use */
+	else if (strcmp(param, "pager_min_lines") == 0)
+	{
+		if (value)
+			popt->topt.pager_min_lines = atoi(value);
+	}
+
 	/* disable "(x rows)" footer */
 	else if (strcmp(param, "footer") == 0)
 	{
@@ -2598,6 +2705,15 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 			printf(_("Pager usage is off.\n"));
 	}
 
+	/* show minimum lines for pager use */
+	else if (strcmp(param, "pager_min_lines") == 0)
+	{
+		printf(ngettext("Pager won't be used for less than %d line.\n",
+						"Pager won't be used for less than %d lines.\n",
+						popt->topt.pager_min_lines),
+			   popt->topt.pager_min_lines);
+	}
+
 	/* show record separator for unaligned text */
 	else if (strcmp(param, "recordsep") == 0)
 	{
@@ -2641,6 +2757,25 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 			printf(_("Tuples only is on.\n"));
 		else
 			printf(_("Tuples only is off.\n"));
+	}
+
+	/* Unicode style formatting */
+	else if (strcmp(param, "unicode_border_linestyle") == 0)
+	{
+		printf(_("Unicode border line style is \"%s\".\n"),
+			 _unicode_linestyle2string(popt->topt.unicode_border_linestyle));
+	}
+
+	else if (strcmp(param, "unicode_column_linestyle") == 0)
+	{
+		printf(_("Unicode column line style is \"%s\".\n"),
+			 _unicode_linestyle2string(popt->topt.unicode_column_linestyle));
+	}
+
+	else if (strcmp(param, "unicode_header_linestyle") == 0)
+	{
+		printf(_("Unicode header line style is \"%s\".\n"),
+			 _unicode_linestyle2string(popt->topt.unicode_header_linestyle));
 	}
 
 	else
@@ -2731,6 +2866,8 @@ pset_value_string(const char *param, struct printQueryOpt *popt)
 		return pstrdup(pset_bool_string(popt->topt.numericLocale));
 	else if (strcmp(param, "pager") == 0)
 		return psprintf("%d", popt->topt.pager);
+	else if (strcmp(param, "pager_min_lines") == 0)
+		return psprintf("%d", popt->topt.pager_min_lines);
 	else if (strcmp(param, "recordsep") == 0)
 		return pset_quoted_string(popt->topt.recordSep.separator
 								  ? popt->topt.recordSep.separator
@@ -2743,6 +2880,12 @@ pset_value_string(const char *param, struct printQueryOpt *popt)
 		return popt->title ? pset_quoted_string(popt->title) : pstrdup("");
 	else if (strcmp(param, "tuples_only") == 0)
 		return pstrdup(pset_bool_string(popt->topt.tuples_only));
+	else if (strcmp(param, "unicode_border_linestyle") == 0)
+		return pstrdup(_unicode_linestyle2string(popt->topt.unicode_border_linestyle));
+	else if (strcmp(param, "unicode_column_linestyle") == 0)
+		return pstrdup(_unicode_linestyle2string(popt->topt.unicode_column_linestyle));
+	else if (strcmp(param, "unicode_header_linestyle") == 0)
+		return pstrdup(_unicode_linestyle2string(popt->topt.unicode_header_linestyle));
 	else
 		return pstrdup("ERROR");
 }
@@ -2823,7 +2966,7 @@ do_watch(PQExpBuffer query_buf, long sleep)
 
 	for (;;)
 	{
-		PGresult   *res;
+		int			res;
 		time_t		timer;
 		long		i;
 
@@ -2836,65 +2979,22 @@ do_watch(PQExpBuffer query_buf, long sleep)
 				 sleep, asctime(localtime(&timer)));
 		myopt.title = title;
 
-		/*
-		 * Run the query.  We use PSQLexec, which is kind of cheating, but
-		 * SendQuery doesn't let us suppress autocommit behavior.
-		 */
-		res = PSQLexec(query_buf->data, false);
-
-		/* PSQLexec handles failure results and returns NULL */
-		if (res == NULL)
-			break;
+		/* Run the query and print out the results */
+		res = PSQLexecWatch(query_buf->data, &myopt);
 
 		/*
-		 * If SIGINT is sent while the query is processing, PSQLexec will
-		 * consume the interrupt.  The user's intention, though, is to cancel
-		 * the entire watch process, so detect a sent cancellation request and
-		 * exit in this case.
+		 * PSQLexecWatch handles the case where we can no longer repeat the
+		 * query, and returns 0 or -1.
 		 */
-		if (cancel_pressed)
-		{
-			PQclear(res);
+		if (res == 0)
 			break;
-		}
-
-		switch (PQresultStatus(res))
-		{
-			case PGRES_TUPLES_OK:
-				printQuery(res, &myopt, pset.queryFout, pset.logfile);
-				break;
-
-			case PGRES_COMMAND_OK:
-				fprintf(pset.queryFout, "%s\n%s\n\n", title, PQcmdStatus(res));
-				break;
-
-			case PGRES_EMPTY_QUERY:
-				psql_error(_("\\watch cannot be used with an empty query\n"));
-				PQclear(res);
-				return false;
-
-			case PGRES_COPY_OUT:
-			case PGRES_COPY_IN:
-			case PGRES_COPY_BOTH:
-				psql_error(_("\\watch cannot be used with COPY\n"));
-				PQclear(res);
-				return false;
-
-			default:
-				/* other cases should have been handled by PSQLexec */
-				psql_error(_("unexpected result status for \\watch\n"));
-				PQclear(res);
-				return false;
-		}
-
-		PQclear(res);
-
-		fflush(pset.queryFout);
+		if (res == -1)
+			return false;
 
 		/*
 		 * Set up cancellation of 'watch' via SIGINT.  We redo this each time
-		 * through the loop since it's conceivable something inside PSQLexec
-		 * could change sigint_interrupt_jmp.
+		 * through the loop since it's conceivable something inside
+		 * PSQLexecWatch could change sigint_interrupt_jmp.
 		 */
 		if (sigsetjmp(sigint_interrupt_jmp, 1) != 0)
 			break;
@@ -2918,6 +3018,34 @@ do_watch(PQExpBuffer query_buf, long sleep)
 }
 
 /*
+ * a little code borrowed from PSQLexec() to manage ECHO_HIDDEN output.
+ * returns true unless we have ECHO_HIDDEN_NOEXEC.
+ */
+static bool
+lookup_function_echo_hidden(char *query)
+{
+	if (pset.echo_hidden != PSQL_ECHO_HIDDEN_OFF)
+	{
+		printf(_("********* QUERY **********\n"
+				 "%s\n"
+				 "**************************\n\n"), query);
+		fflush(stdout);
+		if (pset.logfile)
+		{
+			fprintf(pset.logfile,
+					_("********* QUERY **********\n"
+					  "%s\n"
+					  "**************************\n\n"), query);
+			fflush(pset.logfile);
+		}
+
+		if (pset.echo_hidden == PSQL_ECHO_HIDDEN_NOEXEC)
+			return false;
+	}
+	return true;
+}
+
+/*
  * This function takes a function description, e.g. "x" or "x(int)", and
  * issues a query on the given connection to retrieve the function's OID
  * using a cast to regproc or regprocedure (as appropriate). The result,
@@ -2927,7 +3055,7 @@ do_watch(PQExpBuffer query_buf, long sleep)
  * unfortunately it can be hard to tell the difference.
  */
 static bool
-lookup_function_oid(PGconn *conn, const char *desc, Oid *foid)
+lookup_function_oid(const char *desc, Oid *foid)
 {
 	bool		result = true;
 	PQExpBuffer query;
@@ -2935,11 +3063,15 @@ lookup_function_oid(PGconn *conn, const char *desc, Oid *foid)
 
 	query = createPQExpBuffer();
 	appendPQExpBufferStr(query, "SELECT ");
-	appendStringLiteralConn(query, desc, conn);
+	appendStringLiteralConn(query, desc, pset.db);
 	appendPQExpBuffer(query, "::pg_catalog.%s::pg_catalog.oid",
 					  strchr(desc, '(') ? "regprocedure" : "regproc");
-
-	res = PQexec(conn, query->data);
+	if (!lookup_function_echo_hidden(query->data))
+	{
+		destroyPQExpBuffer(query);
+		return false;
+	}
+	res = PQexec(pset.db, query->data);
 	if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) == 1)
 		*foid = atooid(PQgetvalue(res, 0, 0));
 	else
@@ -2959,7 +3091,7 @@ lookup_function_oid(PGconn *conn, const char *desc, Oid *foid)
  * function with the given OID.  If successful, the result is stored in buf.
  */
 static bool
-get_create_function_cmd(PGconn *conn, Oid oid, PQExpBuffer buf)
+get_create_function_cmd(Oid oid, PQExpBuffer buf)
 {
 	bool		result = true;
 	PQExpBuffer query;
@@ -2968,7 +3100,12 @@ get_create_function_cmd(PGconn *conn, Oid oid, PQExpBuffer buf)
 	query = createPQExpBuffer();
 	printfPQExpBuffer(query, "SELECT pg_catalog.pg_get_functiondef(%u)", oid);
 
-	res = PQexec(conn, query->data);
+	if (!lookup_function_echo_hidden(query->data))
+	{
+		destroyPQExpBuffer(query);
+		return false;
+	}
+	res = PQexec(pset.db, query->data);
 	if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) == 1)
 	{
 		resetPQExpBuffer(buf);

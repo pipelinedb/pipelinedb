@@ -4,7 +4,7 @@
  *	  Routines to support inter-object dependencies.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -44,9 +44,11 @@
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_operator.h"
 #include "catalog/pg_opfamily.h"
+#include "catalog/pg_policy.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_rewrite.h"
 #include "catalog/pg_tablespace.h"
+#include "catalog/pg_transform.h"
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_ts_config.h"
 #include "catalog/pg_ts_dict.h"
@@ -57,11 +59,13 @@
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_database_fn.h"
 #include "catalog/pipeline_query.h"
+#include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "commands/comment.h"
 #include "commands/defrem.h"
 #include "commands/event_trigger.h"
 #include "commands/extension.h"
+#include "commands/policy.h"
 #include "commands/proclang.h"
 #include "commands/schemacmds.h"
 #include "commands/seclabel.h"
@@ -129,7 +133,7 @@ typedef struct
  * This constant table maps ObjectClasses to the corresponding catalog OIDs.
  * See also getObjectClass().
  */
-static const Oid object_classes[MAX_OCLASS] = {
+static const Oid object_classes[] = {
 	RelationRelationId,			/* OCLASS_CLASS */
 	ProcedureRelationId,		/* OCLASS_PROC */
 	TypeRelationId,				/* OCLASS_TYPE */
@@ -160,7 +164,12 @@ static const Oid object_classes[MAX_OCLASS] = {
 	UserMappingRelationId,		/* OCLASS_USER_MAPPING */
 	DefaultAclRelationId,		/* OCLASS_DEFACL */
 	ExtensionRelationId,		/* OCLASS_EXTENSION */
-	EventTriggerRelationId		/* OCLASS_EVENT_TRIGGER */
+	EventTriggerRelationId,		/* OCLASS_EVENT_TRIGGER */
+	PipelineQueryRelationId, /* OCLASS_CONTINUOUS_VIEW */
+	PipelineStreamRelationId, /* OCLASS_STREAM */
+	PipelineCombineRelationId, /* OCLASS_COMBINE */
+	PolicyRelationId,			/* OCLASS_POLICY */
+	TransformRelationId			/* OCLASS_TRANSFORM */
 };
 
 
@@ -209,16 +218,25 @@ deleteObjectsInList(ObjectAddresses *targetObjects, Relation *depRel,
 	/*
 	 * Keep track of objects for event triggers, if necessary.
 	 */
-	if (trackDroppedObjectsNeeded())
+	if (trackDroppedObjectsNeeded() && !(flags & PERFORM_DELETION_INTERNAL))
 	{
 		for (i = 0; i < targetObjects->numrefs; i++)
 		{
-			ObjectAddress *thisobj = targetObjects->refs + i;
+			const ObjectAddress *thisobj = &targetObjects->refs[i];
+			const ObjectAddressExtra *extra = &targetObjects->extras[i];
+			bool		original = false;
+			bool		normal = false;
 
-			if ((!(flags & PERFORM_DELETION_INTERNAL)) &&
-				EventTriggerSupportsObjectClass(getObjectClass(thisobj)))
+			if (extra->flags & DEPFLAG_ORIGINAL)
+				original = true;
+			if (extra->flags & DEPFLAG_NORMAL)
+				normal = true;
+			if (extra->flags & DEPFLAG_REVERSE)
+				normal = true;
+
+			if (EventTriggerSupportsObjectClass(getObjectClass(thisobj)))
 			{
-				EventTriggerSQLDropAddObject(thisobj);
+				EventTriggerSQLDropAddObject(thisobj, original, normal);
 			}
 		}
 	}
@@ -1386,6 +1404,14 @@ doDeletion(const ObjectAddress *object, int flags)
 			RemoveEventTriggerById(object->objectId);
 			break;
 
+		case OCLASS_POLICY:
+			RemovePolicyById(object->objectId);
+			break;
+
+		case OCLASS_TRANSFORM:
+			DropTransformById(object->objectId);
+			break;
+
 		case OCLASS_CONTINUOUS_VIEW:
 			RemoveContinuousViewById(object->objectId);
 			break;
@@ -1733,6 +1759,24 @@ find_expr_references_walker(Node *node,
 						add_object_address(OCLASS_TSDICT, objoid, 0,
 										   context->addrs);
 					break;
+
+				case REGNAMESPACEOID:
+					objoid = DatumGetObjectId(con->constvalue);
+					if (SearchSysCacheExists1(NAMESPACEOID,
+											  ObjectIdGetDatum(objoid)))
+						add_object_address(OCLASS_SCHEMA, objoid, 0,
+										   context->addrs);
+					break;
+
+					/*
+					 * Dependencies for regrole should be shared among all
+					 * databases, so explicitly inhibit to have dependencies.
+					 */
+				case REGROLEOID:
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("constant of the type \"regrole\" cannot be used here")));
+					break;
 			}
 		}
 		return false;
@@ -2023,6 +2067,14 @@ find_expr_references_walker(Node *node,
 								   context->addrs);
 		}
 	}
+	else if (IsA(node, TableSampleClause))
+	{
+		TableSampleClause *tsc = (TableSampleClause *) node;
+
+		add_object_address(OCLASS_PROC, tsc->tsmhandler, 0,
+						   context->addrs);
+		/* fall through to examine arguments */
+	}
 
 	return expression_tree_walker(node, find_expr_references_walker,
 								  (void *) context);
@@ -2149,6 +2201,12 @@ add_object_address(ObjectClass oclass, Oid objectId, int32 subId,
 				   ObjectAddresses *addrs)
 {
 	ObjectAddress *item;
+
+	/*
+	 * Make sure object_classes is kept up to date with the ObjectClass enum.
+	 */
+	StaticAssertStmt(lengthof(object_classes) == LAST_OCLASS + 1,
+					 "object_classes[] must cover all ObjectClasses");
 
 	/* enlarge array if needed */
 	if (addrs->numrefs >= addrs->maxrefs)
@@ -2506,6 +2564,12 @@ getObjectClass(const ObjectAddress *object)
 
 		case EventTriggerRelationId:
 			return OCLASS_EVENT_TRIGGER;
+
+		case PolicyRelationId:
+			return OCLASS_POLICY;
+
+		case TransformRelationId:
+			return OCLASS_TRANSFORM;
 
 		case PipelineQueryRelationId:
 			return OCLASS_CONTINUOUS_VIEW;

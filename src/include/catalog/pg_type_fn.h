@@ -4,7 +4,7 @@
  *	 prototypes for functions in catalog/pg_type.c
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_type_fn.h
@@ -14,14 +14,15 @@
 #ifndef PG_TYPE_FN_H
 #define PG_TYPE_FN_H
 
+#include "catalog/objectaddress.h"
 #include "nodes/nodes.h"
 
 
-extern Oid TypeShellMake(const char *typeName,
+extern ObjectAddress TypeShellMake(const char *typeName,
 			  Oid typeNamespace,
 			  Oid ownerId);
 
-extern Oid TypeCreate(Oid newTypeOid,
+extern ObjectAddress TypeCreate(Oid newTypeOid,
 		   const char *typeName,
 		   Oid typeNamespace,
 		   Oid relationOid,

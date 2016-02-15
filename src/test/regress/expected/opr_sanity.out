@@ -2,11 +2,12 @@
 -- OPR_SANITY
 -- Sanity checks for common errors in making operator/procedure system tables:
 -- pg_operator, pg_proc, pg_cast, pg_aggregate, pg_am,
--- pg_amop, pg_amproc, pg_opclass, pg_opfamily.
+-- pg_amop, pg_amproc, pg_opclass, pg_opfamily, pg_index.
 --
--- Every test failures in this file should be closely inspected. The
--- description of the failing test should be read carefully before
--- adjusting the expected output.
+-- Every test failure in this file should be closely inspected.
+-- The description of the failing test should be read carefully before
+-- adjusting the expected output.  In most cases, the queries should
+-- not find *any* matching entries.
 --
 -- NB: we assume the oidjoins test will have caught any dangling links,
 -- that is OID or REGPROC fields that are not zero and do not match some
@@ -26,7 +27,9 @@ SELECT ($1 = $2) OR
  ($2 = 'pg_catalog.any'::pg_catalog.regtype) OR
  ($2 = 'pg_catalog.anyarray'::pg_catalog.regtype AND
   EXISTS(select 1 from pg_catalog.pg_type where
-         oid = $1 and typelem != 0 and typlen = -1))
+         oid = $1 and typelem != 0 and typlen = -1)) OR
+ ($2 = 'pg_catalog.anyrange'::pg_catalog.regtype AND
+  (select typtype from pg_catalog.pg_type where oid = $1) = 'r')
 $$ language sql strict stable;
 -- This one ignores castcontext, so it considers only physical equivalence
 -- and not whether the coercion can be invoked implicitly.
@@ -38,7 +41,9 @@ SELECT ($1 = $2) OR
  ($2 = 'pg_catalog.any'::pg_catalog.regtype) OR
  ($2 = 'pg_catalog.anyarray'::pg_catalog.regtype AND
   EXISTS(select 1 from pg_catalog.pg_type where
-         oid = $1 and typelem != 0 and typlen = -1))
+         oid = $1 and typelem != 0 and typlen = -1)) OR
+ ($2 = 'pg_catalog.anyrange'::pg_catalog.regtype AND
+  (select typtype from pg_catalog.pg_type where oid = $1) = 'r')
 $$ language sql strict stable;
 -- **************** pg_proc ****************
 -- Look for illegal values in pg_proc fields.
@@ -53,9 +58,12 @@ WHERE p1.prolang = 0 OR p1.prorettype = 0 OR
        0::oid = ANY (p1.proargtypes) OR
        procost <= 0 OR
        CASE WHEN proretset THEN prorows <= 0 ELSE prorows != 0 END;
- oid | proname 
------+---------
-(0 rows)
+ oid  |      proname       
+------+--------------------
+ 4324 | hll_agg_transp
+ 4342 | tdigest_agg_transp
+ 4408 | fss_topk
+(3 rows)
 
 -- prosrc should never be null or empty
 SELECT p1.oid, p1.proname
@@ -125,6 +133,7 @@ WHERE p1.oid < p2.oid AND
     (p1.prolang != p2.prolang OR
      p1.proisagg != p2.proisagg OR
      p1.prosecdef != p2.prosecdef OR
+     p1.proleakproof != p2.proleakproof OR
      p1.proisstrict != p2.proisstrict OR
      p1.proretset != p2.proretset OR
      p1.provolatile != p2.provolatile OR
@@ -175,9 +184,7 @@ ORDER BY 1, 2;
           25 |        1043
         1114 |        1184
         1560 |        1562
-        2277 |        2283
-        2281 |       12883
-(6 rows)
+(4 rows)
 
 SELECT DISTINCT p1.proargtypes[1], p2.proargtypes[1]
 FROM pg_proc AS p1, pg_proc AS p2
@@ -192,9 +199,9 @@ ORDER BY 1, 2;
  proargtypes | proargtypes 
 -------------+-------------
           23 |          28
+          25 |        2283
         1114 |        1184
         1560 |        1562
-        2277 |        2283
 (4 rows)
 
 SELECT DISTINCT p1.proargtypes[2], p2.proargtypes[2]
@@ -278,12 +285,17 @@ ORDER BY 1, 2;
 SELECT p1.oid, p1.proname
 FROM pg_proc as p1
 WHERE p1.prorettype = 'internal'::regtype AND NOT
-    'internal'::regtype = ANY (p1.proargtypes) AND
-	p1.oid NOT IN (SELECT combineinfn FROM pipeline_combine);
- oid  |   proname   
-------+-------------
+    'internal'::regtype = ANY (p1.proargtypes);
+ oid  |      proname       
+------+--------------------
  2304 | internal_in
-(1 row)
+ 5021 | cqosastaterecv
+ 4308 | naggstaterecv
+ 4310 | arrayaggstaterecv
+ 4313 | byteatostringinfo
+ 4320 | stringaggstaterecv
+ 4473 | first_values_recv
+(7 rows)
 
 -- Look for functions that return a polymorphic type and do not have any
 -- polymorphic argument.  Calls of such functions would be unresolvable
@@ -301,8 +313,8 @@ WHERE p1.prorettype IN
      'anyenum'::regtype = ANY (p1.proargtypes) OR
      'anyrange'::regtype = ANY (p1.proargtypes))
 ORDER BY 2;
- oid  |    proname     
-------+----------------
+ oid  |        proname         
+------+------------------------
  2296 | anyarray_in
  2502 | anyarray_recv
  2312 | anyelement_in
@@ -313,9 +325,14 @@ ORDER BY 2;
  2400 | array_recv
  3506 | enum_in
  3532 | enum_recv
+ 4469 | first_values
+ 4474 | first_values_final
+ 4415 | fss_topk_freqs
+ 4414 | fss_topk_values
+ 4460 | keyed_min_max_finalize
  3834 | range_in
  3836 | range_recv
-(12 rows)
+(17 rows)
 
 -- Check for length inconsistencies between the various argument-info arrays.
 SELECT p1.oid, p1.proname
@@ -374,9 +391,11 @@ WHERE proallargtypes IS NOT NULL AND
   ARRAY(SELECT proallargtypes[i]
         FROM generate_series(1, array_length(proallargtypes, 1)) g(i)
         WHERE proargmodes IS NULL OR proargmodes[i] IN ('i', 'b', 'v'));
- oid | proname | proargtypes | proallargtypes | proargmodes 
------+---------+-------------+----------------+-------------
-(0 rows)
+ oid  |   proname    | proargtypes | proallargtypes | proargmodes 
+------+--------------+-------------+----------------+-------------
+ 4408 | fss_topk     | 5041        | {2283,23}      | {o,o}
+ 4469 | first_values | 23          | {2283}         | {v}
+(2 rows)
 
 -- Check for protransform functions with the wrong signature
 SELECT p1.oid, p1.proname, p2.oid, p2.proname
@@ -571,6 +590,7 @@ interval_gt(interval,interval)
 charlt("char","char")
 tidne(tid,tid)
 tideq(tid,tid)
+xideqint4(xid,integer)
 timetz_eq(time with time zone,time with time zone)
 timetz_ne(time with time zone,time with time zone)
 timetz_lt(time with time zone,time with time zone)
@@ -774,8 +794,7 @@ WHERE c.castmethod = 'b' AND
  xml               | text              |        0 | a
  xml               | character varying |        0 | a
  xml               | character         |        0 | a
- bytea             | hll               |        0 | e
-(8 rows)
+(7 rows)
 
 -- **************** pg_operator ****************
 -- Look for illegal values in pg_operator fields.
@@ -822,10 +841,9 @@ WHERE p1.oprcom = p2.oid AND
      p1.oprright != p2.oprleft OR
      p1.oprresult != p2.oprresult OR
      p1.oid != p2.oprcom);
-  oid  |           oprcode            |  oid  |         oprcode         
--------+------------------------------+-------+-------------------------
- 13300 | raster_contained_by_geometry | 13299 | geometry_raster_contain
-(1 row)
+ oid | oprcode | oid | oprcode 
+-----+---------+-----+---------
+(0 rows)
 
 -- Look for negatory operators that don't agree.
 -- DEFINITIONAL NOTE: If A.oprnegate = B, then both A and B must yield
@@ -847,6 +865,72 @@ WHERE p1.oprnegate = p2.oid AND
  oid | oprcode | oid | oprcode 
 -----+---------+-----+---------
 (0 rows)
+
+-- Make a list of the names of operators that are claimed to be commutator
+-- pairs.  This list will grow over time, but before accepting a new entry
+-- make sure you didn't link the wrong operators.
+SELECT DISTINCT o1.oprname AS op1, o2.oprname AS op2
+FROM pg_operator o1, pg_operator o2
+WHERE o1.oprcom = o2.oid AND o1.oprname <= o2.oprname
+ORDER BY 1, 2;
+ op1  | op2  
+------+------
+ #    | #
+ &    | &
+ &&   | &&
+ *    | *
+ *<   | *>
+ *<=  | *>=
+ *<>  | *<>
+ *=   | *=
+ +    | +
+ -|-  | -|-
+ <    | >
+ <->  | <->
+ <<   | >>
+ <<=  | >>=
+ <=   | >=
+ <>   | <>
+ <@   | @>
+ =    | =
+ ?#   | ?#
+ ?-   | ?-
+ ?-|  | ?-|
+ ?|   | ?|
+ ?||  | ?||
+ @    | ~
+ @@   | @@
+ @@@  | @@@
+ |    | |
+ ~<=~ | ~>=~
+ ~<~  | ~>~
+ ~=   | ~=
+(30 rows)
+
+-- Likewise for negator pairs.
+SELECT DISTINCT o1.oprname AS op1, o2.oprname AS op2
+FROM pg_operator o1, pg_operator o2
+WHERE o1.oprnegate = o2.oid AND o1.oprname <= o2.oprname
+ORDER BY 1, 2;
+ op1  | op2  
+------+------
+ !~   | ~
+ !~*  | ~*
+ !~~  | ~~
+ !~~* | ~~*
+ #<   | #>=
+ #<=  | #>
+ #<>  | #=
+ *<   | *>=
+ *<=  | *>
+ *<>  | *=
+ <    | >=
+ <=   | >
+ <>   | =
+ <>   | ~=
+ ~<=~ | ~>~
+ ~<~  | ~>=~
+(16 rows)
 
 -- A mergejoinable or hashjoinable operator must be binary, must return
 -- boolean, and must have a commutator (itself, unless it's a cross-type
@@ -887,11 +971,9 @@ WHERE amopopr = p1.oid
   AND amopmethod = (SELECT oid FROM pg_am WHERE amname = 'btree')
   AND amopstrategy = 3
   AND NOT p1.oprcanmerge;
-  oid  | oprname | amopfamily 
--------+---------+------------
- 12186 | =       |      12187
- 12770 | =       |      12771
-(2 rows)
+ oid | oprname | amopfamily 
+-----+---------+------------
+(0 rows)
 
 -- Hashable operators should appear as members of hash index opfamilies.
 SELECT p1.oid, p1.oprname
@@ -910,10 +992,9 @@ FROM pg_operator AS p1, pg_amop p
 WHERE amopopr = p1.oid
   AND amopmethod = (SELECT oid FROM pg_am WHERE amname = 'hash')
   AND NOT p1.oprcanhash;
-  oid  | oprname | amopfamily 
--------+---------+------------
- 13263 | =       |      13264
-(1 row)
+ oid | oprname | amopfamily 
+-----+---------+------------
+(0 rows)
 
 -- Check that each operator defined in pg_operator matches its oprcode entry
 -- in pg_proc.  Easiest to do this separately for each oprkind.
@@ -999,12 +1080,9 @@ WHERE p1.oprjoin = p2.oid AND
      p2.proargtypes[2] != 'internal'::regtype OR
      p2.proargtypes[3] != 'int2'::regtype OR
      p2.proargtypes[4] != 'internal'::regtype);
-  oid  | oprname |  oid  |           proname           
--------+---------+-------+-----------------------------
- 12211 | &&      | 12208 | gserialized_gist_joinsel_2d
- 12270 | &&&     | 12209 | gserialized_gist_joinsel_nd
- 12749 | &&      | 12209 | gserialized_gist_joinsel_nd
-(3 rows)
+ oid | oprname | oid | proname 
+-----+---------+-----+---------
+(0 rows)
 
 -- Insist that all built-in pg_operator entries have descriptions
 SELECT p1.oid, p1.oprname
@@ -1094,11 +1172,12 @@ WHERE a.aggfnoid = p.oid AND
 SELECT oid, proname
 FROM pg_proc as p
 WHERE p.proisagg AND
-    NOT EXISTS (SELECT 1 FROM pg_aggregate a WHERE a.aggfnoid = p.oid)
-	AND p.proname != 'combine';
- oid | proname 
------+---------
-(0 rows)
+    NOT EXISTS (SELECT 1 FROM pg_aggregate a WHERE a.aggfnoid = p.oid);
+ oid  | proname  
+------+----------
+ 4300 | combine
+ 4388 | finalize
+(2 rows)
 
 -- If there is no finalfn then the output type must be the transtype.
 SELECT a.aggfnoid::oid, p.proname
@@ -1109,62 +1188,150 @@ WHERE a.aggfnoid = p.oid AND
 ----------+---------
 (0 rows)
 
--- TODO(derekjn) PipelineDB aggregates break a lot of the assumptions that are made
--- here. Disable this check until we're done adding our own aggregates that we
--- can whitelist here.
 -- Cross-check transfn against its entry in pg_proc.
 -- NOTE: use physically_coercible here, not binary_coercible, because
 -- max and min on abstime are implemented using int4larger/int4smaller.
--- SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
--- FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
--- WHERE a.aggfnoid = p.oid AND
---     a.aggtransfn = ptr.oid AND
---     (ptr.proretset
---      OR NOT (ptr.pronargs =
---              CASE WHEN a.aggkind = 'n' THEN p.pronargs + 1
---              ELSE greatest(p.pronargs - a.aggnumdirectargs, 1) + 1 END)
---      OR NOT physically_coercible(ptr.prorettype, a.aggtranstype)
---      OR NOT physically_coercible(a.aggtranstype, ptr.proargtypes[0])
---      OR (p.pronargs > 0 AND
---          NOT physically_coercible(p.proargtypes[0], ptr.proargtypes[1]))
---      OR (p.pronargs > 1 AND
---          NOT physically_coercible(p.proargtypes[1], ptr.proargtypes[2]))
---      OR (p.pronargs > 2 AND
---          NOT physically_coercible(p.proargtypes[2], ptr.proargtypes[3]))
---      -- we could carry the check further, but 3 args is enough for now
---     );
--- Cross-check finalfn (if present) against its entry in pg_proc.
--- SELECT a.aggfnoid::oid, p.proname, pfn.oid, pfn.proname
--- FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS pfn
--- WHERE a.aggfnoid = p.oid AND
---     a.aggfinalfn = pfn.oid AND
---     (pfn.proretset OR
---      NOT binary_coercible(pfn.prorettype, p.prorettype) OR
---      NOT binary_coercible(a.aggtranstype, pfn.proargtypes[0]) OR
---      CASE WHEN a.aggfinalextra THEN pfn.pronargs != p.pronargs + 1
---           ELSE pfn.pronargs != a.aggnumdirectargs + 1 END
---      OR (pfn.pronargs > 1 AND
---          NOT binary_coercible(p.proargtypes[0], pfn.proargtypes[1]))
---      OR (pfn.pronargs > 2 AND
---          NOT binary_coercible(p.proargtypes[1], pfn.proargtypes[2]))
---      OR (pfn.pronargs > 3 AND
---          NOT binary_coercible(p.proargtypes[2], pfn.proargtypes[3]))
+SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
+FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
+WHERE a.aggfnoid = p.oid AND
+    a.aggtransfn = ptr.oid AND
+    (ptr.proretset
+     OR NOT (ptr.pronargs =
+             CASE WHEN a.aggkind = 'n' THEN p.pronargs + 1
+             ELSE greatest(p.pronargs - a.aggnumdirectargs, 1) + 1 END)
+     OR NOT physically_coercible(ptr.prorettype, a.aggtranstype)
+     OR NOT physically_coercible(a.aggtranstype, ptr.proargtypes[0])
+     OR (p.pronargs > 0 AND
+         NOT physically_coercible(p.proargtypes[0], ptr.proargtypes[1]))
+     OR (p.pronargs > 1 AND
+         NOT physically_coercible(p.proargtypes[1], ptr.proargtypes[2]))
+     OR (p.pronargs > 2 AND
+         NOT physically_coercible(p.proargtypes[2], ptr.proargtypes[3]))
      -- we could carry the check further, but 3 args is enough for now
---     );
--- XXX(derekjn) array_agg(anyarray) will fail this check because we
--- allow array-based transition states to be stored as anyarrays, so
--- array_agg(anyarray) can technically take arrays of different types.
--- This all happens programmatically though, so array_agg(anyarray)
--- should always get arrays of the same type so it's pretty legit.
+    );
+ aggfnoid |   proname    | oid  |      proname       
+----------+--------------+------+--------------------
+     4322 | hll_agg      | 4324 | hll_agg_transp
+     4340 | tdigest_agg  | 4342 | tdigest_agg_transp
+     4420 | keyed_min    | 4458 | keyed_min_trans
+     4421 | keyed_min    | 4458 | keyed_min_trans
+     4422 | keyed_min    | 4458 | keyed_min_trans
+     4423 | keyed_min    | 4458 | keyed_min_trans
+     4424 | keyed_min    | 4458 | keyed_min_trans
+     4425 | keyed_min    | 4458 | keyed_min_trans
+     4426 | keyed_min    | 4458 | keyed_min_trans
+     4427 | keyed_min    | 4458 | keyed_min_trans
+     4428 | keyed_min    | 4458 | keyed_min_trans
+     4429 | keyed_min    | 4458 | keyed_min_trans
+     4430 | keyed_min    | 4458 | keyed_min_trans
+     4431 | keyed_min    | 4458 | keyed_min_trans
+     4432 | keyed_min    | 4458 | keyed_min_trans
+     4433 | keyed_min    | 4458 | keyed_min_trans
+     4434 | keyed_min    | 4458 | keyed_min_trans
+     4435 | keyed_min    | 4458 | keyed_min_trans
+     4436 | keyed_min    | 4458 | keyed_min_trans
+     4437 | keyed_min    | 4458 | keyed_min_trans
+     4438 | keyed_min    | 4458 | keyed_min_trans
+     4439 | keyed_max    | 4459 | keyed_max_trans
+     4440 | keyed_max    | 4459 | keyed_max_trans
+     4441 | keyed_max    | 4459 | keyed_max_trans
+     4442 | keyed_max    | 4459 | keyed_max_trans
+     4443 | keyed_max    | 4459 | keyed_max_trans
+     4444 | keyed_max    | 4459 | keyed_max_trans
+     4445 | keyed_max    | 4459 | keyed_max_trans
+     4446 | keyed_max    | 4459 | keyed_max_trans
+     4447 | keyed_max    | 4459 | keyed_max_trans
+     4448 | keyed_max    | 4459 | keyed_max_trans
+     4449 | keyed_max    | 4459 | keyed_max_trans
+     4450 | keyed_max    | 4459 | keyed_max_trans
+     4451 | keyed_max    | 4459 | keyed_max_trans
+     4452 | keyed_max    | 4459 | keyed_max_trans
+     4453 | keyed_max    | 4459 | keyed_max_trans
+     4454 | keyed_max    | 4459 | keyed_max_trans
+     4455 | keyed_max    | 4459 | keyed_max_trans
+     4456 | keyed_max    | 4459 | keyed_max_trans
+     4457 | keyed_max    | 4459 | keyed_max_trans
+     4469 | first_values | 4470 | first_values_trans
+(41 rows)
+
+-- Cross-check finalfn (if present) against its entry in pg_proc.
+SELECT a.aggfnoid::oid, p.proname, pfn.oid, pfn.proname
+FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS pfn
+WHERE a.aggfnoid = p.oid AND
+    a.aggfinalfn = pfn.oid AND
+    (pfn.proretset OR
+     NOT binary_coercible(pfn.prorettype, p.prorettype) OR
+     NOT binary_coercible(a.aggtranstype, pfn.proargtypes[0]) OR
+     CASE WHEN a.aggfinalextra THEN pfn.pronargs != p.pronargs + 1
+          ELSE pfn.pronargs != a.aggnumdirectargs + 1 END
+     OR (pfn.pronargs > 1 AND
+         NOT binary_coercible(p.proargtypes[0], pfn.proargtypes[1]))
+     OR (pfn.pronargs > 2 AND
+         NOT binary_coercible(p.proargtypes[1], pfn.proargtypes[2]))
+     OR (pfn.pronargs > 3 AND
+         NOT binary_coercible(p.proargtypes[2], pfn.proargtypes[3]))
+     -- we could carry the check further, but 3 args is enough for now
+    );
+ aggfnoid |      proname       | oid  |             proname             
+----------+--------------------+------+---------------------------------
+     5002 | cq_percent_rank    | 5004 | cq_percent_rank_final
+     5005 | cq_cume_dist       | 5007 | cq_cume_dist_final
+     5014 | hll_count_distinct | 5019 | hll_count_distinct_final
+     5023 | cq_percentile_cont | 5027 | cq_percentile_cont_float8_final
+     4420 | keyed_min          | 4460 | keyed_min_max_finalize
+     4421 | keyed_min          | 4460 | keyed_min_max_finalize
+     4422 | keyed_min          | 4460 | keyed_min_max_finalize
+     4423 | keyed_min          | 4460 | keyed_min_max_finalize
+     4424 | keyed_min          | 4460 | keyed_min_max_finalize
+     4425 | keyed_min          | 4460 | keyed_min_max_finalize
+     4426 | keyed_min          | 4460 | keyed_min_max_finalize
+     4427 | keyed_min          | 4460 | keyed_min_max_finalize
+     4428 | keyed_min          | 4460 | keyed_min_max_finalize
+     4429 | keyed_min          | 4460 | keyed_min_max_finalize
+     4430 | keyed_min          | 4460 | keyed_min_max_finalize
+     4431 | keyed_min          | 4460 | keyed_min_max_finalize
+     4432 | keyed_min          | 4460 | keyed_min_max_finalize
+     4433 | keyed_min          | 4460 | keyed_min_max_finalize
+     4434 | keyed_min          | 4460 | keyed_min_max_finalize
+     4435 | keyed_min          | 4460 | keyed_min_max_finalize
+     4436 | keyed_min          | 4460 | keyed_min_max_finalize
+     4437 | keyed_min          | 4460 | keyed_min_max_finalize
+     4438 | keyed_min          | 4460 | keyed_min_max_finalize
+     4439 | keyed_max          | 4460 | keyed_min_max_finalize
+     4440 | keyed_max          | 4460 | keyed_min_max_finalize
+     4441 | keyed_max          | 4460 | keyed_min_max_finalize
+     4442 | keyed_max          | 4460 | keyed_min_max_finalize
+     4443 | keyed_max          | 4460 | keyed_min_max_finalize
+     4444 | keyed_max          | 4460 | keyed_min_max_finalize
+     4445 | keyed_max          | 4460 | keyed_min_max_finalize
+     4446 | keyed_max          | 4460 | keyed_min_max_finalize
+     4447 | keyed_max          | 4460 | keyed_min_max_finalize
+     4448 | keyed_max          | 4460 | keyed_min_max_finalize
+     4449 | keyed_max          | 4460 | keyed_min_max_finalize
+     4450 | keyed_max          | 4460 | keyed_min_max_finalize
+     4451 | keyed_max          | 4460 | keyed_min_max_finalize
+     4452 | keyed_max          | 4460 | keyed_min_max_finalize
+     4453 | keyed_max          | 4460 | keyed_min_max_finalize
+     4454 | keyed_max          | 4460 | keyed_min_max_finalize
+     4455 | keyed_max          | 4460 | keyed_min_max_finalize
+     4456 | keyed_max          | 4460 | keyed_min_max_finalize
+     4457 | keyed_max          | 4460 | keyed_min_max_finalize
+     4463 | set_agg            | 2334 | array_agg_finalfn
+(43 rows)
+
 -- If transfn is strict then either initval should be non-NULL, or
 -- input type should match transtype so that the first non-null input
 -- can be assigned as the state value.
--- SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
--- FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
--- WHERE a.aggfnoid = p.oid AND
---     a.aggtransfn = ptr.oid AND ptr.proisstrict AND
---     a.agginitval IS NULL AND
---     NOT binary_coercible(p.proargtypes[0], a.aggtranstype);
+SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
+FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
+WHERE a.aggfnoid = p.oid AND
+    a.aggtransfn = ptr.oid AND ptr.proisstrict AND
+    a.agginitval IS NULL AND
+    NOT binary_coercible(p.proargtypes[0], a.aggtranstype);
+ aggfnoid | proname | oid | proname 
+----------+---------+-----+---------
+(0 rows)
+
 -- Check for inconsistent specifications of moving-aggregate columns.
 SELECT ctid, aggfnoid::oid
 FROM pg_aggregate as p1
@@ -1291,14 +1458,16 @@ SELECT DISTINCT proname, oprname
 FROM pg_operator AS o, pg_aggregate AS a, pg_proc AS p
 WHERE a.aggfnoid = p.oid AND a.aggsortop = o.oid
 ORDER BY 1, 2;
- proname  | oprname 
-----------+---------
- bool_and | <
- bool_or  | >
- every    | <
- max      | >
- min      | <
-(5 rows)
+  proname  | oprname 
+-----------+---------
+ bool_and  | <
+ bool_or   | >
+ every     | <
+ keyed_max | >
+ keyed_min | >
+ max       | >
+ min       | <
+(7 rows)
 
 -- Check datatypes match
 SELECT a.aggfnoid::oid, o.oid
@@ -1306,9 +1475,47 @@ FROM pg_operator AS o, pg_aggregate AS a, pg_proc AS p
 WHERE a.aggfnoid = p.oid AND a.aggsortop = o.oid AND
     (oprkind != 'b' OR oprresult != 'boolean'::regtype
      OR oprleft != p.proargtypes[0] OR oprright != p.proargtypes[0]);
- aggfnoid | oid 
-----------+-----
-(0 rows)
+ aggfnoid | oid  
+----------+------
+     4420 |  413
+     4421 |  521
+     4422 |  520
+     4423 |  610
+     4424 |  623
+     4425 |  674
+     4426 |  563
+     4427 | 1097
+     4428 | 1112
+     4429 | 1554
+     4430 |  903
+     4431 | 2064
+     4432 | 1324
+     4433 | 1334
+     4434 |  666
+     4435 | 1756
+     4436 | 1060
+     4437 | 2800
+     4438 | 3519
+     4439 |  521
+     4440 |  520
+     4441 |  610
+     4442 |  623
+     4443 |  674
+     4444 |  563
+     4445 | 1097
+     4446 | 1112
+     4447 | 1554
+     4448 |  903
+     4449 | 2064
+     4450 | 1324
+     4451 | 1334
+     4452 |  666
+     4453 | 1756
+     4454 | 1060
+     4455 | 2800
+     4456 |  413
+     4457 | 3519
+(38 rows)
 
 -- Check operator is a suitable btree opfamily member
 SELECT a.aggfnoid::oid, o.oid
@@ -1331,14 +1538,16 @@ WHERE a.aggfnoid = p.oid AND a.aggsortop = o.oid AND
     amopopr = o.oid AND
     amopmethod = (SELECT oid FROM pg_am WHERE amname = 'btree')
 ORDER BY 1, 2;
- proname  | oprname | amopstrategy 
-----------+---------+--------------
- bool_and | <       |            1
- bool_or  | >       |            5
- every    | <       |            1
- max      | >       |            5
- min      | <       |            1
-(5 rows)
+  proname  | oprname | amopstrategy 
+-----------+---------+--------------
+ bool_and  | <       |            1
+ bool_or   | >       |            5
+ every     | <       |            1
+ keyed_max | >       |            5
+ keyed_min | >       |            5
+ max       | >       |            5
+ min       | <       |            1
+(7 rows)
 
 -- Check that there are not aggregates with the same name and different
 -- numbers of arguments.  While not technically wrong, we have a project policy
@@ -1347,12 +1556,23 @@ ORDER BY 1, 2;
 -- See the fate of the single-argument form of string_agg() for history.
 -- (Note: we don't forbid users from creating such aggregates; the policy is
 -- just to think twice before creating built-in aggregates like this.)
--- SELECT p1.oid::regprocedure, p2.oid::regprocedure
--- FROM pg_proc AS p1, pg_proc AS p2
--- WHERE p1.oid < p2.oid AND p1.proname = p2.proname AND
---     p1.proisagg AND p2.proisagg AND
---     array_dims(p1.proargtypes) != array_dims(p2.proargtypes)
--- ORDER BY 1;
+-- The only aggregates that should show up here are count(x) and count(*).
+SELECT p1.oid::regprocedure, p2.oid::regprocedure
+FROM pg_proc AS p1, pg_proc AS p2
+WHERE p1.oid < p2.oid AND p1.proname = p2.proname AND
+    p1.proisagg AND p2.proisagg AND
+    array_dims(p1.proargtypes) != array_dims(p2.proargtypes)
+ORDER BY 1;
+              oid              |                            oid                             
+-------------------------------+------------------------------------------------------------
+ count("any")                  | count()
+ hll_agg(anyelement)           | hll_agg(anyelement,integer)
+ bloom_agg(anyelement)         | bloom_agg(anyelement,double precision,bigint)
+ tdigest_agg(double precision) | tdigest_agg(double precision,integer)
+ cmsketch_agg(anyelement)      | cmsketch_agg(anyelement,double precision,double precision)
+ fss_agg(anyelement,bigint)    | fss_agg(anyelement,bigint,bigint,bigint)
+(6 rows)
+
 -- For the same reason, built-in aggregates with default arguments are no good.
 SELECT oid, proname
 FROM pg_proc AS p
@@ -1366,7 +1586,7 @@ WHERE proisagg AND proargdefaults IS NOT NULL;
 -- that is not subject to the misplaced ORDER BY issue).
 SELECT p.oid, proname
 FROM pg_proc AS p JOIN pg_aggregate AS a ON a.aggfnoid = p.oid
-WHERE proisagg AND provariadic != 0 AND a.aggkind = 'n' AND p.proname != 'combine';
+WHERE proisagg AND provariadic != 0 AND a.aggkind = 'n';
  oid | proname 
 -----+---------
 (0 rows)
@@ -1553,24 +1773,19 @@ ORDER BY 1, 2, 3;
         783 |            1 | @@
         783 |            2 | &<
         783 |            3 | &&
-        783 |            3 | &&&
         783 |            4 | &>
         783 |            5 | >>
         783 |            6 | -|-
         783 |            6 | ~=
         783 |            7 | @>
-        783 |            7 | ~
         783 |            8 | <@
-        783 |            8 | @
         783 |            9 | &<|
         783 |           10 | <<|
         783 |           10 | <^
         783 |           11 | >^
         783 |           11 | |>>
         783 |           12 | |&>
-        783 |           13 | <->
         783 |           13 | ~
-        783 |           14 | <#>
         783 |           14 | @
         783 |           15 | <->
         783 |           16 | @>
@@ -1597,6 +1812,34 @@ ORDER BY 1, 2, 3;
        2742 |            9 | ?
        2742 |           10 | ?|
        2742 |           11 | ?&
+       3580 |            1 | <
+       3580 |            1 | <<
+       3580 |            2 | &<
+       3580 |            2 | <=
+       3580 |            3 | &&
+       3580 |            3 | =
+       3580 |            4 | &>
+       3580 |            4 | >=
+       3580 |            5 | >
+       3580 |            5 | >>
+       3580 |            6 | ~=
+       3580 |            7 | >>=
+       3580 |            7 | @>
+       3580 |            8 | <<=
+       3580 |            8 | <@
+       3580 |            9 | &<|
+       3580 |           10 | <<|
+       3580 |           11 | |>>
+       3580 |           12 | |&>
+       3580 |           16 | @>
+       3580 |           17 | -|-
+       3580 |           18 | =
+       3580 |           20 | <
+       3580 |           21 | <=
+       3580 |           22 | >
+       3580 |           23 | >=
+       3580 |           24 | >>
+       3580 |           26 | <<
        4000 |            1 | <<
        4000 |            1 | ~<~
        4000 |            2 | &<
@@ -1619,7 +1862,7 @@ ORDER BY 1, 2, 3;
        4000 |           15 | >
        4000 |           16 | @>
        4000 |           18 | =
-(85 rows)
+(108 rows)
 
 -- Check that all opclass search operators have selectivity estimators.
 -- This is not absolutely required, but it seems a reasonable thing
@@ -1781,11 +2024,13 @@ WHERE NOT (
   -- GIN has six support functions. 1-3 are mandatory, 5 is optional, and
   --   at least one of 4 and 6 must be given.
   -- SP-GiST has five support functions, all mandatory
+  -- BRIN has four mandatory support functions, and a bunch of optionals
   amname = 'btree' AND procnums @> '{1}' OR
   amname = 'hash' AND procnums = '{1}' OR
   amname = 'gist' AND procnums @> '{1, 2, 3, 4, 5, 6, 7}' OR
   amname = 'gin' AND (procnums @> '{1, 2, 3}' AND (procnums && '{4, 6}')) OR
-  amname = 'spgist' AND procnums = '{1, 2, 3, 4, 5}'
+  amname = 'spgist' AND procnums = '{1, 2, 3, 4, 5}' OR
+  amname = 'brin' AND procnums @> '{1, 2, 3, 4}'
 );
  amname | opfname | amproclefttype | amprocrighttype | procnums 
 --------+---------+----------------+-----------------+----------
@@ -1806,7 +2051,8 @@ WHERE NOT (
   amname = 'hash' AND procnums = '{1}' OR
   amname = 'gist' AND procnums @> '{1, 2, 3, 4, 5, 6, 7}' OR
   amname = 'gin' AND (procnums @> '{1, 2, 3}' AND (procnums && '{4, 6}')) OR
-  amname = 'spgist' AND procnums = '{1, 2, 3, 4, 5}'
+  amname = 'spgist' AND procnums = '{1, 2, 3, 4, 5}' OR
+  amname = 'brin' AND procnums @> '{1, 2, 3, 4}'
 );
  amname | opcname | procnums 
 --------+---------+----------
@@ -1830,59 +2076,9 @@ WHERE p1.amprocfamily = p3.oid AND p4.amprocfamily = p6.oid AND
     p3.opfmethod = p6.opfmethod AND p1.amprocnum = p4.amprocnum AND
     p1.amproc = p2.oid AND p4.amproc = p5.oid AND
     (p2.proretset OR p5.proretset OR p2.pronargs != p5.pronargs);
- amprocfamily | amprocnum |  oid  |           proname           |       opfname        | amprocfamily | amprocnum |  oid  |           proname           |       opfname        
---------------+-----------+-------+-----------------------------+----------------------+--------------+-----------+-------+-----------------------------+----------------------
-         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops           |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
-         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops           |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
-         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops           |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
-         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops             |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
-         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops             |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
-         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops             |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
-        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops
-        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops
-        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         3550 |         1 |  3553 | inet_gist_consistent        | network_ops
-        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         1029 |         1 |  2179 | gist_point_consistent       | point_ops
-        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         2593 |         1 |  2578 | gist_box_consistent         | box_ops
-        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         3919 |         1 |  3875 | range_gist_consistent       | range_ops
-        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops
-        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops
-         3550 |         1 |  3553 | inet_gist_consistent        | network_ops          |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
-         3550 |         1 |  3553 | inet_gist_consistent        | network_ops          |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
-         3550 |         1 |  3553 | inet_gist_consistent        | network_ops          |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
-         1029 |         1 |  2179 | gist_point_consistent       | point_ops            |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
-         1029 |         1 |  2179 | gist_point_consistent       | point_ops            |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
-         1029 |         1 |  2179 | gist_point_consistent       | point_ops            |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
-         2593 |         1 |  2578 | gist_box_consistent         | box_ops              |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
-         2593 |         1 |  2578 | gist_box_consistent         | box_ops              |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
-         2593 |         1 |  2578 | gist_box_consistent         | box_ops              |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
-         3919 |         1 |  3875 | range_gist_consistent       | range_ops            |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
-         3919 |         1 |  3875 | range_gist_consistent       | range_ops            |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
-         3919 |         1 |  3875 | range_gist_consistent       | range_ops            |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
-        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops
-        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops
-        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         3550 |         1 |  3553 | inet_gist_consistent        | network_ops
-        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         1029 |         1 |  2179 | gist_point_consistent       | point_ops
-        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         2593 |         1 |  2578 | gist_box_consistent         | box_ops
-        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         3919 |         1 |  3875 | range_gist_consistent       | range_ops
-        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops
-        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops
-         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops          |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
-         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops          |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
-         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops          |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
-         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops         |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
-         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops         |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
-         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops         |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
-        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops
-        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops
-        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         3550 |         1 |  3553 | inet_gist_consistent        | network_ops
-        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         1029 |         1 |  2179 | gist_point_consistent       | point_ops
-        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         2593 |         1 |  2578 | gist_box_consistent         | box_ops
-        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         3919 |         1 |  3875 | range_gist_consistent       | range_ops
-        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops
-        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops
-         1029 |         8 |  3064 | gist_point_distance         | point_ops            |        12238 |         8 | 12195 | geometry_gist_distance_2d   | gist_geometry_ops_2d
-        12238 |         8 | 12195 | geometry_gist_distance_2d   | gist_geometry_ops_2d |         1029 |         8 |  3064 | gist_point_distance         | point_ops
-(50 rows)
+ amprocfamily | amprocnum | oid | proname | opfname | amprocfamily | amprocnum | oid | proname | opfname 
+--------------+-----------+-----+---------+---------+--------------+-----------+-----+---------+---------
+(0 rows)
 
 -- For btree, though, we can do better since we know the support routines
 -- must be of the form cmp(lefttype, righttype) returns int4
@@ -1961,31 +2157,9 @@ FROM pg_amproc AS p1, pg_proc AS p2
 WHERE p1.amproc = p2.oid AND
     p1.amproclefttype = p1.amprocrighttype AND
     p2.provolatile != 'i';
- amprocfamily |           amproc            |             prosrc             
---------------+-----------------------------+--------------------------------
-        12238 | geometry_gist_distance_2d   | gserialized_gist_distance_2d
-        12238 | geometry_gist_consistent_2d | gserialized_gist_consistent_2d
-        12238 | geometry_gist_union_2d      | gserialized_gist_union_2d
-        12238 | geometry_gist_compress_2d   | gserialized_gist_compress_2d
-        12238 | geometry_gist_decompress_2d | gserialized_gist_decompress_2d
-        12238 | geometry_gist_penalty_2d    | gserialized_gist_penalty_2d
-        12238 | geometry_gist_picksplit_2d  | gserialized_gist_picksplit_2d
-        12238 | geometry_gist_same_2d       | gserialized_gist_same_2d
-        12271 | geometry_gist_consistent_nd | gserialized_gist_consistent
-        12271 | geometry_gist_union_nd      | gserialized_gist_union
-        12271 | geometry_gist_compress_nd   | gserialized_gist_compress
-        12271 | geometry_gist_decompress_nd | gserialized_gist_decompress
-        12271 | geometry_gist_penalty_nd    | gserialized_gist_penalty
-        12271 | geometry_gist_picksplit_nd  | gserialized_gist_picksplit
-        12271 | geometry_gist_same_nd       | gserialized_gist_same
-        12750 | geography_gist_consistent   | gserialized_gist_consistent
-        12750 | geography_gist_union        | gserialized_gist_union
-        12750 | geography_gist_compress     | gserialized_gist_compress
-        12750 | geography_gist_decompress   | gserialized_gist_decompress
-        12750 | geography_gist_penalty      | gserialized_gist_penalty
-        12750 | geography_gist_picksplit    | gserialized_gist_picksplit
-        12750 | geography_gist_same         | gserialized_gist_same
-(22 rows)
+ amprocfamily | amproc | prosrc 
+--------------+--------+--------
+(0 rows)
 
 SELECT p1.amprocfamily, p1.amproc, p2.prosrc
 FROM pg_amproc AS p1, pg_proc AS p2
@@ -1994,5 +2168,80 @@ WHERE p1.amproc = p2.oid AND
     p2.provolatile = 'v';
  amprocfamily | amproc | prosrc 
 --------------+--------+--------
+(0 rows)
+
+-- **************** pg_index ****************
+-- Look for illegal values in pg_index fields.
+SELECT p1.indexrelid, p1.indrelid
+FROM pg_index as p1
+WHERE p1.indexrelid = 0 OR p1.indrelid = 0 OR
+      p1.indnatts <= 0 OR p1.indnatts > 32;
+ indexrelid | indrelid 
+------------+----------
+(0 rows)
+
+-- oidvector and int2vector fields should be of length indnatts.
+SELECT p1.indexrelid, p1.indrelid
+FROM pg_index as p1
+WHERE array_lower(indkey, 1) != 0 OR array_upper(indkey, 1) != indnatts-1 OR
+    array_lower(indclass, 1) != 0 OR array_upper(indclass, 1) != indnatts-1 OR
+    array_lower(indcollation, 1) != 0 OR array_upper(indcollation, 1) != indnatts-1 OR
+    array_lower(indoption, 1) != 0 OR array_upper(indoption, 1) != indnatts-1;
+ indexrelid | indrelid 
+------------+----------
+(0 rows)
+
+-- Check that opclasses and collations match the underlying columns.
+-- (As written, this test ignores expression indexes.)
+SELECT indexrelid::regclass, indrelid::regclass, attname, atttypid::regtype, opcname
+FROM (SELECT indexrelid, indrelid, unnest(indkey) as ikey,
+             unnest(indclass) as iclass, unnest(indcollation) as icoll
+      FROM pg_index) ss,
+      pg_attribute a,
+      pg_opclass opc
+WHERE a.attrelid = indrelid AND a.attnum = ikey AND opc.oid = iclass AND
+      (NOT binary_coercible(atttypid, opcintype) OR icoll != attcollation);
+ indexrelid | indrelid | attname | atttypid | opcname 
+------------+----------+---------+----------+---------
+(0 rows)
+
+-- For system catalogs, be even tighter: nearly all indexes should be
+-- exact type matches not binary-coercible matches.  At this writing
+-- the only exception is an OID index on a regproc column.
+SELECT indexrelid::regclass, indrelid::regclass, attname, atttypid::regtype, opcname
+FROM (SELECT indexrelid, indrelid, unnest(indkey) as ikey,
+             unnest(indclass) as iclass, unnest(indcollation) as icoll
+      FROM pg_index
+      WHERE indrelid < 16384) ss,
+      pg_attribute a,
+      pg_opclass opc
+WHERE a.attrelid = indrelid AND a.attnum = ikey AND opc.oid = iclass AND
+      (opcintype != atttypid OR icoll != attcollation)
+ORDER BY 1;
+           indexrelid           |     indrelid     |  attname   | atttypid | opcname 
+--------------------------------+------------------+------------+----------+---------
+ pg_aggregate_fnoid_index       | pg_aggregate     | aggfnoid   | regproc  | oid_ops
+ pipeline_combine_transfn_index | pipeline_combine | aggfinalfn | regproc  | oid_ops
+ pipeline_combine_transfn_index | pipeline_combine | transfn    | regproc  | oid_ops
+(3 rows)
+
+-- Check for system catalogs with collation-sensitive ordering.  This is not
+-- a representational error in pg_index, but simply wrong catalog design.
+-- It's bad because we expect to be able to clone template0 and assign the
+-- copy a different database collation.  It would especially not work for
+-- shared catalogs.  Note that although text columns will show a collation
+-- in indcollation, they're still okay to index with text_pattern_ops,
+-- so allow that case.
+SELECT indexrelid::regclass, indrelid::regclass, iclass, icoll
+FROM (SELECT indexrelid, indrelid,
+             unnest(indclass) as iclass, unnest(indcollation) as icoll
+      FROM pg_index
+      WHERE indrelid < 16384) ss
+WHERE icoll != 0 AND iclass !=
+    (SELECT oid FROM pg_opclass
+     WHERE opcname = 'text_pattern_ops' AND opcmethod =
+           (SELECT oid FROM pg_am WHERE amname = 'btree'));
+ indexrelid | indrelid | iclass | icoll 
+------------+----------+--------+-------
 (0 rows)
 

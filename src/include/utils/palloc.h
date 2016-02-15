@@ -18,7 +18,7 @@
  * everything that should be freed.  See utils/mmgr/README for more info.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/palloc.h
@@ -36,6 +36,22 @@
 typedef struct MemoryContextData *MemoryContext;
 
 /*
+ * A memory context can have callback functions registered on it.  Any such
+ * function will be called once just before the context is next reset or
+ * deleted.  The MemoryContextCallback struct describing such a callback
+ * typically would be allocated within the context itself, thereby avoiding
+ * any need to manage it explicitly (the reset/delete action will free it).
+ */
+typedef void (*MemoryContextCallbackFunction) (void *arg);
+
+typedef struct MemoryContextCallback
+{
+	MemoryContextCallbackFunction func; /* function to call */
+	void	   *arg;			/* argument to pass it */
+	struct MemoryContextCallback *next; /* next in list of callbacks */
+} MemoryContextCallback;
+
+/*
  * CurrentMemoryContext is the default allocation context for palloc().
  * Avoid accessing it directly!  Instead, use MemoryContextSwitchTo()
  * to change the setting.
@@ -43,14 +59,24 @@ typedef struct MemoryContextData *MemoryContext;
 extern PGDLLIMPORT MemoryContext CurrentMemoryContext;
 
 /*
+ * Flags for MemoryContextAllocExtended.
+ */
+#define MCXT_ALLOC_HUGE			0x01	/* allow huge allocation (> 1 GB) */
+#define MCXT_ALLOC_NO_OOM		0x02	/* no failure if out-of-memory */
+#define MCXT_ALLOC_ZERO			0x04	/* zero allocated memory */
+
+/*
  * Fundamental memory-allocation operations (more are in utils/memutils.h)
  */
 extern void *MemoryContextAlloc(MemoryContext context, Size size);
 extern void *MemoryContextAllocZero(MemoryContext context, Size size);
 extern void *MemoryContextAllocZeroAligned(MemoryContext context, Size size);
+extern void *MemoryContextAllocExtended(MemoryContext context,
+						   Size size, int flags);
 
 extern void *palloc(Size size);
 extern void *palloc0(Size size);
+extern void *palloc_extended(Size size, int flags);
 extern void *repalloc(void *pointer, Size size);
 extern void pfree(void *pointer);
 
@@ -98,6 +124,10 @@ MemoryContextSwitchTo(MemoryContext context)
 #endif   /* PG_USE_INLINE || MCXT_INCLUDE_DEFINITIONS */
 #endif   /* FRONTEND */
 
+/* Registration of memory context reset/delete callbacks */
+extern void MemoryContextRegisterResetCallback(MemoryContext context,
+								   MemoryContextCallback *cb);
+
 /*
  * These are like standard strdup() except the copied string is
  * allocated in a context, not with malloc().
@@ -107,11 +137,7 @@ extern char *pstrdup(const char *in);
 extern char *pnstrdup(const char *in, Size len);
 
 /* sprintf into a palloc'd buffer --- these are in psprintf.c */
-extern char *
-psprintf(const char *fmt,...)
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 1, 2)));
-extern size_t
-pvsnprintf(char *buf, size_t len, const char *fmt, va_list args)
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 3, 0)));
+extern char *psprintf(const char *fmt,...) pg_attribute_printf(1, 2);
+extern size_t pvsnprintf(char *buf, size_t len, const char *fmt, va_list args) pg_attribute_printf(3, 0);
 
 #endif   /* PALLOC_H */

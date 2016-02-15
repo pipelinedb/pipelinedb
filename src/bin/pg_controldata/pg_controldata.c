@@ -26,6 +26,7 @@
 #include "access/xlog.h"
 #include "access/xlog_internal.h"
 #include "catalog/pg_control.h"
+#include "pg_getopt.h"
 
 
 static void
@@ -35,6 +36,7 @@ usage(const char *progname)
 	printf(_("Usage:\n"));
 	printf(_("  %s [OPTION] [DATADIR]\n"), progname);
 	printf(_("\nOptions:\n"));
+	printf(_(" [-D] DATADIR    data directory\n"));
 	printf(_("  -V, --version  output version information, then exit\n"));
 	printf(_("  -?, --help     show this help, then exit\n"));
 	printf(_("\nIf no data directory (DATADIR) is specified, "
@@ -90,8 +92,8 @@ main(int argc, char *argv[])
 	ControlFileData ControlFile;
 	int			fd;
 	char		ControlFilePath[MAXPGPATH];
-	char	   *DataDir;
-	pg_crc32	crc;
+	char	   *DataDir = NULL;
+	pg_crc32c	crc;
 	time_t		time_tmp;
 	char		pgctime_str[128];
 	char		ckpttime_str[128];
@@ -100,6 +102,7 @@ main(int argc, char *argv[])
 	const char *progname;
 	XLogSegNo	segno;
 	char		xlogfilename[MAXFNAMELEN];
+	int			c;
 
 	set_pglocale_pgservice(argv[0], PG_TEXTDOMAIN("pg_controldata"));
 
@@ -119,10 +122,38 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if (argc > 1)
-		DataDir = argv[1];
-	else
-		DataDir = getenv("PGDATA");
+	while ((c = getopt(argc, argv, "D:")) != -1)
+	{
+		switch (c)
+		{
+			case 'D':
+				DataDir = optarg;
+				break;
+
+			default:
+				fprintf(stderr, _("Try \"%s --help\" for more information.\n"), progname);
+				exit(1);
+		}
+	}
+
+	if (DataDir == NULL)
+	{
+		if (optind < argc)
+			DataDir = argv[optind++];
+		else
+			DataDir = getenv("PGDATA");
+	}
+
+	/* Complain if any arguments remain */
+	if (optind < argc)
+	{
+		fprintf(stderr, _("%s: too many command-line arguments (first is \"%s\")\n"),
+				progname, argv[optind]);
+		fprintf(stderr, _("Try \"%s --help\" for more information.\n"),
+				progname);
+		exit(1);
+	}
+
 	if (DataDir == NULL)
 	{
 		fprintf(stderr, _("%s: no data directory specified\n"), progname);
@@ -148,13 +179,13 @@ main(int argc, char *argv[])
 	close(fd);
 
 	/* Check the CRC. */
-	INIT_CRC32(crc);
-	COMP_CRC32(crc,
-			   (char *) &ControlFile,
-			   offsetof(ControlFileData, crc));
-	FIN_CRC32(crc);
+	INIT_CRC32C(crc);
+	COMP_CRC32C(crc,
+				(char *) &ControlFile,
+				offsetof(ControlFileData, crc));
+	FIN_CRC32C(crc);
 
-	if (!EQ_CRC32(crc, ControlFile.crc))
+	if (!EQ_CRC32C(crc, ControlFile.crc))
 		printf(_("WARNING: Calculated CRC checksum does not match value stored in file.\n"
 				 "Either the file is corrupt, or it has a different layout than this program\n"
 				 "is expecting.  The results below are untrustworthy.\n\n"));
@@ -240,6 +271,10 @@ main(int argc, char *argv[])
 		   ControlFile.checkPointCopy.oldestMulti);
 	printf(_("Latest checkpoint's oldestMulti's DB: %u\n"),
 		   ControlFile.checkPointCopy.oldestMultiDB);
+	printf(_("Latest checkpoint's oldestCommitTsXid:%u\n"),
+		   ControlFile.checkPointCopy.oldestCommitTsXid);
+	printf(_("Latest checkpoint's newestCommitTsXid:%u\n"),
+		   ControlFile.checkPointCopy.newestCommitTsXid);
 	printf(_("Time of latest checkpoint:            %s\n"),
 		   ckpttime_str);
 	printf(_("Fake LSN counter for unlogged rels:   %X/%X\n"),
@@ -258,18 +293,20 @@ main(int argc, char *argv[])
 		   (uint32) ControlFile.backupEndPoint);
 	printf(_("End-of-backup record required:        %s\n"),
 		   ControlFile.backupEndRequired ? _("yes") : _("no"));
-	printf(_("Current wal_level setting:            %s\n"),
+	printf(_("wal_level setting:                    %s\n"),
 		   wal_level_str(ControlFile.wal_level));
-	printf(_("Current wal_log_hints setting:        %s\n"),
+	printf(_("wal_log_hints setting:                %s\n"),
 		   ControlFile.wal_log_hints ? _("on") : _("off"));
-	printf(_("Current max_connections setting:      %d\n"),
+	printf(_("max_connections setting:              %d\n"),
 		   ControlFile.MaxConnections);
-	printf(_("Current max_worker_processes setting: %d\n"),
+	printf(_("max_worker_processes setting:         %d\n"),
 		   ControlFile.max_worker_processes);
-	printf(_("Current max_prepared_xacts setting:   %d\n"),
+	printf(_("max_prepared_xacts setting:           %d\n"),
 		   ControlFile.max_prepared_xacts);
-	printf(_("Current max_locks_per_xact setting:   %d\n"),
+	printf(_("max_locks_per_xact setting:           %d\n"),
 		   ControlFile.max_locks_per_xact);
+	printf(_("track_commit_timestamp setting:       %s\n"),
+		   ControlFile.track_commit_timestamp ? _("on") : _("off"));
 	printf(_("Maximum data alignment:               %u\n"),
 		   ControlFile.maxAlign);
 	/* we don't print floatFormat since can't say much useful about it */

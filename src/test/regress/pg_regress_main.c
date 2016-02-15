@@ -8,7 +8,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/test/regress/pg_regress_main.c
@@ -65,8 +65,8 @@ psql_start_test(const char *testname,
 
 	snprintf(psql_cmd + offset, sizeof(psql_cmd) - offset,
 			 "\"%s%spsql\" -X -a -q -d \"%s\" < \"%s\" > \"%s\" 2>&1",
-			 psqldir ? psqldir : "",
-			 psqldir ? "/" : "",
+			 bindir ? bindir : "",
+			 bindir ? "/" : "",
 			 dblist->str,
 			 infile,
 			 outfile);

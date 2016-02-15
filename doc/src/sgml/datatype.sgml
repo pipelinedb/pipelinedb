@@ -498,11 +498,13 @@
 
     <para>
      The type <type>numeric</type> can store numbers with a
-     very large number of digits and perform calculations exactly. It is
-     especially recommended for storing monetary amounts and other
-     quantities where exactness is required. However, arithmetic on
-     <type>numeric</type> values is very slow compared to the integer
-     types, or to the floating-point types described in the next section.
+     very large number of digits. It is especially recommended for
+     storing monetary amounts and other quantities where exactness is
+     required.  Calculations with <type>numeric</type> values yield exact
+     results where possible, e.g.  addition, subtraction, multiplication.
+     However, calculations on <type>numeric</type> values are very slow
+     compared to the integer types, or to the floating-point types
+     described in the next section.
     </para>
 
     <para>
@@ -1073,14 +1075,15 @@ SELECT '52093.89'::money::numeric::float8;
     stored and displayed that way.  However, trailing spaces are treated as
     semantically insignificant and disregarded when comparing two values
     of type <type>character</type>.  In collations where whitespace
-    is significant, this behavior can produce unexpected results,
-    e.g. <command>SELECT 'a '::CHAR(2) collate "C" &lt;
-    'a\n'::CHAR(2)</command> returns true.
+    is significant, this behavior can produce unexpected results;
+    for example <command>SELECT 'a '::CHAR(2) collate "C" &lt;
+    E'a\n'::CHAR(2)</command> returns true, even though <literal>C</>
+    locale would consider a space to be greater than a newline.
     Trailing spaces are removed when converting a <type>character</type> value
     to one of the other string types.  Note that trailing spaces
     <emphasis>are</> semantically significant in
     <type>character varying</type> and <type>text</type> values, and
-    when using pattern matching, e.g. <literal>LIKE</>,
+    when using pattern matching, that is <literal>LIKE</> and
     regular expressions.
    </para>
 
@@ -1112,7 +1115,8 @@ SELECT '52093.89'::money::numeric::float8;
      advantages in some other database systems, there is no such advantage in
      <productname>PostgreSQL</productname>; in fact
      <type>character(<replaceable>n</>)</type> is usually the slowest of
-     the three because of its additional storage costs.  In most situations
+     the three because of its additional storage costs and slower
+     sorting.  In most situations
      <type>text</type> or <type>character varying</type> should be used
      instead.
     </para>
@@ -3646,6 +3650,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
       <member><literal>'08002b:010203'</></member>
       <member><literal>'08002b-010203'</></member>
       <member><literal>'0800.2b01.0203'</></member>
+      <member><literal>'0800-2b01-0203'</></member>
       <member><literal>'08002b010203'</></member>
      </simplelist>
 
@@ -3667,7 +3672,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     </para>
 
     <para>
-     The remaining four input formats are not part of any standard.
+     The remaining five input formats are not part of any standard.
     </para>
    </sect2>
 
@@ -4318,7 +4323,8 @@ SET xmloption TO { DOCUMENT | CONTENT };
     an object identifier.  There are also several alias types for
     <type>oid</>: <type>regproc</>, <type>regprocedure</>,
     <type>regoper</>, <type>regoperator</>, <type>regclass</>,
-    <type>regtype</>, <type>regconfig</>, and <type>regdictionary</>.
+    <type>regtype</>, <type>regrole</>, <type>regnamespace</>,
+    <type>regconfig</>, and <type>regdictionary</>.
     <xref linkend="datatype-oid-table"> shows an overview.
    </para>
 
@@ -4428,6 +4434,20 @@ SELECT * FROM pg_attribute
        </row>
 
        <row>
+        <entry><type>regrole</></entry>
+        <entry><structname>pg_authid</></entry>
+        <entry>role name</entry>
+        <entry><literal>smithee</></entry>
+       </row>
+
+       <row>
+        <entry><type>regnamespace</></entry>
+        <entry><structname>pg_namespace</></entry>
+        <entry>namespace name</entry>
+        <entry><literal>pg_catalog</></entry>
+       </row>
+
+       <row>
         <entry><type>regconfig</></entry>
         <entry><structname>pg_ts_config</></entry>
         <entry>text search configuration</entry>
@@ -4445,7 +4465,8 @@ SELECT * FROM pg_attribute
     </table>
 
    <para>
-    All of the OID alias types accept schema-qualified names, and will
+    All of the OID alias types for objects grouped by namespace accept
+    schema-qualified names, and will
     display schema-qualified names on output if the object would not
     be found in the current search path without being qualified.
     The <type>regproc</> and <type>regoper</> alias types will only
@@ -4457,7 +4478,7 @@ SELECT * FROM pg_attribute
    </para>
 
    <para>
-    An additional property of the OID alias types is the creation of
+    An additional property of most of the OID alias types is the creation of
     dependencies.  If a
     constant of one of these types appears in a stored expression
     (such as a column default expression or view), it creates a dependency
@@ -4467,7 +4488,17 @@ SELECT * FROM pg_attribute
     understands that the default expression depends on the sequence
     <literal>my_seq</>; the system will not let the sequence be dropped
     without first removing the default expression.
+    <type>regrole</> is the only exception for the property. Constants of this
+    type are not allowed in such expressions.
    </para>
+
+   <note>
+   <para>
+    The OID alias types do not completely follow transaction isolation
+    rules. The planner also treats them as simple constants, which may
+    result in sub-optimal planning.
+   </para>
+   </note>
 
    <para>
     Another identifier type used by the system is <type>xid</>, or transaction
@@ -4561,11 +4592,23 @@ SELECT * FROM pg_attribute
    </indexterm>
 
    <indexterm zone="datatype-pseudo">
+    <primary>event_trigger</primary>
+   </indexterm>
+
+   <indexterm zone="datatype-pseudo">
+    <primary>pg_ddl_command</primary>
+   </indexterm>
+
+   <indexterm zone="datatype-pseudo">
     <primary>language_handler</primary>
    </indexterm>
 
    <indexterm zone="datatype-pseudo">
     <primary>fdw_handler</primary>
+   </indexterm>
+
+   <indexterm zone="datatype-pseudo">
+    <primary>tsm_handler</primary>
    </indexterm>
 
    <indexterm zone="datatype-pseudo">
@@ -4663,13 +4706,28 @@ SELECT * FROM pg_attribute
        </row>
 
        <row>
+        <entry><type>tsm_handler</></entry>
+        <entry>A tablesample method handler is declared to return <type>tsm_handler</>.</entry>
+       </row>
+
+       <row>
         <entry><type>record</></entry>
-        <entry>Identifies a function returning an unspecified row type.</entry>
+        <entry>Identifies a function taking or returning an unspecified row type.</entry>
        </row>
 
        <row>
         <entry><type>trigger</></entry>
         <entry>A trigger function is declared to return <type>trigger.</></entry>
+       </row>
+
+       <row>
+        <entry><type>event_trigger</></entry>
+        <entry>An event trigger function is declared to return <type>event_trigger.</></entry>
+       </row>
+
+       <row>
+        <entry><type>pg_ddl_command</></entry>
+        <entry>Identifies a represention of DDL commands that is available to event triggers.</entry>
        </row>
 
        <row>
@@ -4694,10 +4752,11 @@ SELECT * FROM pg_attribute
 
    <para>
     Functions coded in procedural languages can use pseudo-types only as
-    allowed by their implementation languages.  At present the procedural
-    languages all forbid use of a pseudo-type as argument type, and allow
+    allowed by their implementation languages.  At present most procedural
+    languages forbid use of a pseudo-type as an argument type, and allow
     only <type>void</> and <type>record</> as a result type (plus
-    <type>trigger</> when the function is used as a trigger).  Some also
+    <type>trigger</> or <type>event_trigger</> when the function is used
+    as a trigger or event trigger).  Some also
     support polymorphic functions using the types <type>anyelement</>,
     <type>anyarray</>, <type>anynonarray</>, <type>anyenum</>, and
     <type>anyrange</>.

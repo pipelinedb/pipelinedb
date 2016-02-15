@@ -3,7 +3,7 @@
  * assert.c
  *	  Assert code.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -56,7 +56,7 @@ ExceptionalCondition(const char *conditionName,
 	/* Usually this shouldn't be needed, but make sure the msg went out */
 	fflush(stderr);
 
-#ifdef SLEEP_ON_ASSERT
+#ifndef SLEEP_ON_ASSERT
 
 	/*
 	 * It would be nice to use pg_usleep() here, but only does 2000 sec or 33

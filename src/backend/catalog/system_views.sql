@@ -1,7 +1,7 @@
 /*
  * PostgreSQL System Views
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/backend/catalog/system_views.sql
@@ -14,12 +14,12 @@ CREATE VIEW pg_roles AS
         rolinherit,
         rolcreaterole,
         rolcreatedb,
-        rolcatupdate,
         rolcanlogin,
         rolreplication,
         rolconnlimit,
         '********'::text as rolpassword,
         rolvaliduntil,
+        rolbypassrls,
         setconfig as rolconfig,
         pg_authid.oid
     FROM pg_authid LEFT JOIN pg_db_role_setting s
@@ -31,8 +31,8 @@ CREATE VIEW pg_shadow AS
         pg_authid.oid AS usesysid,
         rolcreatedb AS usecreatedb,
         rolsuper AS usesuper,
-        rolcatupdate AS usecatupd,
         rolreplication AS userepl,
+        rolbypassrls AS usebypassrls,
         rolpassword AS passwd,
         rolvaliduntil::abstime AS valuntil,
         setconfig AS useconfig
@@ -56,12 +56,41 @@ CREATE VIEW pg_user AS
         usesysid,
         usecreatedb,
         usesuper,
-        usecatupd,
         userepl,
+        usebypassrls,
         '********'::text as passwd,
         valuntil,
         useconfig
     FROM pg_shadow;
+
+CREATE VIEW pg_policies AS
+    SELECT
+        N.nspname AS schemaname,
+        C.relname AS tablename,
+        pol.polname AS policyname,
+        CASE
+            WHEN pol.polroles = '{0}' THEN
+                string_to_array('public', '')
+            ELSE
+                ARRAY
+                (
+                    SELECT rolname
+                    FROM pg_catalog.pg_authid
+                    WHERE oid = ANY (pol.polroles) ORDER BY 1
+                )
+        END AS roles,
+        CASE pol.polcmd
+            WHEN 'r' THEN 'SELECT'
+            WHEN 'a' THEN 'INSERT'
+            WHEN 'w' THEN 'UPDATE'
+            WHEN 'd' THEN 'DELETE'
+            WHEN '*' THEN 'ALL'
+        END AS cmd,
+        pg_catalog.pg_get_expr(pol.polqual, pol.polrelid) AS qual,
+        pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+    FROM pg_catalog.pg_policy pol
+    JOIN pg_catalog.pg_class C ON (C.oid = pol.polrelid)
+    LEFT JOIN pg_catalog.pg_namespace N ON (N.oid = C.relnamespace);
 
 CREATE VIEW pg_rules AS
     SELECT
@@ -90,7 +119,8 @@ CREATE VIEW pg_tables AS
         T.spcname AS tablespace,
         C.relhasindex AS hasindexes,
         C.relhasrules AS hasrules,
-        C.relhastriggers AS hastriggers
+        C.relhastriggers AS hastriggers,
+        C.relrowsecurity AS rowsecurity
     FROM pg_class C LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace)
          LEFT JOIN pg_tablespace T ON (T.oid = C.reltablespace)
     WHERE C.relkind = 'r';
@@ -121,7 +151,7 @@ CREATE VIEW pg_indexes AS
          LEFT JOIN pg_tablespace T ON (T.oid = I.reltablespace)
     WHERE C.relkind IN ('r', 'm') AND I.relkind = 'i';
 
-CREATE VIEW pg_stats AS
+CREATE VIEW pg_stats WITH (security_barrier) AS
     SELECT
         nspname AS schemaname,
         relname AS tablename,
@@ -182,7 +212,9 @@ CREATE VIEW pg_stats AS
     FROM pg_statistic s JOIN pg_class c ON (c.oid = s.starelid)
          JOIN pg_attribute a ON (c.oid = attrelid AND attnum = s.staattnum)
          LEFT JOIN pg_namespace n ON (n.oid = c.relnamespace)
-    WHERE NOT attisdropped AND has_column_privilege(c.oid, a.attnum, 'select');
+    WHERE NOT attisdropped
+    AND has_column_privilege(c.oid, a.attnum, 'select')
+    AND (c.relrowsecurity = false OR NOT row_security_active(c.oid));
 
 REVOKE ALL on pg_statistic FROM public;
 
@@ -381,6 +413,12 @@ CREATE RULE pg_settings_n AS
     DO INSTEAD NOTHING;
 
 GRANT SELECT, UPDATE ON pg_settings TO PUBLIC;
+
+CREATE VIEW pg_file_settings AS
+   SELECT * FROM pg_show_all_file_settings() AS A;
+
+REVOKE ALL on pg_file_settings FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION pg_show_all_file_settings() FROM PUBLIC;
 
 CREATE VIEW pg_timezone_abbrevs AS
     SELECT * FROM pg_timezone_abbrevs();
@@ -617,6 +655,17 @@ CREATE VIEW pg_stat_replication AS
     WHERE S.usesysid = U.oid AND
             S.pid = W.pid;
 
+CREATE VIEW pg_stat_ssl AS
+    SELECT
+            S.pid,
+            S.ssl,
+            S.sslversion AS version,
+            S.sslcipher AS cipher,
+            S.sslbits AS bits,
+            S.sslcompression AS compression,
+            S.sslclientdn AS clientdn
+    FROM pg_stat_get_activity(NULL) AS S;
+
 CREATE VIEW pg_replication_slots AS
     SELECT
             L.slot_name,
@@ -625,6 +674,7 @@ CREATE VIEW pg_replication_slots AS
             L.datoid,
             D.datname AS database,
             L.active,
+            L.active_pid,
             L.xmin,
             L.catalog_xmin,
             L.restart_lsn
@@ -736,6 +786,13 @@ CREATE VIEW pg_user_mappings AS
         pg_foreign_server S ON (U.umserver = S.oid);
 
 REVOKE ALL on pg_user_mapping FROM public;
+
+
+CREATE VIEW pg_replication_origin_status AS
+    SELECT *
+    FROM pg_show_replication_origin_status();
+
+REVOKE ALL ON pg_replication_origin_status FROM public;
 
 --
 -- We have a few function definitions in here, too.
@@ -868,6 +925,14 @@ RETURNS interval
 LANGUAGE INTERNAL
 STRICT IMMUTABLE
 AS 'make_interval';
+
+CREATE OR REPLACE FUNCTION
+  jsonb_set(jsonb_in jsonb, path text[] , replacement jsonb,
+            create_if_missing boolean DEFAULT true)
+RETURNS jsonb
+LANGUAGE INTERNAL
+STRICT IMMUTABLE
+AS 'jsonb_set';
 
 --
 -- PipelineDB system views

@@ -5,7 +5,7 @@
  *
  * Author: Magnus Hagander <magnus@hagander.net>
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
@@ -38,11 +38,17 @@ static int	verbose = 0;
 static int	noloop = 0;
 static int	standby_message_timeout = 10 * 1000;		/* 10 sec = default */
 static volatile bool time_to_abort = false;
+static bool do_create_slot = false;
+static bool slot_exists_ok = false;
+static bool do_drop_slot = false;
+static bool synchronous = false;
 
 
 static void usage(void);
+static DIR *get_destination_dir(char *dest_folder);
+static void close_destination_dir(DIR *dest_dir, char *dest_folder);
 static XLogRecPtr FindStreamingStart(uint32 *tli);
-static void StreamLog();
+static void StreamLog(void);
 static bool stop_streaming(XLogRecPtr segendpos, uint32 timeline,
 			   bool segment_finished);
 
@@ -62,10 +68,12 @@ usage(void)
 	printf(_("  %s [OPTION]...\n"), progname);
 	printf(_("\nOptions:\n"));
 	printf(_("  -D, --directory=DIR    receive transaction log files into this directory\n"));
+	printf(_("      --if-not-exists    do not error if slot already exists when creating a slot\n"));
 	printf(_("  -n, --no-loop          do not loop on connection lost\n"));
 	printf(_("  -s, --status-interval=SECS\n"
 			 "                         time between status packets sent to server (default: %d)\n"), (standby_message_timeout / 1000));
 	printf(_("  -S, --slot=SLOTNAME    replication slot to use\n"));
+	printf(_("      --synchronous      flush transaction log immediately after writing\n"));
 	printf(_("  -v, --verbose          output verbose messages\n"));
 	printf(_("  -V, --version          output version information, then exit\n"));
 	printf(_("  -?, --help             show this help, then exit\n"));
@@ -76,6 +84,9 @@ usage(void)
 	printf(_("  -U, --username=NAME    connect as specified database user\n"));
 	printf(_("  -w, --no-password      never prompt for password\n"));
 	printf(_("  -W, --password         force password prompt (should happen automatically)\n"));
+	printf(_("\nOptional actions:\n"));
+	printf(_("      --create-slot      create a new replication slot (for the slot's name see --slot)\n"));
+	printf(_("      --drop-slot        drop the replication slot (for the slot's name see --slot)\n"));
 	printf(_("\nReport bugs to <eng@pipelinedb.com>.\n"));
 }
 
@@ -116,6 +127,44 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	return false;
 }
 
+
+/*
+ * Get destination directory.
+ */
+static DIR *
+get_destination_dir(char *dest_folder)
+{
+	DIR		   *dir;
+
+	Assert(dest_folder != NULL);
+	dir = opendir(dest_folder);
+	if (dir == NULL)
+	{
+		fprintf(stderr, _("%s: could not open directory \"%s\": %s\n"),
+				progname, basedir, strerror(errno));
+		disconnect_and_exit(1);
+	}
+
+	return dir;
+}
+
+
+/*
+ * Close existing directory.
+ */
+static void
+close_destination_dir(DIR *dest_dir, char *dest_folder)
+{
+	Assert(dest_dir != NULL && dest_folder != NULL);
+	if (closedir(dest_dir))
+	{
+		fprintf(stderr, _("%s: could not close directory \"%s\": %s\n"),
+				progname, dest_folder, strerror(errno));
+		disconnect_and_exit(1);
+	}
+}
+
+
 /*
  * Determine starting location for streaming, based on any existing xlog
  * segments in the directory. We start at the end of the last one that is
@@ -132,13 +181,7 @@ FindStreamingStart(uint32 *tli)
 	uint32		high_tli = 0;
 	bool		high_ispartial = false;
 
-	dir = opendir(basedir);
-	if (dir == NULL)
-	{
-		fprintf(stderr, _("%s: could not open directory \"%s\": %s\n"),
-				progname, basedir, strerror(errno));
-		disconnect_and_exit(1);
-	}
+	dir = get_destination_dir(basedir);
 
 	while (errno = 0, (dirent = readdir(dir)) != NULL)
 	{
@@ -148,23 +191,11 @@ FindStreamingStart(uint32 *tli)
 
 		/*
 		 * Check if the filename looks like an xlog file, or a .partial file.
-		 * Xlog files are always 24 characters, and .partial files are 32
-		 * characters.
 		 */
-		if (strlen(dirent->d_name) == 24)
-		{
-			if (strspn(dirent->d_name, "0123456789ABCDEF") != 24)
-				continue;
+		if (IsXLogFileName(dirent->d_name))
 			ispartial = false;
-		}
-		else if (strlen(dirent->d_name) == 32)
-		{
-			if (strspn(dirent->d_name, "0123456789ABCDEF") != 24)
-				continue;
-			if (strcmp(&dirent->d_name[24], ".partial") != 0)
-				continue;
+		else if (IsPartialXLogFileName(dirent->d_name))
 			ispartial = true;
-		}
 		else
 			continue;
 
@@ -217,12 +248,7 @@ FindStreamingStart(uint32 *tli)
 		disconnect_and_exit(1);
 	}
 
-	if (closedir(dir))
-	{
-		fprintf(stderr, _("%s: could not close directory \"%s\": %s\n"),
-				progname, basedir, strerror(errno));
-		disconnect_and_exit(1);
-	}
+	close_destination_dir(dir, basedir);
 
 	if (high_segno > 0)
 	{
@@ -251,18 +277,16 @@ FindStreamingStart(uint32 *tli)
 static void
 StreamLog(void)
 {
-	PGresult   *res;
-	XLogRecPtr	startpos;
-	uint32		starttli;
-	XLogRecPtr	serverpos;
-	uint32		servertli;
-	uint32		hi,
-				lo;
+	XLogRecPtr	startpos,
+				serverpos;
+	TimeLineID	starttli,
+				servertli;
 
 	/*
 	 * Connect in replication mode to the server
 	 */
-	conn = GetConnection();
+	if (conn == NULL)
+		conn = GetConnection();
 	if (!conn)
 		/* Error message already written in GetConnection() */
 		return;
@@ -278,33 +302,12 @@ StreamLog(void)
 	}
 
 	/*
-	 * Run IDENTIFY_SYSTEM so we can get the timeline and current xlog
-	 * position.
+	 * Identify server, obtaining start LSN position and current timeline ID
+	 * at the same time, necessary if not valid data can be found in the
+	 * existing output directory.
 	 */
-	res = PQexec(conn, "IDENTIFY_SYSTEM");
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-	{
-		fprintf(stderr, _("%s: could not send replication command \"%s\": %s"),
-				progname, "IDENTIFY_SYSTEM", PQerrorMessage(conn));
+	if (!RunIdentifySystem(conn, NULL, &servertli, &serverpos, NULL))
 		disconnect_and_exit(1);
-	}
-	if (PQntuples(res) != 1 || PQnfields(res) < 3)
-	{
-		fprintf(stderr,
-				_("%s: could not identify system: got %d rows and %d fields, expected %d rows and %d or more fields\n"),
-				progname, PQntuples(res), PQnfields(res), 1, 3);
-		disconnect_and_exit(1);
-	}
-	servertli = atoi(PQgetvalue(res, 0, 1));
-	if (sscanf(PQgetvalue(res, 0, 2), "%X/%X", &hi, &lo) != 2)
-	{
-		fprintf(stderr,
-				_("%s: could not parse transaction log location \"%s\"\n"),
-				progname, PQgetvalue(res, 0, 2));
-		disconnect_and_exit(1);
-	}
-	serverpos = ((uint64) hi) << 32 | lo;
-	PQclear(res);
 
 	/*
 	 * Figure out where to start streaming.
@@ -332,9 +335,10 @@ StreamLog(void)
 
 	ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
 					  stop_streaming, standby_message_timeout, ".partial",
-					  false);
+					  synchronous, false);
 
 	PQfinish(conn);
+	conn = NULL;
 }
 
 /*
@@ -367,14 +371,20 @@ main(int argc, char **argv)
 		{"status-interval", required_argument, NULL, 's'},
 		{"slot", required_argument, NULL, 'S'},
 		{"verbose", no_argument, NULL, 'v'},
+/* action */
+		{"create-slot", no_argument, NULL, 1},
+		{"drop-slot", no_argument, NULL, 2},
+		{"if-not-exists", no_argument, NULL, 3},
+		{"synchronous", no_argument, NULL, 4},
 		{NULL, 0, NULL, 0}
 	};
 
 	int			c;
 	int			option_index;
+	char	   *db_name;
 
 	progname = get_progname(argv[0]);
-	set_pglocale_pgservice(argv[0], PG_TEXTDOMAIN("pg_receivexlog"));
+	set_pglocale_pgservice(argv[0], PG_TEXTDOMAIN("pg_basebackup"));
 
 	if (argc > 1)
 	{
@@ -441,6 +451,19 @@ main(int argc, char **argv)
 			case 'v':
 				verbose++;
 				break;
+/* action */
+			case 1:
+				do_create_slot = true;
+				break;
+			case 2:
+				do_drop_slot = true;
+				break;
+			case 3:
+				slot_exists_ok = true;
+				break;
+			case 4:
+				synchronous = true;
+				break;
 			default:
 
 				/*
@@ -465,10 +488,28 @@ main(int argc, char **argv)
 		exit(1);
 	}
 
+	if (do_drop_slot && do_create_slot)
+	{
+		fprintf(stderr, _("%s: cannot use --create-slot together with --drop-slot\n"), progname);
+		fprintf(stderr, _("Try \"%s --help\" for more information.\n"),
+				progname);
+		exit(1);
+	}
+
+	if (replication_slot == NULL && (do_drop_slot || do_create_slot))
+	{
+		/* translator: second %s is an option name */
+		fprintf(stderr, _("%s: %s needs a slot to be specified using --slot\n"), progname,
+				do_drop_slot ? "--drop-slot" : "--create-slot");
+		fprintf(stderr, _("Try \"%s --help\" for more information.\n"),
+				progname);
+		exit(1);
+	}
+
 	/*
 	 * Required arguments
 	 */
-	if (basedir == NULL)
+	if (basedir == NULL && !do_drop_slot && !do_create_slot)
 	{
 		fprintf(stderr, _("%s: no target directory specified\n"), progname);
 		fprintf(stderr, _("Try \"%s --help\" for more information.\n"),
@@ -476,9 +517,81 @@ main(int argc, char **argv)
 		exit(1);
 	}
 
+	/*
+	 * Check existence of destination folder.
+	 */
+	if (!do_drop_slot && !do_create_slot)
+	{
+		DIR		   *dir = get_destination_dir(basedir);
+
+		close_destination_dir(dir, basedir);
+	}
+
 #ifndef WIN32
 	pqsignal(SIGINT, sigint_handler);
 #endif
+
+	/*
+	 * Obtain a connection before doing anything.
+	 */
+	conn = GetConnection();
+	if (!conn)
+		/* error message already written in GetConnection() */
+		exit(1);
+
+	/*
+	 * Run IDENTIFY_SYSTEM to make sure we've successfully have established a
+	 * replication connection and haven't connected using a database specific
+	 * connection.
+	 */
+	if (!RunIdentifySystem(conn, NULL, NULL, NULL, &db_name))
+		disconnect_and_exit(1);
+
+	/*
+	 * Check that there is a database associated with connection, none should
+	 * be defined in this context.
+	 */
+	if (db_name)
+	{
+		fprintf(stderr,
+				_("%s: replication connection using slot \"%s\" is unexpectedly database specific\n"),
+				progname, replication_slot);
+		disconnect_and_exit(1);
+	}
+
+	/*
+	 * Drop a replication slot.
+	 */
+	if (do_drop_slot)
+	{
+		if (verbose)
+			fprintf(stderr,
+					_("%s: dropping replication slot \"%s\"\n"),
+					progname, replication_slot);
+
+		if (!DropReplicationSlot(conn, replication_slot))
+			disconnect_and_exit(1);
+		disconnect_and_exit(0);
+	}
+
+	/* Create a replication slot */
+	if (do_create_slot)
+	{
+		if (verbose)
+			fprintf(stderr,
+					_("%s: creating replication slot \"%s\"\n"),
+					progname, replication_slot);
+
+		if (!CreateReplicationSlot(conn, replication_slot, NULL, true,
+								   slot_exists_ok))
+			disconnect_and_exit(1);
+		disconnect_and_exit(0);
+	}
+
+	/*
+	 * Don't close the connection here so that subsequent StreamLog() can
+	 * reuse it.
+	 */
 
 	while (true)
 	{

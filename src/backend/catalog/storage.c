@@ -3,7 +3,7 @@
  * storage.c
  *	  code to create and destroy physical storage for relations
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -21,6 +21,8 @@
 
 #include "access/visibilitymap.h"
 #include "access/xact.h"
+#include "access/xlog.h"
+#include "access/xloginsert.h"
 #include "access/xlogutils.h"
 #include "catalog/catalog.h"
 #include "catalog/storage.h"
@@ -117,13 +119,12 @@ RelationCreateStorage(RelFileNode rnode, char relpersistence)
 }
 
 /*
- * Perform XLogInsert of a XLOG_SMGR_CREATE record to WAL.
+ * Perform XLogInsert of an XLOG_SMGR_CREATE record to WAL.
  */
 void
 log_smgrcreate(RelFileNode *rnode, ForkNumber forkNum)
 {
 	xl_smgr_create xlrec;
-	XLogRecData rdata;
 
 	/*
 	 * Make an XLOG entry reporting the file creation.
@@ -131,12 +132,9 @@ log_smgrcreate(RelFileNode *rnode, ForkNumber forkNum)
 	xlrec.rnode = *rnode;
 	xlrec.forkNum = forkNum;
 
-	rdata.data = (char *) &xlrec;
-	rdata.len = sizeof(xlrec);
-	rdata.buffer = InvalidBuffer;
-	rdata.next = NULL;
-
-	XLogInsert(RM_SMGR_ID, XLOG_SMGR_CREATE, &rdata);
+	XLogBeginInsert();
+	XLogRegisterData((char *) &xlrec, sizeof(xlrec));
+	XLogInsert(RM_SMGR_ID, XLOG_SMGR_CREATE | XLR_SPECIAL_REL_UPDATE);
 }
 
 /*
@@ -266,18 +264,16 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 		 * Make an XLOG entry reporting the file truncation.
 		 */
 		XLogRecPtr	lsn;
-		XLogRecData rdata;
 		xl_smgr_truncate xlrec;
 
 		xlrec.blkno = nblocks;
 		xlrec.rnode = rel->rd_node;
 
-		rdata.data = (char *) &xlrec;
-		rdata.len = sizeof(xlrec);
-		rdata.buffer = InvalidBuffer;
-		rdata.next = NULL;
+		XLogBeginInsert();
+		XLogRegisterData((char *) &xlrec, sizeof(xlrec));
 
-		lsn = XLogInsert(RM_SMGR_ID, XLOG_SMGR_TRUNCATE, &rdata);
+		lsn = XLogInsert(RM_SMGR_ID,
+						 XLOG_SMGR_TRUNCATE | XLR_SPECIAL_REL_UPDATE);
 
 		/*
 		 * Flush, because otherwise the truncation of the main relation might
@@ -477,12 +473,13 @@ AtSubAbort_smgr(void)
 }
 
 void
-smgr_redo(XLogRecPtr lsn, XLogRecord *record)
+smgr_redo(XLogReaderState *record)
 {
-	uint8		info = record->xl_info & ~XLR_INFO_MASK;
+	XLogRecPtr	lsn = record->EndRecPtr;
+	uint8		info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
 	/* Backup blocks are not used in smgr records */
-	Assert(!(record->xl_info & XLR_BKP_BLOCK_MASK));
+	Assert(!XLogRecHasAnyBlockRefs(record));
 
 	if (info == XLOG_SMGR_CREATE)
 	{
@@ -503,8 +500,8 @@ smgr_redo(XLogRecPtr lsn, XLogRecord *record)
 		/*
 		 * Forcibly create relation if it doesn't exist (which suggests that
 		 * it was dropped somewhere later in the WAL sequence).  As in
-		 * XLogReadBuffer, we prefer to recreate the rel and replay the log as
-		 * best we can until the drop is seen.
+		 * XLogReadBufferForRedo, we prefer to recreate the rel and replay the
+		 * log as best we can until the drop is seen.
 		 */
 		smgrcreate(reln, MAIN_FORKNUM, true);
 

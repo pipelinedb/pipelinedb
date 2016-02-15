@@ -3,7 +3,7 @@
  * pg_type.c
  *	  routines to support manipulation of the pg_type relation
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -38,7 +38,7 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-/* Potentially set by contrib/pg_upgrade_support functions */
+/* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_pg_type_oid = InvalidOid;
 
 /* ----------------------------------------------------------------
@@ -54,7 +54,7 @@ Oid			binary_upgrade_next_pg_type_oid = InvalidOid;
  *		with correct ones, and "typisdefined" will be set to true.
  * ----------------------------------------------------------------
  */
-Oid
+ObjectAddress
 TypeShellMake(const char *typeName, Oid typeNamespace, Oid ownerId)
 {
 	Relation	pg_type_desc;
@@ -65,6 +65,7 @@ TypeShellMake(const char *typeName, Oid typeNamespace, Oid ownerId)
 	bool		nulls[Natts_pg_type];
 	Oid			typoid;
 	NameData	name;
+	ObjectAddress address;
 
 	Assert(PointerIsValid(typeName));
 
@@ -128,9 +129,14 @@ TypeShellMake(const char *typeName, Oid typeNamespace, Oid ownerId)
 	 */
 	tup = heap_form_tuple(tupDesc, values, nulls);
 
-	/* Use binary-upgrade override for pg_type.oid, if supplied. */
-	if (IsBinaryUpgrade && OidIsValid(binary_upgrade_next_pg_type_oid))
+	/* Use binary-upgrade override for pg_type.oid? */
+	if (IsBinaryUpgrade)
 	{
+		if (!OidIsValid(binary_upgrade_next_pg_type_oid))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			errmsg("pg_type OID value not set when in binary upgrade mode")));
+
 		HeapTupleSetOid(tup, binary_upgrade_next_pg_type_oid);
 		binary_upgrade_next_pg_type_oid = InvalidOid;
 	}
@@ -168,13 +174,15 @@ TypeShellMake(const char *typeName, Oid typeNamespace, Oid ownerId)
 	/* Post creation hook for new shell type */
 	InvokeObjectPostCreateHook(TypeRelationId, typoid, 0);
 
+	ObjectAddressSet(address, TypeRelationId, typoid);
+
 	/*
 	 * clean up and return the type-oid
 	 */
 	heap_freetuple(tup);
 	heap_close(pg_type_desc, RowExclusiveLock);
 
-	return typoid;
+	return address;
 }
 
 /* ----------------------------------------------------------------
@@ -182,12 +190,12 @@ TypeShellMake(const char *typeName, Oid typeNamespace, Oid ownerId)
  *
  *		This does all the necessary work needed to define a new type.
  *
- *		Returns the OID assigned to the new type.  If newTypeOid is
- *		zero (the normal case), a new OID is created; otherwise we
- *		use exactly that OID.
+ *		Returns the ObjectAddress assigned to the new type.
+ *		If newTypeOid is zero (the normal case), a new OID is created;
+ *		otherwise we use exactly that OID.
  * ----------------------------------------------------------------
  */
-Oid
+ObjectAddress
 TypeCreate(Oid newTypeOid,
 		   const char *typeName,
 		   Oid typeNamespace,
@@ -230,6 +238,7 @@ TypeCreate(Oid newTypeOid,
 	NameData	name;
 	int			i;
 	Acl		   *typacl = NULL;
+	ObjectAddress address;
 
 	/*
 	 * We assume that the caller validated the arguments individually, but did
@@ -439,8 +448,13 @@ TypeCreate(Oid newTypeOid,
 		if (OidIsValid(newTypeOid))
 			HeapTupleSetOid(tup, newTypeOid);
 		/* Use binary-upgrade override for pg_type.oid, if supplied. */
-		else if (IsBinaryUpgrade && OidIsValid(binary_upgrade_next_pg_type_oid))
+		else if (IsBinaryUpgrade)
 		{
+			if (!OidIsValid(binary_upgrade_next_pg_type_oid))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("pg_type OID value not set when in binary upgrade mode")));
+
 			HeapTupleSetOid(tup, binary_upgrade_next_pg_type_oid);
 			binary_upgrade_next_pg_type_oid = InvalidOid;
 		}
@@ -480,12 +494,14 @@ TypeCreate(Oid newTypeOid,
 	/* Post creation hook for new type */
 	InvokeObjectPostCreateHook(TypeRelationId, typeObjectId, 0);
 
+	ObjectAddressSet(address, TypeRelationId, typeObjectId);
+
 	/*
 	 * finish up
 	 */
 	heap_close(pg_type_desc, RowExclusiveLock);
 
-	return typeObjectId;
+	return address;
 }
 
 /*

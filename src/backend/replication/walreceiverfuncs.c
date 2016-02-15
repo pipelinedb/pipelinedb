@@ -6,7 +6,7 @@
  * with the walreceiver process. Functions implementing walreceiver itself
  * are in walreceiver.c.
  *
- * Portions Copyright (c) 2010-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2015, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -329,7 +329,7 @@ GetReplicationApplyDelay(void)
 	long		secs;
 	int			usecs;
 
-	TimestampTz	chunckReplayStartTime;
+	TimestampTz chunckReplayStartTime;
 
 	SpinLockAcquire(&walrcv->mutex);
 	receivePtr = walrcv->receivedUpto;

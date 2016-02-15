@@ -3,7 +3,7 @@
  * port.h
  *	  Header for src/port/ compatibility functions.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/port.h
@@ -153,28 +153,16 @@ extern unsigned char pg_ascii_tolower(unsigned char ch);
 #endif
 
 extern int	pg_vsnprintf(char *str, size_t count, const char *fmt, va_list args);
-extern int
-pg_snprintf(char *str, size_t count, const char *fmt,...)
-/* This extension allows gcc to check the format string */
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 3, 4)));
-extern int
-pg_sprintf(char *str, const char *fmt,...)
-/* This extension allows gcc to check the format string */
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 2, 3)));
+extern int	pg_snprintf(char *str, size_t count, const char *fmt,...) pg_attribute_printf(3, 4);
+extern int	pg_sprintf(char *str, const char *fmt,...) pg_attribute_printf(2, 3);
 extern int	pg_vfprintf(FILE *stream, const char *fmt, va_list args);
-extern int
-pg_fprintf(FILE *stream, const char *fmt,...)
-/* This extension allows gcc to check the format string */
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 2, 3)));
-extern int
-pg_printf(const char *fmt,...)
-/* This extension allows gcc to check the format string */
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 1, 2)));
+extern int	pg_fprintf(FILE *stream, const char *fmt,...) pg_attribute_printf(2, 3);
+extern int	pg_printf(const char *fmt,...) pg_attribute_printf(1, 2);
 
 /*
- *	The GCC-specific code below prevents the __attribute__(... 'printf')
- *	above from being replaced, and this is required because gcc doesn't
- *	know anything about pg_printf.
+ *	The GCC-specific code below prevents the pg_attribute_printf above from
+ *	being replaced, and this is required because gcc doesn't know anything
+ *	about pg_printf.
  */
 #ifdef __GNUC__
 #define vsnprintf(...)	pg_vsnprintf(__VA_ARGS__)

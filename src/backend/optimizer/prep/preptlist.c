@@ -14,7 +14,7 @@
  * between here and there is a bit arbitrary and historical.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -92,9 +92,9 @@ preprocess_targetlist(PlannerInfo *root, List *tlist)
 		if (rc->rti != rc->prti)
 			continue;
 
-		if (rc->markType != ROW_MARK_COPY)
+		if (rc->allMarkTypes & ~(1 << ROW_MARK_COPY))
 		{
-			/* It's a regular table, so fetch its TID */
+			/* Need to fetch TID */
 			var = makeVar(rc->rti,
 						  SelfItemPointerAttributeNumber,
 						  TIDOID,
@@ -107,32 +107,32 @@ preprocess_targetlist(PlannerInfo *root, List *tlist)
 								  pstrdup(resname),
 								  true);
 			tlist = lappend(tlist, tle);
-
-			/* if parent of inheritance tree, need the tableoid too */
-			if (rc->isParent)
-			{
-				var = makeVar(rc->rti,
-							  TableOidAttributeNumber,
-							  OIDOID,
-							  -1,
-							  InvalidOid,
-							  0);
-				snprintf(resname, sizeof(resname), "tableoid%u", rc->rowmarkId);
-				tle = makeTargetEntry((Expr *) var,
-									  list_length(tlist) + 1,
-									  pstrdup(resname),
-									  true);
-				tlist = lappend(tlist, tle);
-			}
 		}
-		else
+		if (rc->allMarkTypes & (1 << ROW_MARK_COPY))
 		{
-			/* Not a table, so we need the whole row as a junk var */
+			/* Need the whole row as a junk var */
 			var = makeWholeRowVar(rt_fetch(rc->rti, range_table),
 								  rc->rti,
 								  0,
 								  false);
 			snprintf(resname, sizeof(resname), "wholerow%u", rc->rowmarkId);
+			tle = makeTargetEntry((Expr *) var,
+								  list_length(tlist) + 1,
+								  pstrdup(resname),
+								  true);
+			tlist = lappend(tlist, tle);
+		}
+
+		/* If parent of inheritance tree, always fetch the tableoid too. */
+		if (rc->isParent)
+		{
+			var = makeVar(rc->rti,
+						  TableOidAttributeNumber,
+						  OIDOID,
+						  -1,
+						  InvalidOid,
+						  0);
+			snprintf(resname, sizeof(resname), "tableoid%u", rc->rowmarkId);
 			tle = makeTargetEntry((Expr *) var,
 								  list_length(tlist) + 1,
 								  pstrdup(resname),
@@ -180,6 +180,19 @@ preprocess_targetlist(PlannerInfo *root, List *tlist)
 
 	return tlist;
 }
+
+/*
+ * preprocess_onconflict_targetlist
+ *	  Process ON CONFLICT SET targetlist.
+ *
+ *	  Returns the new targetlist.
+ */
+List *
+preprocess_onconflict_targetlist(List *tlist, int result_relation, List *range_table)
+{
+	return expand_targetlist(tlist, CMD_UPDATE, result_relation, range_table);
+}
+
 
 /*****************************************************************************
  *

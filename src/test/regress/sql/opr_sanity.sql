@@ -2,11 +2,12 @@
 -- OPR_SANITY
 -- Sanity checks for common errors in making operator/procedure system tables:
 -- pg_operator, pg_proc, pg_cast, pg_aggregate, pg_am,
--- pg_amop, pg_amproc, pg_opclass, pg_opfamily.
+-- pg_amop, pg_amproc, pg_opclass, pg_opfamily, pg_index.
 --
--- Every test failures in this file should be closely inspected. The
--- description of the failing test should be read carefully before
--- adjusting the expected output.
+-- Every test failure in this file should be closely inspected.
+-- The description of the failing test should be read carefully before
+-- adjusting the expected output.  In most cases, the queries should
+-- not find *any* matching entries.
 --
 -- NB: we assume the oidjoins test will have caught any dangling links,
 -- that is OID or REGPROC fields that are not zero and do not match some
@@ -29,7 +30,9 @@ SELECT ($1 = $2) OR
  ($2 = 'pg_catalog.any'::pg_catalog.regtype) OR
  ($2 = 'pg_catalog.anyarray'::pg_catalog.regtype AND
   EXISTS(select 1 from pg_catalog.pg_type where
-         oid = $1 and typelem != 0 and typlen = -1))
+         oid = $1 and typelem != 0 and typlen = -1)) OR
+ ($2 = 'pg_catalog.anyrange'::pg_catalog.regtype AND
+  (select typtype from pg_catalog.pg_type where oid = $1) = 'r')
 $$ language sql strict stable;
 
 -- This one ignores castcontext, so it considers only physical equivalence
@@ -42,7 +45,9 @@ SELECT ($1 = $2) OR
  ($2 = 'pg_catalog.any'::pg_catalog.regtype) OR
  ($2 = 'pg_catalog.anyarray'::pg_catalog.regtype AND
   EXISTS(select 1 from pg_catalog.pg_type where
-         oid = $1 and typelem != 0 and typlen = -1))
+         oid = $1 and typelem != 0 and typlen = -1)) OR
+ ($2 = 'pg_catalog.anyrange'::pg_catalog.regtype AND
+  (select typtype from pg_catalog.pg_type where oid = $1) = 'r')
 $$ language sql strict stable;
 
 -- **************** pg_proc ****************
@@ -113,6 +118,7 @@ WHERE p1.oid < p2.oid AND
     (p1.prolang != p2.prolang OR
      p1.proisagg != p2.proisagg OR
      p1.prosecdef != p2.prosecdef OR
+     p1.proleakproof != p2.proleakproof OR
      p1.proisstrict != p2.proisstrict OR
      p1.proretset != p2.proretset OR
      p1.provolatile != p2.provolatile OR
@@ -224,8 +230,7 @@ ORDER BY 1, 2;
 SELECT p1.oid, p1.proname
 FROM pg_proc as p1
 WHERE p1.prorettype = 'internal'::regtype AND NOT
-    'internal'::regtype = ANY (p1.proargtypes) AND
-	p1.oid NOT IN (SELECT combineinfn FROM pipeline_combine);
+    'internal'::regtype = ANY (p1.proargtypes);
 
 -- Look for functions that return a polymorphic type and do not have any
 -- polymorphic argument.  Calls of such functions would be unresolvable
@@ -482,6 +487,22 @@ WHERE p1.oprnegate = p2.oid AND
      p1.oid != p2.oprnegate OR
      p1.oid = p2.oid);
 
+-- Make a list of the names of operators that are claimed to be commutator
+-- pairs.  This list will grow over time, but before accepting a new entry
+-- make sure you didn't link the wrong operators.
+
+SELECT DISTINCT o1.oprname AS op1, o2.oprname AS op2
+FROM pg_operator o1, pg_operator o2
+WHERE o1.oprcom = o2.oid AND o1.oprname <= o2.oprname
+ORDER BY 1, 2;
+
+-- Likewise for negator pairs.
+
+SELECT DISTINCT o1.oprname AS op1, o2.oprname AS op2
+FROM pg_operator o1, pg_operator o2
+WHERE o1.oprnegate = o2.oid AND o1.oprname <= o2.oprname
+ORDER BY 1, 2;
+
 -- A mergejoinable or hashjoinable operator must be binary, must return
 -- boolean, and must have a commutator (itself, unless it's a cross-type
 -- operator).
@@ -677,8 +698,7 @@ WHERE a.aggfnoid = p.oid AND
 SELECT oid, proname
 FROM pg_proc as p
 WHERE p.proisagg AND
-    NOT EXISTS (SELECT 1 FROM pg_aggregate a WHERE a.aggfnoid = p.oid)
-	AND p.proname != 'combine';
+    NOT EXISTS (SELECT 1 FROM pg_aggregate a WHERE a.aggfnoid = p.oid);
 
 -- If there is no finalfn then the output type must be the transtype.
 
@@ -687,67 +707,58 @@ FROM pg_aggregate as a, pg_proc as p
 WHERE a.aggfnoid = p.oid AND
     a.aggfinalfn = 0 AND p.prorettype != a.aggtranstype;
 
--- TODO(derekjn) PipelineDB aggregates break a lot of the assumptions that are made
--- here. Disable this check until we're done adding our own aggregates that we
--- can whitelist here.
-
 -- Cross-check transfn against its entry in pg_proc.
 -- NOTE: use physically_coercible here, not binary_coercible, because
 -- max and min on abstime are implemented using int4larger/int4smaller.
--- SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
--- FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
--- WHERE a.aggfnoid = p.oid AND
---     a.aggtransfn = ptr.oid AND
---     (ptr.proretset
---      OR NOT (ptr.pronargs =
---              CASE WHEN a.aggkind = 'n' THEN p.pronargs + 1
---              ELSE greatest(p.pronargs - a.aggnumdirectargs, 1) + 1 END)
---      OR NOT physically_coercible(ptr.prorettype, a.aggtranstype)
---      OR NOT physically_coercible(a.aggtranstype, ptr.proargtypes[0])
---      OR (p.pronargs > 0 AND
---          NOT physically_coercible(p.proargtypes[0], ptr.proargtypes[1]))
---      OR (p.pronargs > 1 AND
---          NOT physically_coercible(p.proargtypes[1], ptr.proargtypes[2]))
---      OR (p.pronargs > 2 AND
---          NOT physically_coercible(p.proargtypes[2], ptr.proargtypes[3]))
---      -- we could carry the check further, but 3 args is enough for now
---     );
+SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
+FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
+WHERE a.aggfnoid = p.oid AND
+    a.aggtransfn = ptr.oid AND
+    (ptr.proretset
+     OR NOT (ptr.pronargs =
+             CASE WHEN a.aggkind = 'n' THEN p.pronargs + 1
+             ELSE greatest(p.pronargs - a.aggnumdirectargs, 1) + 1 END)
+     OR NOT physically_coercible(ptr.prorettype, a.aggtranstype)
+     OR NOT physically_coercible(a.aggtranstype, ptr.proargtypes[0])
+     OR (p.pronargs > 0 AND
+         NOT physically_coercible(p.proargtypes[0], ptr.proargtypes[1]))
+     OR (p.pronargs > 1 AND
+         NOT physically_coercible(p.proargtypes[1], ptr.proargtypes[2]))
+     OR (p.pronargs > 2 AND
+         NOT physically_coercible(p.proargtypes[2], ptr.proargtypes[3]))
+     -- we could carry the check further, but 3 args is enough for now
+    );
 
 -- Cross-check finalfn (if present) against its entry in pg_proc.
 
--- SELECT a.aggfnoid::oid, p.proname, pfn.oid, pfn.proname
--- FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS pfn
--- WHERE a.aggfnoid = p.oid AND
---     a.aggfinalfn = pfn.oid AND
---     (pfn.proretset OR
---      NOT binary_coercible(pfn.prorettype, p.prorettype) OR
---      NOT binary_coercible(a.aggtranstype, pfn.proargtypes[0]) OR
---      CASE WHEN a.aggfinalextra THEN pfn.pronargs != p.pronargs + 1
---           ELSE pfn.pronargs != a.aggnumdirectargs + 1 END
---      OR (pfn.pronargs > 1 AND
---          NOT binary_coercible(p.proargtypes[0], pfn.proargtypes[1]))
---      OR (pfn.pronargs > 2 AND
---          NOT binary_coercible(p.proargtypes[1], pfn.proargtypes[2]))
---      OR (pfn.pronargs > 3 AND
---          NOT binary_coercible(p.proargtypes[2], pfn.proargtypes[3]))
+SELECT a.aggfnoid::oid, p.proname, pfn.oid, pfn.proname
+FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS pfn
+WHERE a.aggfnoid = p.oid AND
+    a.aggfinalfn = pfn.oid AND
+    (pfn.proretset OR
+     NOT binary_coercible(pfn.prorettype, p.prorettype) OR
+     NOT binary_coercible(a.aggtranstype, pfn.proargtypes[0]) OR
+     CASE WHEN a.aggfinalextra THEN pfn.pronargs != p.pronargs + 1
+          ELSE pfn.pronargs != a.aggnumdirectargs + 1 END
+     OR (pfn.pronargs > 1 AND
+         NOT binary_coercible(p.proargtypes[0], pfn.proargtypes[1]))
+     OR (pfn.pronargs > 2 AND
+         NOT binary_coercible(p.proargtypes[1], pfn.proargtypes[2]))
+     OR (pfn.pronargs > 3 AND
+         NOT binary_coercible(p.proargtypes[2], pfn.proargtypes[3]))
      -- we could carry the check further, but 3 args is enough for now
---     );
--- XXX(derekjn) array_agg(anyarray) will fail this check because we
--- allow array-based transition states to be stored as anyarrays, so
--- array_agg(anyarray) can technically take arrays of different types.
--- This all happens programmatically though, so array_agg(anyarray)
--- should always get arrays of the same type so it's pretty legit.
+    );
 
 -- If transfn is strict then either initval should be non-NULL, or
 -- input type should match transtype so that the first non-null input
 -- can be assigned as the state value.
 
--- SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
--- FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
--- WHERE a.aggfnoid = p.oid AND
---     a.aggtransfn = ptr.oid AND ptr.proisstrict AND
---     a.agginitval IS NULL AND
---     NOT binary_coercible(p.proargtypes[0], a.aggtranstype);
+SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
+FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
+WHERE a.aggfnoid = p.oid AND
+    a.aggtransfn = ptr.oid AND ptr.proisstrict AND
+    a.agginitval IS NULL AND
+    NOT binary_coercible(p.proargtypes[0], a.aggtranstype);
 
 -- Check for inconsistent specifications of moving-aggregate columns.
 
@@ -894,13 +905,14 @@ ORDER BY 1, 2;
 -- See the fate of the single-argument form of string_agg() for history.
 -- (Note: we don't forbid users from creating such aggregates; the policy is
 -- just to think twice before creating built-in aggregates like this.)
+-- The only aggregates that should show up here are count(x) and count(*).
 
--- SELECT p1.oid::regprocedure, p2.oid::regprocedure
--- FROM pg_proc AS p1, pg_proc AS p2
--- WHERE p1.oid < p2.oid AND p1.proname = p2.proname AND
---     p1.proisagg AND p2.proisagg AND
---     array_dims(p1.proargtypes) != array_dims(p2.proargtypes)
--- ORDER BY 1;
+SELECT p1.oid::regprocedure, p2.oid::regprocedure
+FROM pg_proc AS p1, pg_proc AS p2
+WHERE p1.oid < p2.oid AND p1.proname = p2.proname AND
+    p1.proisagg AND p2.proisagg AND
+    array_dims(p1.proargtypes) != array_dims(p2.proargtypes)
+ORDER BY 1;
 
 -- For the same reason, built-in aggregates with default arguments are no good.
 
@@ -914,7 +926,7 @@ WHERE proisagg AND proargdefaults IS NOT NULL;
 
 SELECT p.oid, proname
 FROM pg_proc AS p JOIN pg_aggregate AS a ON a.aggfnoid = p.oid
-WHERE proisagg AND provariadic != 0 AND a.aggkind = 'n' AND p.proname != 'combine';
+WHERE proisagg AND provariadic != 0 AND a.aggkind = 'n';
 
 -- **************** pg_opfamily ****************
 
@@ -1188,11 +1200,13 @@ WHERE NOT (
   -- GIN has six support functions. 1-3 are mandatory, 5 is optional, and
   --   at least one of 4 and 6 must be given.
   -- SP-GiST has five support functions, all mandatory
+  -- BRIN has four mandatory support functions, and a bunch of optionals
   amname = 'btree' AND procnums @> '{1}' OR
   amname = 'hash' AND procnums = '{1}' OR
   amname = 'gist' AND procnums @> '{1, 2, 3, 4, 5, 6, 7}' OR
   amname = 'gin' AND (procnums @> '{1, 2, 3}' AND (procnums && '{4, 6}')) OR
-  amname = 'spgist' AND procnums = '{1, 2, 3, 4, 5}'
+  amname = 'spgist' AND procnums = '{1, 2, 3, 4, 5}' OR
+  amname = 'brin' AND procnums @> '{1, 2, 3, 4}'
 );
 
 -- Also, check if there are any pg_opclass entries that don't seem to have
@@ -1211,7 +1225,8 @@ WHERE NOT (
   amname = 'hash' AND procnums = '{1}' OR
   amname = 'gist' AND procnums @> '{1, 2, 3, 4, 5, 6, 7}' OR
   amname = 'gin' AND (procnums @> '{1, 2, 3}' AND (procnums && '{4, 6}')) OR
-  amname = 'spgist' AND procnums = '{1, 2, 3, 4, 5}'
+  amname = 'spgist' AND procnums = '{1, 2, 3, 4, 5}' OR
+  amname = 'brin' AND procnums @> '{1, 2, 3, 4}'
 );
 
 -- Unfortunately, we can't check the amproc link very well because the
@@ -1306,3 +1321,66 @@ FROM pg_amproc AS p1, pg_proc AS p2
 WHERE p1.amproc = p2.oid AND
     p1.amproclefttype != p1.amprocrighttype AND
     p2.provolatile = 'v';
+
+-- **************** pg_index ****************
+
+-- Look for illegal values in pg_index fields.
+
+SELECT p1.indexrelid, p1.indrelid
+FROM pg_index as p1
+WHERE p1.indexrelid = 0 OR p1.indrelid = 0 OR
+      p1.indnatts <= 0 OR p1.indnatts > 32;
+
+-- oidvector and int2vector fields should be of length indnatts.
+
+SELECT p1.indexrelid, p1.indrelid
+FROM pg_index as p1
+WHERE array_lower(indkey, 1) != 0 OR array_upper(indkey, 1) != indnatts-1 OR
+    array_lower(indclass, 1) != 0 OR array_upper(indclass, 1) != indnatts-1 OR
+    array_lower(indcollation, 1) != 0 OR array_upper(indcollation, 1) != indnatts-1 OR
+    array_lower(indoption, 1) != 0 OR array_upper(indoption, 1) != indnatts-1;
+
+-- Check that opclasses and collations match the underlying columns.
+-- (As written, this test ignores expression indexes.)
+
+SELECT indexrelid::regclass, indrelid::regclass, attname, atttypid::regtype, opcname
+FROM (SELECT indexrelid, indrelid, unnest(indkey) as ikey,
+             unnest(indclass) as iclass, unnest(indcollation) as icoll
+      FROM pg_index) ss,
+      pg_attribute a,
+      pg_opclass opc
+WHERE a.attrelid = indrelid AND a.attnum = ikey AND opc.oid = iclass AND
+      (NOT binary_coercible(atttypid, opcintype) OR icoll != attcollation);
+
+-- For system catalogs, be even tighter: nearly all indexes should be
+-- exact type matches not binary-coercible matches.  At this writing
+-- the only exception is an OID index on a regproc column.
+
+SELECT indexrelid::regclass, indrelid::regclass, attname, atttypid::regtype, opcname
+FROM (SELECT indexrelid, indrelid, unnest(indkey) as ikey,
+             unnest(indclass) as iclass, unnest(indcollation) as icoll
+      FROM pg_index
+      WHERE indrelid < 16384) ss,
+      pg_attribute a,
+      pg_opclass opc
+WHERE a.attrelid = indrelid AND a.attnum = ikey AND opc.oid = iclass AND
+      (opcintype != atttypid OR icoll != attcollation)
+ORDER BY 1;
+
+-- Check for system catalogs with collation-sensitive ordering.  This is not
+-- a representational error in pg_index, but simply wrong catalog design.
+-- It's bad because we expect to be able to clone template0 and assign the
+-- copy a different database collation.  It would especially not work for
+-- shared catalogs.  Note that although text columns will show a collation
+-- in indcollation, they're still okay to index with text_pattern_ops,
+-- so allow that case.
+
+SELECT indexrelid::regclass, indrelid::regclass, iclass, icoll
+FROM (SELECT indexrelid, indrelid,
+             unnest(indclass) as iclass, unnest(indcollation) as icoll
+      FROM pg_index
+      WHERE indrelid < 16384) ss
+WHERE icoll != 0 AND iclass !=
+    (SELECT oid FROM pg_opclass
+     WHERE opcname = 'text_pattern_ops' AND opcmethod =
+           (SELECT oid FROM pg_am WHERE amname = 'btree'));

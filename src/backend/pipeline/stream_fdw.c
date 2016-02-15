@@ -130,7 +130,7 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 		}
 	}
 
-	path = create_foreignscan_path(root, baserel, 0, 0, 0, NIL, NULL, NIL);
+	path = create_foreignscan_path(root, baserel, 0, 0, 0, NIL, NULL, NULL, NIL);
 	add_path(baserel, (Path *) path);
 }
 
@@ -139,7 +139,7 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
  */
 ForeignScan *
 GetStreamScanPlan(PlannerInfo *root, RelOptInfo *baserel,
-		Oid streamid, ForeignPath *best_path, List *tlist, List *scan_clauses)
+		Oid streamid, ForeignPath *best_path, List *tlist, List *scan_clauses, Plan *outer_plan)
 {
 	StreamFdwInfo *sinfo = (StreamFdwInfo *) baserel->fdw_private;
 	List *physical_tlist = build_physical_tlist(root, baserel);
@@ -148,7 +148,7 @@ GetStreamScanPlan(PlannerInfo *root, RelOptInfo *baserel,
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
 	return make_foreignscan(tlist, scan_clauses, baserel->relid,
-							NIL, list_make2(sinfo->colnames, physical_tlist));
+							NIL, list_make2(sinfo->colnames, physical_tlist), NIL, NIL, outer_plan);
 }
 
 /*

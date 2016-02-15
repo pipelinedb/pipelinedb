@@ -3,7 +3,7 @@
  * tlist.c
  *	  Target list manipulation routines
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -184,6 +184,27 @@ get_tlist_exprs(List *tlist, bool includeJunk)
 		result = lappend(result, tle->expr);
 	}
 	return result;
+}
+
+
+/*
+ * count_nonjunk_tlist_entries
+ *		What it says ...
+ */
+int
+count_nonjunk_tlist_entries(List *tlist)
+{
+	int			len = 0;
+	ListCell   *l;
+
+	foreach(l, tlist)
+	{
+		TargetEntry *tle = (TargetEntry *) lfirst(l);
+
+		if (!tle->resjunk)
+			len++;
+	}
+	return len;
 }
 
 
@@ -372,6 +393,28 @@ get_sortgrouplist_exprs(List *sgClauses, List *targetList)
  * These don't really belong in tlist.c, but they are sort of related to the
  * functions just above, and they don't seem to deserve their own file.
  *****************************************************************************/
+
+/*
+ * get_sortgroupref_clause
+ *		Find the SortGroupClause matching the given SortGroupRef index,
+ *		and return it.
+ */
+SortGroupClause *
+get_sortgroupref_clause(Index sortref, List *clauses)
+{
+	ListCell   *l;
+
+	foreach(l, clauses)
+	{
+		SortGroupClause *cl = (SortGroupClause *) lfirst(l);
+
+		if (cl->tleSortGroupRef == sortref)
+			return cl;
+	}
+
+	elog(ERROR, "ORDER/GROUP BY expression not found in list");
+	return NULL;				/* keep compiler quiet */
+}
 
 /*
  * extract_grouping_ops - make an array of the equality operator OIDs

@@ -4,7 +4,7 @@
  * bootparse.y
  *	  yacc grammar for the "bootstrap" mode (BKI file format)
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -21,7 +21,6 @@
 #include "access/attnum.h"
 #include "access/htup.h"
 #include "access/itup.h"
-#include "access/skey.h"
 #include "access/tupdesc.h"
 #include "access/xact.h"
 #include "bootstrap/bootstrap.h"
@@ -107,7 +106,7 @@ static int num_columns_read = 0;
 %type <list>  boot_index_params
 %type <ielem> boot_index_param
 %type <str>   boot_const boot_ident
-%type <ival>  optbootstrap optsharedrelation optwithoutoids
+%type <ival>  optbootstrap optsharedrelation optwithoutoids boot_column_nullness
 %type <oidval> oidspec optoideq optrowtypeoid
 
 %token <str> CONST_P ID
@@ -115,6 +114,7 @@ static int num_columns_read = 0;
 %token XDECLARE INDEX ON USING XBUILD INDICES UNIQUE XTOAST
 %token COMMA EQUALS LPAREN RPAREN
 %token OBJ_ID XBOOTSTRAP XSHARED_RELATION XWITHOUT_OIDS XROWTYPE_OID NULLVAL
+%token XFORCE XNOT XNULL
 
 %start TopLevel
 
@@ -250,7 +250,8 @@ Boot_CreateStmt:
 													  (Datum) 0,
 													  false,
 													  true,
-													  false);
+													  false,
+													  NULL);
 						elog(DEBUG4, "relation created with OID %u", id);
 					}
 					do_end();
@@ -303,7 +304,9 @@ Boot_DeclareIndexStmt:
 					stmt->isconstraint = false;
 					stmt->deferrable = false;
 					stmt->initdeferred = false;
+					stmt->transformed = false;
 					stmt->concurrent = false;
+					stmt->if_not_exists = false;
 
 					/* locks and races need not concern us in bootstrap mode */
 					relationId = RangeVarGetRelid(stmt->relation, NoLock,
@@ -344,7 +347,9 @@ Boot_DeclareUniqueIndexStmt:
 					stmt->isconstraint = false;
 					stmt->deferrable = false;
 					stmt->initdeferred = false;
+					stmt->transformed = false;
 					stmt->concurrent = false;
+					stmt->if_not_exists = false;
 
 					/* locks and races need not concern us in bootstrap mode */
 					relationId = RangeVarGetRelid(stmt->relation, NoLock,
@@ -427,12 +432,18 @@ boot_column_list:
 		;
 
 boot_column_def:
-		  boot_ident EQUALS boot_ident
+		  boot_ident EQUALS boot_ident boot_column_nullness
 				{
 				   if (++numattr > MAXATTR)
 						elog(FATAL, "too many columns");
-				   DefineAttr($1, $3, numattr-1);
+				   DefineAttr($1, $3, numattr-1, $4);
 				}
+		;
+
+boot_column_nullness:
+			XFORCE XNOT XNULL	{ $$ = BOOTCOL_NULL_FORCE_NOT_NULL; }
+		|	XFORCE XNULL		{  $$ = BOOTCOL_NULL_FORCE_NULL; }
+		| { $$ = BOOTCOL_NULL_AUTO; }
 		;
 
 oidspec:

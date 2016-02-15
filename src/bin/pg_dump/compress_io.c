@@ -4,7 +4,7 @@
  *	 Routines for archivers to write an uncompressed or compressed data
  *	 stream.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * This file includes two APIs for dealing with compressed data. The first
@@ -51,10 +51,11 @@
  *
  *-------------------------------------------------------------------------
  */
+#include "postgres_fe.h"
 
 #include "compress_io.h"
-#include "pg_backup_utils.h"
 #include "parallel.h"
+#include "pg_backup_utils.h"
 
 /*----------------------
  * Compressor API
@@ -546,11 +547,21 @@ cfopen(const char *path, const char *mode, int compression)
 	if (compression != 0)
 	{
 #ifdef HAVE_LIBZ
-		char		mode_compression[32];
+		if (compression != Z_DEFAULT_COMPRESSION)
+		{
+			/* user has specified a compression level, so tell zlib to use it */
+			char		mode_compression[32];
 
-		snprintf(mode_compression, sizeof(mode_compression), "%s%d",
-				 mode, compression);
-		fp->compressedfp = gzopen(path, mode_compression);
+			snprintf(mode_compression, sizeof(mode_compression), "%s%d",
+					 mode, compression);
+			fp->compressedfp = gzopen(path, mode_compression);
+		}
+		else
+		{
+			/* don't specify a level, just use the zlib default */
+			fp->compressedfp = gzopen(path, mode);
+		}
+
 		fp->uncompressedfp = NULL;
 		if (fp->compressedfp == NULL)
 		{

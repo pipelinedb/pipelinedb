@@ -7,7 +7,7 @@
  *	  stuff - checking the qualification and projecting the tuple
  *	  appropriately.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -50,8 +50,21 @@ ExecScanFetch(ScanState *node,
 		 */
 		Index		scanrelid = ((Scan *) node->ps.plan)->scanrelid;
 
-		Assert(scanrelid > 0);
-		if (estate->es_epqTupleSet[scanrelid - 1])
+		if (scanrelid == 0)
+		{
+			TupleTableSlot *slot = node->ss_ScanTupleSlot;
+
+			/*
+			 * This is a ForeignScan or CustomScan which has pushed down a
+			 * join to the remote side.  The recheck method is responsible not
+			 * only for rechecking the scan/join quals but also for storing
+			 * the correct tuple in the slot.
+			 */
+			if (!(*recheckMtd) (node, slot))
+				ExecClearTuple(slot);	/* would not be returned by scan */
+			return slot;
+		}
+		else if (estate->es_epqTupleSet[scanrelid - 1])
 		{
 			TupleTableSlot *slot = node->ss_ScanTupleSlot;
 
@@ -89,7 +102,7 @@ ExecScanFetch(ScanState *node,
  *		Scans the relation using the 'access method' indicated and
  *		returns the next qualifying tuple in the direction specified
  *		in the global variable ExecDirection.
- *		The access method returns the next tuple and execScan() is
+ *		The access method returns the next tuple and ExecScan() is
  *		responsible for checking the tuple returned against the qual-clause.
  *
  *		A 'recheck method' must also be provided that can check an
@@ -221,10 +234,7 @@ ExecScan(ScanState *node,
 			}
 		}
 		else
-		{
-			node->ps.state->es_filtered++;
 			InstrCountFiltered1(node, 1);
-		}
 
 		/*
 		 * Tuple fails qual, so free per-tuple memory and try again.
@@ -250,13 +260,18 @@ void
 ExecAssignScanProjectionInfo(ScanState *node)
 {
 	Scan	   *scan = (Scan *) node->ps.plan;
-	Index		varno;
 
-	/* Vars in an index-only scan's tlist should be INDEX_VAR */
-	if (IsA(scan, IndexOnlyScan))
-		varno = INDEX_VAR;
-	else
-		varno = scan->scanrelid;
+	ExecAssignScanProjectionInfoWithVarno(node, scan->scanrelid);
+}
+
+/*
+ * ExecAssignScanProjectionInfoWithVarno
+ *		As above, but caller can specify varno expected in Vars in the tlist.
+ */
+void
+ExecAssignScanProjectionInfoWithVarno(ScanState *node, Index varno)
+{
+	Scan	   *scan = (Scan *) node->ps.plan;
 
 	if (tlist_matches_tupdesc(&node->ps,
 							  scan->plan.targetlist,
@@ -346,8 +361,31 @@ ExecScanReScan(ScanState *node)
 	{
 		Index		scanrelid = ((Scan *) node->ps.plan)->scanrelid;
 
-		Assert(scanrelid > 0);
+		if (scanrelid > 0)
+			estate->es_epqScanDone[scanrelid - 1] = false;
+		else
+		{
+			Bitmapset  *relids;
+			int			rtindex = -1;
 
-		estate->es_epqScanDone[scanrelid - 1] = false;
+			/*
+			 * If an FDW or custom scan provider has replaced the join with a
+			 * scan, there are multiple RTIs; reset the epqScanDone flag for
+			 * all of them.
+			 */
+			if (IsA(node->ps.plan, ForeignScan))
+				relids = ((ForeignScan *) node->ps.plan)->fs_relids;
+			else if (IsA(node->ps.plan, CustomScan))
+				relids = ((CustomScan *) node->ps.plan)->custom_relids;
+			else
+				elog(ERROR, "unexpected scan node: %d",
+					 (int) nodeTag(node->ps.plan));
+
+			while ((rtindex = bms_next_member(relids, rtindex)) >= 0)
+			{
+				Assert(rtindex > 0);
+				estate->es_epqScanDone[rtindex - 1] = false;
+			}
+		}
 	}
 }

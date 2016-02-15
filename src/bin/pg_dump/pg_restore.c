@@ -25,26 +25,27 @@
  *	Generate script to stdout
  *	Exit
  *
- * Portions Copyright (c) 2000, Philip Warner
+ * Copyright (c) 2000, Philip Warner
  *		Rights are granted to use this software in any way so long
  *		as this notice is not removed.
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *	The author is not responsible for loss or damages that may
  *	result from its use.
  *
+ * Portions Copyright (c) 2013-2015 PipelineDB
  *
  * IDENTIFICATION
  *		src/bin/pg_dump/pg_restore.c
  *
  *-------------------------------------------------------------------------
  */
+#include "postgres_fe.h"
 
-#include "pg_backup_archiver.h"
-#include "pg_backup_utils.h"
+#include "getopt_long.h"
+
 #include "dumputils.h"
 #include "parallel.h"
-#include "getopt_long.h"
+#include "pg_backup_utils.h"
 
 #include <ctype.h>
 
@@ -71,6 +72,7 @@ main(int argc, char **argv)
 	Archive    *AH;
 	char	   *inputFileSpec;
 	static int	disable_triggers = 0;
+	static int	enable_row_security = 0;
 	static int	if_exists = 0;
 	static int	no_data_for_failed_tables = 0;
 	static int	outputNoTablespaces = 0;
@@ -87,7 +89,6 @@ main(int argc, char **argv)
 		{"format", 1, NULL, 'F'},
 		{"function", 1, NULL, 'P'},
 		{"host", 1, NULL, 'h'},
-		{"ignore-version", 0, NULL, 'i'},
 		{"index", 1, NULL, 'I'},
 		{"jobs", 1, NULL, 'j'},
 		{"list", 0, NULL, 'l'},
@@ -112,6 +113,7 @@ main(int argc, char **argv)
 		 * the following options don't have an equivalent short option letter
 		 */
 		{"disable-triggers", no_argument, &disable_triggers, 1},
+		{"enable-row-security", no_argument, &enable_row_security, 1},
 		{"if-exists", no_argument, &if_exists, 1},
 		{"no-data-for-failed-tables", no_argument, &no_data_for_failed_tables, 1},
 		{"no-tablespaces", no_argument, &outputNoTablespaces, 1},
@@ -145,7 +147,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	while ((c = getopt_long(argc, argv, "acCd:ef:F:h:iI:j:lL:n:Op:P:RsS:t:T:U:vwWx1",
+	while ((c = getopt_long(argc, argv, "acCd:ef:F:h:I:j:lL:n:Op:P:RsS:t:T:U:vwWx1",
 							cmdopts, NULL)) != -1)
 	{
 		switch (c)
@@ -175,9 +177,6 @@ main(int argc, char **argv)
 			case 'h':
 				if (strlen(optarg) != 0)
 					opts->pghost = pg_strdup(optarg);
-				break;
-			case 'i':
-				/* ignored, deprecated option */
 				break;
 
 			case 'j':			/* number of restore jobs */
@@ -334,6 +333,7 @@ main(int argc, char **argv)
 	}
 
 	opts->disable_triggers = disable_triggers;
+	opts->enable_row_security = enable_row_security;
 	opts->noDataForFailedTables = no_data_for_failed_tables;
 	opts->noTablespace = outputNoTablespaces;
 	opts->use_setsessauth = use_setsessauth;
@@ -421,7 +421,7 @@ main(int argc, char **argv)
 	/* AH may be freed in CloseArchive? */
 	exit_code = AH->n_errors ? 1 : 0;
 
-	CloseArchive(AH);
+	CloseArchive(AH, NULL);
 
 	return exit_code;
 }
@@ -429,7 +429,7 @@ main(int argc, char **argv)
 static void
 usage(const char *progname)
 {
-	printf(_("%s restores a PipelineDB database from an archive created by pipeline-dump.\n\n"), progname);
+	printf(_("%s restores a PipelineDB database from an archive created by pg_dump.\n\n"), progname);
 	printf(_("Usage:\n"));
 	printf(_("  %s [OPTION]... [FILE]\n"), progname);
 
@@ -461,6 +461,7 @@ usage(const char *progname)
 	printf(_("  -x, --no-privileges          skip restoration of access privileges (grant/revoke)\n"));
 	printf(_("  -1, --single-transaction     restore as a single transaction\n"));
 	printf(_("  --disable-triggers           disable triggers during data-only restore\n"));
+	printf(_("  --enable-row-security        enable row security\n"));
 	printf(_("  --if-exists                  use IF EXISTS when dropping objects\n"));
 	printf(_("  --no-data-for-failed-tables  do not restore data of tables that could not be\n"
 			 "                               created\n"));
@@ -483,5 +484,5 @@ usage(const char *progname)
 			 "The options -I, -n, -P, -t, -T, and --section can be combined and specified\n"
 			 "multiple times to select multiple objects.\n"));
 	printf(_("\nIf no input file name is supplied, then standard input is used.\n\n"));
-	printf(_("Report bugs to <eng@pipelinedb>.\n"));
+	printf(_("Report bugs to <eng@pipelinedb.com>.\n"));
 }

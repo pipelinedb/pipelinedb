@@ -2,7 +2,7 @@
  *
  * rewriteManip.c
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -92,6 +92,12 @@ contain_aggs_of_level_walker(Node *node,
 			return true;		/* abort the tree traversal and return true */
 		/* else fall through to examine argument */
 	}
+	if (IsA(node, GroupingFunc))
+	{
+		if (((GroupingFunc *) node)->agglevelsup == context->sublevels_up)
+			return true;
+		/* else fall through to examine argument */
+	}
 	if (IsA(node, Query))
 	{
 		/* Recurse into subselects */
@@ -156,6 +162,15 @@ locate_agg_of_level_walker(Node *node,
 			return true;		/* abort the tree traversal and return true */
 		}
 		/* else fall through to examine argument */
+	}
+	if (IsA(node, GroupingFunc))
+	{
+		if (((GroupingFunc *) node)->agglevelsup == context->sublevels_up &&
+			((GroupingFunc *) node)->location >= 0)
+		{
+			context->agg_location = ((GroupingFunc *) node)->location;
+			return true;		/* abort the tree traversal and return true */
+		}
 	}
 	if (IsA(node, Query))
 	{
@@ -281,6 +296,26 @@ checkExprHasSubLink_walker(Node *node, void *context)
 	return expression_tree_walker(node, checkExprHasSubLink_walker, context);
 }
 
+/*
+ * Check for MULTIEXPR Param within expression tree
+ *
+ * We intentionally don't descend into SubLinks: only Params at the current
+ * query level are of interest.
+ */
+static bool
+contains_multiexpr_param(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+	if (IsA(node, Param))
+	{
+		if (((Param *) node)->paramkind == PARAM_MULTIEXPR)
+			return true;		/* abort the tree traversal and return true */
+		return false;
+	}
+	return expression_tree_walker(node, contains_multiexpr_param, context);
+}
+
 
 /*
  * OffsetVarNodes - adjust Vars when appending one query's RT to another
@@ -367,7 +402,6 @@ OffsetVarNodes_walker(Node *node, OffsetVarNodes_context *context)
 	/* Shouldn't need to handle other planner auxiliary nodes here */
 	Assert(!IsA(node, PlanRowMark));
 	Assert(!IsA(node, SpecialJoinInfo));
-	Assert(!IsA(node, LateralJoinInfo));
 	Assert(!IsA(node, PlaceHolderInfo));
 	Assert(!IsA(node, MinMaxAggInfo));
 
@@ -406,9 +440,9 @@ OffsetVarNodes(Node *node, int offset, int sublevels_up)
 		/*
 		 * If we are starting at a Query, and sublevels_up is zero, then we
 		 * must also fix rangetable indexes in the Query itself --- namely
-		 * resultRelation and rowMarks entries.  sublevels_up cannot be zero
-		 * when recursing into a subquery, so there's no need to have the same
-		 * logic inside OffsetVarNodes_walker.
+		 * resultRelation, exclRelIndex and rowMarks entries.  sublevels_up
+		 * cannot be zero when recursing into a subquery, so there's no need
+		 * to have the same logic inside OffsetVarNodes_walker.
 		 */
 		if (sublevels_up == 0)
 		{
@@ -416,6 +450,10 @@ OffsetVarNodes(Node *node, int offset, int sublevels_up)
 
 			if (qry->resultRelation)
 				qry->resultRelation += offset;
+
+			if (qry->onConflict && qry->onConflict->exclRelIndex)
+				qry->onConflict->exclRelIndex += offset;
+
 			foreach(l, qry->rowMarks)
 			{
 				RowMarkClause *rc = (RowMarkClause *) lfirst(l);
@@ -434,13 +472,11 @@ static Relids
 offset_relid_set(Relids relids, int offset)
 {
 	Relids		result = NULL;
-	Relids		tmprelids;
 	int			rtindex;
 
-	tmprelids = bms_copy(relids);
-	while ((rtindex = bms_first_member(tmprelids)) >= 0)
+	rtindex = -1;
+	while ((rtindex = bms_next_member(relids, rtindex)) >= 0)
 		result = bms_add_member(result, rtindex + offset);
-	bms_free(tmprelids);
 	return result;
 }
 
@@ -549,7 +585,6 @@ ChangeVarNodes_walker(Node *node, ChangeVarNodes_context *context)
 	}
 	/* Shouldn't need to handle other planner auxiliary nodes here */
 	Assert(!IsA(node, SpecialJoinInfo));
-	Assert(!IsA(node, LateralJoinInfo));
 	Assert(!IsA(node, PlaceHolderInfo));
 	Assert(!IsA(node, MinMaxAggInfo));
 
@@ -599,6 +634,11 @@ ChangeVarNodes(Node *node, int rt_index, int new_index, int sublevels_up)
 
 			if (qry->resultRelation == rt_index)
 				qry->resultRelation = new_index;
+
+			/* this is unlikely to ever be used, but ... */
+			if (qry->onConflict && qry->onConflict->exclRelIndex == rt_index)
+				qry->onConflict->exclRelIndex = new_index;
+
 			foreach(l, qry->rowMarks)
 			{
 				RowMarkClause *rc = (RowMarkClause *) lfirst(l);
@@ -683,6 +723,14 @@ IncrementVarSublevelsUp_walker(Node *node,
 
 		if (agg->agglevelsup >= context->min_sublevels_up)
 			agg->agglevelsup += context->delta_sublevels_up;
+		/* fall through to recurse into argument */
+	}
+	if (IsA(node, GroupingFunc))
+	{
+		GroupingFunc *grp = (GroupingFunc *) node;
+
+		if (grp->agglevelsup >= context->min_sublevels_up)
+			grp->agglevelsup += context->delta_sublevels_up;
 		/* fall through to recurse into argument */
 	}
 	if (IsA(node, PlaceHolderVar))
@@ -818,7 +866,6 @@ rangeTableEntry_used_walker(Node *node,
 	Assert(!IsA(node, PlaceHolderVar));
 	Assert(!IsA(node, PlanRowMark));
 	Assert(!IsA(node, SpecialJoinInfo));
-	Assert(!IsA(node, LateralJoinInfo));
 	Assert(!IsA(node, AppendRelInfo));
 	Assert(!IsA(node, PlaceHolderInfo));
 	Assert(!IsA(node, MinMaxAggInfo));
@@ -1005,6 +1052,7 @@ AddInvertedQual(Query *parsetree, Node *qual)
 	invqual = makeNode(BooleanTest);
 	invqual->arg = (Expr *) qual;
 	invqual->booltesttype = IS_NOT_TRUE;
+	invqual->location = -1;
 
 	AddQual(parsetree, (Node *) invqual);
 }
@@ -1369,6 +1417,21 @@ ReplaceVarsFromTargetList_callback(Var *var,
 		/* Must adjust varlevelsup if tlist item is from higher query */
 		if (var->varlevelsup > 0)
 			IncrementVarSublevelsUp(newnode, var->varlevelsup, 0);
+
+		/*
+		 * Check to see if the tlist item contains a PARAM_MULTIEXPR Param,
+		 * and throw error if so.  This case could only happen when expanding
+		 * an ON UPDATE rule's NEW variable and the referenced tlist item in
+		 * the original UPDATE command is part of a multiple assignment. There
+		 * seems no practical way to handle such cases without multiple
+		 * evaluation of the multiple assignment's sub-select, which would
+		 * create semantic oddities that users of rules would probably prefer
+		 * not to cope with.  So treat it as an unimplemented feature.
+		 */
+		if (contains_multiexpr_param(newnode, NULL))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("NEW variables in ON UPDATE rules cannot reference columns that are part of a multiple assignment in the subject UPDATE command")));
 
 		return newnode;
 	}

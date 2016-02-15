@@ -6,7 +6,7 @@
  * There is hardly anything left of Paul Brown's original implementation...
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015 PostgreSQL Global Development Group
  * Portions Copyright (c) 1994-5, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -24,6 +24,7 @@
 #include "access/transam.h"
 #include "access/tuptoaster.h"
 #include "access/xact.h"
+#include "access/xlog.h"
 #include "catalog/catalog.h"
 #include "catalog/dependency.h"
 #include "catalog/heap.h"
@@ -576,7 +577,8 @@ rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose)
 	heap_close(OldHeap, NoLock);
 
 	/* Create the transient table that will receive the re-ordered data */
-	OIDNewHeap = make_new_heap(tableOid, tableSpace, false,
+	OIDNewHeap = make_new_heap(tableOid, tableSpace,
+							   OldHeap->rd_rel->relpersistence,
 							   AccessExclusiveLock);
 
 	/* Copy the heap data into the new table in the desired order */
@@ -589,7 +591,8 @@ rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose)
 	 */
 	finish_heap_swap(tableOid, OIDNewHeap, is_system_catalog,
 					 swap_toast_by_content, false, true,
-					 frozenXid, cutoffMulti);
+					 frozenXid, cutoffMulti,
+					 OldHeap->rd_rel->relpersistence);
 }
 
 
@@ -597,13 +600,14 @@ rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose)
  * Create the transient table that will be filled with new data during
  * CLUSTER, ALTER TABLE, and similar operations.  The transient table
  * duplicates the logical structure of the OldHeap, but is placed in
- * NewTableSpace which might be different from OldHeap's.
+ * NewTableSpace which might be different from OldHeap's.  Also, it's built
+ * with the specified persistence, which might differ from the original's.
  *
  * After this, the caller should load the new heap with transferred/modified
  * data, then call finish_heap_swap to complete the operation.
  */
 Oid
-make_new_heap(Oid OIDOldHeap, Oid NewTableSpace, bool forcetemp,
+make_new_heap(Oid OIDOldHeap, Oid NewTableSpace, char relpersistence,
 			  LOCKMODE lockmode)
 {
 	TupleDesc	OldHeapDesc;
@@ -615,7 +619,6 @@ make_new_heap(Oid OIDOldHeap, Oid NewTableSpace, bool forcetemp,
 	Datum		reloptions;
 	bool		isNull;
 	Oid			namespaceid;
-	char		relpersistence;
 
 	OldHeap = heap_open(OIDOldHeap, lockmode);
 	OldHeapDesc = RelationGetDescr(OldHeap);
@@ -638,16 +641,10 @@ make_new_heap(Oid OIDOldHeap, Oid NewTableSpace, bool forcetemp,
 	if (isNull)
 		reloptions = (Datum) 0;
 
-	if (forcetemp)
-	{
+	if (relpersistence == RELPERSISTENCE_TEMP)
 		namespaceid = LookupCreationNamespace("pg_temp");
-		relpersistence = RELPERSISTENCE_TEMP;
-	}
 	else
-	{
 		namespaceid = RelationGetNamespace(OldHeap);
-		relpersistence = OldHeap->rd_rel->relpersistence;
-	}
 
 	/*
 	 * Create the new heap, using a temporary name in the same namespace as
@@ -682,7 +679,8 @@ make_new_heap(Oid OIDOldHeap, Oid NewTableSpace, bool forcetemp,
 										  reloptions,
 										  false,
 										  true,
-										  true);
+										  true,
+										  NULL);
 	Assert(OIDNewHeap != InvalidOid);
 
 	ReleaseSysCache(tuple);
@@ -1111,8 +1109,10 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 /*
  * Swap the physical files of two given relations.
  *
- * We swap the physical identity (reltablespace and relfilenode) while
- * keeping the same logical identities of the two relations.
+ * We swap the physical identity (reltablespace, relfilenode) while keeping the
+ * same logical identities of the two relations.  relpersistence is also
+ * swapped, which is critical since it determines where buffers live for each
+ * relation.
  *
  * We can swap associated TOAST data in either of two ways: recursively swap
  * the physical content of the toast tables (and their indexes), or swap the
@@ -1148,6 +1148,7 @@ swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class,
 	Oid			relfilenode1,
 				relfilenode2;
 	Oid			swaptemp;
+	char		swptmpchr;
 	CatalogIndexState indstate;
 
 	/* We need writable copies of both pg_class tuples. */
@@ -1168,7 +1169,10 @@ swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class,
 
 	if (OidIsValid(relfilenode1) && OidIsValid(relfilenode2))
 	{
-		/* Normal non-mapped relations: swap relfilenodes and reltablespaces */
+		/*
+		 * Normal non-mapped relations: swap relfilenodes, reltablespaces,
+		 * relpersistence
+		 */
 		Assert(!target_is_pg_class);
 
 		swaptemp = relform1->relfilenode;
@@ -1178,6 +1182,10 @@ swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class,
 		swaptemp = relform1->reltablespace;
 		relform1->reltablespace = relform2->reltablespace;
 		relform2->reltablespace = swaptemp;
+
+		swptmpchr = relform1->relpersistence;
+		relform1->relpersistence = relform2->relpersistence;
+		relform2->relpersistence = swptmpchr;
 
 		/* Also swap toast links, if we're swapping by links */
 		if (!swap_toast_by_content)
@@ -1198,14 +1206,17 @@ swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class,
 				 NameStr(relform1->relname));
 
 		/*
-		 * We can't change the tablespace of a mapped rel, and we can't handle
-		 * toast link swapping for one either, because we must not apply any
-		 * critical changes to its pg_class row.  These cases should be
-		 * prevented by upstream permissions tests, so this check is a
-		 * non-user-facing emergency backstop.
+		 * We can't change the tablespace nor persistence of a mapped rel, and
+		 * we can't handle toast link swapping for one either, because we must
+		 * not apply any critical changes to its pg_class row.  These cases
+		 * should be prevented by upstream permissions tests, so these checks
+		 * are non-user-facing emergency backstop.
 		 */
 		if (relform1->reltablespace != relform2->reltablespace)
 			elog(ERROR, "cannot change tablespace of mapped relation \"%s\"",
+				 NameStr(relform1->relname));
+		if (relform1->relpersistence != relform2->relpersistence)
+			elog(ERROR, "cannot change persistence of mapped relation \"%s\"",
 				 NameStr(relform1->relname));
 		if (!swap_toast_by_content &&
 			(relform1->reltoastrelid || relform2->reltoastrelid))
@@ -1468,7 +1479,8 @@ finish_heap_swap(Oid OIDOldHeap, Oid OIDNewHeap,
 				 bool check_constraints,
 				 bool is_internal,
 				 TransactionId frozenXid,
-				 MultiXactId cutoffMulti)
+				 MultiXactId cutoffMulti,
+				 char newrelpersistence)
 {
 	ObjectAddress object;
 	Oid			mapped_tables[4];
@@ -1512,7 +1524,17 @@ finish_heap_swap(Oid OIDOldHeap, Oid OIDNewHeap,
 	reindex_flags = REINDEX_REL_SUPPRESS_INDEX_USE;
 	if (check_constraints)
 		reindex_flags |= REINDEX_REL_CHECK_CONSTRAINTS;
-	reindex_relation(OIDOldHeap, reindex_flags);
+
+	/*
+	 * Ensure that the indexes have the same persistence as the parent
+	 * relation.
+	 */
+	if (newrelpersistence == RELPERSISTENCE_UNLOGGED)
+		reindex_flags |= REINDEX_REL_FORCE_INDEXES_UNLOGGED;
+	else if (newrelpersistence == RELPERSISTENCE_PERMANENT)
+		reindex_flags |= REINDEX_REL_FORCE_INDEXES_PERMANENT;
+
+	reindex_relation(OIDOldHeap, reindex_flags, 0);
 
 	/*
 	 * If the relation being rebuild is pg_class, swap_relation_files()

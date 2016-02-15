@@ -3,7 +3,7 @@
  * timestamp.h
  *	  Definitions for the SQL "timestamp" and "interval" types.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -162,7 +162,9 @@ extern Datum timestamp_trunc(PG_FUNCTION_ARGS);
 extern Datum interval_trunc(PG_FUNCTION_ARGS);
 extern Datum timestamp_part(PG_FUNCTION_ARGS);
 extern Datum interval_part(PG_FUNCTION_ARGS);
+extern Datum timestamp_zone_transform(PG_FUNCTION_ARGS);
 extern Datum timestamp_zone(PG_FUNCTION_ARGS);
+extern Datum timestamp_izone_transform(PG_FUNCTION_ARGS);
 extern Datum timestamp_izone(PG_FUNCTION_ARGS);
 extern Datum timestamp_timestamptz(PG_FUNCTION_ARGS);
 

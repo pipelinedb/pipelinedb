@@ -3,7 +3,7 @@
  * allpaths.c
  *	  Routines to find possible search paths for processing a query
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -18,9 +18,12 @@
 
 #include <math.h>
 
+#include "access/sysattr.h"
+#include "access/tsmapi.h"
 #include "catalog/pg_class.h"
 #include "catalog/pg_operator.h"
 #include "foreign/fdwapi.h"
+#include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #ifdef OPTIMIZER_DEBUG
 #include "nodes/print.h"
@@ -53,6 +56,9 @@ typedef struct pushdown_safety_info
 bool		enable_geqo = false;	/* just in case GUC doesn't set it */
 int			geqo_threshold;
 
+/* Hook for plugins to get control in set_rel_pathlist() */
+set_rel_pathlist_hook_type set_rel_pathlist_hook = NULL;
+
 /* Hook for plugins to replace standard_join_search() */
 join_search_hook_type join_search_hook = NULL;
 
@@ -68,6 +74,10 @@ static void set_plain_rel_size(PlannerInfo *root, RelOptInfo *rel,
 				   RangeTblEntry *rte);
 static void set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 					   RangeTblEntry *rte);
+static void set_tablesample_rel_size(PlannerInfo *root, RelOptInfo *rel,
+						 RangeTblEntry *rte);
+static void set_tablesample_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
+							 RangeTblEntry *rte);
 static void set_foreign_size(PlannerInfo *root, RelOptInfo *rel,
 				 RangeTblEntry *rte);
 static void set_foreign_pathlist(PlannerInfo *root, RelOptInfo *rel,
@@ -103,12 +113,14 @@ static void check_output_expressions(Query *subquery,
 						 pushdown_safety_info *safetyInfo);
 static void compare_tlist_datatypes(List *tlist, List *colTypes,
 						pushdown_safety_info *safetyInfo);
+static bool targetIsInAllPartitionLists(TargetEntry *tle, Query *query);
 static bool qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
 					  pushdown_safety_info *safetyInfo);
 static void subquery_push_qual(Query *subquery,
 				   RangeTblEntry *rte, Index rti, Node *qual);
 static void recurse_push_qual(Node *setOp, Query *topquery,
 				  RangeTblEntry *rte, Index rti, Node *qual);
+static void remove_unused_subquery_outputs(Query *subquery, RelOptInfo *rel);
 
 
 /*
@@ -165,7 +177,6 @@ make_one_rel(PlannerInfo *root, List *joinlist)
 	return rel;
 }
 
-
 /*
  * set_base_rel_consider_startup
  *	  Set the consider_[param_]startup flags for each base-relation entry.
@@ -197,11 +208,11 @@ set_base_rel_consider_startup(PlannerInfo *root)
 	foreach(lc, root->join_info_list)
 	{
 		SpecialJoinInfo *sjinfo = (SpecialJoinInfo *) lfirst(lc);
+		int			varno;
 
 		if ((sjinfo->jointype == JOIN_SEMI || sjinfo->jointype == JOIN_ANTI) &&
-			bms_membership(sjinfo->syn_righthand) == BMS_SINGLETON)
+			bms_get_singleton_member(sjinfo->syn_righthand, &varno))
 		{
-			int			varno = bms_singleton_member(sjinfo->syn_righthand);
 			RelOptInfo *rel = find_base_rel(root, varno);
 
 			rel->consider_param_startup = true;
@@ -302,11 +313,15 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 		switch (rel->rtekind)
 		{
 			case RTE_RELATION:
-				if (rte->relkind == RELKIND_FOREIGN_TABLE ||
-						rte->relkind == RELKIND_STREAM)
+				if (rte->relkind == RELKIND_FOREIGN_TABLE || rte->relkind == RELKIND_STREAM)
 				{
 					/* Foreign table */
 					set_foreign_size(root, rel, rte);
+				}
+				else if (rte->tablesample != NULL)
+				{
+					/* Sampled relation */
+					set_tablesample_rel_size(root, rel, rte);
 				}
 				else
 				{
@@ -346,6 +361,11 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 				break;
 		}
 	}
+
+	/*
+	 * We insist that all non-dummy rels have a nonzero rowcount estimate.
+	 */
+	Assert(rel->rows > 0 || IS_DUMMY_REL(rel));
 }
 
 /*
@@ -370,11 +390,15 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 		switch (rel->rtekind)
 		{
 			case RTE_RELATION:
-				if (rte->relkind == RELKIND_FOREIGN_TABLE ||
-						rte->relkind == RELKIND_STREAM)
+				if (rte->relkind == RELKIND_FOREIGN_TABLE || rte->relkind == RELKIND_STREAM)
 				{
 					/* Foreign table */
 					set_foreign_pathlist(root, rel, rte);
+				}
+				else if (rte->tablesample != NULL)
+				{
+					/* Sampled relation */
+					set_tablesample_rel_pathlist(root, rel, rte);
 				}
 				else
 				{
@@ -401,6 +425,17 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 				break;
 		}
 	}
+
+	/*
+	 * Allow a plugin to editorialize on the set of Paths for this base
+	 * relation.  It could add new paths (such as CustomPaths) by calling
+	 * add_path(), or delete or modify paths added by the core code.
+	 */
+	if (set_rel_pathlist_hook)
+		(*set_rel_pathlist_hook) (root, rel, rti, rte);
+
+	/* Now find the cheapest of the paths for this rel */
+	set_cheapest(rel);
 
 #ifdef OPTIMIZER_DEBUG
 	debug_print_rel(root, rel);
@@ -448,9 +483,94 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* Consider TID scans */
 	create_tidscan_paths(root, rel);
+}
 
-	/* Now find the cheapest of the paths for this rel */
-	set_cheapest(rel);
+/*
+ * set_tablesample_rel_size
+ *	  Set size estimates for a sampled relation
+ */
+static void
+set_tablesample_rel_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
+{
+	TableSampleClause *tsc = rte->tablesample;
+	TsmRoutine *tsm;
+	BlockNumber pages;
+	double		tuples;
+
+	/*
+	 * Test any partial indexes of rel for applicability.  We must do this
+	 * first since partial unique indexes can affect size estimates.
+	 */
+	check_partial_indexes(root, rel);
+
+	/*
+	 * Call the sampling method's estimation function to estimate the number
+	 * of pages it will read and the number of tuples it will return.  (Note:
+	 * we assume the function returns sane values.)
+	 */
+	tsm = GetTsmRoutine(tsc->tsmhandler);
+	tsm->SampleScanGetSampleSize(root, rel, tsc->args,
+								 &pages, &tuples);
+
+	/*
+	 * For the moment, because we will only consider a SampleScan path for the
+	 * rel, it's okay to just overwrite the pages and tuples estimates for the
+	 * whole relation.  If we ever consider multiple path types for sampled
+	 * rels, we'll need more complication.
+	 */
+	rel->pages = pages;
+	rel->tuples = tuples;
+
+	/* Mark rel with estimated output rows, width, etc */
+	set_baserel_size_estimates(root, rel);
+}
+
+/*
+ * set_tablesample_rel_pathlist
+ *	  Build access paths for a sampled relation
+ */
+static void
+set_tablesample_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
+{
+	Relids		required_outer;
+	Path	   *path;
+
+	/*
+	 * We don't support pushing join clauses into the quals of a samplescan,
+	 * but it could still have required parameterization due to LATERAL refs
+	 * in its tlist or TABLESAMPLE arguments.
+	 */
+	required_outer = rel->lateral_relids;
+
+	/* Consider sampled scan */
+	path = create_samplescan_path(root, rel, required_outer);
+
+	/*
+	 * If the sampling method does not support repeatable scans, we must avoid
+	 * plans that would scan the rel multiple times.  Ideally, we'd simply
+	 * avoid putting the rel on the inside of a nestloop join; but adding such
+	 * a consideration to the planner seems like a great deal of complication
+	 * to support an uncommon usage of second-rate sampling methods.  Instead,
+	 * if there is a risk that the query might perform an unsafe join, just
+	 * wrap the SampleScan in a Materialize node.  We can check for joins by
+	 * counting the membership of all_baserels (note that this correctly
+	 * counts inheritance trees as single rels).  If we're inside a subquery,
+	 * we can't easily check whether a join might occur in the outer query, so
+	 * just assume one is possible.
+	 *
+	 * GetTsmRoutine is relatively expensive compared to the other tests here,
+	 * so check repeatable_across_scans last, even though that's a bit odd.
+	 */
+	if ((root->query_level > 1 ||
+		 bms_membership(root->all_baserels) != BMS_SINGLETON) &&
+	 !(GetTsmRoutine(rte->tablesample->tsmhandler)->repeatable_across_scans))
+	{
+		path = (Path *) create_material_path(rel, path);
+	}
+
+	add_path(rel, path);
+
+	/* For the moment, at least, there are no other paths to consider */
 }
 
 /*
@@ -465,6 +585,9 @@ set_foreign_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* Let FDW adjust the size estimates, if it can */
 	rel->fdwroutine->GetForeignRelSize(root, rel, rte->relid);
+
+	/* ... but do not let it set the rows estimate to zero */
+	rel->rows = clamp_row_est(rel->rows);
 }
 
 /*
@@ -476,9 +599,6 @@ set_foreign_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
 	/* Call the FDW's GetForeignPaths function to generate path(s) */
 	rel->fdwroutine->GetForeignPaths(root, rel, rte->relid);
-
-	/* Select cheapest path */
-	set_cheapest(rel);
 }
 
 /*
@@ -497,6 +617,7 @@ set_append_rel_size(PlannerInfo *root, RelOptInfo *rel,
 					Index rti, RangeTblEntry *rte)
 {
 	int			parentRTindex = rti;
+	bool		has_live_children;
 	double		parent_rows;
 	double		parent_size;
 	double	   *parent_attrsizes;
@@ -517,6 +638,7 @@ set_append_rel_size(PlannerInfo *root, RelOptInfo *rel,
 	 * Note: if you consider changing this logic, beware that child rels could
 	 * have zero rows and/or width, if they were excluded by constraints.
 	 */
+	has_live_children = false;
 	parent_rows = 0;
 	parent_size = 0;
 	nattrs = rel->max_attr - rel->min_attr + 1;
@@ -644,70 +766,80 @@ set_append_rel_size(PlannerInfo *root, RelOptInfo *rel,
 		if (IS_DUMMY_REL(childrel))
 			continue;
 
+		/* We have at least one live child. */
+		has_live_children = true;
+
 		/*
 		 * Accumulate size information from each live child.
 		 */
-		if (childrel->rows > 0)
+		Assert(childrel->rows > 0);
+
+		parent_rows += childrel->rows;
+		parent_size += childrel->width * childrel->rows;
+
+		/*
+		 * Accumulate per-column estimates too.  We need not do anything for
+		 * PlaceHolderVars in the parent list.  If child expression isn't a
+		 * Var, or we didn't record a width estimate for it, we have to fall
+		 * back on a datatype-based estimate.
+		 *
+		 * By construction, child's reltargetlist is 1-to-1 with parent's.
+		 */
+		forboth(parentvars, rel->reltargetlist,
+				childvars, childrel->reltargetlist)
 		{
-			parent_rows += childrel->rows;
-			parent_size += childrel->width * childrel->rows;
+			Var		   *parentvar = (Var *) lfirst(parentvars);
+			Node	   *childvar = (Node *) lfirst(childvars);
 
-			/*
-			 * Accumulate per-column estimates too.  We need not do anything
-			 * for PlaceHolderVars in the parent list.  If child expression
-			 * isn't a Var, or we didn't record a width estimate for it, we
-			 * have to fall back on a datatype-based estimate.
-			 *
-			 * By construction, child's reltargetlist is 1-to-1 with parent's.
-			 */
-			forboth(parentvars, rel->reltargetlist,
-					childvars, childrel->reltargetlist)
+			if (IsA(parentvar, Var))
 			{
-				Var		   *parentvar = (Var *) lfirst(parentvars);
-				Node	   *childvar = (Node *) lfirst(childvars);
+				int			pndx = parentvar->varattno - rel->min_attr;
+				int32		child_width = 0;
 
-				if (IsA(parentvar, Var))
+				if (IsA(childvar, Var) &&
+					((Var *) childvar)->varno == childrel->relid)
 				{
-					int			pndx = parentvar->varattno - rel->min_attr;
-					int32		child_width = 0;
+					int			cndx = ((Var *) childvar)->varattno - childrel->min_attr;
 
-					if (IsA(childvar, Var) &&
-						((Var *) childvar)->varno == childrel->relid)
-					{
-						int			cndx = ((Var *) childvar)->varattno - childrel->min_attr;
-
-						child_width = childrel->attr_widths[cndx];
-					}
-					if (child_width <= 0)
-						child_width = get_typavgwidth(exprType(childvar),
-													  exprTypmod(childvar));
-					Assert(child_width > 0);
-					parent_attrsizes[pndx] += child_width * childrel->rows;
+					child_width = childrel->attr_widths[cndx];
 				}
+				if (child_width <= 0)
+					child_width = get_typavgwidth(exprType(childvar),
+												  exprTypmod(childvar));
+				Assert(child_width > 0);
+				parent_attrsizes[pndx] += child_width * childrel->rows;
 			}
 		}
 	}
 
-	/*
-	 * Save the finished size estimates.
-	 */
-	rel->rows = parent_rows;
-	if (parent_rows > 0)
+	if (has_live_children)
 	{
+		/*
+		 * Save the finished size estimates.
+		 */
 		int			i;
 
+		Assert(parent_rows > 0);
+		rel->rows = parent_rows;
 		rel->width = rint(parent_size / parent_rows);
 		for (i = 0; i < nattrs; i++)
 			rel->attr_widths[i] = rint(parent_attrsizes[i] / parent_rows);
+
+		/*
+		 * Set "raw tuples" count equal to "rows" for the appendrel; needed
+		 * because some places assume rel->tuples is valid for any baserel.
+		 */
+		rel->tuples = parent_rows;
 	}
 	else
-		rel->width = 0;			/* attr_widths should be zero already */
-
-	/*
-	 * Set "raw tuples" count equal to "rows" for the appendrel; needed
-	 * because some places assume rel->tuples is valid for any baserel.
-	 */
-	rel->tuples = parent_rows;
+	{
+		/*
+		 * All children were excluded by constraints, so mark the whole
+		 * appendrel dummy.  We must do this in this phase so that the rel's
+		 * dummy-ness is visible when we generate paths for other rels.
+		 */
+		set_dummy_rel_pathlist(rel);
+	}
 
 	pfree(parent_attrsizes);
 }
@@ -901,9 +1033,6 @@ set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 			add_path(rel, (Path *)
 					 create_append_path(rel, subpaths, required_outer));
 	}
-
-	/* Select cheapest paths */
-	set_cheapest(rel);
 }
 
 /*
@@ -1131,7 +1260,12 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 
 	add_path(rel, (Path *) create_append_path(rel, NIL, NULL));
 
-	/* Select cheapest path (pretty easy in this case...) */
+	/*
+	 * We set the cheapest path immediately, to ensure that IS_DUMMY_REL()
+	 * will recognize the relation as dummy if anyone asks.  This is redundant
+	 * when we're called from set_rel_size(), but not when called from
+	 * elsewhere, and doing it twice is harmless anyway.
+	 */
 	set_cheapest(rel);
 }
 
@@ -1184,7 +1318,7 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	/*
 	 * Must copy the Query so that planning doesn't mess up the RTE contents
 	 * (really really need to fix the planner to not scribble on its input,
-	 * someday).
+	 * someday ... but see remove_unused_subquery_outputs to start with).
 	 */
 	subquery = copyObject(subquery);
 
@@ -1208,7 +1342,7 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 
 	/*
 	 * If the subquery has the "security_barrier" flag, it means the subquery
-	 * originated from a view that must enforce row-level security.  Then we
+	 * originated from a view that must enforce row level security.  Then we
 	 * must not push down quals that contain leaky functions.  (Ideally this
 	 * would be checked inside subquery_is_pushdown_safe, but since we don't
 	 * currently pass the RTE to that function, we must do it here.)
@@ -1265,6 +1399,12 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	pfree(safetyInfo.unsafeColumns);
 
 	/*
+	 * The upper query might not use all the subquery's output columns; if
+	 * not, we can simplify.
+	 */
+	remove_unused_subquery_outputs(subquery, rel);
+
+	/*
 	 * We can safely pass the outer tuple_fraction down to the subquery if the
 	 * outer level has no joining, aggregation, or sorting to do. Otherwise
 	 * we'd better tell the subquery to plan for full retrieval. (XXX This
@@ -1272,6 +1412,7 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	 */
 	if (parse->hasAggs ||
 		parse->groupClause ||
+		parse->groupingSets ||
 		parse->havingQual ||
 		parse->distinctClause ||
 		parse->sortClause ||
@@ -1313,9 +1454,6 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 
 	/* Generate appropriate path */
 	add_path(rel, create_subqueryscan_path(root, rel, pathkeys, required_outer));
-
-	/* Select cheapest path (pretty easy in this case...) */
-	set_cheapest(rel);
 }
 
 /*
@@ -1384,9 +1522,6 @@ set_function_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	/* Generate appropriate path */
 	add_path(rel, create_functionscan_path(root, rel,
 										   pathkeys, required_outer));
-
-	/* Select cheapest path (pretty easy in this case...) */
-	set_cheapest(rel);
 }
 
 /*
@@ -1407,9 +1542,6 @@ set_values_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* Generate appropriate path */
 	add_path(rel, create_valuesscan_path(root, rel, required_outer));
-
-	/* Select cheapest path (pretty easy in this case...) */
-	set_cheapest(rel);
 }
 
 /*
@@ -1476,9 +1608,6 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* Generate appropriate path */
 	add_path(rel, create_ctescan_path(root, rel, required_outer));
-
-	/* Select cheapest path (pretty easy in this case...) */
-	set_cheapest(rel);
 }
 
 /*
@@ -1529,9 +1658,6 @@ set_worktable_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* Generate appropriate path */
 	add_path(rel, create_worktablescan_path(root, rel, required_outer));
-
-	/* Select cheapest path (pretty easy in this case...) */
-	set_cheapest(rel);
 }
 
 /*
@@ -1733,19 +1859,22 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
  * 1. If the subquery has a LIMIT clause, we must not push down any quals,
  * since that could change the set of rows returned.
  *
- * 2. If the subquery contains any window functions, we can't push quals
- * into it, because that could change the results.
- *
- * 3. If the subquery contains EXCEPT or EXCEPT ALL set ops we cannot push
+ * 2. If the subquery contains EXCEPT or EXCEPT ALL set ops we cannot push
  * quals into it, because that could change the results.
  *
- * 4. If the subquery uses DISTINCT, we cannot push volatile quals into it.
+ * 3. If the subquery uses DISTINCT, we cannot push volatile quals into it.
  * This is because upper-level quals should semantically be evaluated only
  * once per distinct row, not once per original row, and if the qual is
  * volatile then extra evaluations could change the results.  (This issue
  * does not apply to other forms of aggregation such as GROUP BY, because
  * when those are present we push into HAVING not WHERE, so that the quals
  * are still applied after aggregation.)
+ *
+ * 4. If the subquery contains window functions, we cannot push volatile quals
+ * into it.  The issue here is a bit different from DISTINCT: a volatile qual
+ * might succeed for some rows of a window partition and fail for others,
+ * thereby changing the partition contents and thus the window functions'
+ * results for rows that remain.
  *
  * In addition, we make several checks on the subquery's output columns to see
  * if it is safe to reference them in pushed-down quals.  If output column k
@@ -1768,6 +1897,18 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
  * more than we save by eliminating rows before the DISTINCT step.  But it
  * would be very hard to estimate that at this stage, and in practice pushdown
  * seldom seems to make things worse, so we ignore that problem too.
+ *
+ * Note: likewise, pushing quals into a subquery with window functions is a
+ * bit dubious: the quals might remove some rows of a window partition while
+ * leaving others, causing changes in the window functions' results for the
+ * surviving rows.  We insist that such a qual reference only partitioning
+ * columns, but again that only protects us if the qual does not distinguish
+ * values that the partitioning equality operator sees as equal.  The risks
+ * here are perhaps larger than for DISTINCT, since no de-duplication of rows
+ * occurs and thus there is no theoretical problem with such a qual.  But
+ * we'll do this anyway because the potential performance benefits are very
+ * large, and we've seen no field complaints about the longstanding comparable
+ * behavior with DISTINCT.
  */
 static bool
 subquery_is_pushdown_safe(Query *subquery, Query *topquery,
@@ -1779,12 +1920,8 @@ subquery_is_pushdown_safe(Query *subquery, Query *topquery,
 	if (subquery->limitOffset != NULL || subquery->limitCount != NULL)
 		return false;
 
-	/* Check point 2 */
-	if (subquery->hasWindowFuncs)
-		return false;
-
-	/* Check point 4 */
-	if (subquery->distinctClause)
+	/* Check points 3 and 4 */
+	if (subquery->distinctClause || subquery->hasWindowFuncs)
 		safetyInfo->unsafeVolatile = true;
 
 	/*
@@ -1840,7 +1977,7 @@ recurse_pushdown_safe(Node *setOp, Query *topquery,
 	{
 		SetOperationStmt *op = (SetOperationStmt *) setOp;
 
-		/* EXCEPT is no good (point 3 for subquery_is_pushdown_safe) */
+		/* EXCEPT is no good (point 2 for subquery_is_pushdown_safe) */
 		if (op->op == SETOP_EXCEPT)
 			return false;
 		/* Else recurse */
@@ -1880,6 +2017,15 @@ recurse_pushdown_safe(Node *setOp, Query *topquery,
  * there are no non-DISTINCT output columns, so we needn't check.  Note that
  * subquery_is_pushdown_safe already reported that we can't use volatile
  * quals if there's DISTINCT or DISTINCT ON.)
+ *
+ * 4. If the subquery has any window functions, we must not push down quals
+ * that reference any output columns that are not listed in all the subquery's
+ * window PARTITION BY clauses.  We can push down quals that use only
+ * partitioning columns because they should succeed or fail identically for
+ * every row of any one window partition, and totally excluding some
+ * partitions will not change a window function's results for remaining
+ * partitions.  (Again, this also requires nonvolatile quals, but
+ * subquery_is_pushdown_safe handles that.)
  */
 static void
 check_output_expressions(Query *subquery, pushdown_safety_info *safetyInfo)
@@ -1916,6 +2062,15 @@ check_output_expressions(Query *subquery, pushdown_safety_info *safetyInfo)
 			!targetIsInSortList(tle, InvalidOid, subquery->distinctClause))
 		{
 			/* non-DISTINCT column, so mark it unsafe */
+			safetyInfo->unsafeColumns[tle->resno] = true;
+			continue;
+		}
+
+		/* If subquery uses window functions, check point 4 */
+		if (subquery->hasWindowFuncs &&
+			!targetIsInAllPartitionLists(tle, subquery))
+		{
+			/* not present in all PARTITION BY clauses, so mark it unsafe */
 			safetyInfo->unsafeColumns[tle->resno] = true;
 			continue;
 		}
@@ -1963,6 +2118,31 @@ compare_tlist_datatypes(List *tlist, List *colTypes,
 }
 
 /*
+ * targetIsInAllPartitionLists
+ *		True if the TargetEntry is listed in the PARTITION BY clause
+ *		of every window defined in the query.
+ *
+ * It would be safe to ignore windows not actually used by any window
+ * function, but it's not easy to get that info at this stage; and it's
+ * unlikely to be useful to spend any extra cycles getting it, since
+ * unreferenced window definitions are probably infrequent in practice.
+ */
+static bool
+targetIsInAllPartitionLists(TargetEntry *tle, Query *query)
+{
+	ListCell   *lc;
+
+	foreach(lc, query->windowClause)
+	{
+		WindowClause *wc = (WindowClause *) lfirst(lc);
+
+		if (!targetIsInSortList(tle, InvalidOid, wc->partitionClause))
+			return false;
+	}
+	return true;
+}
+
+/*
  * qual_is_pushdown_safe - is a particular qual safe to push down?
  *
  * qual is a restriction clause applying to the given subquery (whose RTE
@@ -1977,7 +2157,9 @@ compare_tlist_datatypes(List *tlist, List *colTypes,
  * 2. If unsafeVolatile is set, the qual must not contain any volatile
  * functions.
  *
- * 3. If unsafeLeaky is set, the qual must not contain any leaky functions.
+ * 3. If unsafeLeaky is set, the qual must not contain any leaky functions
+ * that are passed Var nodes, and therefore might reveal values from the
+ * subquery as side effects.
  *
  * 4. The qual must not refer to the whole-row output of the subquery
  * (since there is no easy way to name that within the subquery itself).
@@ -2004,7 +2186,7 @@ qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
 
 	/* Refuse leaky quals if told to (point 3) */
 	if (safetyInfo->unsafeLeaky &&
-		contain_leaky_functions(qual))
+		contain_leaked_vars(qual))
 		return false;
 
 	/*
@@ -2073,6 +2255,46 @@ subquery_push_qual(Query *subquery, RangeTblEntry *rte, Index rti, Node *qual)
 		recurse_push_qual(subquery->setOperations, subquery,
 						  rte, rti, qual);
 	}
+	else if (IsA(qual, CurrentOfExpr))
+	{
+		/*
+		 * This is possible when a WHERE CURRENT OF expression is applied to a
+		 * table with row-level security.  In that case, the subquery should
+		 * contain precisely one rtable entry for the table, and we can safely
+		 * push the expression down into the subquery.  This will cause a TID
+		 * scan subquery plan to be generated allowing the target relation to
+		 * be updated.
+		 *
+		 * Someday we might also be able to use a WHERE CURRENT OF expression
+		 * on a view, but currently the rewriter prevents that, so we should
+		 * never see any other case here, but generate sane error messages in
+		 * case it does somehow happen.
+		 */
+		if (subquery->rtable == NIL)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("WHERE CURRENT OF is not supported on a view with no underlying relation")));
+
+		if (list_length(subquery->rtable) > 1)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("WHERE CURRENT OF is not supported on a view with more than one underlying relation")));
+
+		if (subquery->hasAggs || subquery->groupClause || subquery->groupingSets || subquery->havingQual)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("WHERE CURRENT OF is not supported on a view with grouping or aggregation")));
+
+		/*
+		 * Adjust the CURRENT OF expression to refer to the underlying table
+		 * in the subquery, and attach it to the subquery's WHERE clause.
+		 */
+		qual = copyObject(qual);
+		((CurrentOfExpr *) qual)->cvarno = 1;
+
+		subquery->jointree->quals =
+			make_and_qual(subquery->jointree->quals, qual);
+	}
 	else
 	{
 		/*
@@ -2094,7 +2316,7 @@ subquery_push_qual(Query *subquery, RangeTblEntry *rte, Index rti, Node *qual)
 		 * subquery uses grouping or aggregation, put it in HAVING (since the
 		 * qual really refers to the group-result rows).
 		 */
-		if (subquery->hasAggs || subquery->groupClause || subquery->havingQual)
+		if (subquery->hasAggs || subquery->groupClause || subquery->groupingSets || subquery->havingQual)
 			subquery->havingQual = make_and_qual(subquery->havingQual, qual);
 		else
 			subquery->jointree->quals =
@@ -2139,6 +2361,126 @@ recurse_push_qual(Node *setOp, Query *topquery,
 }
 
 /*****************************************************************************
+ *			SIMPLIFYING SUBQUERY TARGETLISTS
+ *****************************************************************************/
+
+/*
+ * remove_unused_subquery_outputs
+ *		Remove subquery targetlist items we don't need
+ *
+ * It's possible, even likely, that the upper query does not read all the
+ * output columns of the subquery.  We can remove any such outputs that are
+ * not needed by the subquery itself (e.g., as sort/group columns) and do not
+ * affect semantics otherwise (e.g., volatile functions can't be removed).
+ * This is useful not only because we might be able to remove expensive-to-
+ * compute expressions, but because deletion of output columns might allow
+ * optimizations such as join removal to occur within the subquery.
+ *
+ * To avoid affecting column numbering in the targetlist, we don't physically
+ * remove unused tlist entries, but rather replace their expressions with NULL
+ * constants.  This is implemented by modifying subquery->targetList.
+ */
+static void
+remove_unused_subquery_outputs(Query *subquery, RelOptInfo *rel)
+{
+	Bitmapset  *attrs_used = NULL;
+	ListCell   *lc;
+
+	/*
+	 * Do nothing if subquery has UNION/INTERSECT/EXCEPT: in principle we
+	 * could update all the child SELECTs' tlists, but it seems not worth the
+	 * trouble presently.
+	 */
+	if (subquery->setOperations)
+		return;
+
+	/*
+	 * If subquery has regular DISTINCT (not DISTINCT ON), we're wasting our
+	 * time: all its output columns must be used in the distinctClause.
+	 */
+	if (subquery->distinctClause && !subquery->hasDistinctOn)
+		return;
+
+	/*
+	 * Collect a bitmap of all the output column numbers used by the upper
+	 * query.
+	 *
+	 * Add all the attributes needed for joins or final output.  Note: we must
+	 * look at reltargetlist, not the attr_needed data, because attr_needed
+	 * isn't computed for inheritance child rels, cf set_append_rel_size().
+	 * (XXX might be worth changing that sometime.)
+	 */
+	pull_varattnos((Node *) rel->reltargetlist, rel->relid, &attrs_used);
+
+	/* Add all the attributes used by un-pushed-down restriction clauses. */
+	foreach(lc, rel->baserestrictinfo)
+	{
+		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+
+		pull_varattnos((Node *) rinfo->clause, rel->relid, &attrs_used);
+	}
+
+	/*
+	 * If there's a whole-row reference to the subquery, we can't remove
+	 * anything.
+	 */
+	if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, attrs_used))
+		return;
+
+	/*
+	 * Run through the tlist and zap entries we don't need.  It's okay to
+	 * modify the tlist items in-place because set_subquery_pathlist made a
+	 * copy of the subquery.
+	 */
+	foreach(lc, subquery->targetList)
+	{
+		TargetEntry *tle = (TargetEntry *) lfirst(lc);
+		Node	   *texpr = (Node *) tle->expr;
+
+		/*
+		 * If it has a sortgroupref number, it's used in some sort/group
+		 * clause so we'd better not remove it.  Also, don't remove any
+		 * resjunk columns, since their reason for being has nothing to do
+		 * with anybody reading the subquery's output.  (It's likely that
+		 * resjunk columns in a sub-SELECT would always have ressortgroupref
+		 * set, but even if they don't, it seems imprudent to remove them.)
+		 */
+		if (tle->ressortgroupref || tle->resjunk)
+			continue;
+
+		/*
+		 * If it's used by the upper query, we can't remove it.
+		 */
+		if (bms_is_member(tle->resno - FirstLowInvalidHeapAttributeNumber,
+						  attrs_used))
+			continue;
+
+		/*
+		 * If it contains a set-returning function, we can't remove it since
+		 * that could change the number of rows returned by the subquery.
+		 */
+		if (expression_returns_set(texpr))
+			continue;
+
+		/*
+		 * If it contains volatile functions, we daren't remove it for fear
+		 * that the user is expecting their side-effects to happen.
+		 */
+		if (contain_volatile_functions(texpr))
+			continue;
+
+		/*
+		 * OK, we don't need it.  Replace the expression with a NULL constant.
+		 * Preserve the exposed type of the expression, in case something
+		 * looks at the rowtype of the subquery's result.
+		 */
+		tle->expr = (Expr *) makeNullConst(exprType(texpr),
+										   exprTypmod(texpr),
+										   exprCollation(texpr));
+	}
+}
+
+/*****************************************************************************
  *			DEBUG SUPPORT
  *****************************************************************************/
 
@@ -2147,19 +2489,17 @@ recurse_push_qual(Node *setOp, Query *topquery,
 static void
 print_relids(Relids relids)
 {
-	Relids		tmprelids;
 	int			x;
 	bool		first = true;
 
-	tmprelids = bms_copy(relids);
-	while ((x = bms_first_member(tmprelids)) >= 0)
+	x = -1;
+	while ((x = bms_next_member(relids, x)) >= 0)
 	{
 		if (!first)
 			printf(" ");
 		printf("%d", x);
 		first = false;
 	}
-	bms_free(tmprelids);
 }
 
 static void
@@ -2188,7 +2528,33 @@ print_path(PlannerInfo *root, Path *path, int indent)
 	switch (nodeTag(path))
 	{
 		case T_Path:
-			ptype = "SeqScan";
+			switch (path->pathtype)
+			{
+				case T_SeqScan:
+					ptype = "SeqScan";
+					break;
+				case T_SampleScan:
+					ptype = "SampleScan";
+					break;
+				case T_SubqueryScan:
+					ptype = "SubqueryScan";
+					break;
+				case T_FunctionScan:
+					ptype = "FunctionScan";
+					break;
+				case T_ValuesScan:
+					ptype = "ValuesScan";
+					break;
+				case T_CteScan:
+					ptype = "CteScan";
+					break;
+				case T_WorkTableScan:
+					ptype = "WorkTableScan";
+					break;
+				default:
+					ptype = "???Path";
+					break;
+			}
 			break;
 		case T_IndexPath:
 			ptype = "IdxScan";

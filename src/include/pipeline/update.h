@@ -3,6 +3,8 @@
  * update.h
  *	  Interface for anonymous update checks
  *
+ * Copyright (c) 2013-2016, PipelineDB
+ *
  * src/include/pipeline/update.h
  *
  *-------------------------------------------------------------------------

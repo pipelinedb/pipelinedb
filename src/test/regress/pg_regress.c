@@ -8,7 +8,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -30,6 +30,7 @@
 #include <sys/resource.h>
 #endif
 
+#include "common/restricted_token.h"
 #include "common/username.h"
 #include "getopt_long.h"
 #include "libpq/pqcomm.h"		/* needed for UNIXSOCK_PATH() */
@@ -45,24 +46,9 @@ typedef struct _resultmap
 } _resultmap;
 
 /*
- * Values obtained from pg_config_paths.h and Makefile.  The PG installation
- * paths are only used in temp_install mode: we use these strings to find
- * out where "make install" will put stuff under the temp_install directory.
- * In non-temp_install mode, the only thing we need is the location of psql,
- * which we expect to find in psqldir, or in the PATH if psqldir isn't given.
- *
- * XXX Because pg_regress is not installed in bindir, we can't support
- * this for relocatable trees as it is.  --psqldir would need to be
- * specified in those cases.
+ * Values obtained from Makefile.
  */
-char	   *bindir = PGBINDIR;
-char	   *libdir = LIBDIR;
-char	   *datadir = PGSHAREDIR;
 char	   *host_platform = HOST_TUPLE;
-
-#ifndef WIN32_ONLY_COMPILER
-static char *makeprog = MAKEPROG;
-#endif
 
 #ifndef WIN32					/* not used in WIN32 case */
 static char *shellprog = SHELLPROG;
@@ -86,7 +72,7 @@ _stringlist *dblist = NULL;
 bool		debug = false;
 char	   *inputdir = ".";
 char	   *outputdir = ".";
-char	   *psqldir = PGBINDIR;
+char	   *bindir = PGBINDIR;
 char	   *launcher = NULL;
 static _stringlist *loadlanguage = NULL;
 static _stringlist *loadextension = NULL;
@@ -94,9 +80,8 @@ static int	max_connections = 0;
 static char *encoding = NULL;
 static _stringlist *schedulelist = NULL;
 static _stringlist *extra_tests = NULL;
-static char *temp_install = NULL;
+static char *temp_instance = NULL;
 static char *temp_config = NULL;
-static char *top_builddir = NULL;
 static bool nolocale = false;
 static bool use_existing = false;
 static char *hostname = NULL;
@@ -105,7 +90,6 @@ static bool port_specified_by_user = false;
 static char *dlpath = PKGLIBDIR;
 static char *user = NULL;
 static _stringlist *extraroles = NULL;
-static _stringlist *extra_install = NULL;
 static char *config_auth_datadir = NULL;
 
 /* internal variables */
@@ -132,30 +116,9 @@ static int	fail_ignore_count = 0;
 static bool directory_exists(const char *dir);
 static void make_directory(const char *dir);
 
-static void
-header(const char *fmt,...)
-/* This extension allows gcc to check the format string for consistency with
-   the supplied arguments. */
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 1, 2)));
-static void
-status(const char *fmt,...)
-/* This extension allows gcc to check the format string for consistency with
-   the supplied arguments. */
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 1, 2)));
-static void
-psql_command(const char *database, const char *query,...)
-/* This extension allows gcc to check the format string for consistency with
-   the supplied arguments. */
-__attribute__((format(PG_PRINTF_ATTRIBUTE, 2, 3)));
-
-#ifdef WIN32
-typedef BOOL (WINAPI * __CreateRestrictedToken) (HANDLE, DWORD, DWORD, PSID_AND_ATTRIBUTES, DWORD, PLUID_AND_ATTRIBUTES, DWORD, PSID_AND_ATTRIBUTES, PHANDLE);
-
-/* Windows API define missing from some versions of MingW headers */
-#ifndef  DISABLE_MAX_PRIVILEGE
-#define DISABLE_MAX_PRIVILEGE	0x1
-#endif
-#endif
+static void header(const char *fmt,...) pg_attribute_printf(1, 2);
+static void status(const char *fmt,...) pg_attribute_printf(1, 2);
+static void psql_command(const char *database, const char *query,...) pg_attribute_printf(2, 3);
 
 /*
  * allow core files if possible.
@@ -303,8 +266,10 @@ stop_postmaster(void)
 		fflush(stderr);
 
 		snprintf(buf, sizeof(buf),
-				 "\"%s/pipeline-ctl\" stop -D \"%s/data\" -s -m fast",
-				 bindir, temp_install);
+				 "\"%s%spipeline-ctl\" stop -D \"%s/data\" -s -m fast",
+				 bindir ? bindir : "",
+				 bindir ? "/" : "",
+				 temp_instance);
 		r = system(buf);
 		if (r != 0)
 		{
@@ -752,27 +717,6 @@ doputenv(const char *var, const char *val)
 }
 
 /*
- * Set the environment variable "pathname", prepending "addval" to its
- * old value (if any).
- */
-static void
-add_to_path(const char *pathname, char separator, const char *addval)
-{
-	char	   *oldval = getenv(pathname);
-	char	   *newval;
-
-	if (!oldval || !oldval[0])
-	{
-		/* no previous value */
-		newval = psprintf("%s=%s", pathname, addval);
-	}
-	else
-		newval = psprintf("%s=%s%c%s", pathname, addval, separator, oldval);
-
-	putenv(newval);
-}
-
-/*
  * Prepare environment variables for running regression tests
  */
 static void
@@ -846,7 +790,7 @@ initialize_environment(void)
 		putenv(new_pgoptions);
 	}
 
-	if (temp_install)
+	if (temp_instance)
 	{
 		/*
 		 * Clear out any environment vars that might cause psql to connect to
@@ -884,49 +828,6 @@ initialize_environment(void)
 			sprintf(s, "%d", port);
 			doputenv("PGPORT", s);
 		}
-
-		/*
-		 * GNU make stores some flags in the MAKEFLAGS environment variable to
-		 * pass arguments to its own children.  If we are invoked by make,
-		 * that causes the make invoked by us to think its part of the make
-		 * task invoking us, and so it tries to communicate with the toplevel
-		 * make.  Which fails.
-		 *
-		 * Unset the variable to protect against such problems.  We also reset
-		 * MAKELEVEL to be certain the child doesn't notice the make above us.
-		 */
-		unsetenv("MAKEFLAGS");
-		unsetenv("MAKELEVEL");
-
-		/*
-		 * Adjust path variables to point into the temp-install tree
-		 */
-		bindir = psprintf("%s/install/%s", temp_install, bindir);
-
-		libdir = psprintf("%s/install/%s", temp_install, libdir);
-
-		datadir = psprintf("%s/install/%s", temp_install, datadir);
-
-		/* psql will be installed into temp-install bindir */
-		psqldir = bindir;
-
-		/*
-		 * Set up shared library paths to include the temp install.
-		 *
-		 * LD_LIBRARY_PATH covers many platforms.  DYLD_LIBRARY_PATH works on
-		 * Darwin, and maybe other Mach-based systems.  LIBPATH is for AIX.
-		 * Windows needs shared libraries in PATH (only those linked into
-		 * executables, not dlopen'ed ones). Feel free to account for others
-		 * as well.
-		 */
-		add_to_path("LD_LIBRARY_PATH", ':', libdir);
-		add_to_path("DYLD_LIBRARY_PATH", ':', libdir);
-		add_to_path("LIBPATH", ':', libdir);
-#if defined(WIN32)
-		add_to_path("PATH", ';', libdir);
-#elif defined(__CYGWIN__)
-		add_to_path("PATH", ':', libdir);
-#endif
 	}
 	else
 	{
@@ -1179,8 +1080,8 @@ psql_command(const char *database, const char *query,...)
 	/* And now we can build and execute the shell command */
 	snprintf(psql_cmd, sizeof(psql_cmd),
 			 "\"%s%spsql\" -X -c \"%s\" \"%s\"",
-			 psqldir ? psqldir : "",
-			 psqldir ? "/" : "",
+			 bindir ? bindir : "",
+			 bindir ? "/" : "",
 			 query_escaped,
 			 database);
 
@@ -1239,100 +1140,17 @@ spawn_process(const char *cmdline)
 	/* in parent */
 	return pid;
 #else
-	char	   *cmdline2;
-	BOOL		b;
-	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
-	HANDLE		origToken;
+	char	   *cmdline2;
 	HANDLE		restrictedToken;
-	SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
-	SID_AND_ATTRIBUTES dropSids[2];
-	__CreateRestrictedToken _CreateRestrictedToken = NULL;
-	HANDLE		Advapi32Handle;
 
-	ZeroMemory(&si, sizeof(si));
-	si.cb = sizeof(si);
-
-	Advapi32Handle = LoadLibrary("ADVAPI32.DLL");
-	if (Advapi32Handle != NULL)
-	{
-		_CreateRestrictedToken = (__CreateRestrictedToken) GetProcAddress(Advapi32Handle, "CreateRestrictedToken");
-	}
-
-	if (_CreateRestrictedToken == NULL)
-	{
-		if (Advapi32Handle != NULL)
-			FreeLibrary(Advapi32Handle);
-		fprintf(stderr, _("%s: cannot create restricted tokens on this platform\n"),
-				progname);
-		exit(2);
-	}
-
-	/* Open the current token to use as base for the restricted one */
-	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ALL_ACCESS, &origToken))
-	{
-		fprintf(stderr, _("could not open process token: error code %lu\n"),
-				GetLastError());
-		exit(2);
-	}
-
-	/* Allocate list of SIDs to remove */
-	ZeroMemory(&dropSids, sizeof(dropSids));
-	if (!AllocateAndInitializeSid(&NtAuthority, 2,
-								  SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &dropSids[0].Sid) ||
-		!AllocateAndInitializeSid(&NtAuthority, 2,
-								  SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_POWER_USERS, 0, 0, 0, 0, 0, 0, &dropSids[1].Sid))
-	{
-		fprintf(stderr, _("could not allocate SIDs: error code %lu\n"), GetLastError());
-		exit(2);
-	}
-
-	b = _CreateRestrictedToken(origToken,
-							   DISABLE_MAX_PRIVILEGE,
-							   sizeof(dropSids) / sizeof(dropSids[0]),
-							   dropSids,
-							   0, NULL,
-							   0, NULL,
-							   &restrictedToken);
-
-	FreeSid(dropSids[1].Sid);
-	FreeSid(dropSids[0].Sid);
-	CloseHandle(origToken);
-	FreeLibrary(Advapi32Handle);
-
-	if (!b)
-	{
-		fprintf(stderr, _("could not create restricted token: error code %lu\n"),
-				GetLastError());
-		exit(2);
-	}
-
+	memset(&pi, 0, sizeof(pi));
 	cmdline2 = psprintf("cmd /c \"%s\"", cmdline);
 
-#ifndef __CYGWIN__
-	AddUserToTokenDacl(restrictedToken);
-#endif
-
-	if (!CreateProcessAsUser(restrictedToken,
-							 NULL,
-							 cmdline2,
-							 NULL,
-							 NULL,
-							 TRUE,
-							 CREATE_SUSPENDED,
-							 NULL,
-							 NULL,
-							 &si,
-							 &pi))
-	{
-		fprintf(stderr, _("could not start process for \"%s\": error code %lu\n"),
-				cmdline2, GetLastError());
+	if ((restrictedToken =
+		 CreateRestrictedProcess(cmdline2, &pi, progname)) == 0)
 		exit(2);
-	}
 
-	free(cmdline2);
-
-	ResumeThread(pi.hThread);
 	CloseHandle(pi.hThread);
 	return pi.hProcess;
 #endif
@@ -2133,7 +1951,7 @@ create_role(const char *rolename, const _stringlist *granted_dbs)
 static void
 help(void)
 {
-	printf(_("PostgreSQL regression test driver\n"));
+	printf(_("PipelineDB regression test driver\n"));
 	printf(_("\n"));
 	printf(_("Usage:\n  %s [OPTION]... [EXTRA-TEST]...\n"), progname);
 	printf(_("\n"));
@@ -2155,21 +1973,18 @@ help(void)
 	printf(_("  --outputdir=DIR           place output files in DIR (default \".\")\n"));
 	printf(_("  --schedule=FILE           use test ordering schedule from FILE\n"));
 	printf(_("                            (can be used multiple times to concatenate)\n"));
-	printf(_("  --temp-install=DIR        create a temporary installation in DIR\n"));
+	printf(_("  --temp-instance=DIR       create a temporary instance in DIR\n"));
 	printf(_("  --use-existing            use an existing installation\n"));
 	printf(_("\n"));
-	printf(_("Options for \"temp-install\" mode:\n"));
-	printf(_("  --extra-install=DIR       additional directory to install (e.g., contrib)\n"));
+	printf(_("Options for \"temp-instance\" mode:\n"));
 	printf(_("  --no-locale               use C locale\n"));
 	printf(_("  --port=PORT               start postmaster on PORT\n"));
 	printf(_("  --temp-config=FILE        append contents of FILE to temporary config\n"));
-	printf(_("  --top-builddir=DIR        (relative) path to top level build directory\n"));
 	printf(_("\n"));
 	printf(_("Options for using an existing installation:\n"));
 	printf(_("  --host=HOST               use postmaster running on HOST\n"));
 	printf(_("  --port=PORT               use postmaster running at PORT\n"));
 	printf(_("  --user=USER               connect as USER\n"));
-	printf(_("  --psqldir=DIR             use psql in DIR (default: configured bindir)\n"));
 	printf(_("\n"));
 	printf(_("The exit status is 0 if all tests passed, 1 if some tests failed, and 2\n"));
 	printf(_("if the tests could not be run for some reason.\n"));
@@ -2191,20 +2006,18 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		{"encoding", required_argument, NULL, 6},
 		{"outputdir", required_argument, NULL, 7},
 		{"schedule", required_argument, NULL, 8},
-		{"temp-install", required_argument, NULL, 9},
+		{"temp-instance", required_argument, NULL, 9},
 		{"no-locale", no_argument, NULL, 10},
-		{"top-builddir", required_argument, NULL, 11},
 		{"host", required_argument, NULL, 13},
 		{"port", required_argument, NULL, 14},
 		{"user", required_argument, NULL, 15},
-		{"psqldir", required_argument, NULL, 16},
+		{"bindir", required_argument, NULL, 16},
 		{"dlpath", required_argument, NULL, 17},
 		{"create-role", required_argument, NULL, 18},
 		{"temp-config", required_argument, NULL, 19},
 		{"use-existing", no_argument, NULL, 20},
 		{"launcher", required_argument, NULL, 21},
 		{"load-extension", required_argument, NULL, 22},
-		{"extra-install", required_argument, NULL, 23},
 		{"config-auth", required_argument, NULL, 24},
 		{NULL, 0, NULL, 0}
 	};
@@ -2276,13 +2089,10 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				add_stringlist_item(&schedulelist, optarg);
 				break;
 			case 9:
-				temp_install = make_absolute_path(optarg);
+				temp_instance = make_absolute_path(optarg);
 				break;
 			case 10:
 				nolocale = true;
-				break;
-			case 11:
-				top_builddir = strdup(optarg);
 				break;
 			case 13:
 				hostname = strdup(optarg);
@@ -2295,9 +2105,11 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				user = strdup(optarg);
 				break;
 			case 16:
-				/* "--psqldir=" should mean to use PATH */
+				/* "--bindir=" means to use PATH */
 				if (strlen(optarg))
-					psqldir = strdup(optarg);
+					bindir = strdup(optarg);
+				else
+					bindir = NULL;
 				break;
 			case 17:
 				dlpath = strdup(optarg);
@@ -2316,9 +2128,6 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				break;
 			case 22:
 				add_stringlist_item(&loadextension, optarg);
-				break;
-			case 23:
-				add_stringlist_item(&extra_install, optarg);
 				break;
 			case 24:
 				config_auth_datadir = pstrdup(optarg);
@@ -2348,7 +2157,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		exit(0);
 	}
 
-	if (temp_install && !port_specified_by_user)
+	if (temp_instance && !port_specified_by_user)
 
 		/*
 		 * To reduce chances of interference with parallel installations, use
@@ -2374,98 +2183,60 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 	unlimit_core_size();
 #endif
 
-	if (temp_install)
+	if (temp_instance)
 	{
 		FILE	   *pg_conf;
-		_stringlist *sl;
 
 		/*
-		 * Prepare the temp installation
+		 * Prepare the temp instance
 		 */
-		if (!top_builddir)
-		{
-			fprintf(stderr, _("--top-builddir must be specified when using --temp-install\n"));
-			exit(2);
-		}
 
-		if (directory_exists(temp_install))
+		if (directory_exists(temp_instance))
 		{
-			header(_("removing existing temp installation"));
-			if (!rmtree(temp_install, true))
+			header(_("removing existing temp instance"));
+			if (!rmtree(temp_instance, true))
 			{
-				fprintf(stderr, _("\n%s: could not remove temp installation \"%s\"\n"),
-						progname, temp_install);
+				fprintf(stderr, _("\n%s: could not remove temp instance \"%s\"\n"),
+						progname, temp_instance);
 				exit(2);
 			}
 		}
 
-		header(_("creating temporary installation"));
+		header(_("creating temporary instance"));
 
-		/* make the temp install top directory */
-		make_directory(temp_install);
+		/* make the temp instance top directory */
+		make_directory(temp_instance);
 
 		/* and a directory for log files */
 		snprintf(buf, sizeof(buf), "%s/log", outputdir);
 		if (!directory_exists(buf))
 			make_directory(buf);
 
-		/* "make install" */
-#ifndef WIN32_ONLY_COMPILER
-		snprintf(buf, sizeof(buf),
-				 "\"%s\" -C \"%s\" DESTDIR=\"%s/install\" install > \"%s/log/install.log\" 2>&1",
-				 makeprog, top_builddir, temp_install, outputdir);
-#else
-		snprintf(buf, sizeof(buf),
-				 "perl \"%s/src/tools/msvc/install.pl\" \"%s/install\" >\"%s/log/install.log\" 2>&1",
-				 top_builddir, temp_install, outputdir);
-#endif
-		if (system(buf))
-		{
-			fprintf(stderr, _("\n%s: installation failed\nExamine %s/log/install.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
-			exit(2);
-		}
-
-		for (sl = extra_install; sl != NULL; sl = sl->next)
-		{
-#ifndef WIN32_ONLY_COMPILER
-			snprintf(buf, sizeof(buf),
-					 "\"%s\" -C \"%s/%s\" DESTDIR=\"%s/install\" install >> \"%s/log/install.log\" 2>&1",
-				   makeprog, top_builddir, sl->str, temp_install, outputdir);
-#else
-			fprintf(stderr, _("\n%s: --extra-install option not supported on this platform\n"), progname);
-			exit(2);
-#endif
-
-			if (system(buf))
-			{
-				fprintf(stderr, _("\n%s: installation failed\nExamine %s/log/install.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
-				exit(2);
-			}
-		}
-
 		/* initdb */
 		header(_("initializing database system"));
 		snprintf(buf, sizeof(buf),
-				 "\"%s/pipeline-init\" -D \"%s/data\" -L \"%s\" --noclean --nosync%s%s > \"%s/log/initdb.log\" 2>&1",
-				 bindir, temp_install, datadir,
+				 "\"%s%spipeline-init\" -D \"%s/data\" --noclean --nosync%s%s > \"%s/log/initdb.log\" 2>&1",
+				 bindir ? bindir : "",
+				 bindir ? "/" : "",
+				 temp_instance,
 				 debug ? " --debug" : "",
 				 nolocale ? " --no-locale" : "",
 				 outputdir);
 		if (system(buf))
 		{
-			fprintf(stderr, _("\n%s: initdb failed\nExamine %s/log/initdb.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
+			fprintf(stderr, _("\n%s: pipeline-init failed\nExamine %s/log/initdb.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
 			exit(2);
 		}
 
 		/*
-		 * Adjust the default postgresql.conf as needed for regression
-		 * testing. The user can specify a file to be appended; in any case we
-		 * set max_prepared_transactions to enable testing of prepared xacts.
-		 * (Note: to reduce the probability of unexpected shmmax failures,
-		 * don't set max_prepared_transactions any higher than actually needed
-		 * by the prepared_xacts regression test.)
+		 * Adjust the default postgresql.conf for regression testing. The user
+		 * can specify a file to be appended; in any case we expand logging
+		 * and set max_prepared_transactions to enable testing of prepared
+		 * xacts.  (Note: to reduce the probability of unexpected shmmax
+		 * failures, don't set max_prepared_transactions any higher than
+		 * actually needed by the prepared_xacts regression test.)
 		 */
-		snprintf(buf, sizeof(buf), "%s/data/pipelinedb.conf", temp_install);
+		snprintf(buf, sizeof(buf), "%s/data/pipelinedb.conf", temp_instance);
 		pg_conf = fopen(buf, "a");
 		if (pg_conf == NULL)
 		{
@@ -2473,6 +2244,10 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 			exit(2);
 		}
 		fputs("\n# Configuration added by pg_regress\n\n", pg_conf);
+		fputs("log_autovacuum_min_duration = 0\n", pg_conf);
+		fputs("log_checkpoints = on\n", pg_conf);
+		fputs("log_lock_waits = on\n", pg_conf);
+		fputs("log_temp_files = 128kB\n", pg_conf);
 		fputs("max_prepared_transactions = 2\n", pg_conf);
 
 		if (temp_config != NULL)
@@ -2499,7 +2274,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		 * Since we successfully used the same buffer for the much-longer
 		 * "initdb" command, this can't truncate.
 		 */
-		snprintf(buf, sizeof(buf), "%s/data", temp_install);
+		snprintf(buf, sizeof(buf), "%s/data", temp_instance);
 		config_sspi_auth(buf);
 #elif !defined(HAVE_UNIX_SOCKETS)
 #error Platform has no means to secure the test installation.
@@ -2509,8 +2284,10 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		 * Check if there is a postmaster running already.
 		 */
 		snprintf(buf2, sizeof(buf2),
-				 "\"%s/psql\" -X pipeline <%s 2>%s",
-				 bindir, DEVNULL, DEVNULL);
+				 "\"%s%spsql\" -X pipeline <%s 2>%s",
+				 bindir ? bindir : "",
+				 bindir ? "/" : "",
+				 DEVNULL, DEVNULL);
 
 		for (i = 0; i < 16; i++)
 		{
@@ -2541,7 +2318,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		 */
 		header(_("starting postmaster"));
 		snprintf(buf, sizeof(buf),
-				 "\"%s/pipeline-server\" -D \"%s/data\" -F%s "
+				 "\"%s%spipeline-server\" -D \"%s/data\" -F%s "
 				 "-c \"listen_addresses=%s\" "
 				 "-c \"synchronous_stream_insert=on\" "
 				 "-c \"continuous_query_num_combiners=2\" "
@@ -2551,7 +2328,8 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				 "-c \"continuous_queries_enabled=on\" "
 				 "-k \"%s\" "
 				 "> \"%s/log/postmaster.log\" 2>&1",
-				 bindir, temp_install, debug ? " -d 5" : "",
+				 bindir ? bindir : "",
+				 bindir ? "/" : "", temp_instance, debug ? " -d 5" : "",
 				 hostname ? hostname : "", sockdir ? sockdir : "",
 				 outputdir);
 		postmaster_pid = spawn_process(buf);
@@ -2667,23 +2445,23 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 	/*
 	 * Shut down temp installation's postmaster
 	 */
-	if (temp_install)
+	if (temp_instance)
 	{
 		header(_("shutting down postmaster"));
 		stop_postmaster();
 	}
 
 	/*
-	 * If there were no errors, remove the temp installation immediately to
-	 * conserve disk space.  (If there were errors, we leave the installation
-	 * in place for possible manual investigation.)
+	 * If there were no errors, remove the temp instance immediately to
+	 * conserve disk space.  (If there were errors, we leave the instance in
+	 * place for possible manual investigation.)
 	 */
-	if (temp_install && fail_count == 0 && fail_ignore_count == 0)
+	if (temp_instance && fail_count == 0 && fail_ignore_count == 0)
 	{
-		header(_("removing temporary installation"));
-		if (!rmtree(temp_install, true))
-			fprintf(stderr, _("\n%s: could not remove temp installation \"%s\"\n"),
-					progname, temp_install);
+		header(_("removing temporary instance"));
+		if (!rmtree(temp_instance, true))
+			fprintf(stderr, _("\n%s: could not remove temp instance \"%s\"\n"),
+					progname, temp_instance);
 	}
 
 	fclose(logfile);

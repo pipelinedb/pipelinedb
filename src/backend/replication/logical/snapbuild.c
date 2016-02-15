@@ -79,7 +79,7 @@
  *	  +--->|SNAPBUILD_CONSISTENT	 |<------------+
  *		   +-------------------------+
  *
- * Initially the machinery is in the START stage. When a xl_running_xacts
+ * Initially the machinery is in the START stage. When an xl_running_xacts
  * record is read that is sufficiently new (above the safe xmin horizon),
  * there's a state transition. If there were no running xacts when the
  * runnign_xacts record was generated, we'll directly go into CONSISTENT
@@ -96,7 +96,7 @@
  * is a convenient point to initialize replication from, which is why we
  * export a snapshot at that point, which *can* be used to read normal data.
  *
- * Copyright (c) 2012-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/snapbuild.c
@@ -153,15 +153,14 @@ struct SnapBuild
 	TransactionId xmax;
 
 	/*
-	 * Don't replay commits from an LSN < this LSN. This can be set
-	 * externally but it will also be advanced (never retreat) from within
-	 * snapbuild.c.
+	 * Don't replay commits from an LSN < this LSN. This can be set externally
+	 * but it will also be advanced (never retreat) from within snapbuild.c.
 	 */
 	XLogRecPtr	start_decoding_at;
 
 	/*
 	 * Don't start decoding WAL until the "xl_running_xacts" information
-	 * indicates there are no running xids with a xid smaller than this.
+	 * indicates there are no running xids with an xid smaller than this.
 	 */
 	TransactionId initial_xmin_horizon;
 
@@ -243,8 +242,8 @@ struct SnapBuild
  * Starting a transaction -- which we need to do while exporting a snapshot --
  * removes knowledge about the previously used resowner, so we save it here.
  */
-ResourceOwner SavedResourceOwnerDuringExport = NULL;
-bool		ExportInProgress = false;
+static ResourceOwner SavedResourceOwnerDuringExport = NULL;
+static bool ExportInProgress = false;
 
 /* transaction state manipulation functions */
 static void SnapBuildEndTxn(SnapBuild *builder, XLogRecPtr lsn, TransactionId xid);
@@ -348,7 +347,7 @@ SnapBuildFreeSnapshot(Snapshot snap)
 	Assert(snap->curcid == FirstCommandId);
 	Assert(!snap->suboverflowed);
 	Assert(!snap->takenDuringRecovery);
-	Assert(snap->regd_count == 1);
+	Assert(snap->regd_count == 0);
 
 	/* slightly more likely, so it's checked even without c-asserts */
 	if (snap->copied)
@@ -407,16 +406,16 @@ SnapBuildSnapDecRefcount(Snapshot snap)
 	Assert(!snap->suboverflowed);
 	Assert(!snap->takenDuringRecovery);
 
-	Assert(snap->regd_count == 1);
+	Assert(snap->regd_count == 0);
 
-	Assert(snap->active_count);
+	Assert(snap->active_count > 0);
 
 	/* slightly more likely, so it's checked even without casserts */
 	if (snap->copied)
 		elog(ERROR, "cannot free a copied snapshot");
 
 	snap->active_count--;
-	if (!snap->active_count)
+	if (snap->active_count == 0)
 		SnapBuildFreeSnapshot(snap);
 }
 
@@ -495,7 +494,7 @@ SnapBuildBuildSnapshot(SnapBuild *builder, TransactionId xid)
 	snapshot->copied = false;
 	snapshot->curcid = FirstCommandId;
 	snapshot->active_count = 0;
-	snapshot->regd_count = 1;	/* mark as registered so nobody frees it */
+	snapshot->regd_count = 0;
 
 	return snapshot;
 }
@@ -599,7 +598,7 @@ SnapBuildExportSnapshot(SnapBuild *builder)
 
 	ereport(LOG,
 			(errmsg_plural("exported logical decoding snapshot: \"%s\" with %u transaction ID",
-						   "exported logical decoding snapshot: \"%s\" with %u transaction IDs",
+		"exported logical decoding snapshot: \"%s\" with %u transaction IDs",
 						   snap->xcnt,
 						   snapname, snap->xcnt)));
 	return snapname;
@@ -683,8 +682,9 @@ SnapBuildProcessChange(SnapBuild *builder, TransactionId xid, XLogRecPtr lsn)
 }
 
 /*
- * Do CommandId/ComboCid handling after reading a xl_heap_new_cid record. This
- * implies that a transaction has done some form of write to system catalogs.
+ * Do CommandId/ComboCid handling after reading an xl_heap_new_cid record.
+ * This implies that a transaction has done some form of write to system
+ * catalogs.
  */
 void
 SnapBuildProcessNewCid(SnapBuild *builder, TransactionId xid,
@@ -699,7 +699,7 @@ SnapBuildProcessNewCid(SnapBuild *builder, TransactionId xid,
 	ReorderBufferXidSetCatalogChanges(builder->reorder, xid, lsn);
 
 	ReorderBufferAddNewTupleCids(builder->reorder, xlrec->top_xid, lsn,
-								 xlrec->target.node, xlrec->target.tid,
+								 xlrec->target_node, xlrec->target_tid,
 								 xlrec->cmin, xlrec->cmax,
 								 xlrec->combocid);
 
@@ -769,7 +769,7 @@ SnapBuildDistributeNewCatalogSnapshot(SnapBuild *builder, XLogRecPtr lsn)
 	/*
 	 * Iterate through all toplevel transactions. This can include
 	 * subtransactions which we just don't yet know to be that, but that's
-	 * fine, they will just get an unneccesary snapshot queued.
+	 * fine, they will just get an unnecessary snapshot queued.
 	 */
 	dlist_foreach(txn_i, &builder->reorder->toplevel_by_lsn)
 	{
@@ -832,7 +832,7 @@ SnapBuildAddCommittedTxn(SnapBuild *builder, TransactionId xid)
 
 /*
  * Remove knowledge about transactions we treat as committed that are smaller
- * than ->xmin. Those won't ever get checked via the ->commited array but via
+ * than ->xmin. Those won't ever get checked via the ->committed array but via
  * the clog machinery, so we don't need to waste memory on them.
  */
 static void
@@ -903,8 +903,8 @@ SnapBuildEndTxn(SnapBuild *builder, XLogRecPtr lsn, TransactionId xid)
 			ereport(LOG,
 				  (errmsg("logical decoding found consistent point at %X/%X",
 						  (uint32) (lsn >> 32), (uint32) lsn),
-				errdetail("Transaction ID %u finished; no more running transactions.",
-						  xid)));
+				   errdetail("Transaction ID %u finished; no more running transactions.",
+							 xid)));
 			builder->state = SNAPBUILD_CONSISTENT;
 		}
 	}
@@ -1077,7 +1077,7 @@ SnapBuildCommitTxn(SnapBuild *builder, XLogRecPtr lsn, TransactionId xid,
 		/* refcount of the snapshot builder for the new snapshot */
 		SnapBuildSnapIncRefcount(builder->snapshot);
 
-		/* add a new SnapshotNow to all currently running transactions */
+		/* add a new Snapshot to all currently running transactions */
 		SnapBuildDistributeNewCatalogSnapshot(builder, lsn);
 	}
 	else
@@ -1211,7 +1211,7 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 	 *	  to CONSISTENT.
 	 *	  NB: We need to search running.xip when seeing a transaction's end to
 	 *	  make sure it's a toplevel transaction and it's been one of the
-	 *	  intially running ones.
+	 *	  initially running ones.
 	 *	  Interestingly, in contrast to HS, this allows us not to care about
 	 *	  subtransactions - and by extension suboverflowed xl_running_xacts -
 	 *	  at all.
@@ -1231,8 +1231,8 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 	{
 		ereport(DEBUG1,
 				(errmsg_internal("skipping snapshot at %X/%X while building logical decoding snapshot, xmin horizon too low",
-						(uint32) (lsn >> 32), (uint32) lsn),
-				 errdetail_internal("initial xmin horizon of %u vs the snapshot's %u",
+								 (uint32) (lsn >> 32), (uint32) lsn),
+		errdetail_internal("initial xmin horizon of %u vs the snapshot's %u",
 				 builder->initial_xmin_horizon, running->oldestRunningXid)));
 		return true;
 	}
@@ -1251,8 +1251,8 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 			builder->start_decoding_at = lsn + 1;
 
 		/* As no transactions were running xmin/xmax can be trivially set. */
-		builder->xmin = running->nextXid; /* < are finished */
-		builder->xmax = running->nextXid; /* >= are running */
+		builder->xmin = running->nextXid;		/* < are finished */
+		builder->xmax = running->nextXid;		/* >= are running */
 
 		/* so we can safely use the faster comparisons */
 		Assert(TransactionIdIsNormal(builder->xmin));
@@ -1301,8 +1301,8 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 		 * currently running transactions have finished. We'll update both
 		 * while waiting for the pending transactions to finish.
 		 */
-		builder->xmin = running->nextXid; /* < are finished */
-		builder->xmax = running->nextXid;  /* >= are running */
+		builder->xmin = running->nextXid;		/* < are finished */
+		builder->xmax = running->nextXid;		/* >= are running */
 
 		/* so we can safely use the faster comparisons */
 		Assert(TransactionIdIsNormal(builder->xmin));
@@ -1391,7 +1391,7 @@ typedef struct SnapBuildOnDisk
 
 	/* data not covered by checksum */
 	uint32		magic;
-	pg_crc32	checksum;
+	pg_crc32c	checksum;
 
 	/* data covered by checksum */
 
@@ -1528,9 +1528,9 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 	ondisk->magic = SNAPBUILD_MAGIC;
 	ondisk->version = SNAPBUILD_VERSION;
 	ondisk->length = needed_length;
-	INIT_CRC32(ondisk->checksum);
-	COMP_CRC32(ondisk->checksum,
-			   ((char *) ondisk) + SnapBuildOnDiskNotChecksummedSize,
+	INIT_CRC32C(ondisk->checksum);
+	COMP_CRC32C(ondisk->checksum,
+				((char *) ondisk) + SnapBuildOnDiskNotChecksummedSize,
 			SnapBuildOnDiskConstantSize - SnapBuildOnDiskNotChecksummedSize);
 	ondisk_c += sizeof(SnapBuildOnDisk);
 
@@ -1542,23 +1542,23 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 	ondisk->builder.running.xip = NULL;
 	ondisk->builder.committed.xip = NULL;
 
-	COMP_CRC32(ondisk->checksum,
-			   &ondisk->builder,
-			   sizeof(SnapBuild));
+	COMP_CRC32C(ondisk->checksum,
+				&ondisk->builder,
+				sizeof(SnapBuild));
 
 	/* copy running xacts */
 	sz = sizeof(TransactionId) * builder->running.xcnt_space;
 	memcpy(ondisk_c, builder->running.xip, sz);
-	COMP_CRC32(ondisk->checksum, ondisk_c, sz);
+	COMP_CRC32C(ondisk->checksum, ondisk_c, sz);
 	ondisk_c += sz;
 
 	/* copy committed xacts */
 	sz = sizeof(TransactionId) * builder->committed.xcnt;
 	memcpy(ondisk_c, builder->committed.xip, sz);
-	COMP_CRC32(ondisk->checksum, ondisk_c, sz);
+	COMP_CRC32C(ondisk->checksum, ondisk_c, sz);
 	ondisk_c += sz;
 
-	FIN_CRC32(ondisk->checksum);
+	FIN_CRC32C(ondisk->checksum);
 
 	/* we have valid data now, open tempfile and write it there */
 	fd = OpenTransientFile(tmppath,
@@ -1597,7 +1597,7 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 
 	/*
 	 * We may overwrite the work from some other backend, but that's ok, our
-	 * snapshot is valid as well, we'll just have done some superflous work.
+	 * snapshot is valid as well, we'll just have done some superfluous work.
 	 */
 	if (rename(tmppath, path) != 0)
 	{
@@ -1634,7 +1634,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 	char		path[MAXPGPATH];
 	Size		sz;
 	int			readBytes;
-	pg_crc32	checksum;
+	pg_crc32c	checksum;
 
 	/* no point in loading a snapshot if we're already there */
 	if (builder->state == SNAPBUILD_CONSISTENT)
@@ -1656,7 +1656,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 	 * Make sure the snapshot had been stored safely to disk, that's normally
 	 * cheap.
 	 * Note that we do not need PANIC here, nobody will be able to use the
-	 * slot without fsyncing, and saving it won't suceed without an fsync()
+	 * slot without fsyncing, and saving it won't succeed without an fsync()
 	 * either...
 	 * ----
 	 */
@@ -1677,17 +1677,17 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 
 	if (ondisk.magic != SNAPBUILD_MAGIC)
 		ereport(ERROR,
-				(errmsg("snapbuild state file \"%s\" has wrong magic %u instead of %u",
+				(errmsg("snapbuild state file \"%s\" has wrong magic number: %u instead of %u",
 						path, ondisk.magic, SNAPBUILD_MAGIC)));
 
 	if (ondisk.version != SNAPBUILD_VERSION)
 		ereport(ERROR,
-				(errmsg("snapbuild state file \"%s\" has unsupported version %u instead of %u",
+				(errmsg("snapbuild state file \"%s\" has unsupported version: %u instead of %u",
 						path, ondisk.version, SNAPBUILD_VERSION)));
 
-	INIT_CRC32(checksum);
-	COMP_CRC32(checksum,
-			   ((char *) &ondisk) + SnapBuildOnDiskNotChecksummedSize,
+	INIT_CRC32C(checksum);
+	COMP_CRC32C(checksum,
+				((char *) &ondisk) + SnapBuildOnDiskNotChecksummedSize,
 			SnapBuildOnDiskConstantSize - SnapBuildOnDiskNotChecksummedSize);
 
 	/* read SnapBuild */
@@ -1700,7 +1700,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 				 errmsg("could not read file \"%s\", read %d of %d: %m",
 						path, readBytes, (int) sizeof(SnapBuild))));
 	}
-	COMP_CRC32(checksum, &ondisk.builder, sizeof(SnapBuild));
+	COMP_CRC32C(checksum, &ondisk.builder, sizeof(SnapBuild));
 
 	/* restore running xacts information */
 	sz = sizeof(TransactionId) * ondisk.builder.running.xcnt_space;
@@ -1714,7 +1714,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 				 errmsg("could not read file \"%s\", read %d of %d: %m",
 						path, readBytes, (int) sz)));
 	}
-	COMP_CRC32(checksum, ondisk.builder.running.xip, sz);
+	COMP_CRC32C(checksum, ondisk.builder.running.xip, sz);
 
 	/* restore committed xacts information */
 	sz = sizeof(TransactionId) * ondisk.builder.committed.xcnt;
@@ -1728,17 +1728,17 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 				 errmsg("could not read file \"%s\", read %d of %d: %m",
 						path, readBytes, (int) sz)));
 	}
-	COMP_CRC32(checksum, ondisk.builder.committed.xip, sz);
+	COMP_CRC32C(checksum, ondisk.builder.committed.xip, sz);
 
 	CloseTransientFile(fd);
 
-	FIN_CRC32(checksum);
+	FIN_CRC32C(checksum);
 
 	/* verify checksum of what we've read */
-	if (!EQ_CRC32(checksum, ondisk.checksum))
+	if (!EQ_CRC32C(checksum, ondisk.checksum))
 		ereport(ERROR,
 				(errcode_for_file_access(),
-				 errmsg("snapbuild state file %s: checksum mismatch, is %u, should be %u",
+				 errmsg("checksum mismatch for snapbuild state file \"%s\": is %u, should be %u",
 						path, checksum, ondisk.checksum)));
 
 	/*
@@ -1748,7 +1748,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 
 	/*
 	 * We are only interested in consistent snapshots for now, comparing
-	 * whether one imcomplete snapshot is more "advanced" seems to be
+	 * whether one incomplete snapshot is more "advanced" seems to be
 	 * unnecessarily complex.
 	 */
 	if (ondisk.builder.state < SNAPBUILD_CONSISTENT)

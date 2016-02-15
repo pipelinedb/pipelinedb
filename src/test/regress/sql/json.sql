@@ -7,11 +7,7 @@ SELECT '"abc
 def"'::json;					-- ERROR, unescaped newline in string constant
 SELECT '"\n\"\\"'::json;		-- OK, legal escapes
 SELECT '"\v"'::json;			-- ERROR, not a valid JSON escape
-SELECT '"\u"'::json;			-- ERROR, incomplete escape
-SELECT '"\u00"'::json;			-- ERROR, incomplete escape
-SELECT '"\u000g"'::json;		-- ERROR, g is not a hex digit
-SELECT '"\u0000"'::json;		-- OK, legal escape
-SELECT '"\uaBcD"'::json;		-- OK, uppercase and lower case both OK
+-- see json_encoding test for input with unicode escapes
 
 -- Numbers.
 SELECT '1'::json;				-- OK
@@ -44,6 +40,12 @@ SELECT '{"abc"::1}'::json;		-- ERROR, another wrong separator
 SELECT '{"abc":1,"def":2,"ghi":[3,4],"hij":{"klm":5,"nop":[6]}}'::json; -- OK
 SELECT '{"abc":1:2}'::json;		-- ERROR, colon in wrong spot
 SELECT '{"abc":1,3}'::json;		-- ERROR, no value
+
+-- Recursion.
+SET max_stack_depth = '100kB';
+SELECT repeat('[', 10000)::json;
+SELECT repeat('{"a":', 10000)::json;
+RESET max_stack_depth;
 
 -- Miscellaneous stuff.
 SELECT 'true'::json;			-- OK
@@ -114,8 +116,11 @@ COMMIT;
 select to_json(date '2014-05-28');
 
 select to_json(date 'Infinity');
+select to_json(date '-Infinity');
 select to_json(timestamp 'Infinity');
+select to_json(timestamp '-Infinity');
 select to_json(timestamptz 'Infinity');
+select to_json(timestamptz '-Infinity');
 
 --json_agg
 
@@ -126,7 +131,12 @@ SELECT json_agg(q)
          FROM generate_series(1,2) x,
               generate_series(4,5) y) q;
 
-SELECT json_agg(q)
+SELECT json_agg(q ORDER BY x, y)
+  FROM rows q;
+
+UPDATE rows SET x = NULL WHERE x = 1;
+
+SELECT json_agg(q ORDER BY x NULLS FIRST, y)
   FROM rows q;
 
 -- non-numeric output
@@ -181,6 +191,10 @@ FROM test_json
 WHERE json_type = 'scalar';
 
 SELECT test_json -> 2
+FROM test_json
+WHERE json_type = 'array';
+
+SELECT test_json -> -1
 FROM test_json
 WHERE json_type = 'array';
 
@@ -241,6 +255,7 @@ where json_type = 'array';
 select '{"a": [{"b": "c"}, {"b": "cc"}]}'::json -> null::text;
 select '{"a": [{"b": "c"}, {"b": "cc"}]}'::json -> null::int;
 select '{"a": [{"b": "c"}, {"b": "cc"}]}'::json -> 1;
+select '{"a": [{"b": "c"}, {"b": "cc"}]}'::json -> -1;
 select '{"a": [{"b": "c"}, {"b": "cc"}]}'::json -> 'z';
 select '{"a": [{"b": "c"}, {"b": "cc"}]}'::json -> '';
 select '[{"b": "c"}, {"b": "cc"}]'::json -> 1;
@@ -389,28 +404,6 @@ select * from json_populate_recordset(null::jpop,'[{"a":"blurfl","x":43.2},{"b":
 select * from json_populate_recordset(row('def',99,null)::jpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]') q;
 select * from json_populate_recordset(row('def',99,null)::jpop,'[{"a":[100,200,300],"x":43.2},{"a":{"z":true},"b":3,"c":"2012-01-20 10:42:53"}]') q;
 
--- handling of unicode surrogate pairs
-
-select json '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a' as correct_in_utf8;
-select json '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
-select json '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
-select json '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
-select json '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
-
---handling of simple unicode escapes
-
-select json '{ "a":  "the Copyright \u00a9 sign" }' as correct_in_utf8;
-select json '{ "a":  "dollar \u0024 character" }' as correct_everywhere;
-select json '{ "a":  "dollar \\u0024 character" }' as not_an_escape;
-select json '{ "a":  "null \u0000 escape" }' as not_unescaped;
-select json '{ "a":  "null \\u0000 escape" }' as not_an_escape;
-
-select json '{ "a":  "the Copyright \u00a9 sign" }' ->> 'a' as correct_in_utf8;
-select json '{ "a":  "dollar \u0024 character" }' ->> 'a' as correct_everywhere;
-select json '{ "a":  "dollar \\u0024 character" }' ->> 'a' as not_an_escape;
-select json '{ "a":  "null \u0000 escape" }' ->> 'a' as fails;
-select json '{ "a":  "null \\u0000 escape" }' ->> 'a' as not_an_escape;
-
 --json_typeof() function
 select value, json_typeof(value)
   from (values (json '123.4'),
@@ -437,7 +430,6 @@ SELECT json_build_object(
        'd', json_build_object('e',array[9,8,7]::int[],
            'f', (select row_to_json(r) from ( select relkind, oid::regclass as name from pg_class where relname = 'pg_class') r)));
 
-
 -- empty objects/arrays
 SELECT json_build_array();
 
@@ -462,6 +454,11 @@ INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
 
 SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
 FROM foo;
+
+SELECT json_object_agg(name, type) FROM foo;
+
+INSERT INTO foo VALUES (999999, NULL, 'bar');
+SELECT json_object_agg(name, type) FROM foo;
 
 -- json_object
 
@@ -515,3 +512,23 @@ select * from json_to_recordset('[{"a":1,"b":"foo","d":false},{"a":2,"b":"bar","
 
 select * from json_to_recordset('[{"a":1,"b":{"d":"foo"},"c":true},{"a":2,"c":false,"b":{"d":"bar"}}]')
     as x(a int, b json, c boolean);
+
+
+-- json_strip_nulls
+
+select json_strip_nulls(null);
+
+select json_strip_nulls('1');
+
+select json_strip_nulls('"a string"');
+
+select json_strip_nulls('null');
+
+select json_strip_nulls('[1,2,null,3,4]');
+
+select json_strip_nulls('{"a":1,"b":null,"c":[2,null,3],"d":{"e":4,"f":null}}');
+
+select json_strip_nulls('[1,{"a":1,"b":null,"c":2},3]');
+
+-- an empty object is not null and should not be stripped
+select json_strip_nulls('{"a": {"b": null, "c": null}, "d": {} }');

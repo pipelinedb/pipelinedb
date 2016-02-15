@@ -4,7 +4,7 @@
  *	  fetch tuples from a GIN scan.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -497,7 +497,7 @@ startScanKey(GinState *ginstate, GinScanOpaque so, GinScanKey key)
 		}
 		/* i is now the last required entry. */
 
-		MemoryContextSwitchTo(oldCtx);
+		MemoryContextSwitchTo(so->keyCtx);
 
 		key->nrequired = i + 1;
 		key->nadditional = key->nentries - key->nrequired;
@@ -515,11 +515,14 @@ startScanKey(GinState *ginstate, GinScanOpaque so, GinScanKey key)
 	}
 	else
 	{
+		MemoryContextSwitchTo(so->keyCtx);
+
 		key->nrequired = 1;
 		key->nadditional = 0;
 		key->requiredEntries = palloc(1 * sizeof(GinScanEntry));
 		key->requiredEntries[0] = key->scanEntry[0];
 	}
+	MemoryContextSwitchTo(oldCtx);
 }
 
 static void
@@ -1782,7 +1785,8 @@ gingetbitmap(PG_FUNCTION_ARGS)
 	/*
 	 * Set up the scan keys, and check for unsatisfiable query.
 	 */
-	ginFreeScanKeys(so); /* there should be no keys yet, but just to be sure */
+	ginFreeScanKeys(so);		/* there should be no keys yet, but just to be
+								 * sure */
 	ginNewScanKey(scan);
 
 	if (GinIsVoidRes(scan))

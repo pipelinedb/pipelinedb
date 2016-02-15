@@ -19,7 +19,6 @@
 
 #include "access/xact.h"
 #include "catalog/pg_type.h"
-#include "catalog/pipeline_stream_fn.h"
 #include "commands/createas.h"
 #include "commands/prepare.h"
 #include "miscadmin.h"
@@ -31,7 +30,6 @@
 #include "parser/parse_type.h"
 #include "rewrite/rewriteHandler.h"
 #include "tcop/pquery.h"
-#include "tcop/tcopprot.h"
 #include "tcop/utility.h"
 #include "utils/builtins.h"
 #include "utils/snapmgr.h"
@@ -61,7 +59,7 @@ PrepareQuery(PrepareStmt *stmt, const char *queryString)
 	Oid		   *argtypes = NULL;
 	int			nargs;
 	Query	   *query;
-	List	   *query_list = NIL;
+	List	   *query_list;
 	int			i;
 
 	/*
@@ -153,7 +151,6 @@ PrepareQuery(PrepareStmt *stmt, const char *queryString)
 
 	/* Rewrite the query. The result could be 0, 1, or many queries. */
 	query_list = QueryRewrite(query);
-
 
 	/* Finish filling in the CachedPlanSource */
 	CompleteCachedPlan(plansource,
@@ -387,10 +384,9 @@ EvaluateParams(PreparedStatement *pstmt, List *params,
 	/* Prepare the expressions for execution */
 	exprstates = (List *) ExecPrepareExpr((Expr *) params, estate);
 
-	/* sizeof(ParamListInfoData) includes the first array element */
 	paramLI = (ParamListInfo)
-		palloc(sizeof(ParamListInfoData) +
-			   (num_params - 1) * sizeof(ParamExternData));
+		palloc(offsetof(ParamListInfoData, params) +
+			   num_params * sizeof(ParamExternData));
 	/* we have static list of params, so no hooks needed */
 	paramLI->paramFetch = NULL;
 	paramLI->paramFetchArg = NULL;

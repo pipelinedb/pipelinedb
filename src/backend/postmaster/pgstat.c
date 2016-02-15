@@ -11,7 +11,7 @@
  *			- Add a pgstat config column to pg_database, so this
  *			  entire thing can be enabled/disabled on a per db basis.
  *
- *	Portions Copyright (c) 2001-2014, PostgreSQL Global Development Group
+ *	Portions Copyright (c) 2001-2015, PostgreSQL Global Development Group
  *  Portions Copyright (c) 2013-2015, PipelineDB
  *
  *	src/backend/postmaster/pgstat.c
@@ -140,8 +140,6 @@ CQStatEntry *MyCQStats = NULL;
  */
 NON_EXEC_STATIC pgsocket pgStatSock = PGINVALID_SOCKET;
 
-static Latch pgStatLatch;
-
 static struct sockaddr_storage pgStatAddr;
 
 static time_t last_pgstat_start_time;
@@ -209,8 +207,12 @@ typedef struct TwoPhasePgStatRecord
 	PgStat_Counter tuples_inserted;		/* tuples inserted in xact */
 	PgStat_Counter tuples_updated;		/* tuples updated in xact */
 	PgStat_Counter tuples_deleted;		/* tuples deleted in xact */
+	PgStat_Counter inserted_pre_trunc;	/* tuples inserted prior to truncate */
+	PgStat_Counter updated_pre_trunc;	/* tuples updated prior to truncate */
+	PgStat_Counter deleted_pre_trunc;	/* tuples deleted prior to truncate */
 	Oid			t_id;			/* table's OID */
 	bool		t_shared;		/* is it a shared catalog? */
+	bool		t_truncated;	/* was the relation truncated? */
 } TwoPhasePgStatRecord;
 
 /*
@@ -259,7 +261,7 @@ static instr_time total_func_time;
 static pid_t pgstat_forkexec(void);
 #endif
 
-NON_EXEC_STATIC void PgstatCollectorMain(int argc, char *argv[]) __attribute__((noreturn));
+NON_EXEC_STATIC void PgstatCollectorMain(int argc, char *argv[]) pg_attribute_noreturn();;
 static void pgstat_exit(SIGNAL_ARGS);
 static void pgstat_beshutdown_hook(int code, Datum arg);
 static void pgstat_sighup_handler(SIGNAL_ARGS);
@@ -709,11 +711,10 @@ pgstat_start(void)
 #ifndef EXEC_BACKEND
 		case 0:
 			/* in postmaster child ... */
+			InitPostmasterChild();
+
 			/* Close the postmaster's sockets */
 			ClosePostmasterPorts(false);
-
-			/* Lose the postmaster's on-exit routines */
-			on_exit_reset();
 
 			/* Drop our connection to postmaster's shared memory, as well */
 			dsm_detach_all();
@@ -1149,12 +1150,11 @@ pgstat_collect_oids(Oid catalogid)
 	memset(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(Oid);
 	hash_ctl.entrysize = sizeof(Oid);
-	hash_ctl.hash = oid_hash;
 	hash_ctl.hcxt = CurrentMemoryContext;
 	htab = hash_create("Temporary table of OIDs",
 					   PGSTAT_TAB_HASH_SIZE,
 					   &hash_ctl,
-					   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
+					   HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
 	rel = heap_open(catalogid, AccessShareLock);
 	snapshot = RegisterSnapshot(GetLatestSnapshot());
@@ -1881,6 +1881,65 @@ pgstat_count_heap_delete(Relation rel)
 }
 
 /*
+ * pgstat_truncate_save_counters
+ *
+ * Whenever a table is truncated, we save its i/u/d counters so that they can
+ * be cleared, and if the (sub)xact that executed the truncate later aborts,
+ * the counters can be restored to the saved (pre-truncate) values.  Note we do
+ * this on the first truncate in any particular subxact level only.
+ */
+static void
+pgstat_truncate_save_counters(PgStat_TableXactStatus *trans)
+{
+	if (!trans->truncated)
+	{
+		trans->inserted_pre_trunc = trans->tuples_inserted;
+		trans->updated_pre_trunc = trans->tuples_updated;
+		trans->deleted_pre_trunc = trans->tuples_deleted;
+		trans->truncated = true;
+	}
+}
+
+/*
+ * pgstat_truncate_restore_counters - restore counters when a truncate aborts
+ */
+static void
+pgstat_truncate_restore_counters(PgStat_TableXactStatus *trans)
+{
+	if (trans->truncated)
+	{
+		trans->tuples_inserted = trans->inserted_pre_trunc;
+		trans->tuples_updated = trans->updated_pre_trunc;
+		trans->tuples_deleted = trans->deleted_pre_trunc;
+	}
+}
+
+/*
+ * pgstat_count_truncate - update tuple counters due to truncate
+ */
+void
+pgstat_count_truncate(Relation rel)
+{
+	PgStat_TableStatus *pgstat_info = rel->pgstat_info;
+
+	if (pgstat_info != NULL)
+	{
+		/* We have to log the effect at the proper transactional level */
+		int			nest_level = GetCurrentTransactionNestLevel();
+
+		if (pgstat_info->trans == NULL ||
+			pgstat_info->trans->nest_level != nest_level)
+			add_tabstat_xact_level(pgstat_info, nest_level);
+
+		pgstat_truncate_save_counters(pgstat_info->trans);
+		pgstat_info->trans->tuples_inserted = 0;
+		pgstat_info->trans->tuples_updated = 0;
+		pgstat_info->trans->tuples_deleted = 0;
+	}
+}
+
+
+/*
  * pgstat_update_heap_dead_tuples - update dead-tuples count
  *
  * The semantics of this are that we are reporting the nontransactional
@@ -1938,12 +1997,22 @@ AtEOXact_PgStat(bool isCommit)
 			Assert(trans->upper == NULL);
 			tabstat = trans->parent;
 			Assert(tabstat->trans == trans);
+			/* restore pre-truncate stats (if any) in case of aborted xact */
+			if (!isCommit)
+				pgstat_truncate_restore_counters(trans);
 			/* count attempted actions regardless of commit/abort */
 			tabstat->t_counts.t_tuples_inserted += trans->tuples_inserted;
 			tabstat->t_counts.t_tuples_updated += trans->tuples_updated;
 			tabstat->t_counts.t_tuples_deleted += trans->tuples_deleted;
 			if (isCommit)
 			{
+				tabstat->t_counts.t_truncated = trans->truncated;
+				if (trans->truncated)
+				{
+					/* forget live/dead stats seen by backend thus far */
+					tabstat->t_counts.t_delta_live_tuples = 0;
+					tabstat->t_counts.t_delta_dead_tuples = 0;
+				}
 				/* insert adds a live tuple, delete removes one */
 				tabstat->t_counts.t_delta_live_tuples +=
 					trans->tuples_inserted - trans->tuples_deleted;
@@ -2008,9 +2077,21 @@ AtEOSubXact_PgStat(bool isCommit, int nestDepth)
 			{
 				if (trans->upper && trans->upper->nest_level == nestDepth - 1)
 				{
-					trans->upper->tuples_inserted += trans->tuples_inserted;
-					trans->upper->tuples_updated += trans->tuples_updated;
-					trans->upper->tuples_deleted += trans->tuples_deleted;
+					if (trans->truncated)
+					{
+						/* propagate the truncate status one level up */
+						pgstat_truncate_save_counters(trans->upper);
+						/* replace upper xact stats with ours */
+						trans->upper->tuples_inserted = trans->tuples_inserted;
+						trans->upper->tuples_updated = trans->tuples_updated;
+						trans->upper->tuples_deleted = trans->tuples_deleted;
+					}
+					else
+					{
+						trans->upper->tuples_inserted += trans->tuples_inserted;
+						trans->upper->tuples_updated += trans->tuples_updated;
+						trans->upper->tuples_deleted += trans->tuples_deleted;
+					}
 					tabstat->trans = trans->upper;
 					pfree(trans);
 				}
@@ -2039,6 +2120,8 @@ AtEOSubXact_PgStat(bool isCommit, int nestDepth)
 				 * subtransaction
 				 */
 
+				/* first restore values obliterated by truncate */
+				pgstat_truncate_restore_counters(trans);
 				/* count attempted actions regardless of commit/abort */
 				tabstat->t_counts.t_tuples_inserted += trans->tuples_inserted;
 				tabstat->t_counts.t_tuples_updated += trans->tuples_updated;
@@ -2087,8 +2170,12 @@ AtPrepare_PgStat(void)
 			record.tuples_inserted = trans->tuples_inserted;
 			record.tuples_updated = trans->tuples_updated;
 			record.tuples_deleted = trans->tuples_deleted;
+			record.inserted_pre_trunc = trans->inserted_pre_trunc;
+			record.updated_pre_trunc = trans->updated_pre_trunc;
+			record.deleted_pre_trunc = trans->deleted_pre_trunc;
 			record.t_id = tabstat->t_id;
 			record.t_shared = tabstat->t_shared;
+			record.t_truncated = trans->truncated;
 
 			RegisterTwoPhaseRecord(TWOPHASE_RM_PGSTAT_ID, 0,
 								   &record, sizeof(TwoPhasePgStatRecord));
@@ -2154,6 +2241,8 @@ pgstat_twophase_postcommit(TransactionId xid, uint16 info,
 	pgstat_info->t_counts.t_tuples_inserted += rec->tuples_inserted;
 	pgstat_info->t_counts.t_tuples_updated += rec->tuples_updated;
 	pgstat_info->t_counts.t_tuples_deleted += rec->tuples_deleted;
+	pgstat_info->t_counts.t_truncated = rec->t_truncated;
+
 	pgstat_info->t_counts.t_delta_live_tuples +=
 		rec->tuples_inserted - rec->tuples_deleted;
 	pgstat_info->t_counts.t_delta_dead_tuples +=
@@ -2180,6 +2269,12 @@ pgstat_twophase_postabort(TransactionId xid, uint16 info,
 	pgstat_info = get_tabstat_entry(rec->t_id, rec->t_shared);
 
 	/* Same math as in AtEOXact_PgStat, abort case */
+	if (rec->t_truncated)
+	{
+		rec->tuples_inserted = rec->inserted_pre_trunc;
+		rec->tuples_updated = rec->updated_pre_trunc;
+		rec->tuples_deleted = rec->deleted_pre_trunc;
+	}
 	pgstat_info->t_counts.t_tuples_inserted += rec->tuples_inserted;
 	pgstat_info->t_counts.t_tuples_updated += rec->tuples_updated;
 	pgstat_info->t_counts.t_tuples_deleted += rec->tuples_deleted;
@@ -2402,10 +2497,13 @@ pgstat_fetch_global(void)
 
 static PgBackendStatus *BackendStatusArray = NULL;
 static PgBackendStatus *MyBEEntry = NULL;
-static char *BackendClientHostnameBuffer = NULL;
 static char *BackendAppnameBuffer = NULL;
+static char *BackendClientHostnameBuffer = NULL;
 static char *BackendActivityBuffer = NULL;
 static Size BackendActivityBufferSize = 0;
+#ifdef USE_SSL
+static PgBackendSSLStatus *BackendSslStatusBuffer = NULL;
+#endif
 
 
 /*
@@ -2416,13 +2514,22 @@ BackendStatusShmemSize(void)
 {
 	Size		size;
 
+	/* BackendStatusArray: */
 	size = mul_size(sizeof(PgBackendStatus), MaxBackends);
+	/* BackendAppnameBuffer: */
 	size = add_size(size,
 					mul_size(NAMEDATALEN, MaxBackends));
+	/* BackendClientHostnameBuffer: */
+	size = add_size(size,
+					mul_size(NAMEDATALEN, MaxBackends));
+	/* BackendActivityBuffer: */
 	size = add_size(size,
 					mul_size(pgstat_track_activity_query_size, MaxBackends));
+#ifdef USE_SSL
+	/* BackendSslStatusBuffer: */
 	size = add_size(size,
-					mul_size(NAMEDATALEN, MaxBackends));
+					mul_size(sizeof(PgBackendSSLStatus), MaxBackends));
+#endif
 	return size;
 }
 
@@ -2507,6 +2614,28 @@ CreateSharedBackendStatus(void)
 			buffer += pgstat_track_activity_query_size;
 		}
 	}
+
+#ifdef USE_SSL
+	/* Create or attach to the shared SSL status buffer */
+	size = mul_size(sizeof(PgBackendSSLStatus), MaxBackends);
+	BackendSslStatusBuffer = (PgBackendSSLStatus *)
+		ShmemInitStruct("Backend SSL Status Buffer", size, &found);
+
+	if (!found)
+	{
+		PgBackendSSLStatus *ptr;
+
+		MemSet(BackendSslStatusBuffer, 0, size);
+
+		/* Initialize st_sslstatus pointers. */
+		ptr = BackendSslStatusBuffer;
+		for (i = 0; i < MaxBackends; i++)
+		{
+			BackendStatusArray[i].st_sslstatus = ptr;
+			ptr++;
+		}
+	}
+#endif
 }
 
 
@@ -2580,7 +2709,7 @@ pgstat_bestart(void)
 	beentry = MyBEEntry;
 	do
 	{
-		beentry->st_changecount++;
+		pgstat_increment_changecount_before(beentry);
 	} while ((beentry->st_changecount & 1) == 0);
 
 	beentry->st_procpid = MyProcPid;
@@ -2596,6 +2725,23 @@ pgstat_bestart(void)
 				NAMEDATALEN);
 	else
 		beentry->st_clienthostname[0] = '\0';
+#ifdef USE_SSL
+	if (MyProcPort && MyProcPort->ssl != NULL)
+	{
+		beentry->st_ssl = true;
+		beentry->st_sslstatus->ssl_bits = be_tls_get_cipher_bits(MyProcPort);
+		beentry->st_sslstatus->ssl_compression = be_tls_get_compression(MyProcPort);
+		be_tls_get_version(MyProcPort, beentry->st_sslstatus->ssl_version, NAMEDATALEN);
+		be_tls_get_cipher(MyProcPort, beentry->st_sslstatus->ssl_cipher, NAMEDATALEN);
+		be_tls_get_peerdn_name(MyProcPort, beentry->st_sslstatus->ssl_clientdn, NAMEDATALEN);
+	}
+	else
+	{
+		beentry->st_ssl = false;
+	}
+#else
+	beentry->st_ssl = false;
+#endif
 	beentry->st_waiting = false;
 	beentry->st_state = STATE_UNDEFINED;
 	beentry->st_appname[0] = '\0';
@@ -2605,8 +2751,7 @@ pgstat_bestart(void)
 	beentry->st_appname[NAMEDATALEN - 1] = '\0';
 	beentry->st_activity[pgstat_track_activity_query_size - 1] = '\0';
 
-	beentry->st_changecount++;
-	Assert((beentry->st_changecount & 1) == 0);
+	pgstat_increment_changecount_after(beentry);
 
 	/* Update app name to current GUC setting */
 	if (application_name)
@@ -2641,12 +2786,11 @@ pgstat_beshutdown_hook(int code, Datum arg)
 	 * before and after.  We use a volatile pointer here to ensure the
 	 * compiler doesn't try to get cute.
 	 */
-	beentry->st_changecount++;
+	pgstat_increment_changecount_before(beentry);
 
 	beentry->st_procpid = 0;	/* mark invalid */
 
-	beentry->st_changecount++;
-	Assert((beentry->st_changecount & 1) == 0);
+	pgstat_increment_changecount_after(beentry);
 }
 
 
@@ -2683,7 +2827,7 @@ pgstat_report_activity(BackendState state, const char *cmd_str)
 			 * non-disabled state.  As our final update, change the state and
 			 * clear fields we will not be updating anymore.
 			 */
-			beentry->st_changecount++;
+			pgstat_increment_changecount_before(beentry);
 			beentry->st_state = STATE_DISABLED;
 			beentry->st_state_start_timestamp = 0;
 			beentry->st_activity[0] = '\0';
@@ -2691,8 +2835,7 @@ pgstat_report_activity(BackendState state, const char *cmd_str)
 			/* st_xact_start_timestamp and st_waiting are also disabled */
 			beentry->st_xact_start_timestamp = 0;
 			beentry->st_waiting = false;
-			beentry->st_changecount++;
-			Assert((beentry->st_changecount & 1) == 0);
+			pgstat_increment_changecount_after(beentry);
 		}
 		return;
 	}
@@ -2712,7 +2855,7 @@ pgstat_report_activity(BackendState state, const char *cmd_str)
 	/*
 	 * Now update the status entry
 	 */
-	beentry->st_changecount++;
+	pgstat_increment_changecount_before(beentry);
 
 	beentry->st_state = state;
 	beentry->st_state_start_timestamp = current_timestamp;
@@ -2724,8 +2867,7 @@ pgstat_report_activity(BackendState state, const char *cmd_str)
 		beentry->st_activity_start_timestamp = start_timestamp;
 	}
 
-	beentry->st_changecount++;
-	Assert((beentry->st_changecount & 1) == 0);
+	pgstat_increment_changecount_after(beentry);
 }
 
 /* ----------
@@ -2777,10 +2919,9 @@ pgstat_report_xact_timestamp(TimestampTz tstamp)
 	 * st_changecount before and after.  We use a volatile pointer here to
 	 * ensure the compiler doesn't try to get cute.
 	 */
-	beentry->st_changecount++;
+	pgstat_increment_changecount_before(beentry);
 	beentry->st_xact_start_timestamp = tstamp;
-	beentry->st_changecount++;
-	Assert((beentry->st_changecount & 1) == 0);
+	pgstat_increment_changecount_after(beentry);
 }
 
 /* ----------
@@ -2824,6 +2965,9 @@ pgstat_read_current_status(void)
 	LocalPgBackendStatus *localentry;
 	char	   *localappname,
 			   *localactivity;
+#ifdef USE_SSL
+	PgBackendSSLStatus *localsslstatus;
+#endif
 	int			i;
 
 	Assert(!pgStatRunningInCollector);
@@ -2841,6 +2985,12 @@ pgstat_read_current_status(void)
 	localactivity = (char *)
 		MemoryContextAlloc(pgStatLocalContext,
 						   pgstat_track_activity_query_size * MaxBackends);
+#ifdef USE_SSL
+	localsslstatus = (PgBackendSSLStatus *)
+		MemoryContextAlloc(pgStatLocalContext,
+						   sizeof(PgBackendSSLStatus) * MaxBackends);
+#endif
+
 	localNumBackends = 0;
 
 	beentry = BackendStatusArray;
@@ -2856,7 +3006,10 @@ pgstat_read_current_status(void)
 		 */
 		for (;;)
 		{
-			int			save_changecount = beentry->st_changecount;
+			int			before_changecount;
+			int			after_changecount;
+
+			pgstat_save_changecount_before(beentry, before_changecount);
 
 			localentry->backendStatus.st_procpid = beentry->st_procpid;
 			if (localentry->backendStatus.st_procpid > 0)
@@ -2871,10 +3024,19 @@ pgstat_read_current_status(void)
 				localentry->backendStatus.st_appname = localappname;
 				strcpy(localactivity, (char *) beentry->st_activity);
 				localentry->backendStatus.st_activity = localactivity;
+				localentry->backendStatus.st_ssl = beentry->st_ssl;
+#ifdef USE_SSL
+				if (beentry->st_ssl)
+				{
+					memcpy(localsslstatus, beentry->st_sslstatus, sizeof(PgBackendSSLStatus));
+					localentry->backendStatus.st_sslstatus = localsslstatus;
+				}
+#endif
 			}
 
-			if (save_changecount == beentry->st_changecount &&
-				(save_changecount & 1) == 0)
+			pgstat_save_changecount_after(beentry, after_changecount);
+			if (before_changecount == after_changecount &&
+				(before_changecount & 1) == 0)
 				break;
 
 			/* Make sure we can break out of loop if stuck... */
@@ -2892,6 +3054,9 @@ pgstat_read_current_status(void)
 			localentry++;
 			localappname += NAMEDATALEN;
 			localactivity += pgstat_track_activity_query_size;
+#ifdef USE_SSL
+			localsslstatus++;
+#endif
 			localNumBackends++;
 		}
 	}
@@ -2944,12 +3109,17 @@ pgstat_get_backend_current_activity(int pid, bool checkUser)
 
 		for (;;)
 		{
-			int			save_changecount = vbeentry->st_changecount;
+			int			before_changecount;
+			int			after_changecount;
+
+			pgstat_save_changecount_before(vbeentry, before_changecount);
 
 			found = (vbeentry->st_procpid == pid);
 
-			if (save_changecount == vbeentry->st_changecount &&
-				(save_changecount & 1) == 0)
+			pgstat_save_changecount_after(vbeentry, after_changecount);
+
+			if (before_changecount == after_changecount &&
+				(before_changecount & 1) == 0)
 				break;
 
 			/* Make sure we can break out of loop if stuck... */
@@ -3114,7 +3284,7 @@ pgstat_send_archiver(const char *xlog, bool failed)
 	 */
 	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_ARCHIVER);
 	msg.m_failed = failed;
-	strncpy(msg.m_xlog, xlog, sizeof(msg.m_xlog));
+	StrNCpy(msg.m_xlog, xlog, sizeof(msg.m_xlog));
 	msg.m_timestamp = GetCurrentTimestamp();
 	pgstat_send(&msg, sizeof(msg));
 }
@@ -3168,32 +3338,10 @@ PgstatCollectorMain(int argc, char *argv[])
 	PgStat_Msg	msg;
 	int			wr;
 
-	IsUnderPostmaster = true;	/* we are a postmaster subprocess now */
-
-	MyProcPid = getpid();		/* reset MyProcPid */
-
-	MyStartTime = time(NULL);	/* record Start Time for logging */
-
-	/*
-	 * If possible, make this process a group leader, so that the postmaster
-	 * can signal any child processes too.  (pgstat probably never has any
-	 * child processes, but for consistency we make all postmaster child
-	 * processes do this.)
-	 */
-#ifdef HAVE_SETSID
-	if (setsid() < 0)
-		elog(FATAL, "setsid() failed: %m");
-#endif
-
-	InitializeLatchSupport();	/* needed for latch waits */
-
-	/* Initialize private latch for use by signal handlers */
-	InitLatch(&pgStatLatch);
-
 	/*
 	 * Ignore all signals usually bound to some action in the postmaster,
 	 * except SIGHUP and SIGQUIT.  Note we don't need a SIGUSR1 handler to
-	 * support latch operations, because pgStatLatch is local not shared.
+	 * support latch operations, because we only use a local latch.
 	 */
 	pqsignal(SIGHUP, pgstat_sighup_handler);
 	pqsignal(SIGINT, SIG_IGN);
@@ -3239,7 +3387,7 @@ PgstatCollectorMain(int argc, char *argv[])
 	for (;;)
 	{
 		/* Clear any already-pending wakeups */
-		ResetLatch(&pgStatLatch);
+		ResetLatch(MyLatch);
 
 		/*
 		 * Quit if we get SIGQUIT from the postmaster.
@@ -3409,7 +3557,7 @@ PgstatCollectorMain(int argc, char *argv[])
 
 		/* Sleep until there's something to do */
 #ifndef WIN32
-		wr = WaitLatchOrSocket(&pgStatLatch,
+		wr = WaitLatchOrSocket(MyLatch,
 					 WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_SOCKET_READABLE,
 							   pgStatSock,
 							   -1L);
@@ -3468,7 +3616,7 @@ pgstat_exit(SIGNAL_ARGS)
 	int			save_errno = errno;
 
 	need_exit = true;
-	SetLatch(&pgStatLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -3480,7 +3628,7 @@ pgstat_sighup_handler(SIGNAL_ARGS)
 	int			save_errno = errno;
 
 	got_SIGHUP = true;
-	SetLatch(&pgStatLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -3522,19 +3670,17 @@ reset_dbentry_counters(PgStat_StatDBEntry *dbentry)
 	memset(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(Oid);
 	hash_ctl.entrysize = sizeof(PgStat_StatTabEntry);
-	hash_ctl.hash = oid_hash;
 	dbentry->tables = hash_create("Per-database table",
 								  PGSTAT_TAB_HASH_SIZE,
 								  &hash_ctl,
-								  HASH_ELEM | HASH_FUNCTION);
+								  HASH_ELEM | HASH_BLOBS);
 
 	hash_ctl.keysize = sizeof(Oid);
 	hash_ctl.entrysize = sizeof(PgStat_StatFuncEntry);
-	hash_ctl.hash = oid_hash;
 	dbentry->functions = hash_create("Per-database function",
 									 PGSTAT_FUNCTION_HASH_SIZE,
 									 &hash_ctl,
-									 HASH_ELEM | HASH_FUNCTION);
+									  HASH_ELEM | HASH_BLOBS);
 
 	hash_ctl.keysize = sizeof(int64);
 	hash_ctl.entrysize = sizeof(CQStatEntry);
@@ -3979,10 +4125,9 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 	memset(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(Oid);
 	hash_ctl.entrysize = sizeof(PgStat_StatDBEntry);
-	hash_ctl.hash = oid_hash;
 	hash_ctl.hcxt = pgStatLocalContext;
 	dbhash = hash_create("Databases hash", PGSTAT_DB_HASH_SIZE, &hash_ctl,
-						 HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
+						 HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
 	/*
 	 * Clear out global and archiver statistics so they start from zero in
@@ -4103,21 +4248,19 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 				memset(&hash_ctl, 0, sizeof(hash_ctl));
 				hash_ctl.keysize = sizeof(Oid);
 				hash_ctl.entrysize = sizeof(PgStat_StatTabEntry);
-				hash_ctl.hash = oid_hash;
 				hash_ctl.hcxt = pgStatLocalContext;
 				dbentry->tables = hash_create("Per-database table",
 											  PGSTAT_TAB_HASH_SIZE,
 											  &hash_ctl,
-								   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
+									  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
 				hash_ctl.keysize = sizeof(Oid);
 				hash_ctl.entrysize = sizeof(PgStat_StatFuncEntry);
-				hash_ctl.hash = oid_hash;
 				hash_ctl.hcxt = pgStatLocalContext;
 				dbentry->functions = hash_create("Per-database function",
 												 PGSTAT_FUNCTION_HASH_SIZE,
 												 &hash_ctl,
-								   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
+									  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
 				hash_ctl.keysize = sizeof(int64);
 				hash_ctl.entrysize = sizeof(CQStatEntry);
@@ -4851,6 +4994,12 @@ pgstat_recv_tabstat(PgStat_MsgTabstat *msg, int len)
 			tabentry->tuples_updated += tabmsg->t_counts.t_tuples_updated;
 			tabentry->tuples_deleted += tabmsg->t_counts.t_tuples_deleted;
 			tabentry->tuples_hot_updated += tabmsg->t_counts.t_tuples_hot_updated;
+			/* If table was truncated, first reset the live/dead counters */
+			if (tabmsg->t_counts.t_truncated)
+			{
+				tabentry->n_live_tuples = 0;
+				tabentry->n_dead_tuples = 0;
+			}
 			tabentry->n_live_tuples += tabmsg->t_counts.t_delta_live_tuples;
 			tabentry->n_dead_tuples += tabmsg->t_counts.t_delta_dead_tuples;
 			tabentry->changes_since_analyze += tabmsg->t_counts.t_changed_tuples;

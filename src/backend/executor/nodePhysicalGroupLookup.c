@@ -5,6 +5,8 @@
  * 	Node for efficiently retrieving updatable physical groups from
  * 	aggregate materialization tables.
  *
+ * Copyright (c) 2013-2016, PipelineDB
+ *
  * IDENTIFICATION
  *	  src/backend/executor/nodePhysicalGroupLookup.c
  *

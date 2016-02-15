@@ -4,7 +4,7 @@
  *	  tuple table support stuff
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -17,7 +17,6 @@
 
 #include "access/htup.h"
 #include "access/tupdesc.h"
-#include "postgres.h"
 #include "storage/buf.h"
 
 /*----------
@@ -165,6 +164,7 @@ extern Datum ExecFetchSlotTupleDatum(TupleTableSlot *slot);
 extern HeapTuple ExecMaterializeSlot(TupleTableSlot *slot);
 extern TupleTableSlot *ExecCopySlot(TupleTableSlot *dstslot,
 			 TupleTableSlot *srcslot);
+extern TupleTableSlot *ExecMakeSlotContentsReadOnly(TupleTableSlot *slot);
 
 /* in access/common/heaptuple.c */
 extern Datum slot_getattr(TupleTableSlot *slot, int attnum, bool *isnull);

@@ -3,7 +3,7 @@
  * nodeForeignscan.c
  *	  Routines to support scans of foreign tables
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -25,6 +25,7 @@
 #include "executor/executor.h"
 #include "executor/nodeForeignscan.h"
 #include "foreign/fdwapi.h"
+#include "utils/memutils.h"
 #include "utils/rel.h"
 
 static TupleTableSlot *ForeignNext(ForeignScanState *node);
@@ -72,8 +73,32 @@ ForeignNext(ForeignScanState *node)
 static bool
 ForeignRecheck(ForeignScanState *node, TupleTableSlot *slot)
 {
-	/* There are no access-method-specific conditions to recheck. */
-	return true;
+	FdwRoutine *fdwroutine = node->fdwroutine;
+	ExprContext *econtext;
+
+	/*
+	 * extract necessary information from foreign scan node
+	 */
+	econtext = node->ss.ps.ps_ExprContext;
+
+	/* Does the tuple meet the remote qual condition? */
+	econtext->ecxt_scantuple = slot;
+
+	ResetExprContext(econtext);
+
+	/*
+	 * If an outer join is pushed down, RecheckForeignScan may need to store a
+	 * different tuple in the slot, because a different set of columns may go
+	 * to NULL upon recheck.  Otherwise, it shouldn't need to change the slot
+	 * contents, just return true or false to indicate whether the quals still
+	 * pass.  For simple cases, setting fdw_recheck_quals may be easier than
+	 * providing this callback.
+	 */
+	if (fdwroutine->RecheckForeignScan &&
+		!fdwroutine->RecheckForeignScan(node, slot))
+		return false;
+
+	return ExecQual(node->fdw_recheck_quals, econtext, false);
 }
 
 /* ----------------------------------------------------------------
@@ -102,7 +127,9 @@ ForeignScanState *
 ExecInitForeignScan(ForeignScan *node, EState *estate, int eflags)
 {
 	ForeignScanState *scanstate;
-	Relation	currentRelation;
+	Relation	currentRelation = NULL;
+	Index		scanrelid = node->scan.scanrelid;
+	Index		tlistvarno;
 	FdwRoutine *fdwroutine;
 
 	/* check for unsupported flags */
@@ -133,6 +160,9 @@ ExecInitForeignScan(ForeignScan *node, EState *estate, int eflags)
 	scanstate->ss.ps.qual = (List *)
 		ExecInitExpr((Expr *) node->scan.plan.qual,
 					 (PlanState *) scanstate);
+	scanstate->fdw_recheck_quals = (List *)
+		ExecInitExpr((Expr *) node->fdw_recheck_quals,
+					 (PlanState *) scanstate);
 
 	/*
 	 * tuple table initialization
@@ -141,32 +171,60 @@ ExecInitForeignScan(ForeignScan *node, EState *estate, int eflags)
 	ExecInitScanTupleSlot(estate, &scanstate->ss);
 
 	/*
-	 * open the base relation and acquire appropriate lock on it.
+	 * open the base relation, if any, and acquire an appropriate lock on it;
+	 * also acquire function pointers from the FDW's handler
 	 */
-	currentRelation = ExecOpenScanRelation(estate, node->scan.scanrelid, eflags);
-	scanstate->ss.ss_currentRelation = currentRelation;
+	if (scanrelid > 0)
+	{
+		currentRelation = ExecOpenScanRelation(estate, scanrelid, eflags);
+		scanstate->ss.ss_currentRelation = currentRelation;
+		fdwroutine = GetFdwRoutineForRelation(currentRelation, true);
+	}
+	else
+	{
+		/* We can't use the relcache, so get fdwroutine the hard way */
+		fdwroutine = GetFdwRoutineByServerId(node->fs_server);
+	}
 
 	/*
-	 * get the scan type from the relation descriptor.  (XXX at some point we
-	 * might want to let the FDW editorialize on the scan tupdesc.)
+	 * Determine the scan tuple type.  If the FDW provided a targetlist
+	 * describing the scan tuples, use that; else use base relation's rowtype.
 	 */
-	ExecAssignScanType(&scanstate->ss, RelationGetDescr(currentRelation));
+	if (node->fdw_scan_tlist != NIL || currentRelation == NULL)
+	{
+		TupleDesc	scan_tupdesc;
+
+		scan_tupdesc = ExecTypeFromTL(node->fdw_scan_tlist, false);
+		ExecAssignScanType(&scanstate->ss, scan_tupdesc);
+		/* Node's targetlist will contain Vars with varno = INDEX_VAR */
+		tlistvarno = INDEX_VAR;
+	}
+	else
+	{
+		ExecAssignScanType(&scanstate->ss, RelationGetDescr(currentRelation));
+		/* Node's targetlist will contain Vars with varno = scanrelid */
+		tlistvarno = scanrelid;
+	}
 
 	/*
 	 * Initialize result tuple type and projection info.
 	 */
 	ExecAssignResultTypeFromTL(&scanstate->ss.ps);
-	ExecAssignScanProjectionInfo(&scanstate->ss);
+	ExecAssignScanProjectionInfoWithVarno(&scanstate->ss, tlistvarno);
 
 	/*
-	 * Acquire function pointers from the FDW's handler, and init fdw_state.
+	 * Initialize FDW-related state.
 	 */
-	fdwroutine = GetFdwRoutineForRelation(currentRelation, true);
 	scanstate->fdwroutine = fdwroutine;
 	scanstate->fdw_state = NULL;
 
+	/* Initialize any outer plan. */
+	if (outerPlan(node))
+		outerPlanState(scanstate) =
+			ExecInitNode(outerPlan(node), estate, eflags);
+
 	/*
-	 * Tell the FDW to initiate the scan.
+	 * Tell the FDW to initialize the scan.
 	 */
 	fdwroutine->BeginForeignScan(scanstate, eflags);
 
@@ -185,6 +243,10 @@ ExecEndForeignScan(ForeignScanState *node)
 	/* Let the FDW shut down */
 	node->fdwroutine->EndForeignScan(node);
 
+	/* Shut down any outer plan. */
+	if (outerPlanState(node))
+		ExecEndNode(outerPlanState(node));
+
 	/* Free the exprcontext */
 	ExecFreeExprContext(&node->ss.ps);
 
@@ -193,7 +255,8 @@ ExecEndForeignScan(ForeignScanState *node)
 	ExecClearTuple(node->ss.ss_ScanTupleSlot);
 
 	/* close the relation. */
-	ExecCloseScanRelation(node->ss.ss_currentRelation);
+	if (node->ss.ss_currentRelation)
+		ExecCloseScanRelation(node->ss.ss_currentRelation);
 }
 
 /* ----------------------------------------------------------------
@@ -205,7 +268,17 @@ ExecEndForeignScan(ForeignScanState *node)
 void
 ExecReScanForeignScan(ForeignScanState *node)
 {
+	PlanState  *outerPlan = outerPlanState(node);
+
 	node->fdwroutine->ReScanForeignScan(node);
+
+	/*
+	 * If chgParam of subnode is not null then plan will be re-scanned by
+	 * first ExecProcNode.  outerPlan may also be NULL, in which case there
+	 * is nothing to rescan at all.
+	 */
+	if (outerPlan != NULL && outerPlan->chgParam == NULL)
+		ExecReScan(outerPlan);
 
 	ExecScanReScan(&node->ss);
 }

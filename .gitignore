@@ -38,6 +38,7 @@ lib*.pc
 /pgsql.sln.cache
 /Debug/
 /Release/
+/tmp_install
 
 src/test/regress/regression.diffs
 src/test/regress/regression.out
@@ -50,3 +51,5 @@ src/test/regress/regression.out
 /.project
 /.pydevproject
 /.settings/
+
+

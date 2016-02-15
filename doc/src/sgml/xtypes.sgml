@@ -234,35 +234,49 @@ CREATE TYPE complex (
  </para>
 
  <para>
+  If the internal representation of the data type is variable-length, the
+  internal representation must follow the standard layout for variable-length
+  data: the first four bytes must be a <type>char[4]</type> field which is
+  never accessed directly (customarily named <structfield>vl_len_</>). You
+  must use the <function>SET_VARSIZE()</function> macro to store the total
+  size of the datum (including the length field itself) in this field
+  and <function>VARSIZE()</function> to retrieve it.  (These macros exist
+  because the length field may be encoded depending on platform.)
+ </para>
+
+ <para>
+  For further details see the description of the
+  <xref linkend="sql-createtype"> command.
+ </para>
+
+ <sect2 id="xtypes-toast">
+  <title>TOAST Considerations</title>
    <indexterm>
     <primary>TOAST</primary>
     <secondary>and user-defined types</secondary>
    </indexterm>
-  If the values of your data type vary in size (in internal form), you should
-  make the data type <acronym>TOAST</>-able (see <xref
-  linkend="storage-toast">). You should do this even if the data are always
+
+ <para>
+  If the values of your data type vary in size (in internal form), it's
+  usually desirable to make the data type <acronym>TOAST</>-able (see <xref
+  linkend="storage-toast">). You should do this even if the values are always
   too small to be compressed or stored externally, because
   <acronym>TOAST</> can save space on small data too, by reducing header
   overhead.
  </para>
 
  <para>
-  To do this, the internal representation must follow the standard layout for
-  variable-length data: the first four bytes must be a <type>char[4]</type>
-  field which is never accessed directly (customarily named
-  <structfield>vl_len_</>). You
-  must use <function>SET_VARSIZE()</function> to store the size of the datum
-  in this field and <function>VARSIZE()</function> to retrieve it. The C
-  functions operating on the data type must always be careful to unpack any
-  toasted values they are handed, by using <function>PG_DETOAST_DATUM</>.
-  (This detail is customarily hidden by defining type-specific
-  <function>GETARG_DATATYPE_P</function> macros.) Then, when running the
-  <command>CREATE TYPE</command> command, specify the internal length as
-  <literal>variable</> and select the appropriate storage option.
+  To support <acronym>TOAST</> storage, the C functions operating on the data
+  type must always be careful to unpack any toasted values they are handed
+  by using <function>PG_DETOAST_DATUM</>.  (This detail is customarily hidden
+  by defining type-specific <function>GETARG_DATATYPE_P</function> macros.)
+  Then, when running the <command>CREATE TYPE</command> command, specify the
+  internal length as <literal>variable</> and select some appropriate storage
+  option other than <literal>plain</>.
  </para>
 
  <para>
-  If the alignment is unimportant (either just for a specific function or
+  If data alignment is unimportant (either just for a specific function or
   because the data type specifies byte alignment anyway) then it's possible
   to avoid some of the overhead of <function>PG_DETOAST_DATUM</>. You can use
   <function>PG_DETOAST_DATUM_PACKED</> instead (customarily hidden by
@@ -287,7 +301,76 @@ CREATE TYPE complex (
  </note>
 
  <para>
-  For further details see the description of the
-  <xref linkend="sql-createtype"> command.
+  Another feature that's enabled by <acronym>TOAST</> support is the
+  possibility of having an <firstterm>expanded</> in-memory data
+  representation that is more convenient to work with than the format that
+  is stored on disk.  The regular or <quote>flat</> varlena storage format
+  is ultimately just a blob of bytes; it cannot for example contain
+  pointers, since it may get copied to other locations in memory.
+  For complex data types, the flat format may be quite expensive to work
+  with, so <productname>PostgreSQL</> provides a way to <quote>expand</>
+  the flat format into a representation that is more suited to computation,
+  and then pass that format in-memory between functions of the data type.
  </para>
+
+ <para>
+  To use expanded storage, a data type must define an expanded format that
+  follows the rules given in <filename>src/include/utils/expandeddatum.h</>,
+  and provide functions to <quote>expand</> a flat varlena value into
+  expanded format and <quote>flatten</> the expanded format back to the
+  regular varlena representation.  Then ensure that all C functions for
+  the data type can accept either representation, possibly by converting
+  one into the other immediately upon receipt.  This does not require fixing
+  all existing functions for the data type at once, because the standard
+  <function>PG_DETOAST_DATUM</> macro is defined to convert expanded inputs
+  into regular flat format.  Therefore, existing functions that work with
+  the flat varlena format will continue to work, though slightly
+  inefficiently, with expanded inputs; they need not be converted until and
+  unless better performance is important.
+ </para>
+
+ <para>
+  C functions that know how to work with an expanded representation
+  typically fall into two categories: those that can only handle expanded
+  format, and those that can handle either expanded or flat varlena inputs.
+  The former are easier to write but may be less efficient overall, because
+  converting a flat input to expanded form for use by a single function may
+  cost more than is saved by operating on the expanded format.
+  When only expanded format need be handled, conversion of flat inputs to
+  expanded form can be hidden inside an argument-fetching macro, so that
+  the function appears no more complex than one working with traditional
+  varlena input.
+  To handle both types of input, write an argument-fetching function that
+  will detoast external, short-header, and compressed varlena inputs, but
+  not expanded inputs.  Such a function can be defined as returning a
+  pointer to a union of the flat varlena format and the expanded format.
+  Callers can use the <function>VARATT_IS_EXPANDED_HEADER()</> macro to
+  determine which format they received.
+ </para>
+
+ <para>
+  The <acronym>TOAST</> infrastructure not only allows regular varlena
+  values to be distinguished from expanded values, but also
+  distinguishes <quote>read-write</> and <quote>read-only</> pointers to
+  expanded values.  C functions that only need to examine an expanded
+  value, or will only change it in safe and non-semantically-visible ways,
+  need not care which type of pointer they receive.  C functions that
+  produce a modified version of an input value are allowed to modify an
+  expanded input value in-place if they receive a read-write pointer, but
+  must not modify the input if they receive a read-only pointer; in that
+  case they have to copy the value first, producing a new value to modify.
+  A C function that has constructed a new expanded value should always
+  return a read-write pointer to it.  Also, a C function that is modifying
+  a read-write expanded value in-place should take care to leave the value
+  in a sane state if it fails partway through.
+ </para>
+
+ <para>
+  For examples of working with expanded values, see the standard array
+  infrastructure, particularly
+  <filename>src/backend/utils/adt/array_expanded.c</>.
+ </para>
+
+ </sect2>
+
 </sect1>

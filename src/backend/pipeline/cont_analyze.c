@@ -453,6 +453,8 @@ compare_attrs(const void *a, const void *b)
 static bool
 find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 {
+	bool lcontains, rcontains;
+
 	if (node == NULL)
 		return false;
 
@@ -470,7 +472,6 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 	else if (IsA(node, A_Expr))
 	{
 		A_Expr *aexpr = (A_Expr *) node;
-		bool lcontains, rcontains;
 		Node *lexpr, *rexpr;
 
 		context->expr = NULL;
@@ -493,15 +494,7 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 							errmsg("clock_timestamp() may only appear once in a WHERE clause"),
 							parser_errposition(context->pstate, context->location)));
 
-		if (aexpr->kind == AEXPR_AND)
-		{
-			if (lcontains)
-				context->expr = lexpr;
-			else if (rcontains)
-				context->expr = rexpr;
-			return lcontains || rcontains;
-		}
-		else if (aexpr->kind == AEXPR_OP)
+		if (aexpr->kind == AEXPR_OP)
 		{
 			if (lcontains || rcontains)
 				context->expr = (Node *) makeA_Expr(AEXPR_OP, aexpr->name, lexpr, rexpr, -1);
@@ -514,6 +507,49 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					errmsg("clock_timestamp() may only appear as a top-level conjunction predicate"),
 					parser_errposition(context->pstate, context->location)));
+	}
+	else if (IsA(node, BoolExpr))
+	{
+		BoolExpr *be = (BoolExpr *) node;
+		ListCell *lc;
+		int count = 0;
+		Node *expr;
+
+		foreach(lc, be->args)
+		{
+			if (find_clock_timestamp_expr((Node *) lfirst(lc), context))
+			{
+				if (be->boolop != AND_EXPR)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_SYNTAX_ERROR),
+							errmsg("clock_timestamp() may only appear as a top-level conjunction predicate"),
+							parser_errposition(context->pstate, context->location)));
+				}
+				else
+				{
+					expr = context->expr;
+					count++;
+				}
+			}
+		}
+
+		if (count == 1)
+		{
+			context->expr = expr;
+			return true;
+		}
+		else if (count > 1)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+							errmsg("clock_timestamp() may only appear once in a WHERE clause"),
+							parser_errposition(context->pstate, context->location)));
+		}
+		else
+		{
+			return false;
+		}
 	}
 
 	return raw_expression_tree_walker(node, find_clock_timestamp_expr, (void *) context);
@@ -3749,7 +3785,7 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	where = makeA_Expr(AEXPR_OP, list_make1(makeString(">")), (Node *) arrival_ts, (Node *) rexpr, -1);
 
 	if (stmt->whereClause)
-	  stmt->whereClause = (Node *) makeA_Expr(AEXPR_AND, NULL, (Node *) where, stmt->whereClause, -1);
+	  stmt->whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(where, stmt->whereClause), -1);
 	else
 	  stmt->whereClause = (Node *) where;
 }

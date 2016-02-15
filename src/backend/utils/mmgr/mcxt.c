@@ -9,10 +9,9 @@
  * context's MemoryContextMethods struct.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
- *
  *
  * IDENTIFICATION
  *	  src/backend/utils/mmgr/mcxt.c
@@ -25,6 +24,7 @@
 
 #include "postgres.h"
 
+#include "miscadmin.h"
 #include "utils/memdebug.h"
 #include "utils/memutils.h"
 
@@ -57,8 +57,16 @@ MemoryContext ContQueryBatchContext = NULL;
 /* This is a transient link to the active portal's memory context: */
 MemoryContext PortalContext = NULL;
 
+static void MemoryContextCallResetCallbacks(MemoryContext context);
 static void MemoryContextStatsInternal(MemoryContext context, int level);
 
+/*
+ * You should not do memory allocations within a critical section, because
+ * an out-of-memory error will be escalated to a PANIC. To enforce that
+ * rule, the allocation functions Assert that.
+ */
+#define AssertNotInCriticalSection(context) \
+	Assert(CritSectionCount == 0 || (context)->allowInCritSection)
 
 /*****************************************************************************
  *	  EXPORTED ROUTINES														 *
@@ -110,7 +118,9 @@ MemoryContextInit(void)
 	 * require it to contain at least 8K at all times. This is the only case
 	 * where retained memory in a context is *essential* --- we want to be
 	 * sure ErrorContext still has some memory even if we've run out
-	 * elsewhere!
+	 * elsewhere! Also, allow allocations in ErrorContext within a critical
+	 * section. Otherwise a PANIC will cause an assertion failure in the error
+	 * reporting code, before printing out the real cause of the failure.
 	 *
 	 * This should be the last step in this function, as elog.c assumes memory
 	 * management works once ErrorContext is non-null.
@@ -120,15 +130,13 @@ MemoryContextInit(void)
 										 8 * 1024,
 										 8 * 1024,
 										 8 * 1024);
+	MemoryContextAllowInCriticalSection(ErrorContext, true);
 }
 
 /*
  * MemoryContextReset
- *		Release all space allocated within a context and its descendants,
- *		but don't delete the contexts themselves.
- *
- * The type-specific reset routine handles the context itself, but we
- * have to do the recursion for the children.
+ *		Release all space allocated within a context and delete all its
+ *		descendant contexts (but not the named context itself).
  */
 void
 MemoryContextReset(MemoryContext context)
@@ -137,11 +145,27 @@ MemoryContextReset(MemoryContext context)
 
 	/* save a function call in common case where there are no children */
 	if (context->firstchild != NULL)
-		MemoryContextResetChildren(context);
+		MemoryContextDeleteChildren(context);
+
+	/* save a function call if no pallocs since startup or last reset */
+	if (!context->isReset)
+		MemoryContextResetOnly(context);
+}
+
+/*
+ * MemoryContextResetOnly
+ *		Release all space allocated within a context.
+ *		Nothing is done to the context's descendant contexts.
+ */
+void
+MemoryContextResetOnly(MemoryContext context)
+{
+	AssertArg(MemoryContextIsValid(context));
 
 	/* Nothing to do if no pallocs since startup or last reset */
 	if (!context->isReset)
 	{
+		MemoryContextCallResetCallbacks(context);
 		(*context->methods->reset) (context);
 		context->isReset = true;
 		VALGRIND_DESTROY_MEMPOOL(context);
@@ -163,7 +187,10 @@ MemoryContextResetChildren(MemoryContext context)
 	AssertArg(MemoryContextIsValid(context));
 
 	for (child = context->firstchild; child != NULL; child = child->nextchild)
-		MemoryContextReset(child);
+	{
+		MemoryContextResetChildren(child);
+		MemoryContextResetOnly(child);
+	}
 }
 
 /*
@@ -186,6 +213,14 @@ MemoryContextDelete(MemoryContext context)
 	Assert(context != CurrentMemoryContext);
 
 	MemoryContextDeleteChildren(context);
+
+	/*
+	 * It's not entirely clear whether 'tis better to do this before or after
+	 * delinking the context; but an error in a callback will likely result in
+	 * leaking the whole context (if it's not a root context) if we do it
+	 * after, so let's do it before.
+	 */
+	MemoryContextCallResetCallbacks(context);
 
 	/*
 	 * We delink the context from its parent before deleting it, so that if
@@ -218,20 +253,53 @@ MemoryContextDeleteChildren(MemoryContext context)
 }
 
 /*
- * MemoryContextResetAndDeleteChildren
- *		Release all space allocated within a context and delete all
- *		its descendants.
+ * MemoryContextRegisterResetCallback
+ *		Register a function to be called before next context reset/delete.
+ *		Such callbacks will be called in reverse order of registration.
  *
- * This is a common combination case where we want to preserve the
- * specific context but get rid of absolutely everything under it.
+ * The caller is responsible for allocating a MemoryContextCallback struct
+ * to hold the info about this callback request, and for filling in the
+ * "func" and "arg" fields in the struct to show what function to call with
+ * what argument.  Typically the callback struct should be allocated within
+ * the specified context, since that means it will automatically be freed
+ * when no longer needed.
+ *
+ * There is no API for deregistering a callback once registered.  If you
+ * want it to not do anything anymore, adjust the state pointed to by its
+ * "arg" to indicate that.
  */
 void
-MemoryContextResetAndDeleteChildren(MemoryContext context)
+MemoryContextRegisterResetCallback(MemoryContext context,
+								   MemoryContextCallback *cb)
 {
 	AssertArg(MemoryContextIsValid(context));
 
-	MemoryContextDeleteChildren(context);
-	MemoryContextReset(context);
+	/* Push onto head so this will be called before older registrants. */
+	cb->next = context->reset_cbs;
+	context->reset_cbs = cb;
+	/* Mark the context as non-reset (it probably is already). */
+	context->isReset = false;
+}
+
+/*
+ * MemoryContextCallResetCallbacks
+ *		Internal function to call all registered callbacks for context.
+ */
+static void
+MemoryContextCallResetCallbacks(MemoryContext context)
+{
+	MemoryContextCallback *cb;
+
+	/*
+	 * We pop each callback from the list before calling.  That way, if an
+	 * error occurs inside the callback, we won't try to call it a second time
+	 * in the likely event that we reset or delete the context later.
+	 */
+	while ((cb = context->reset_cbs) != NULL)
+	{
+		context->reset_cbs = cb->next;
+		(*cb->func) (cb->arg);
+	}
 }
 
 /*
@@ -257,6 +325,10 @@ MemoryContextSetParent(MemoryContext context, MemoryContext new_parent)
 {
 	AssertArg(MemoryContextIsValid(context));
 	AssertArg(context != new_parent);
+
+	/* Fast path if it's got correct parent already */
+	if (new_parent == context->parent)
+		return;
 
 	/* Delink from existing parent, if any */
 	if (context->parent)
@@ -293,6 +365,25 @@ MemoryContextSetParent(MemoryContext context, MemoryContext new_parent)
 		context->parent = NULL;
 		context->nextchild = NULL;
 	}
+}
+
+/*
+ * MemoryContextAllowInCriticalSection
+ *		Allow/disallow allocations in this memory context within a critical
+ *		section.
+ *
+ * Normally, memory allocations are not allowed within a critical section,
+ * because a failure would lead to PANIC.  There are a few exceptions to
+ * that, like allocations related to debugging code that is not supposed to
+ * be enabled in production.  This function can be used to exempt specific
+ * memory contexts from the assertion in palloc().
+ */
+void
+MemoryContextAllowInCriticalSection(MemoryContext context, bool allow)
+{
+	AssertArg(MemoryContextIsValid(context));
+
+	context->allowInCritSection = allow;
 }
 
 /*
@@ -523,6 +614,9 @@ MemoryContextCreate(NodeTag tag, Size size,
 	MemoryContext node;
 	Size		needed = size + strlen(name) + 1;
 
+	/* creating new memory contexts is not allowed in a critical section */
+	Assert(CritSectionCount == 0);
+
 	/* Get space for node and name */
 	if (TopMemoryContext != NULL)
 	{
@@ -558,6 +652,8 @@ MemoryContextCreate(NodeTag tag, Size size,
 		node->parent = parent;
 		node->nextchild = parent->firstchild;
 		parent->firstchild = node;
+		/* inherit allowInCritSection flag from parent */
+		node->allowInCritSection = parent->allowInCritSection;
 	}
 
 	VALGRIND_CREATE_MEMPOOL(node, 0, false);
@@ -579,6 +675,7 @@ MemoryContextAlloc(MemoryContext context, Size size)
 	void	   *ret;
 
 	AssertArg(MemoryContextIsValid(context));
+	AssertNotInCriticalSection(context);
 
 	if (!AllocSizeIsValid(size))
 		elog(ERROR, "invalid memory alloc request size %zu", size);
@@ -586,6 +683,15 @@ MemoryContextAlloc(MemoryContext context, Size size)
 	context->isReset = false;
 
 	ret = (*context->methods->alloc) (context, size);
+	if (ret == NULL)
+	{
+		MemoryContextStats(TopMemoryContext);
+		ereport(ERROR,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory"),
+				 errdetail("Failed on request of size %zu.", size)));
+	}
+
 	VALGRIND_MEMPOOL_ALLOC(context, ret, size);
 
 	return ret;
@@ -604,6 +710,7 @@ MemoryContextAllocZero(MemoryContext context, Size size)
 	void	   *ret;
 
 	AssertArg(MemoryContextIsValid(context));
+	AssertNotInCriticalSection(context);
 
 	if (!AllocSizeIsValid(size))
 		elog(ERROR, "invalid memory alloc request size %zu", size);
@@ -611,6 +718,15 @@ MemoryContextAllocZero(MemoryContext context, Size size)
 	context->isReset = false;
 
 	ret = (*context->methods->alloc) (context, size);
+	if (ret == NULL)
+	{
+		MemoryContextStats(TopMemoryContext);
+		ereport(ERROR,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory"),
+				 errdetail("Failed on request of size %zu.", size)));
+	}
+
 	VALGRIND_MEMPOOL_ALLOC(context, ret, size);
 
 	MemSetAligned(ret, 0, size);
@@ -631,6 +747,7 @@ MemoryContextAllocZeroAligned(MemoryContext context, Size size)
 	void	   *ret;
 
 	AssertArg(MemoryContextIsValid(context));
+	AssertNotInCriticalSection(context);
 
 	if (!AllocSizeIsValid(size))
 		elog(ERROR, "invalid memory alloc request size %zu", size);
@@ -638,9 +755,58 @@ MemoryContextAllocZeroAligned(MemoryContext context, Size size)
 	context->isReset = false;
 
 	ret = (*context->methods->alloc) (context, size);
+	if (ret == NULL)
+	{
+		MemoryContextStats(TopMemoryContext);
+		ereport(ERROR,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory"),
+				 errdetail("Failed on request of size %zu.", size)));
+	}
+
 	VALGRIND_MEMPOOL_ALLOC(context, ret, size);
 
 	MemSetLoop(ret, 0, size);
+
+	return ret;
+}
+
+/*
+ * MemoryContextAllocExtended
+ *		Allocate space within the specified context using the given flags.
+ */
+void *
+MemoryContextAllocExtended(MemoryContext context, Size size, int flags)
+{
+	void	   *ret;
+
+	AssertArg(MemoryContextIsValid(context));
+	AssertNotInCriticalSection(context);
+
+	if (((flags & MCXT_ALLOC_HUGE) != 0 && !AllocHugeSizeIsValid(size)) ||
+		((flags & MCXT_ALLOC_HUGE) == 0 && !AllocSizeIsValid(size)))
+		elog(ERROR, "invalid memory alloc request size %zu", size);
+
+	context->isReset = false;
+
+	ret = (*context->methods->alloc) (context, size);
+	if (ret == NULL)
+	{
+		if ((flags & MCXT_ALLOC_NO_OOM) == 0)
+		{
+			MemoryContextStats(TopMemoryContext);
+			ereport(ERROR,
+					(errcode(ERRCODE_OUT_OF_MEMORY),
+					 errmsg("out of memory"),
+					 errdetail("Failed on request of size %zu.", size)));
+		}
+		return NULL;
+	}
+
+	VALGRIND_MEMPOOL_ALLOC(context, ret, size);
+
+	if ((flags & MCXT_ALLOC_ZERO) != 0)
+		MemSetAligned(ret, 0, size);
 
 	return ret;
 }
@@ -652,6 +818,7 @@ palloc(Size size)
 	void	   *ret;
 
 	AssertArg(MemoryContextIsValid(CurrentMemoryContext));
+	AssertNotInCriticalSection(CurrentMemoryContext);
 
 	if (!AllocSizeIsValid(size))
 		elog(ERROR, "invalid memory alloc request size %zu", size);
@@ -659,6 +826,15 @@ palloc(Size size)
 	CurrentMemoryContext->isReset = false;
 
 	ret = (*CurrentMemoryContext->methods->alloc) (CurrentMemoryContext, size);
+	if (ret == NULL)
+	{
+		MemoryContextStats(TopMemoryContext);
+		ereport(ERROR,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory"),
+				 errdetail("Failed on request of size %zu.", size)));
+	}
+
 	VALGRIND_MEMPOOL_ALLOC(CurrentMemoryContext, ret, size);
 
 	return ret;
@@ -671,6 +847,7 @@ palloc0(Size size)
 	void	   *ret;
 
 	AssertArg(MemoryContextIsValid(CurrentMemoryContext));
+	AssertNotInCriticalSection(CurrentMemoryContext);
 
 	if (!AllocSizeIsValid(size))
 		elog(ERROR, "invalid memory alloc request size %zu", size);
@@ -678,9 +855,55 @@ palloc0(Size size)
 	CurrentMemoryContext->isReset = false;
 
 	ret = (*CurrentMemoryContext->methods->alloc) (CurrentMemoryContext, size);
+	if (ret == NULL)
+	{
+		MemoryContextStats(TopMemoryContext);
+		ereport(ERROR,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory"),
+				 errdetail("Failed on request of size %zu.", size)));
+	}
+
 	VALGRIND_MEMPOOL_ALLOC(CurrentMemoryContext, ret, size);
 
 	MemSetAligned(ret, 0, size);
+
+	return ret;
+}
+
+void *
+palloc_extended(Size size, int flags)
+{
+	/* duplicates MemoryContextAllocExtended to avoid increased overhead */
+	void	   *ret;
+
+	AssertArg(MemoryContextIsValid(CurrentMemoryContext));
+	AssertNotInCriticalSection(CurrentMemoryContext);
+
+	if (((flags & MCXT_ALLOC_HUGE) != 0 && !AllocHugeSizeIsValid(size)) ||
+		((flags & MCXT_ALLOC_HUGE) == 0 && !AllocSizeIsValid(size)))
+		elog(ERROR, "invalid memory alloc request size %zu", size);
+
+	CurrentMemoryContext->isReset = false;
+
+	ret = (*CurrentMemoryContext->methods->alloc) (CurrentMemoryContext, size);
+	if (ret == NULL)
+	{
+		if ((flags & MCXT_ALLOC_NO_OOM) == 0)
+		{
+			MemoryContextStats(TopMemoryContext);
+			ereport(ERROR,
+					(errcode(ERRCODE_OUT_OF_MEMORY),
+					 errmsg("out of memory"),
+					 errdetail("Failed on request of size %zu.", size)));
+		}
+		return NULL;
+	}
+
+	VALGRIND_MEMPOOL_ALLOC(CurrentMemoryContext, ret, size);
+
+	if ((flags & MCXT_ALLOC_ZERO) != 0)
+		MemSetAligned(ret, 0, size);
 
 	return ret;
 }
@@ -707,6 +930,7 @@ pfree(void *pointer)
 	 */
 	context = ((StandardChunkHeader *)
 			   ((char *) pointer - STANDARDCHUNKHEADERSIZE))->context;
+
 	AssertArg(MemoryContextIsValid(context));
 
 	(*context->methods->free_p) (context, pointer);
@@ -741,11 +965,18 @@ repalloc(void *pointer, Size size)
 			   ((char *) pointer - STANDARDCHUNKHEADERSIZE))->context;
 
 	AssertArg(MemoryContextIsValid(context));
+	AssertNotInCriticalSection(context);
 
 	/* isReset must be false already */
 	Assert(!context->isReset);
 
 	ret = (*context->methods->realloc) (context, pointer, size);
+	if (ret == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory"),
+				 errdetail("Failed on request of size %zu.", size)));
+
 	VALGRIND_MEMPOOL_CHANGE(context, pointer, ret, size);
 
 	return ret;
@@ -763,6 +994,7 @@ MemoryContextAllocHuge(MemoryContext context, Size size)
 	void	   *ret;
 
 	AssertArg(MemoryContextIsValid(context));
+	AssertNotInCriticalSection(context);
 
 	if (!AllocHugeSizeIsValid(size))
 		elog(ERROR, "invalid memory alloc request size %zu", size);
@@ -770,6 +1002,15 @@ MemoryContextAllocHuge(MemoryContext context, Size size)
 	context->isReset = false;
 
 	ret = (*context->methods->alloc) (context, size);
+	if (ret == NULL)
+	{
+		MemoryContextStats(TopMemoryContext);
+		ereport(ERROR,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory"),
+				 errdetail("Failed on request of size %zu.", size)));
+	}
+
 	VALGRIND_MEMPOOL_ALLOC(context, ret, size);
 
 	return ret;
@@ -804,11 +1045,18 @@ repalloc_huge(void *pointer, Size size)
 			   ((char *) pointer - STANDARDCHUNKHEADERSIZE))->context;
 
 	AssertArg(MemoryContextIsValid(context));
+	AssertNotInCriticalSection(context);
 
 	/* isReset must be false already */
 	Assert(!context->isReset);
 
 	ret = (*context->methods->realloc) (context, pointer, size);
+	if (ret == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory"),
+				 errdetail("Failed on request of size %zu.", size)));
+
 	VALGRIND_MEMPOOL_CHANGE(context, pointer, ret, size);
 
 	return ret;

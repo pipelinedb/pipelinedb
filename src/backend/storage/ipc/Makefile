@@ -1,6 +1,8 @@
 #
 # Makefile for storage/ipc
-#
+# 
+# Portions Copyright (c) 2013-2016, PipelineDB
+# 
 # src/backend/storage/ipc/Makefile
 #
 

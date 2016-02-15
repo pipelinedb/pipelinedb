@@ -3,7 +3,7 @@
  * indexcmds.c
  *	  POSTGRES define and remove index code.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -291,9 +291,9 @@ CheckIndexCompatible(Oid oldId,
  *		it will be filled later.
  * 'quiet': suppress the NOTICE chatter ordinarily provided for constraints.
  *
- * Returns the OID of the created index.
+ * Returns the object address of the created index.
  */
-Oid
+ObjectAddress
 DefineIndex(Oid relationId,
 			IndexStmt *stmt,
 			Oid indexRelationId,
@@ -323,6 +323,7 @@ DefineIndex(Oid relationId,
 	int			numberOfAttributes;
 	TransactionId limitXmin;
 	VirtualTransactionId *old_snapshots;
+	ObjectAddress address;
 	int			n_old_snapshots;
 	LockRelId	heaprelid;
 	LOCKTAG		heaplocktag;
@@ -489,6 +490,11 @@ DefineIndex(Oid relationId,
 	accessMethodId = HeapTupleGetOid(tuple);
 	accessMethodForm = (Form_pg_am) GETSTRUCT(tuple);
 
+	if (strcmp(accessMethodName, "hash") == 0 &&
+		RelationNeedsWAL(rel))
+		ereport(WARNING,
+				(errmsg("hash indexes are not WAL-logged and their use is discouraged")));
+
 	if (stmt->unique && !accessMethodForm->amcanunique)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -606,7 +612,16 @@ DefineIndex(Oid relationId,
 					 stmt->isconstraint, stmt->deferrable, stmt->initdeferred,
 					 allowSystemTableMods,
 					 skip_build || stmt->concurrent,
-					 stmt->concurrent, !check_rights);
+					 stmt->concurrent, !check_rights,
+					 stmt->if_not_exists);
+
+	ObjectAddressSet(address, RelationRelationId, indexRelationId);
+
+	if (!OidIsValid(indexRelationId))
+	{
+		heap_close(rel, NoLock);
+		return address;
+	}
 
 	/* Add any requested comment */
 	if (stmt->idxcomment != NULL)
@@ -617,7 +632,7 @@ DefineIndex(Oid relationId,
 	{
 		/* Close the heap and we're done, in the non-concurrent case */
 		heap_close(rel, NoLock);
-		return indexRelationId;
+		return address;
 	}
 
 	/* save lockrelid and locktag for below, then close rel */
@@ -862,7 +877,7 @@ DefineIndex(Oid relationId,
 	 */
 	UnlockRelationIdForSession(&heaprelid, ShareUpdateExclusiveLock);
 
-	return indexRelationId;
+	return address;
 }
 
 
@@ -1037,7 +1052,7 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 				 */
 
 				/*
-				 * A expression using mutable functions is probably wrong,
+				 * An expression using mutable functions is probably wrong,
 				 * since if you aren't going to get the same result for the
 				 * same data every time, it's not clear what the index entries
 				 * mean at all.
@@ -1667,18 +1682,32 @@ ChooseIndexColumnNames(List *indexElems)
  *		Recreate a specific index.
  */
 Oid
-ReindexIndex(RangeVar *indexRelation)
+ReindexIndex(RangeVar *indexRelation, int options)
 {
 	Oid			indOid;
 	Oid			heapOid = InvalidOid;
+	Relation	irel;
+	char		persistence;
 
-	/* lock level used here should match index lock reindex_index() */
+	/*
+	 * Find and lock index, and check permissions on table; use callback to
+	 * obtain lock on table first, to avoid deadlock hazard.  The lock level
+	 * used here must match the index lock obtained in reindex_index().
+	 */
 	indOid = RangeVarGetRelidExtended(indexRelation, AccessExclusiveLock,
 									  false, false,
 									  RangeVarCallbackForReindexIndex,
 									  (void *) &heapOid);
 
-	reindex_index(indOid, false);
+	/*
+	 * Obtain the current persistence of the existing index.  We already hold
+	 * lock on the index.
+	 */
+	irel = index_open(indOid, NoLock);
+	persistence = irel->rd_rel->relpersistence;
+	index_close(irel, NoLock);
+
+	reindex_index(indOid, false, persistence, options);
 
 	return indOid;
 }
@@ -1747,7 +1776,7 @@ RangeVarCallbackForReindexIndex(const RangeVar *relation,
  *		Recreate all indexes of a table (and of its toast table, if any)
  */
 Oid
-ReindexTable(RangeVar *relation)
+ReindexTable(RangeVar *relation, int options)
 {
 	Oid			heapOid;
 
@@ -1757,7 +1786,8 @@ ReindexTable(RangeVar *relation)
 
 	if (!reindex_relation(heapOid,
 						  REINDEX_REL_PROCESS_TOAST |
-						  REINDEX_REL_CHECK_CONSTRAINTS))
+						  REINDEX_REL_CHECK_CONSTRAINTS,
+						  options))
 		ereport(NOTICE,
 				(errmsg("table \"%s\" has no indexes",
 						relation->relname)));
@@ -1766,34 +1796,59 @@ ReindexTable(RangeVar *relation)
 }
 
 /*
- * ReindexDatabase
- *		Recreate indexes of a database.
+ * ReindexMultipleTables
+ *		Recreate indexes of tables selected by objectName/objectKind.
  *
  * To reduce the probability of deadlocks, each table is reindexed in a
  * separate transaction, so we can release the lock on it right away.
  * That means this must not be called within a user transaction block!
  */
-Oid
-ReindexDatabase(const char *databaseName, bool do_system, bool do_user)
+void
+ReindexMultipleTables(const char *objectName, ReindexObjectType objectKind,
+					  int options)
 {
+	Oid			objectOid;
 	Relation	relationRelation;
 	HeapScanDesc scan;
+	ScanKeyData scan_keys[1];
 	HeapTuple	tuple;
 	MemoryContext private_context;
 	MemoryContext old;
 	List	   *relids = NIL;
 	ListCell   *l;
+	int			num_keys;
 
-	AssertArg(databaseName);
+	AssertArg(objectName);
+	Assert(objectKind == REINDEX_OBJECT_SCHEMA ||
+		   objectKind == REINDEX_OBJECT_SYSTEM ||
+		   objectKind == REINDEX_OBJECT_DATABASE);
 
-	if (strcmp(databaseName, get_database_name(MyDatabaseId)) != 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("can only reindex the currently open database")));
+	/*
+	 * Get OID of object to reindex, being the database currently being used
+	 * by session for a database or for system catalogs, or the schema defined
+	 * by caller. At the same time do permission checks that need different
+	 * processing depending on the object type.
+	 */
+	if (objectKind == REINDEX_OBJECT_SCHEMA)
+	{
+		objectOid = get_namespace_oid(objectName, false);
 
-	if (!pg_database_ownercheck(MyDatabaseId, GetUserId()))
-		aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_DATABASE,
-					   databaseName);
+		if (!pg_namespace_ownercheck(objectOid, GetUserId()))
+			aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_NAMESPACE,
+						   objectName);
+	}
+	else
+	{
+		objectOid = MyDatabaseId;
+
+		if (strcmp(objectName, get_database_name(objectOid)) != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("can only reindex the currently open database")));
+		if (!pg_database_ownercheck(objectOid, GetUserId()))
+			aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_DATABASE,
+						   objectName);
+	}
 
 	/*
 	 * Create a memory context that will survive forced transaction commits we
@@ -1802,23 +1857,26 @@ ReindexDatabase(const char *databaseName, bool do_system, bool do_user)
 	 * abort cleanup logic.
 	 */
 	private_context = AllocSetContextCreate(PortalContext,
-											"ReindexDatabase",
+											"ReindexMultipleTables",
 											ALLOCSET_DEFAULT_MINSIZE,
 											ALLOCSET_DEFAULT_INITSIZE,
 											ALLOCSET_DEFAULT_MAXSIZE);
 
 	/*
-	 * We always want to reindex pg_class first.  This ensures that if there
-	 * is any corruption in pg_class' indexes, they will be fixed before we
-	 * process any other tables.  This is critical because reindexing itself
-	 * will try to update pg_class.
+	 * Define the search keys to find the objects to reindex. For a schema, we
+	 * select target relations using relnamespace, something not necessary for
+	 * a database-wide operation.
 	 */
-	if (do_system)
+	if (objectKind == REINDEX_OBJECT_SCHEMA)
 	{
-		old = MemoryContextSwitchTo(private_context);
-		relids = lappend_oid(relids, RelationRelationId);
-		MemoryContextSwitchTo(old);
+		num_keys = 1;
+		ScanKeyInit(&scan_keys[0],
+					Anum_pg_class_relnamespace,
+					BTEqualStrategyNumber, F_OIDEQ,
+					ObjectIdGetDatum(objectOid));
 	}
+	else
+		num_keys = 0;
 
 	/*
 	 * Scan pg_class to build a list of the relations we need to reindex.
@@ -1827,12 +1885,16 @@ ReindexDatabase(const char *databaseName, bool do_system, bool do_user)
 	 * rels will be processed indirectly by reindex_relation).
 	 */
 	relationRelation = heap_open(RelationRelationId, AccessShareLock);
-	scan = heap_beginscan_catalog(relationRelation, 0, NULL);
+	scan = heap_beginscan_catalog(relationRelation, num_keys, scan_keys);
 	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
 		Form_pg_class classtuple = (Form_pg_class) GETSTRUCT(tuple);
 		Oid			relid = HeapTupleGetOid(tuple);
 
+		/*
+		 * Only regular tables and matviews can have indexes, so ignore any
+		 * other kind of relation.
+		 */
 		if (classtuple->relkind != RELKIND_RELATION &&
 			classtuple->relkind != RELKIND_MATVIEW)
 			continue;
@@ -1843,22 +1905,25 @@ ReindexDatabase(const char *databaseName, bool do_system, bool do_user)
 			continue;
 
 		/* Check user/system classification, and optionally skip */
-		if (IsSystemClass(relid, classtuple))
-		{
-			if (!do_system)
-				continue;
-		}
-		else
-		{
-			if (!do_user)
-				continue;
-		}
+		if (objectKind == REINDEX_OBJECT_SYSTEM &&
+			!IsSystemClass(relid, classtuple))
+			continue;
 
-		if (HeapTupleGetOid(tuple) == RelationRelationId)
-			continue;			/* got it already */
-
+		/* Save the list of relation OIDs in private context */
 		old = MemoryContextSwitchTo(private_context);
-		relids = lappend_oid(relids, relid);
+
+		/*
+		 * We always want to reindex pg_class first if it's selected to be
+		 * reindexed.  This ensures that if there is any corruption in
+		 * pg_class' indexes, they will be fixed before we process any other
+		 * tables.  This is critical because reindexing itself will try to
+		 * update pg_class.
+		 */
+		if (relid == RelationRelationId)
+			relids = lcons_oid(relid, relids);
+		else
+			relids = lappend_oid(relids, relid);
+
 		MemoryContextSwitchTo(old);
 	}
 	heap_endscan(scan);
@@ -1876,17 +1941,18 @@ ReindexDatabase(const char *databaseName, bool do_system, bool do_user)
 		PushActiveSnapshot(GetTransactionSnapshot());
 		if (reindex_relation(relid,
 							 REINDEX_REL_PROCESS_TOAST |
-							 REINDEX_REL_CHECK_CONSTRAINTS))
-			ereport(NOTICE,
-					(errmsg("table \"%s.%s\" was reindexed",
-							get_namespace_name(get_rel_namespace(relid)),
-							get_rel_name(relid))));
+							 REINDEX_REL_CHECK_CONSTRAINTS,
+							 options))
+
+			if (options & REINDEXOPT_VERBOSE)
+				ereport(INFO,
+						(errmsg("table \"%s.%s\" was reindexed",
+								get_namespace_name(get_rel_namespace(relid)),
+								get_rel_name(relid))));
 		PopActiveSnapshot();
 		CommitTransactionCommand();
 	}
 	StartTransactionCommand();
 
 	MemoryContextDelete(private_context);
-
-	return MyDatabaseId;
 }

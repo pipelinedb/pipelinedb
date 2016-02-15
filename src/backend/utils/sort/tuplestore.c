@@ -43,7 +43,7 @@
  * before switching to the other state or activating a different read pointer.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -53,6 +53,8 @@
  */
 
 #include "postgres.h"
+
+#include <limits.h>
 
 #include "access/htup_details.h"
 #include "commands/tablespace.h"
@@ -265,7 +267,14 @@ tuplestore_begin_common(int eflags, bool interXact, int maxKBytes)
 
 	state->memtupdeleted = 0;
 	state->memtupcount = 0;
-	state->memtupsize = 1024;	/* initial guess */
+
+	/*
+	 * Initial size of array must be more than ALLOCSET_SEPARATE_THRESHOLD;
+	 * see comments in grow_memtuples().
+	 */
+	state->memtupsize = Max(16384 / sizeof(void *),
+							ALLOCSET_SEPARATE_THRESHOLD / sizeof(void *) + 1);
+
 	state->growmemtuples = true;
 	state->memtuples = (void **) palloc(state->memtupsize * sizeof(void *));
 
@@ -639,10 +648,10 @@ grow_memtuples(Tuplestorestate *state)
 	 * never generate a dangerous request, but to be safe, check explicitly
 	 * that the array growth fits within availMem.  (We could still cause
 	 * LACKMEM if the memory chunk overhead associated with the memtuples
-	 * array were to increase.  That shouldn't happen with any sane value of
-	 * allowedMem, because at any array size large enough to risk LACKMEM,
-	 * palloc would be treating both old and new arrays as separate chunks.
-	 * But we'll check LACKMEM explicitly below just in case.)
+	 * array were to increase.  That shouldn't happen because we chose the
+	 * initial array size large enough to ensure that palloc will be treating
+	 * both old and new arrays as separate chunks.  But we'll check LACKMEM
+	 * explicitly below just in case.)
 	 */
 	if (state->availMem < (int64) ((newmemtupsize - memtupsize) * sizeof(void *)))
 		goto noalloc;
@@ -655,7 +664,7 @@ grow_memtuples(Tuplestorestate *state)
 					  state->memtupsize * sizeof(void *));
 	USEMEM(state, GetMemoryChunkSpace(state->memtuples));
 	if (LACKMEM(state))
-		elog(ERROR, "unexpected out-of-memory situation during sort");
+		elog(ERROR, "unexpected out-of-memory situation in tuplestore");
 	return true;
 
 noalloc:

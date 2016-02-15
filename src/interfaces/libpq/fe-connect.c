@@ -3,7 +3,7 @@
  * fe-connect.c
  *	  functions related to setting up a connection to the backend
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -391,9 +391,13 @@ pgthreadlock_t pg_g_threadlock = default_threadlock;
  * Close any physical connection to the server, and reset associated
  * state inside the connection object.  We don't release state that
  * would be needed to reconnect, though.
+ *
+ * We can always flush the output buffer, since there's no longer any hope
+ * of sending that data.  However, unprocessed input data might still be
+ * valuable, so the caller must tell us whether to flush that or not.
  */
 void
-pqDropConnection(PGconn *conn)
+pqDropConnection(PGconn *conn, bool flushInput)
 {
 	/* Drop any SSL state */
 	pqsecure_close(conn);
@@ -401,8 +405,10 @@ pqDropConnection(PGconn *conn)
 	if (conn->sock != PGINVALID_SOCKET)
 		closesocket(conn->sock);
 	conn->sock = PGINVALID_SOCKET;
-	/* Discard any unread/unsent data */
-	conn->inStart = conn->inCursor = conn->inEnd = 0;
+	/* Optionally discard any unread data */
+	if (flushInput)
+		conn->inStart = conn->inCursor = conn->inEnd = 0;
+	/* Always discard any unsent data */
 	conn->outCount = 0;
 }
 
@@ -1510,7 +1516,7 @@ connectDBStart(PGconn *conn)
 		return 1;
 
 connect_errReturn:
-	pqDropConnection(conn);
+	pqDropConnection(conn, true);
 	conn->status = CONNECTION_BAD;
 	return 0;
 }
@@ -1732,7 +1738,7 @@ keep_going:						/* We will come back to here until there is
 					{
 						if (!connectNoDelay(conn))
 						{
-							pqDropConnection(conn);
+							pqDropConnection(conn, true);
 							conn->addr_cur = addr_cur->ai_next;
 							continue;
 						}
@@ -1742,7 +1748,7 @@ keep_going:						/* We will come back to here until there is
 						appendPQExpBuffer(&conn->errorMessage,
 										  libpq_gettext("could not set socket to nonblocking mode: %s\n"),
 							SOCK_STRERROR(SOCK_ERRNO, sebuf, sizeof(sebuf)));
-						pqDropConnection(conn);
+						pqDropConnection(conn, true);
 						conn->addr_cur = addr_cur->ai_next;
 						continue;
 					}
@@ -1753,7 +1759,7 @@ keep_going:						/* We will come back to here until there is
 						appendPQExpBuffer(&conn->errorMessage,
 										  libpq_gettext("could not set socket to close-on-exec mode: %s\n"),
 							SOCK_STRERROR(SOCK_ERRNO, sebuf, sizeof(sebuf)));
-						pqDropConnection(conn);
+						pqDropConnection(conn, true);
 						conn->addr_cur = addr_cur->ai_next;
 						continue;
 					}
@@ -1800,7 +1806,7 @@ keep_going:						/* We will come back to here until there is
 
 						if (err)
 						{
-							pqDropConnection(conn);
+							pqDropConnection(conn, true);
 							conn->addr_cur = addr_cur->ai_next;
 							continue;
 						}
@@ -1887,7 +1893,7 @@ keep_going:						/* We will come back to here until there is
 					 * failure and keep going if there are more addresses.
 					 */
 					connectFailureMessage(conn, SOCK_ERRNO);
-					pqDropConnection(conn);
+					pqDropConnection(conn, true);
 
 					/*
 					 * Try the next address, if any.
@@ -1932,7 +1938,7 @@ keep_going:						/* We will come back to here until there is
 					 * error message.
 					 */
 					connectFailureMessage(conn, optval);
-					pqDropConnection(conn);
+					pqDropConnection(conn, true);
 
 					/*
 					 * If more addresses remain, keep trying, just as in the
@@ -2011,7 +2017,7 @@ keep_going:						/* We will come back to here until there is
 							appendPQExpBuffer(&conn->errorMessage,
 											  libpq_gettext("could not look up local user ID %d: %s\n"),
 											  (int) uid,
-											  pqStrerror(passerr, sebuf, sizeof(sebuf)));
+								  pqStrerror(passerr, sebuf, sizeof(sebuf)));
 						else
 							appendPQExpBuffer(&conn->errorMessage,
 											  libpq_gettext("local user with ID %d does not exist\n"),
@@ -2041,7 +2047,7 @@ keep_going:						/* We will come back to here until there is
 					conn->allow_ssl_try = false;
 				}
 				if (conn->allow_ssl_try && !conn->wait_ssl_try &&
-					conn->ssl == NULL)
+					!conn->ssl_in_use)
 				{
 					ProtocolVersion pv;
 
@@ -2120,7 +2126,7 @@ keep_going:						/* We will come back to here until there is
 				 * On first time through, get the postmaster's response to our
 				 * SSL negotiation packet.
 				 */
-				if (conn->ssl == NULL)
+				if (!conn->ssl_in_use)
 				{
 					/*
 					 * We use pqReadData here since it has the logic to
@@ -2220,7 +2226,7 @@ keep_going:						/* We will come back to here until there is
 						/* only retry once */
 						conn->allow_ssl_try = false;
 						/* Must drop the old connection */
-						pqDropConnection(conn);
+						pqDropConnection(conn, true);
 						conn->status = CONNECTION_NEEDED;
 						goto keep_going;
 					}
@@ -2331,7 +2337,7 @@ keep_going:						/* We will come back to here until there is
 					{
 						conn->pversion = PG_PROTOCOL(2, 0);
 						/* Must drop the old connection */
-						pqDropConnection(conn);
+						pqDropConnection(conn, true);
 						conn->status = CONNECTION_NEEDED;
 						goto keep_going;
 					}
@@ -2390,14 +2396,14 @@ keep_going:						/* We will come back to here until there is
 					 * connection already, then retry with an SSL connection
 					 */
 					if (conn->sslmode[0] == 'a' /* "allow" */
-						&& conn->ssl == NULL
+						&& !conn->ssl_in_use
 						&& conn->allow_ssl_try
 						&& conn->wait_ssl_try)
 					{
 						/* only retry once */
 						conn->wait_ssl_try = false;
 						/* Must drop the old connection */
-						pqDropConnection(conn);
+						pqDropConnection(conn, true);
 						conn->status = CONNECTION_NEEDED;
 						goto keep_going;
 					}
@@ -2413,7 +2419,7 @@ keep_going:						/* We will come back to here until there is
 						/* only retry once */
 						conn->allow_ssl_try = false;
 						/* Must drop the old connection */
-						pqDropConnection(conn);
+						pqDropConnection(conn, true);
 						conn->status = CONNECTION_NEEDED;
 						goto keep_going;
 					}
@@ -2574,7 +2580,7 @@ keep_going:						/* We will come back to here until there is
 							PQclear(res);
 							conn->send_appname = false;
 							/* Must drop the old connection */
-							pqDropConnection(conn);
+							pqDropConnection(conn, true);
 							conn->status = CONNECTION_NEEDED;
 							goto keep_going;
 						}
@@ -2789,6 +2795,7 @@ makeEmptyPGconn(void)
 #ifdef USE_SSL
 	conn->allow_ssl_try = true;
 	conn->wait_ssl_try = false;
+	conn->ssl_in_use = false;
 #endif
 
 	/*
@@ -2969,7 +2976,7 @@ closePGconn(PGconn *conn)
 	/*
 	 * Close the connection, reset all transient state, flush I/O buffers.
 	 */
-	pqDropConnection(conn);
+	pqDropConnection(conn, true);
 	conn->status = CONNECTION_BAD;		/* Well, not really _bad_ - just
 										 * absent */
 	conn->asyncStatus = PGASYNC_IDLE;
@@ -3844,7 +3851,7 @@ ldapServiceLookup(const char *purl, PQconninfoOption *options,
 						if (!options[i].val)
 						{
 							printfPQExpBuffer(errorMessage,
-											libpq_gettext("out of memory\n"));
+										   libpq_gettext("out of memory\n"));
 							free(result);
 							return 3;
 						}
@@ -4060,6 +4067,16 @@ parseServiceFile(const char *serviceFile,
 				}
 				*val++ = '\0';
 
+				if (strcmp(key, "service") == 0)
+				{
+					printfPQExpBuffer(errorMessage,
+									  libpq_gettext("nested service specifications not supported in service file \"%s\", line %d\n"),
+									  serviceFile,
+									  linenr);
+					fclose(f);
+					return 3;
+				}
+
 				/*
 				 * Set the parameter --- but don't override any previous
 				 * explicit setting.
@@ -4074,7 +4091,7 @@ parseServiceFile(const char *serviceFile,
 						if (!options[i].val)
 						{
 							printfPQExpBuffer(errorMessage,
-											libpq_gettext("out of memory\n"));
+										   libpq_gettext("out of memory\n"));
 							fclose(f);
 							return 3;
 						}
@@ -4196,6 +4213,8 @@ parse_connection_string(const char *connstr, PQExpBuffer errorMessage,
  * designators.
  *
  * Returns the URI prefix length, 0 if the string doesn't contain a URI prefix.
+ *
+ * XXX this is duplicated in psql/common.c.
  */
 static int
 uri_prefix_length(const char *connstr)
@@ -4217,6 +4236,8 @@ uri_prefix_length(const char *connstr)
  *
  * Must be consistent with parse_connection_string: anything for which this
  * returns true should at least look like it's parseable by that routine.
+ *
+ * XXX this is duplicated in psql/common.c
  */
 static bool
 recognized_connection_string(const char *connstr)
@@ -4501,7 +4522,7 @@ conninfo_array_parse(const char *const * keywords, const char *const * values,
 								if (!options[k].val)
 								{
 									printfPQExpBuffer(errorMessage,
-													  libpq_gettext("out of memory\n"));
+										   libpq_gettext("out of memory\n"));
 									PQconninfoFree(options);
 									PQconninfoFree(dbname_options);
 									return NULL;
@@ -4511,6 +4532,7 @@ conninfo_array_parse(const char *const * keywords, const char *const * values,
 						}
 					}
 				}
+
 				/*
 				 * Forget the parsed connection string, so that any subsequent
 				 * dbname parameters will not be expanded.
@@ -4933,36 +4955,30 @@ conninfo_uri_parse_params(char *params,
 				{
 					printfPQExpBuffer(errorMessage,
 									  libpq_gettext("extra key/value separator \"=\" in URI query parameter: \"%s\"\n"),
-									  params);
+									  keyword);
 					return false;
 				}
 				/* Cut off keyword, advance to value */
-				*p = '\0';
-				value = ++p;
+				*p++ = '\0';
+				value = p;
 			}
 			else if (*p == '&' || *p == '\0')
 			{
-				char		prevchar;
-
-				/* Cut off value, remember old value */
-				prevchar = *p;
-				*p = '\0';
-
+				/*
+				 * If not at the end, cut off value and advance; leave p
+				 * pointing to start of the next parameter, if any.
+				 */
+				if (*p != '\0')
+					*p++ = '\0';
 				/* Was there '=' at all? */
 				if (value == NULL)
 				{
 					printfPQExpBuffer(errorMessage,
 									  libpq_gettext("missing key/value separator \"=\" in URI query parameter: \"%s\"\n"),
-									  params);
+									  keyword);
 					return false;
 				}
-
-				/*
-				 * If not at the end, advance; now pointing to start of the
-				 * next parameter, if any.
-				 */
-				if (prevchar != '\0')
-					++p;
+				/* Got keyword and value, go process them. */
 				break;
 			}
 			else
@@ -5006,24 +5022,12 @@ conninfo_uri_parse_params(char *params,
 		if (!conninfo_storeval(connOptions, keyword, value,
 							   errorMessage, true, false))
 		{
-			/*
-			 * Check if there was a hard error when decoding or storing the
-			 * option.
-			 */
-			if (errorMessage->len != 0)
-			{
-				if (malloced)
-				{
-					free(keyword);
-					free(value);
-				}
-				return false;
-			}
-
-			printfPQExpBuffer(errorMessage,
-							  libpq_gettext(
-									"invalid URI query parameter: \"%s\"\n"),
-							  keyword);
+			/* Insert generic message if conninfo_storeval didn't give one. */
+			if (errorMessage->len == 0)
+				printfPQExpBuffer(errorMessage,
+					  libpq_gettext("invalid URI query parameter: \"%s\"\n"),
+								  keyword);
+			/* And fail. */
 			if (malloced)
 			{
 				free(keyword);
@@ -5031,13 +5035,14 @@ conninfo_uri_parse_params(char *params,
 			}
 			return false;
 		}
+
 		if (malloced)
 		{
 			free(keyword);
 			free(value);
 		}
 
-		/* Proceed to next key=value pair */
+		/* Proceed to next key=value pair, if any */
 		params = p;
 	}
 

@@ -6,7 +6,7 @@
  * See also lsyscache.h, which provides convenience routines for
  * common cache-lookup operations.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -19,7 +19,7 @@
 
 #include "access/attnum.h"
 #include "access/htup.h"
-/* we purposedly do not include utils/catcache.h here */
+/* we intentionally do not include utils/catcache.h here */
 
 /*
  *		SysCache identifiers.
@@ -88,9 +88,13 @@ enum SysCacheIdentifier
 	RANGETYPE,
 	RELNAMENSP,
 	RELOID,
+	REPLORIGIDENT,
+	REPLORIGNAME,
 	RULERELNAME,
 	STATRELATTINH,
 	TABLESPACEOID,
+	TRFOID,
+	TRFTYPELANG,
 	TSCONFIGMAP,
 	TSCONFIGNAMENSP,
 	TSCONFIGOID,

@@ -12,6 +12,7 @@
 #ifndef PIPELINE_QUERY_FN_H
 #define PIPELINE_QUERY_FN_H
 
+#include "access/htup.h"
 #include "datatype/timestamp.h"
 #include "nodes/bitmapset.h"
 #include "nodes/parsenodes.h"

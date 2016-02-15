@@ -294,7 +294,7 @@
       <listitem>
        <para>
         The frontend must now send a PasswordMessage containing the
-        password (with username) encrypted via MD5, then encrypted
+        password (with user name) encrypted via MD5, then encrypted
         again using the 4-byte random salt specified in the
         AuthenticationMD5Password message.  If this is the correct
         password, the server responds with an AuthenticationOk,
@@ -1306,6 +1306,8 @@ To initiate streaming replication, the frontend sends the
 of <literal>true</> tells the backend to go into walsender mode, wherein a
 small set of replication commands can be issued instead of SQL statements. Only
 the simple query protocol can be used in walsender mode.
+Replication commands are logged in the server log when
+<xref linkend="guc-log-replication-commands"> is enabled.
 Passing <literal>database</> as the value instructs walsender to connect to
 the database specified in the <literal>dbname</> parameter, which will allow
 the connection to be used for logical replication from that database.
@@ -1880,7 +1882,7 @@ The commands accepted in walsender mode are:
   </varlistentry>
 
   <varlistentry>
-    <term>BASE_BACKUP [<literal>LABEL</literal> <replaceable>'label'</replaceable>] [<literal>PROGRESS</literal>] [<literal>FAST</literal>] [<literal>WAL</literal>] [<literal>NOWAIT</literal>] [<literal>MAX_RATE</literal> <replaceable>rate</replaceable>]
+    <term>BASE_BACKUP [<literal>LABEL</literal> <replaceable>'label'</replaceable>] [<literal>PROGRESS</literal>] [<literal>FAST</literal>] [<literal>WAL</literal>] [<literal>NOWAIT</literal>] [<literal>MAX_RATE</literal> <replaceable>rate</replaceable>] [<literal>TABLESPACE_MAP</literal>]
      <indexterm><primary>BASE_BACKUP</primary></indexterm>
     </term>
     <listitem>
@@ -1963,6 +1965,19 @@ The commands accepted in walsender mode are:
           or it must fall within the range from 32 kB through 1 GB (inclusive).
           If zero is passed or the option is not specified, no restriction is
           imposed on the transfer.
+         </para>
+        </listitem>
+       </varlistentry>
+
+       <varlistentry>
+        <term><literal>TABLESPACE_MAP</literal></term>
+        <listitem>
+         <para>
+          Include information about symbolic links present in the directory
+          <filename>pg_tblspc</filename> in a file named
+          <filename>tablespace_map</filename>. The tablespace map file includes
+          each symbolic link name as it exists in the directory
+          <filename>pg_tblspc/</> and the full path of that symbolic link.
          </para>
         </listitem>
        </varlistentry>
@@ -4724,7 +4739,10 @@ StartupMessage (F)
 <para>
                         Command-line arguments for the backend.  (This is
                         deprecated in favor of setting individual run-time
-                        parameters.)
+                        parameters.)  Spaces within this string are
+                        considered to separate arguments, unless escaped with
+                        a backslash (<literal>\</>); write <literal>\\</> to
+                        represent a literal backslash.
 </para>
 </listitem>
 </varlistentry>
@@ -4733,7 +4751,7 @@ StartupMessage (F)
                 In addition to the above, any run-time parameter that can be
                 set at backend start time might be listed.  Such settings
                 will be applied during backend start (after parsing the
-                command-line options if any).  The values will act as
+                command-line arguments if any).  The values will act as
                 session defaults.
 </para>
 </listitem>

@@ -3,10 +3,9 @@
  * timestamp.c
  *	  Functions for the built-in SQL types "timestamp" and "interval".
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
- *
  *
  * IDENTIFICATION
  *	  src/backend/utils/adt/timestamp.c
@@ -28,6 +27,7 @@
 #include "funcapi.h"
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/scansup.h"
 #include "utils/array.h"
@@ -43,14 +43,6 @@
 #endif
 
 #define SAMESIGN(a,b)	(((a) < 0) == ((b) < 0))
-
-#ifndef INT64_MAX
-#define INT64_MAX	INT64CONST(0x7FFFFFFFFFFFFFFF)
-#endif
-
-#ifndef INT64_MIN
-#define INT64_MIN	(-INT64CONST(0x7FFFFFFFFFFFFFFF) - 1)
-#endif
 
 #define round_down(value, base) ((value) - ((value) % (base)))
 
@@ -78,7 +70,6 @@ typedef struct
 
 
 static TimeOffset time2t(const int hour, const int min, const int sec, const fsec_t fsec);
-static void EncodeSpecialTimestamp(Timestamp dt, char *str);
 static Timestamp dt2local(Timestamp dt, int timezone);
 static void AdjustTimestampForTypmod(Timestamp *time, int32 typmod);
 static void AdjustIntervalForTypmod(Interval *interval, int32 typmod);
@@ -1510,7 +1501,7 @@ make_interval(PG_FUNCTION_ARGS)
 /* EncodeSpecialTimestamp()
  * Convert reserved timestamp data type to string.
  */
-static void
+void
 EncodeSpecialTimestamp(Timestamp dt, char *str)
 {
 	if (TIMESTAMP_IS_NOBEGIN(dt))
@@ -1580,7 +1571,7 @@ GetCurrentTimestamp(void)
 /*
  * GetCurrentIntegerTimestamp -- get the current operating system time as int64
  *
- * Result is the number of milliseconds since the Postgres epoch. If compiled
+ * Result is the number of microseconds since the Postgres epoch. If compiled
  * with --enable-integer-datetimes, this is identical to GetCurrentTimestamp(),
  * and is implemented as a macro.
  */
@@ -1973,7 +1964,7 @@ tm2timestamp(struct pg_tm * tm, fsec_t fsec, int *tzp, Timestamp *result)
 
 
 /* interval2tm()
- * Convert a interval data type to a tm structure.
+ * Convert an interval data type to a tm structure.
  */
 int
 interval2tm(Interval span, struct pg_tm * tm, fsec_t *fsec)
@@ -2917,7 +2908,7 @@ interval_justify_days(PG_FUNCTION_ARGS)
 }
 
 /* timestamp_pl_interval()
- * Add a interval to a timestamp data type.
+ * Add an interval to a timestamp data type.
  * Note that interval has provisions for qualitative year/month and day
  *	units, so try to do the right thing with them.
  * To add a month, increment the month, and use the same day of month.
@@ -3017,7 +3008,7 @@ timestamp_mi_interval(PG_FUNCTION_ARGS)
 
 
 /* timestamptz_pl_interval()
- * Add a interval to a timestamp with time zone data type.
+ * Add an interval to a timestamp with time zone data type.
  * Note that interval has provisions for qualitative year/month
  *	units, so try to do the right thing with them.
  * To add a month, increment the month, and use the same day of month.
@@ -3319,7 +3310,7 @@ interval_mul(PG_FUNCTION_ARGS)
 	result->day += (int32) month_remainder_days;
 #ifdef HAVE_INT64_TIMESTAMP
 	result_double = rint(span->time * factor + sec_remainder * USECS_PER_SEC);
-	if (result_double > INT64_MAX || result_double < INT64_MIN)
+	if (result_double > PG_INT64_MAX || result_double < PG_INT64_MIN)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
 				 errmsg("interval out of range")));
@@ -3433,61 +3424,6 @@ interval_accum(PG_FUNCTION_ARGS)
 	transdatums[1] = IntervalPGetDatum(&N);
 
 	result = construct_array(transdatums, 2,
-							 INTERVALOID, sizeof(Interval), false, 'd');
-
-	PG_RETURN_ARRAYTYPE_P(result);
-}
-
-Datum
-interval_combine(PG_FUNCTION_ARGS)
-{
-	ArrayType  *collectarray = PG_GETARG_ARRAYTYPE_P(0);
-	ArrayType  *transarray = PG_GETARG_ARRAYTYPE_P(1);
-	Datum	   *collectdatums;
-	Datum	   *transdatums;
-	int			ndatums;
-	Interval	sumX1,
-				N1,
-				sumX2,
-				N2;
-	Interval   *newsum;
-	ArrayType  *result;
-
-	deconstruct_array(collectarray,
-					  INTERVALOID, sizeof(Interval), false, 'd',
-					  &collectdatums, NULL, &ndatums);
-	if (ndatums != 2)
-		elog(ERROR, "expected 2-element interval array");
-
-	deconstruct_array(transarray,
-					  INTERVALOID, sizeof(Interval), false, 'd',
-					  &transdatums, NULL, &ndatums);
-	if (ndatums != 2)
-		elog(ERROR, "expected 2-element interval array");
-
-	/*
-	 * XXX memcpy, instead of just extracting a pointer, to work around buggy
-	 * array code: it won't ensure proper alignment of Interval objects on
-	 * machines where double requires 8-byte alignment. That should be fixed,
-	 * but in the meantime...
-	 *
-	 * Note: must use DatumGetPointer here, not DatumGetIntervalP, else some
-	 * compilers optimize into double-aligned load/store anyway.
-	 */
-	memcpy((void *) &sumX1, DatumGetPointer(collectdatums[0]), sizeof(Interval));
-	memcpy((void *) &N1, DatumGetPointer(collectdatums[1]), sizeof(Interval));
-	memcpy((void *) &sumX2, DatumGetPointer(transdatums[0]), sizeof(Interval));
-	memcpy((void *) &N2, DatumGetPointer(transdatums[1]), sizeof(Interval));
-
-	newsum = DatumGetIntervalP(DirectFunctionCall2(interval_pl,
-												   IntervalPGetDatum(&sumX1),
-												   IntervalPGetDatum(&sumX2)));
-	N1.time += N2.time;
-
-	collectdatums[0] = IntervalPGetDatum(newsum);
-	collectdatums[1] = IntervalPGetDatum(&N1);
-
-	result = construct_array(collectdatums, 2,
 							 INTERVALOID, sizeof(Interval), false, 'd');
 
 	PG_RETURN_ARRAYTYPE_P(result);
@@ -4102,97 +4038,6 @@ timestamptz_trunc(PG_FUNCTION_ARGS)
 	PG_RETURN_TIMESTAMPTZ(result);
 }
 
-static Datum
-timestamptz_truncate_by(const char *units, PG_FUNCTION_ARGS)
-{
-	Datum arg = PG_GETARG_TIMESTAMPTZ(0);
-	Datum result = DirectFunctionCall2(timestamptz_trunc,
-			(Datum) CStringGetTextDatum(units), arg);
-
-	PG_RETURN_TIMESTAMPTZ(result);
-}
-
-/*
- * Truncate to year
- */
-Datum
-timestamptz_year(PG_FUNCTION_ARGS)
-{
-	return timestamptz_truncate_by("year", fcinfo);
-}
-
-/*
- * Truncate to month
- */
-Datum
-timestamptz_month(PG_FUNCTION_ARGS)
-{
-	return timestamptz_truncate_by("month", fcinfo);
-}
-
-/*
- * Truncate to day
- */
-Datum
-timestamptz_day(PG_FUNCTION_ARGS)
-{
-	return timestamptz_truncate_by("day", fcinfo);
-}
-
-/*
- * Truncate to hour
- */
-Datum
-timestamptz_hour(PG_FUNCTION_ARGS)
-{
-	return timestamptz_truncate_by("hour", fcinfo);
-}
-
-/*
- * Truncate to minute
- */
-Datum
-timestamptz_minute(PG_FUNCTION_ARGS)
-{
-	return timestamptz_truncate_by("minute", fcinfo);
-}
-
-/*
- * Truncate to second
- */
-Datum
-timestamptz_second(PG_FUNCTION_ARGS)
-{
-	return timestamptz_truncate_by("second", fcinfo);
-}
-
-Datum
-timestamptz_round(PG_FUNCTION_ARGS)
-{
-	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
-	TimestampTz interval_ts;
-
-#ifndef HAVE_INT64_TIMESTAMP
-	elog(ERROR, "date_round is only available when PipelineDB is compiled with --enable-integer-datetimes");
-#endif
-
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
-
-	if (TIMESTAMP_NOT_FINITE(timestamp) || PG_ARGISNULL(1))
-		PG_RETURN_TIMESTAMPTZ(timestamp);
-
-	/*
-	 * Add the interval to a 0-valued timestamp (TIMESTAMP '2000-01-01 00:00:00')
-	 * to an int64 value of just the interval.
-	 */
-	interval_ts = DatumGetTimestamp(
-			DirectFunctionCall2(timestamp_pl_interval, TimestampGetDatum(0), PG_GETARG_DATUM(1)));
-	timestamp = round_down(timestamp, interval_ts);
-
-	PG_RETURN_TIMESTAMPTZ(timestamp);
-}
-
 /* interval_trunc()
  * Extract specified field from interval.
  */
@@ -4614,6 +4459,26 @@ timestamp_part(PG_FUNCTION_ARGS)
 				result = date2isoyear(tm->tm_year, tm->tm_mon, tm->tm_mday);
 				break;
 
+			case DTK_DOW:
+			case DTK_ISODOW:
+				if (timestamp2tm(timestamp, NULL, tm, &fsec, NULL, NULL) != 0)
+					ereport(ERROR,
+							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+							 errmsg("timestamp out of range")));
+				result = j2day(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday));
+				if (val == DTK_ISODOW && result == 0)
+					result = 7;
+				break;
+
+			case DTK_DOY:
+				if (timestamp2tm(timestamp, NULL, tm, &fsec, NULL, NULL) != 0)
+					ereport(ERROR,
+							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+							 errmsg("timestamp out of range")));
+				result = (date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)
+						  - date2j(tm->tm_year, 1, 1) + 1);
+				break;
+
 			case DTK_TZ:
 			case DTK_TZ_MINUTE:
 			case DTK_TZ_HOUR:
@@ -4635,26 +4500,6 @@ timestamp_part(PG_FUNCTION_ARGS)
 #else
 				result = timestamp - SetEpochTimestamp();
 #endif
-				break;
-
-			case DTK_DOW:
-			case DTK_ISODOW:
-				if (timestamp2tm(timestamp, NULL, tm, &fsec, NULL, NULL) != 0)
-					ereport(ERROR,
-							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-							 errmsg("timestamp out of range")));
-				result = j2day(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday));
-				if (val == DTK_ISODOW && result == 0)
-					result = 7;
-				break;
-
-			case DTK_DOY:
-				if (timestamp2tm(timestamp, NULL, tm, &fsec, NULL, NULL) != 0)
-					ereport(ERROR,
-							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-							 errmsg("timestamp out of range")));
-				result = (date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)
-						  - date2j(tm->tm_year, 1, 1) + 1);
 				break;
 
 			default:
@@ -4828,6 +4673,26 @@ timestamptz_part(PG_FUNCTION_ARGS)
 				result = date2isoyear(tm->tm_year, tm->tm_mon, tm->tm_mday);
 				break;
 
+			case DTK_DOW:
+			case DTK_ISODOW:
+				if (timestamp2tm(timestamp, &tz, tm, &fsec, NULL, NULL) != 0)
+					ereport(ERROR,
+							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+							 errmsg("timestamp out of range")));
+				result = j2day(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday));
+				if (val == DTK_ISODOW && result == 0)
+					result = 7;
+				break;
+
+			case DTK_DOY:
+				if (timestamp2tm(timestamp, &tz, tm, &fsec, NULL, NULL) != 0)
+					ereport(ERROR,
+							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+							 errmsg("timestamp out of range")));
+				result = (date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)
+						  - date2j(tm->tm_year, 1, 1) + 1);
+				break;
+
 			default:
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -4847,26 +4712,6 @@ timestamptz_part(PG_FUNCTION_ARGS)
 #else
 				result = timestamp - SetEpochTimestamp();
 #endif
-				break;
-
-			case DTK_DOW:
-			case DTK_ISODOW:
-				if (timestamp2tm(timestamp, &tz, tm, &fsec, NULL, NULL) != 0)
-					ereport(ERROR,
-							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-							 errmsg("timestamp out of range")));
-				result = j2day(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday));
-				if (val == DTK_ISODOW && result == 0)
-					result = 7;
-				break;
-
-			case DTK_DOY:
-				if (timestamp2tm(timestamp, &tz, tm, &fsec, NULL, NULL) != 0)
-					ereport(ERROR,
-							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-							 errmsg("timestamp out of range")));
-				result = (date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)
-						  - date2j(tm->tm_year, 1, 1) + 1);
 				break;
 
 			default:
@@ -5023,6 +4868,87 @@ interval_part(PG_FUNCTION_ARGS)
 }
 
 
+/* timestamp_zone_transform()
+ * If the zone argument of a timestamp_zone() or timestamptz_zone() call is a
+ * plan-time constant denoting a zone equivalent to UTC, the call will always
+ * return its second argument unchanged.  Simplify the expression tree
+ * accordingly.  Civil time zones almost never qualify, because jurisdictions
+ * that follow UTC today have not done so continuously.
+ */
+Datum
+timestamp_zone_transform(PG_FUNCTION_ARGS)
+{
+	Node	   *func_node = (Node *) PG_GETARG_POINTER(0);
+	FuncExpr   *expr = (FuncExpr *) func_node;
+	Node	   *ret = NULL;
+	Node	   *zone_node;
+
+	Assert(IsA(expr, FuncExpr));
+	Assert(list_length(expr->args) == 2);
+
+	zone_node = (Node *) linitial(expr->args);
+
+	if (IsA(zone_node, Const) &&!((Const *) zone_node)->constisnull)
+	{
+		text	   *zone = DatumGetTextPP(((Const *) zone_node)->constvalue);
+		char		tzname[TZ_STRLEN_MAX + 1];
+		char	   *lowzone;
+		int			type,
+					abbrev_offset;
+		pg_tz	   *tzp;
+		bool		noop = false;
+
+		/*
+		 * If the timezone is forever UTC+0, the FuncExpr function call is a
+		 * no-op for all possible timestamps.  This passage mirrors code in
+		 * timestamp_zone().
+		 */
+		text_to_cstring_buffer(zone, tzname, sizeof(tzname));
+		lowzone = downcase_truncate_identifier(tzname,
+											   strlen(tzname),
+											   false);
+		type = DecodeTimezoneAbbrev(0, lowzone, &abbrev_offset, &tzp);
+		if (type == TZ || type == DTZ)
+			noop = (abbrev_offset == 0);
+		else if (type == DYNTZ)
+		{
+			/*
+			 * An abbreviation of a single-offset timezone ought not to be
+			 * configured as a DYNTZ, so don't bother checking.
+			 */
+		}
+		else
+		{
+			long		tzname_offset;
+
+			tzp = pg_tzset(tzname);
+			if (tzp && pg_get_timezone_offset(tzp, &tzname_offset))
+				noop = (tzname_offset == 0);
+		}
+
+		if (noop)
+		{
+			Node	   *timestamp = (Node *) lsecond(expr->args);
+
+			/* Strip any existing RelabelType node(s) */
+			while (timestamp && IsA(timestamp, RelabelType))
+				timestamp = (Node *) ((RelabelType *) timestamp)->arg;
+
+			/*
+			 * Replace the FuncExpr with its timestamp argument, relabeled as
+			 * though the function call had computed it.
+			 */
+			ret = (Node *) makeRelabelType((Expr *) timestamp,
+										   exprType(func_node),
+										   exprTypmod(func_node),
+										   exprCollation(func_node),
+										   COERCE_EXPLICIT_CAST);
+		}
+	}
+
+	PG_RETURN_POINTER(ret);
+}
+
 /*	timestamp_zone()
  *	Encode timestamp type with specified time zone.
  *	This function is just timestamp2timestamptz() except instead of
@@ -5110,6 +5036,52 @@ timestamp_zone(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_TIMESTAMPTZ(result);
+}
+
+/* timestamp_izone_transform()
+ * If we deduce at plan time that a particular timestamp_izone() or
+ * timestamptz_izone() call can only compute tz=0, the call will always return
+ * its second argument unchanged.  Simplify the expression tree accordingly.
+ */
+Datum
+timestamp_izone_transform(PG_FUNCTION_ARGS)
+{
+	Node	   *func_node = (Node *) PG_GETARG_POINTER(0);
+	FuncExpr   *expr = (FuncExpr *) func_node;
+	Node	   *ret = NULL;
+	Node	   *zone_node;
+
+	Assert(IsA(expr, FuncExpr));
+	Assert(list_length(expr->args) == 2);
+
+	zone_node = (Node *) linitial(expr->args);
+
+	if (IsA(zone_node, Const) &&!((Const *) zone_node)->constisnull)
+	{
+		Interval   *zone;
+
+		zone = DatumGetIntervalP(((Const *) zone_node)->constvalue);
+		if (zone->month == 0 && zone->day == 0 && zone->time == 0)
+		{
+			Node	   *timestamp = (Node *) lsecond(expr->args);
+
+			/* Strip any existing RelabelType node(s) */
+			while (timestamp && IsA(timestamp, RelabelType))
+				timestamp = (Node *) ((RelabelType *) timestamp)->arg;
+
+			/*
+			 * Replace the FuncExpr with its timestamp argument, relabeled as
+			 * though the function call had computed it.
+			 */
+			ret = (Node *) makeRelabelType((Expr *) timestamp,
+										   exprType(func_node),
+										   exprTypmod(func_node),
+										   exprCollation(func_node),
+										   COERCE_EXPLICIT_CAST);
+		}
+	}
+
+	PG_RETURN_POINTER(ret);
 }
 
 /* timestamp_izone()
@@ -5489,4 +5461,150 @@ generate_series_timestamptz(PG_FUNCTION_ARGS)
 		/* do when there is no more left */
 		SRF_RETURN_DONE(funcctx);
 	}
+}
+
+static Datum
+timestamptz_truncate_by(const char *units, PG_FUNCTION_ARGS)
+{
+	Datum arg = PG_GETARG_TIMESTAMPTZ(0);
+	Datum result = DirectFunctionCall2(timestamptz_trunc,
+			(Datum) CStringGetTextDatum(units), arg);
+
+	PG_RETURN_TIMESTAMPTZ(result);
+}
+
+/*
+ * Truncate to year
+ */
+Datum
+timestamptz_year(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("year", fcinfo);
+}
+
+/*
+ * Truncate to month
+ */
+Datum
+timestamptz_month(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("month", fcinfo);
+}
+
+/*
+ * Truncate to day
+ */
+Datum
+timestamptz_day(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("day", fcinfo);
+}
+
+/*
+ * Truncate to hour
+ */
+Datum
+timestamptz_hour(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("hour", fcinfo);
+}
+
+/*
+ * Truncate to minute
+ */
+Datum
+timestamptz_minute(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("minute", fcinfo);
+}
+
+/*
+ * Truncate to second
+ */
+Datum
+timestamptz_second(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("second", fcinfo);
+}
+
+Datum
+timestamptz_round(PG_FUNCTION_ARGS)
+{
+	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
+	TimestampTz interval_ts;
+
+#ifndef HAVE_INT64_TIMESTAMP
+	elog(ERROR, "date_round is only available when PipelineDB is compiled with --enable-integer-datetimes");
+#endif
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	if (TIMESTAMP_NOT_FINITE(timestamp) || PG_ARGISNULL(1))
+		PG_RETURN_TIMESTAMPTZ(timestamp);
+
+	/*
+	 * Add the interval to a 0-valued timestamp (TIMESTAMP '2000-01-01 00:00:00')
+	 * to an int64 value of just the interval.
+	 */
+	interval_ts = DatumGetTimestamp(
+			DirectFunctionCall2(timestamp_pl_interval, TimestampGetDatum(0), PG_GETARG_DATUM(1)));
+	timestamp = round_down(timestamp, interval_ts);
+
+	PG_RETURN_TIMESTAMPTZ(timestamp);
+}
+
+Datum
+interval_combine(PG_FUNCTION_ARGS)
+{
+	ArrayType  *collectarray = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType  *transarray = PG_GETARG_ARRAYTYPE_P(1);
+	Datum	   *collectdatums;
+	Datum	   *transdatums;
+	int			ndatums;
+	Interval	sumX1,
+				N1,
+				sumX2,
+				N2;
+	Interval   *newsum;
+	ArrayType  *result;
+
+	deconstruct_array(collectarray,
+					  INTERVALOID, sizeof(Interval), false, 'd',
+					  &collectdatums, NULL, &ndatums);
+	if (ndatums != 2)
+		elog(ERROR, "expected 2-element interval array");
+
+	deconstruct_array(transarray,
+					  INTERVALOID, sizeof(Interval), false, 'd',
+					  &transdatums, NULL, &ndatums);
+	if (ndatums != 2)
+		elog(ERROR, "expected 2-element interval array");
+
+	/*
+	 * XXX memcpy, instead of just extracting a pointer, to work around buggy
+	 * array code: it won't ensure proper alignment of Interval objects on
+	 * machines where double requires 8-byte alignment. That should be fixed,
+	 * but in the meantime...
+	 *
+	 * Note: must use DatumGetPointer here, not DatumGetIntervalP, else some
+	 * compilers optimize into double-aligned load/store anyway.
+	 */
+	memcpy((void *) &sumX1, DatumGetPointer(collectdatums[0]), sizeof(Interval));
+	memcpy((void *) &N1, DatumGetPointer(collectdatums[1]), sizeof(Interval));
+	memcpy((void *) &sumX2, DatumGetPointer(transdatums[0]), sizeof(Interval));
+	memcpy((void *) &N2, DatumGetPointer(transdatums[1]), sizeof(Interval));
+
+	newsum = DatumGetIntervalP(DirectFunctionCall2(interval_pl,
+												   IntervalPGetDatum(&sumX1),
+												   IntervalPGetDatum(&sumX2)));
+	N1.time += N2.time;
+
+	collectdatums[0] = IntervalPGetDatum(newsum);
+	collectdatums[1] = IntervalPGetDatum(&N1);
+
+	result = construct_array(collectdatums, 2,
+							 INTERVALOID, sizeof(Interval), false, 'd');
+
+	PG_RETURN_ARRAYTYPE_P(result);
 }

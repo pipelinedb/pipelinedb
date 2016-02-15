@@ -29,7 +29,7 @@
  * at runtime.  If we knew exactly which functions require collation
  * information, we could throw those errors at parse time instead.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -480,9 +480,11 @@ assign_collations_walker(Node *node, assign_collations_context *context)
 						 parser_errposition(context->pstate,
 											loccontext.location2)));
 			break;
+		case T_InferenceElem:
 		case T_RangeTblRef:
 		case T_JoinExpr:
 		case T_FromExpr:
+		case T_OnConflictExpr:
 		case T_SortGroupClause:
 			(void) expression_tree_walker(node,
 										  assign_collations_walker,

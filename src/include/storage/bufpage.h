@@ -4,7 +4,7 @@
  *	  Standard POSTGRES buffer page definitions.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/bufpage.h
@@ -156,7 +156,7 @@ typedef struct PageHeaderData
 	LocationIndex pd_special;	/* offset to start of special space */
 	uint16		pd_pagesize_version;
 	TransactionId pd_prune_xid; /* oldest prunable XID, or zero if none */
-	ItemIdData	pd_linp[1];		/* beginning of line pointer array */
+	ItemIdData	pd_linp[FLEXIBLE_ARRAY_MEMBER]; /* line pointer array */
 } PageHeaderData;
 
 typedef PageHeaderData *PageHeader;
@@ -304,6 +304,8 @@ typedef PageHeaderData *PageHeader;
 #define PageGetSpecialPointer(page) \
 ( \
 	AssertMacro(PageIsValid(page)), \
+	AssertMacro(((PageHeader) (page))->pd_special <= BLCKSZ), \
+	AssertMacro(((PageHeader) (page))->pd_special >= SizeOfPageHeaderData), \
 	(char *) ((char *) (page) + ((PageHeader) (page))->pd_special) \
 )
 
@@ -403,6 +405,8 @@ extern Size PageGetExactFreeSpace(Page page);
 extern Size PageGetHeapFreeSpace(Page page);
 extern void PageIndexTupleDelete(Page page, OffsetNumber offset);
 extern void PageIndexMultiDelete(Page page, OffsetNumber *itemnos, int nitems);
+extern void PageIndexDeleteNoCompact(Page page, OffsetNumber *itemnos,
+						 int nitems);
 extern char *PageSetChecksumCopy(Page page, BlockNumber blkno);
 extern void PageSetChecksumInplace(Page page, BlockNumber blkno);
 

@@ -812,6 +812,18 @@ INSERT INTO num_input_test(n1) VALUES (' N aN ');
 SELECT * FROM num_input_test;
 
 --
+-- Test some corner cases for multiplication
+--
+
+select 4790999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+
+select 4789999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+
+select 4770999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+
+select 4769999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+
+--
 -- Test some corner cases for division
 --
 
@@ -837,3 +849,24 @@ select 10.0 ^ -2147483648 as rounds_to_zero;
 select 10.0 ^ -2147483647 as rounds_to_zero;
 select 10.0 ^ 2147483647 as overflows;
 select 117743296169.0 ^ 1000000000 as overflows;
+
+--
+-- Tests for generate_series
+--
+select * from generate_series(0.0::numeric, 4.0::numeric);
+select * from generate_series(0.1::numeric, 4.0::numeric, 1.3::numeric);
+select * from generate_series(4.0::numeric, -1.5::numeric, -2.2::numeric);
+-- Trigger errors
+select * from generate_series(-100::numeric, 100::numeric, 0::numeric);
+select * from generate_series(-100::numeric, 100::numeric, 'nan'::numeric);
+select * from generate_series('nan'::numeric, 100::numeric, 10::numeric);
+select * from generate_series(0::numeric, 'nan'::numeric, 10::numeric);
+-- Checks maximum, output is truncated
+select (i / (10::numeric ^ 131071))::numeric(1,0)
+	from generate_series(6 * (10::numeric ^ 131071),
+			     9 * (10::numeric ^ 131071),
+			     10::numeric ^ 131071) as a(i);
+-- Check usage with variables
+select * from generate_series(1::numeric, 3::numeric) i, generate_series(i,3) j;
+select * from generate_series(1::numeric, 3::numeric) i, generate_series(1,i) j;
+select * from generate_series(1::numeric, 3::numeric) i, generate_series(1,5,i) j;

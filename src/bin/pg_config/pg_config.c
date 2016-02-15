@@ -457,6 +457,7 @@ help(void)
 	printf(_("  --version             show the PipelineDB version\n"));
 	printf(_("  -?, --help            show this help, then exit\n"));
 	printf(_("\nWith no arguments, all known items are shown.\n\n"));
+	printf(_("Report bugs to <eng@pipelinedb.com>.\n"));
 }
 
 static void

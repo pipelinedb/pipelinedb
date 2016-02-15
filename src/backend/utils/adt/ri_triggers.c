@@ -13,7 +13,7 @@
  *	plan --- consider improving this someday.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  *
  * src/backend/utils/adt/ri_triggers.c
  *
@@ -40,6 +40,7 @@
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "executor/spi.h"
+#include "lib/ilist.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_relation.h"
 #include "miscadmin.h"
@@ -51,6 +52,7 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
+#include "utils/rls.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
@@ -124,6 +126,7 @@ typedef struct RI_ConstraintInfo
 												 * PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS];		/* equality operators (FK =
 												 * FK) */
+	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
 
@@ -184,6 +187,8 @@ typedef struct RI_CompareHashEntry
 static HTAB *ri_constraint_cache = NULL;
 static HTAB *ri_query_cache = NULL;
 static HTAB *ri_compare_cache = NULL;
+static dlist_head ri_constraint_cache_valid_list;
+static int	ri_constraint_cache_valid_count = 0;
 
 
 /* ----------
@@ -2304,6 +2309,18 @@ RI_Initial_Check(Trigger *trigger, Relation fk_rel, Relation pk_rel)
 	if (!ExecCheckRTPerms(list_make2(fkrte, pkrte), false))
 		return false;
 
+	/*
+	 * Also punt if RLS is enabled on either table unless this role has the
+	 * bypassrls right or is the table owner of the table(s) involved which
+	 * have RLS enabled.
+	 */
+	if (!has_bypassrls_privilege(GetUserId()) &&
+		((pk_rel->rd_rel->relrowsecurity &&
+		  !pg_class_ownercheck(pkrte->relid, GetUserId())) ||
+		 (fk_rel->rd_rel->relrowsecurity &&
+		  !pg_class_ownercheck(fkrte->relid, GetUserId()))))
+		return false;
+
 	/*----------
 	 * The query string built is:
 	 *	SELECT fk.keycols FROM ONLY relname fk
@@ -2411,7 +2428,7 @@ RI_Initial_Check(Trigger *trigger, Relation fk_rel, Relation pk_rel)
 	snprintf(workmembuf, sizeof(workmembuf), "%d", maintenance_work_mem);
 	(void) set_config_option("work_mem", workmembuf,
 							 PGC_USERSET, PGC_S_SESSION,
-							 GUC_ACTION_SAVE, true, 0);
+							 GUC_ACTION_SAVE, true, 0, false);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
@@ -2911,6 +2928,13 @@ ri_LoadConstraintInfo(Oid constraintOid)
 
 	ReleaseSysCache(tup);
 
+	/*
+	 * For efficient processing of invalidation messages below, we keep a
+	 * doubly-linked list, and a count, of all currently valid entries.
+	 */
+	dlist_push_tail(&ri_constraint_cache_valid_list, &riinfo->valid_link);
+	ri_constraint_cache_valid_count++;
+
 	riinfo->valid = true;
 
 	return riinfo;
@@ -2923,21 +2947,41 @@ ri_LoadConstraintInfo(Oid constraintOid)
  * gets enough update traffic that it's probably worth being smarter.
  * Invalidate any ri_constraint_cache entry associated with the syscache
  * entry with the specified hash value, or all entries if hashvalue == 0.
+ *
+ * Note: at the time a cache invalidation message is processed there may be
+ * active references to the cache.  Because of this we never remove entries
+ * from the cache, but only mark them invalid, which is harmless to active
+ * uses.  (Any query using an entry should hold a lock sufficient to keep that
+ * data from changing under it --- but we may get cache flushes anyway.)
  */
 static void
 InvalidateConstraintCacheCallBack(Datum arg, int cacheid, uint32 hashvalue)
 {
-	HASH_SEQ_STATUS status;
-	RI_ConstraintInfo *hentry;
+	dlist_mutable_iter iter;
 
 	Assert(ri_constraint_cache != NULL);
 
-	hash_seq_init(&status, ri_constraint_cache);
-	while ((hentry = (RI_ConstraintInfo *) hash_seq_search(&status)) != NULL)
+	/*
+	 * If the list of currently valid entries gets excessively large, we mark
+	 * them all invalid so we can empty the list.  This arrangement avoids
+	 * O(N^2) behavior in situations where a session touches many foreign keys
+	 * and also does many ALTER TABLEs, such as a restore from pg_dump.
+	 */
+	if (ri_constraint_cache_valid_count > 1000)
+		hashvalue = 0;			/* pretend it's a cache reset */
+
+	dlist_foreach_modify(iter, &ri_constraint_cache_valid_list)
 	{
-		if (hentry->valid &&
-			(hashvalue == 0 || hentry->oidHashValue == hashvalue))
-			hentry->valid = false;
+		RI_ConstraintInfo *riinfo = dlist_container(RI_ConstraintInfo,
+													valid_link, iter.cur);
+
+		if (hashvalue == 0 || riinfo->oidHashValue == hashvalue)
+		{
+			riinfo->valid = false;
+			/* Remove invalidated entries from the list, too */
+			dlist_delete(iter.cur);
+			ri_constraint_cache_valid_count--;
+		}
 	}
 }
 
@@ -2970,7 +3014,8 @@ ri_PlanCheck(const char *querystr, int nargs, Oid *argtypes,
 	/* Switch to proper UID to perform check as */
 	GetUserIdAndSecContext(&save_userid, &save_sec_context);
 	SetUserIdAndSecContext(RelationGetForm(query_rel)->relowner,
-						   save_sec_context | SECURITY_LOCAL_USERID_CHANGE);
+						   save_sec_context | SECURITY_LOCAL_USERID_CHANGE |
+						   SECURITY_NOFORCE_RLS);
 
 	/* Create the plan */
 	qplan = SPI_prepare(querystr, nargs, argtypes);
@@ -3090,7 +3135,8 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 	/* Switch to proper UID to perform check as */
 	GetUserIdAndSecContext(&save_userid, &save_sec_context);
 	SetUserIdAndSecContext(RelationGetForm(query_rel)->relowner,
-						   save_sec_context | SECURITY_LOCAL_USERID_CHANGE);
+						   save_sec_context | SECURITY_LOCAL_USERID_CHANGE |
+						   SECURITY_NOFORCE_RLS);
 
 	/* Finally we can run the query. */
 	spi_result = SPI_execute_snapshot(qplan,
@@ -3208,27 +3254,36 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 	 * Check permissions- if the user does not have access to view the data in
 	 * any of the key columns then we don't include the errdetail() below.
 	 *
-	 * Check table-level permissions first and, failing that, column-level
+	 * Check if RLS is enabled on the relation first.  If so, we don't return
+	 * any specifics to avoid leaking data.
+	 *
+	 * Check table-level permissions next and, failing that, column-level
 	 * privileges.
 	 */
-	aclresult = pg_class_aclcheck(rel_oid, GetUserId(), ACL_SELECT);
-	if (aclresult != ACLCHECK_OK)
-	{
-		/* Try for column-level permissions */
-		for (idx = 0; idx < riinfo->nkeys; idx++)
-		{
-			aclresult = pg_attribute_aclcheck(rel_oid, attnums[idx],
-											  GetUserId(),
-											  ACL_SELECT);
 
-			/* No access to the key */
-			if (aclresult != ACLCHECK_OK)
+	if (check_enable_rls(rel_oid, InvalidOid, true) != RLS_ENABLED)
+	{
+		aclresult = pg_class_aclcheck(rel_oid, GetUserId(), ACL_SELECT);
+		if (aclresult != ACLCHECK_OK)
+		{
+			/* Try for column-level permissions */
+			for (idx = 0; idx < riinfo->nkeys; idx++)
 			{
-				has_perm = false;
-				break;
+				aclresult = pg_attribute_aclcheck(rel_oid, attnums[idx],
+												  GetUserId(),
+												  ACL_SELECT);
+
+				/* No access to the key */
+				if (aclresult != ACLCHECK_OK)
+				{
+					has_perm = false;
+					break;
+				}
 			}
 		}
 	}
+	else
+		has_perm = false;
 
 	if (has_perm)
 	{
@@ -3239,7 +3294,7 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 		{
 			int			fnum = attnums[idx];
 			char	   *name,
-				   *val;
+					   *val;
 
 			name = SPI_fname(tupdesc, fnum);
 			val = SPI_getvalue(violator, tupdesc, fnum);
@@ -3263,11 +3318,11 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 						RelationGetRelationName(fk_rel),
 						NameStr(riinfo->conname)),
 				 has_perm ?
-					 errdetail("Key (%s)=(%s) is not present in table \"%s\".",
-							   key_names.data, key_values.data,
-							   RelationGetRelationName(pk_rel)) :
-					 errdetail("Key is not present in table \"%s\".",
-							   RelationGetRelationName(pk_rel)),
+				 errdetail("Key (%s)=(%s) is not present in table \"%s\".",
+						   key_names.data, key_values.data,
+						   RelationGetRelationName(pk_rel)) :
+				 errdetail("Key is not present in table \"%s\".",
+						   RelationGetRelationName(pk_rel)),
 				 errtableconstraint(fk_rel, NameStr(riinfo->conname))));
 	else
 		ereport(ERROR,
@@ -3280,8 +3335,8 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 			errdetail("Key (%s)=(%s) is still referenced from table \"%s\".",
 					  key_names.data, key_values.data,
 					  RelationGetRelationName(fk_rel)) :
-					errdetail("Key is still referenced from table \"%s\".",
-					  RelationGetRelationName(fk_rel)),
+				 errdetail("Key is still referenced from table \"%s\".",
+						   RelationGetRelationName(fk_rel)),
 				 errtableconstraint(fk_rel, NameStr(riinfo->conname))));
 }
 
@@ -3340,10 +3395,9 @@ ri_InitHashTables(void)
 	memset(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(Oid);
 	ctl.entrysize = sizeof(RI_ConstraintInfo);
-	ctl.hash = oid_hash;
 	ri_constraint_cache = hash_create("RI constraint cache",
 									  RI_INIT_CONSTRAINTHASHSIZE,
-									  &ctl, HASH_ELEM | HASH_FUNCTION);
+									  &ctl, HASH_ELEM | HASH_BLOBS);
 
 	/* Arrange to flush cache on pg_constraint changes */
 	CacheRegisterSyscacheCallback(CONSTROID,
@@ -3353,18 +3407,16 @@ ri_InitHashTables(void)
 	memset(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(RI_QueryKey);
 	ctl.entrysize = sizeof(RI_QueryHashEntry);
-	ctl.hash = tag_hash;
 	ri_query_cache = hash_create("RI query cache",
 								 RI_INIT_QUERYHASHSIZE,
-								 &ctl, HASH_ELEM | HASH_FUNCTION);
+								 &ctl, HASH_ELEM | HASH_BLOBS);
 
 	memset(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(RI_CompareKey);
 	ctl.entrysize = sizeof(RI_CompareHashEntry);
-	ctl.hash = tag_hash;
 	ri_compare_cache = hash_create("RI compare cache",
 								   RI_INIT_QUERYHASHSIZE,
-								   &ctl, HASH_ELEM | HASH_FUNCTION);
+								   &ctl, HASH_ELEM | HASH_BLOBS);
 }
 
 

@@ -3,7 +3,7 @@
  * pg_enum.c
  *	  routines to support manipulation of the pg_enum relation
  *
- * Copyright (c) 2006-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2006-2015, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -31,7 +31,7 @@
 #include "utils/tqual.h"
 
 
-/* Potentially set by contrib/pg_upgrade_support functions */
+/* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_pg_enum_oid = InvalidOid;
 
 static void RenumberEnumType(Relation pg_enum, HeapTuple *existing, int nelems);
@@ -341,8 +341,13 @@ restart:
 	}
 
 	/* Get a new OID for the new label */
-	if (IsBinaryUpgrade && OidIsValid(binary_upgrade_next_pg_enum_oid))
+	if (IsBinaryUpgrade)
 	{
+		if (!OidIsValid(binary_upgrade_next_pg_enum_oid))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			errmsg("pg_enum OID value not set when in binary upgrade mode")));
+
 		/*
 		 * Use binary-upgrade override for pg_enum.oid, if supplied. During
 		 * binary upgrade, all pg_enum.oid's are set this way so they are

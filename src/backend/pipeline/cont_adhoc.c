@@ -446,7 +446,7 @@ exec_adhoc_worker(AdhocWorkerState *state)
 
 	ExecutePlan(estate, state->query_desc->planstate, 
 				state->query_desc->operation,
-				true, 0, 0, ForwardScanDirection, state->dest);
+				true, 0, ForwardScanDirection, state->dest);
 
 	ExecEndNode(state->query_desc->planstate);
 	state->query_desc->planstate = NULL;
@@ -514,7 +514,7 @@ exec_adhoc_combiner(AdhocCombinerState *state)
 
 	ExecutePlan(estate, state->query_desc->planstate, 
 				state->query_desc->operation,
-				true, 0, 0, ForwardScanDirection, state->dest);
+				true, 0, ForwardScanDirection, state->dest);
 
 	ExecEndNode(state->query_desc->planstate);
 	state->query_desc->planstate = NULL;
@@ -622,7 +622,7 @@ exec_adhoc_view(AdhocViewState *state)
 
 	ExecutePlan(estate, state->query_desc->planstate, 
 				state->query_desc->operation,
-				true, 0, 0, ForwardScanDirection, state->dest);
+				true, 0, ForwardScanDirection, state->dest);
 
 	ExecEndNode(state->query_desc->planstate);
 	state->query_desc->planstate = NULL;
@@ -721,7 +721,7 @@ create_dsm_cqueue(ResourceOwner owner)
 
 	/* Create dsm_segment and pin it. */
 	size = continuous_query_ipc_shared_mem * 1024;
-	segment = dsm_create(size);
+	segment = dsm_create(size, 0);
 	dsm_pin_mapping(segment);
 	handle = dsm_segment_handle(segment);
 

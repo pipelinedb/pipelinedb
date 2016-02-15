@@ -8,7 +8,7 @@
  * None of this code is used during normal system operation.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/xlogutils.c
@@ -107,12 +107,11 @@ log_invalid_page(RelFileNode node, ForkNumber forkno, BlockNumber blkno,
 		memset(&ctl, 0, sizeof(ctl));
 		ctl.keysize = sizeof(xl_invalid_page_key);
 		ctl.entrysize = sizeof(xl_invalid_page);
-		ctl.hash = tag_hash;
 
 		invalid_page_tab = hash_create("XLOG invalid-page table",
 									   100,
 									   &ctl,
-									   HASH_ELEM | HASH_FUNCTION);
+									   HASH_ELEM | HASH_BLOBS);
 	}
 
 	/* we currently assume xl_invalid_page_key contains no padding */
@@ -242,35 +241,164 @@ XLogCheckInvalidPages(void)
 	invalid_page_tab = NULL;
 }
 
+
 /*
- * XLogReadBuffer
- *		Read a page during XLOG replay.
+ * XLogReadBufferForRedo
+ *		Read a page during XLOG replay
  *
- * This is a shorthand of XLogReadBufferExtended() followed by
- * LockBuffer(buffer, BUFFER_LOCK_EXCLUSIVE), for reading from the main
- * fork.
+ * Reads a block referenced by a WAL record into shared buffer cache, and
+ * determines what needs to be done to redo the changes to it.  If the WAL
+ * record includes a full-page image of the page, it is restored.
  *
- * (Getting the buffer lock is not really necessary during single-process
- * crash recovery, but some subroutines such as MarkBufferDirty will complain
- * if we don't have the lock.  In hot standby mode it's definitely necessary.)
+ * 'lsn' is the LSN of the record being replayed.  It is compared with the
+ * page's LSN to determine if the record has already been replayed.
+ * 'block_id' is the ID number the block was registered with, when the WAL
+ * record was created.
  *
- * The returned buffer is exclusively-locked.
+ * Returns one of the following:
  *
- * For historical reasons, instead of a ReadBufferMode argument, this only
- * supports RBM_ZERO_AND_LOCK (init == true) and RBM_NORMAL (init == false)
- * modes.
+ *	BLK_NEEDS_REDO	- changes from the WAL record need to be applied
+ *	BLK_DONE		- block doesn't need replaying
+ *	BLK_RESTORED	- block was restored from a full-page image included in
+ *					  the record
+ *	BLK_NOTFOUND	- block was not found (because it was truncated away by
+ *					  an operation later in the WAL stream)
+ *
+ * On return, the buffer is locked in exclusive-mode, and returned in *buf.
+ * Note that the buffer is locked and returned even if it doesn't need
+ * replaying.  (Getting the buffer lock is not really necessary during
+ * single-process crash recovery, but some subroutines such as MarkBufferDirty
+ * will complain if we don't have the lock.  In hot standby mode it's
+ * definitely necessary.)
+ *
+ * Note: when a backup block is available in XLOG, we restore it
+ * unconditionally, even if the page in the database appears newer.  This is
+ * to protect ourselves against database pages that were partially or
+ * incorrectly written during a crash.  We assume that the XLOG data must be
+ * good because it has passed a CRC check, while the database page might not
+ * be.  This will force us to replay all subsequent modifications of the page
+ * that appear in XLOG, rather than possibly ignoring them as already
+ * applied, but that's not a huge drawback.
+ */
+XLogRedoAction
+XLogReadBufferForRedo(XLogReaderState *record, uint8 block_id,
+					  Buffer *buf)
+{
+	return XLogReadBufferForRedoExtended(record, block_id, RBM_NORMAL,
+										 false, buf);
+}
+
+/*
+ * Pin and lock a buffer referenced by a WAL record, for the purpose of
+ * re-initializing it.
  */
 Buffer
-XLogReadBuffer(RelFileNode rnode, BlockNumber blkno, bool init)
+XLogInitBufferForRedo(XLogReaderState *record, uint8 block_id)
 {
 	Buffer		buf;
 
-	buf = XLogReadBufferExtended(rnode, MAIN_FORKNUM, blkno,
-								 init ? RBM_ZERO_AND_LOCK : RBM_NORMAL);
-	if (BufferIsValid(buf) && !init)
-		LockBuffer(buf, BUFFER_LOCK_EXCLUSIVE);
-
+	XLogReadBufferForRedoExtended(record, block_id, RBM_ZERO_AND_LOCK, false,
+								  &buf);
 	return buf;
+}
+
+/*
+ * XLogReadBufferForRedoExtended
+ *		Like XLogReadBufferForRedo, but with extra options.
+ *
+ * In RBM_ZERO_* modes, if the page doesn't exist, the relation is extended
+ * with all-zeroes pages up to the referenced block number.  In
+ * RBM_ZERO_AND_LOCK and RBM_ZERO_AND_CLEANUP_LOCK modes, the return value
+ * is always BLK_NEEDS_REDO.
+ *
+ * (The RBM_ZERO_AND_CLEANUP_LOCK mode is redundant with the get_cleanup_lock
+ * parameter. Do not use an inconsistent combination!)
+ *
+ * If 'get_cleanup_lock' is true, a "cleanup lock" is acquired on the buffer
+ * using LockBufferForCleanup(), instead of a regular exclusive lock.
+ */
+XLogRedoAction
+XLogReadBufferForRedoExtended(XLogReaderState *record,
+							  uint8 block_id,
+							  ReadBufferMode mode, bool get_cleanup_lock,
+							  Buffer *buf)
+{
+	XLogRecPtr	lsn = record->EndRecPtr;
+	RelFileNode rnode;
+	ForkNumber	forknum;
+	BlockNumber blkno;
+	Page		page;
+	bool		zeromode;
+	bool		willinit;
+
+	if (!XLogRecGetBlockTag(record, block_id, &rnode, &forknum, &blkno))
+	{
+		/* Caller specified a bogus block_id */
+		elog(PANIC, "failed to locate backup block with ID %d", block_id);
+	}
+
+	/*
+	 * Make sure that if the block is marked with WILL_INIT, the caller is
+	 * going to initialize it. And vice versa.
+	 */
+	zeromode = (mode == RBM_ZERO_AND_LOCK || mode == RBM_ZERO_AND_CLEANUP_LOCK);
+	willinit = (record->blocks[block_id].flags & BKPBLOCK_WILL_INIT) != 0;
+	if (willinit && !zeromode)
+		elog(PANIC, "block with WILL_INIT flag in WAL record must be zeroed by redo routine");
+	if (!willinit && zeromode)
+		elog(PANIC, "block to be initialized in redo routine must be marked with WILL_INIT flag in the WAL record");
+
+	/* If it's a full-page image, restore it. */
+	if (XLogRecHasBlockImage(record, block_id))
+	{
+		*buf = XLogReadBufferExtended(rnode, forknum, blkno,
+		   get_cleanup_lock ? RBM_ZERO_AND_CLEANUP_LOCK : RBM_ZERO_AND_LOCK);
+		page = BufferGetPage(*buf);
+		if (!RestoreBlockImage(record, block_id, page))
+			elog(ERROR, "failed to restore block image");
+
+		/*
+		 * The page may be uninitialized. If so, we can't set the LSN because
+		 * that would corrupt the page.
+		 */
+		if (!PageIsNew(page))
+		{
+			PageSetLSN(page, lsn);
+		}
+
+		MarkBufferDirty(*buf);
+
+		/*
+		 * At the end of crash recovery the init forks of unlogged relations
+		 * are copied, without going through shared buffers. So we need to
+		 * force the on-disk state of init forks to always be in sync with the
+		 * state in shared buffers.
+		 */
+		if (forknum == INIT_FORKNUM)
+			FlushOneBuffer(*buf);
+
+		return BLK_RESTORED;
+	}
+	else
+	{
+		*buf = XLogReadBufferExtended(rnode, forknum, blkno, mode);
+		if (BufferIsValid(*buf))
+		{
+			if (mode != RBM_ZERO_AND_LOCK && mode != RBM_ZERO_AND_CLEANUP_LOCK)
+			{
+				if (get_cleanup_lock)
+					LockBufferForCleanup(*buf);
+				else
+					LockBuffer(*buf, BUFFER_LOCK_EXCLUSIVE);
+			}
+			if (lsn <= PageGetLSN(BufferGetPage(*buf)))
+				return BLK_DONE;
+			else
+				return BLK_NEEDS_REDO;
+		}
+		else
+			return BLK_NOTFOUND;
+	}
 }
 
 /*
@@ -292,6 +420,11 @@ XLogReadBuffer(RelFileNode rnode, BlockNumber blkno, bool init)
  * In RBM_NORMAL_NO_LOG mode, we return InvalidBuffer if the page doesn't
  * exist, and we don't check for all-zeroes.  Thus, no log entry is made
  * to imply that the page should be dropped or truncated later.
+ *
+ * NB: A redo function should normally not call this directly. To get a page
+ * to modify, use XLogReplayBuffer instead. It is important that all pages
+ * modified by a WAL record are registered in the WAL records, or they will be
+ * invisible to tools that that need to know which pages are modified.
  */
 Buffer
 XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
@@ -381,7 +514,6 @@ XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
 
 	return buffer;
 }
-
 
 /*
  * Struct actually returned by XLogFakeRelcacheEntry, though the declared

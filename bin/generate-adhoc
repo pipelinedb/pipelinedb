@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 
+# Copyright (c) 2013-2016, PipelineDB
 # generates data to test the adhoc query client
 
 require 'pp'

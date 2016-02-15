@@ -4,7 +4,7 @@
  *	  definitions for run-time statistics collection
  *
  *
- * Copyright (c) 2001-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2015, PostgreSQL Global Development Group
  *
  * src/include/executor/instrument.h
  *
@@ -38,7 +38,7 @@ typedef enum InstrumentOption
 	INSTRUMENT_TIMER = 1 << 0,	/* needs timer (and row counts) */
 	INSTRUMENT_BUFFERS = 1 << 1,	/* needs buffer usage */
 	INSTRUMENT_ROWS = 1 << 2,	/* needs row count */
-	INSTRUMENT_ALL = 0x7FFFFFFF
+	INSTRUMENT_ALL = PG_INT32_MAX
 } InstrumentOption;
 
 typedef struct Instrumentation

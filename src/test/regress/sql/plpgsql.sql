@@ -1745,7 +1745,7 @@ select trap_matching_test(1);
 
 create temp table foo (f1 int);
 
-create function blockme() returns int as $$
+create function subxact_rollback_semantics() returns int as $$
 declare x int;
 begin
   x := 1;
@@ -1753,29 +1753,40 @@ begin
   begin
     x := x + 1;
     insert into foo values(x);
-    -- we assume this will take longer than 2 seconds:
-    select count(*) into x from tenk1 a, tenk1 b, tenk1 c;
+    raise exception 'inner';
   exception
     when others then
-      raise notice 'caught others?';
-      return -1;
-    when query_canceled then
-      raise notice 'nyeah nyeah, can''t stop me';
       x := x * 10;
   end;
   insert into foo values(x);
   return x;
 end$$ language plpgsql;
 
-set statement_timeout to 2000;
-
-select blockme();
-
-reset statement_timeout;
-
+select subxact_rollback_semantics();
 select * from foo;
-
 drop table foo;
+
+create function trap_timeout() returns void as $$
+begin
+  declare x int;
+  begin
+    -- we assume this will take longer than 2 seconds:
+    select count(*) into x from tenk1 a, tenk1 b, tenk1 c;
+  exception
+    when others then
+      raise notice 'caught others?';
+    when query_canceled then
+      raise notice 'nyeah nyeah, can''t stop me';
+  end;
+  -- Abort transaction to abandon the statement_timeout setting.  Otherwise,
+  -- the next top-level statement would be vulnerable to the timeout.
+  raise exception 'end of function';
+end$$ language plpgsql;
+
+begin;
+set statement_timeout to 2000;
+select trap_timeout();
+rollback;
 
 -- Test for pass-by-ref values being stored in proper context
 create function test_variable_storage() returns text as $$
@@ -2078,8 +2089,6 @@ begin
 end;
 $$ language plpgsql;
 
-select raise_test1(5);
-
 create function raise_test2(int) returns int as $$
 begin
     raise notice 'This message has too few parameters: %, %, %', $1, $1;
@@ -2087,7 +2096,14 @@ begin
 end;
 $$ language plpgsql;
 
-select raise_test2(10);
+create function raise_test3(int) returns int as $$
+begin
+    raise notice 'This message has no parameters (despite having %% signs in it)!';
+    return $1;
+end;
+$$ language plpgsql;
+
+select raise_test3(1);
 
 -- Test re-RAISE inside a nested exception block.  This case is allowed
 -- by Oracle's PL/SQL but was handled differently by PG before 9.1.
@@ -3243,6 +3259,39 @@ $$ language plpgsql;
 
 select compos();
 
+-- RETURN variable is a different code path ...
+create or replace function compos() returns compostype as $$
+declare x int := 42;
+begin
+  return x;
+end;
+$$ language plpgsql;
+
+select * from compos();
+
+drop function compos();
+
+-- test: invalid use of composite variable in scalar-returning function
+create or replace function compos() returns int as $$
+declare
+  v compostype;
+begin
+  v := (1, 'hello');
+  return v;
+end;
+$$ language plpgsql;
+
+select compos();
+
+-- test: invalid use of composite expression in scalar-returning function
+create or replace function compos() returns int as $$
+begin
+  return (1, 'hello')::compostype;
+end;
+$$ language plpgsql;
+
+select compos();
+
 drop function compos();
 drop type compostype;
 
@@ -3768,6 +3817,45 @@ rollback;
 drop function error2(p_name_table text);
 drop function error1(text);
 
+-- Test for proper handling of cast-expression caching
+
+create function sql_to_date(integer) returns date as $$
+select $1::text::date
+$$ language sql immutable strict;
+
+create cast (integer as date) with function sql_to_date(integer) as assignment;
+
+create function cast_invoker(integer) returns date as $$
+begin
+  return $1;
+end$$ language plpgsql;
+
+select cast_invoker(20150717);
+select cast_invoker(20150718);  -- second call crashed in pre-release 9.5
+
+begin;
+select cast_invoker(20150717);
+select cast_invoker(20150718);
+savepoint s1;
+select cast_invoker(20150718);
+select cast_invoker(-1); -- fails
+rollback to savepoint s1;
+select cast_invoker(20150719);
+select cast_invoker(20150720);
+commit;
+
+drop function cast_invoker(integer);
+drop function sql_to_date(integer) cascade;
+
+-- Test handling of cast cache inside DO blocks
+-- (to check the original crash case, this must be a cast not previously
+-- used in this session)
+
+begin;
+do $$ declare x text[]; begin x := '{1.23, 4.56}'::numeric[]; end $$;
+do $$ declare x text[]; begin x := '{1.23, 4.56}'::numeric[]; end $$;
+end;
+
 -- Test for consistent reporting of error context
 
 create function fail() returns int language plpgsql as $$
@@ -3938,6 +4026,17 @@ declare
 begin
   forward := forward * 2;
   return forward;
+end
+$$ language plpgsql;
+
+select unreserved_test();
+
+create or replace function unreserved_test() returns int as $$
+declare
+  return int := 42;
+begin
+  return := return + 1;
+  return return;
 end
 $$ language plpgsql;
 
@@ -4201,3 +4300,51 @@ select outer_outer_func(20);
 drop function outer_outer_func(int);
 drop function outer_func(int);
 drop function inner_func(int);
+
+--
+-- Test ASSERT
+--
+
+do $$
+begin
+  assert 1=1;  -- should succeed
+end;
+$$;
+
+do $$
+begin
+  assert 1=0;  -- should fail
+end;
+$$;
+
+do $$
+begin
+  assert NULL;  -- should fail
+end;
+$$;
+
+-- check controlling GUC
+set plpgsql.check_asserts = off;
+do $$
+begin
+  assert 1=0;  -- won't be tested
+end;
+$$;
+reset plpgsql.check_asserts;
+
+-- test custom message
+do $$
+declare var text := 'some value';
+begin
+  assert 1=0, format('assertion failed, var = "%s"', var);
+end;
+$$;
+
+-- ensure assertions are not trapped by 'others'
+do $$
+begin
+  assert 1=0, 'unhandled assertion';
+exception when others then
+  null; -- do nothing
+end;
+$$;

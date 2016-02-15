@@ -63,13 +63,17 @@ DECLARE_TOAST(pg_shdescription, 2846, 2847);
 DECLARE_TOAST(pg_db_role_setting, 2966, 2967);
 #define PgDbRoleSettingToastTable 2966
 #define PgDbRoleSettingToastIndex 2967
+DECLARE_TOAST(pg_shseclabel, 4060, 4061);
+#define PgShseclabelToastTable 4060
+#define PgShseclabelToastIndex 4061
 
 /* pipeline catalogs */
-DECLARE_TOAST(pipeline_query, 6000, 6001);
-DECLARE_TOAST(pipeline_stream, 6002, 6003);
-DECLARE_TOAST(pipeline_tstate, 6004, 6005);
-DECLARE_TOAST(pipeline_database, 6006, 6007);
-#define PipelineDatabaseToastTable 6006
-#define PipelineDatabaseToastIndex 6007
+DECLARE_TOAST(pipeline_query, 7000, 7001);
+DECLARE_TOAST(pipeline_stream, 7002, 7003);
+DECLARE_TOAST(pipeline_tstate, 7004, 7005);
+DECLARE_TOAST(pipeline_database, 7006, 7007);
+#define PipelineDatabaseToastTable 7006
+#define PipelineDatabaseToastIndex 7007
+
 
 #endif   /* TOASTING_H */

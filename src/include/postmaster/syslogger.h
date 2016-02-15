@@ -3,7 +3,7 @@
  * syslogger.h
  *	  Exports from postmaster/syslogger.c.
  *
- * Copyright (c) 2004-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2004-2015, PostgreSQL Global Development Group
  *
  * src/include/postmaster/syslogger.h
  *
@@ -48,7 +48,7 @@ typedef struct
 	int32		pid;			/* writer's pid */
 	char		is_last;		/* last chunk of message? 't' or 'f' ('T' or
 								 * 'F' for CSV case) */
-	char		data[1];		/* data payload starts here */
+	char		data[FLEXIBLE_ARRAY_MEMBER];	/* data payload starts here */
 } PipeProtoHeader;
 
 typedef union
@@ -84,7 +84,7 @@ extern int	SysLogger_Start(void);
 extern void write_syslogger_file(const char *buffer, int count, int dest);
 
 #ifdef EXEC_BACKEND
-extern void SysLoggerMain(int argc, char *argv[]) __attribute__((noreturn));
+extern void SysLoggerMain(int argc, char *argv[]) pg_attribute_noreturn();
 #endif
 
 #endif   /* _SYSLOGGER_H */

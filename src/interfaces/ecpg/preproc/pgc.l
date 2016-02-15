@@ -7,7 +7,7 @@
  * This is a modified version of src/backend/parser/scan.l
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -27,7 +27,7 @@
 extern YYSTYPE yylval;
 
 static int		xcdepth = 0;	/* depth of nesting in slash-star comments */
-static char	   *dolqstart;		/* current $foo$ quote start string */
+static char	   *dolqstart = NULL;	/* current $foo$ quote start string */
 static YY_BUFFER_STATE scanbufhandle;
 static char *scanbuf;
 
@@ -233,9 +233,16 @@ ident_cont		[A-Za-z\200-\377_0-9\$]
 identifier		{ident_start}{ident_cont}*
 
 array			({ident_cont}|{whitespace}|[\[\]\+\-\*\%\/\(\)\>\.])*
+
+/* Assorted special-case operators and operator-like tokens */
 typecast		"::"
 dot_dot			\.\.
 colon_equals	":="
+equals_greater	"=>"
+less_equals		"<="
+greater_equals	">="
+less_greater	"<>"
+not_equals		"!="
 
 /*
  * "self" is the set of chars that should be returned as single-character
@@ -543,6 +550,8 @@ cppline			{space}*#([^i][A-Za-z]*|{if}|{ifdef}|{ifndef}|{import})(.*\\{space})*.
 			}
 <SQL>{dolqdelim} {
 				token_start = yytext;
+				if (dolqstart)
+					free(dolqstart);
 				dolqstart = mm_strdup(yytext);
 				BEGIN(xdolq);
 				startlit();
@@ -620,6 +629,11 @@ cppline			{space}*#([^i][A-Za-z]*|{if}|{ifdef}|{ifndef}|{import})(.*\\{space})*.
 <SQL>{typecast}		{ return TYPECAST; }
 <SQL>{dot_dot}		{ return DOT_DOT; }
 <SQL>{colon_equals}	{ return COLON_EQUALS; }
+<SQL>{equals_greater} { return EQUALS_GREATER; }
+<SQL>{less_equals}	{ return LESS_EQUALS; }
+<SQL>{greater_equals} { return GREATER_EQUALS; }
+<SQL>{less_greater}	{ return NOT_EQUALS; }
+<SQL>{not_equals}	{ return NOT_EQUALS; }
 <SQL>{informix_special}	{
 			  /* are we simulating Informix? */
 				if (INFORMIX_MODE)
@@ -699,11 +713,7 @@ cppline			{space}*#([^i][A-Za-z]*|{if}|{ifdef}|{ifndef}|{import})(.*\\{space})*.
 								return yytext[0];
 						}
 
-						/* Convert "!=" operator to "<>" for compatibility */
-						if (strcmp(yytext, "!=") == 0)
-							yylval.str = mm_strdup("<>");
-						else
-							yylval.str = mm_strdup(yytext);
+						yylval.str = mm_strdup(yytext);
 						return Op;
 					}
 <SQL>{param}		{

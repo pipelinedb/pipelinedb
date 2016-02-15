@@ -7,7 +7,7 @@
  * collation-sensitive, so the code in this file has no support for passing
  * collation settings through from callers.  That may have to change someday.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -488,39 +488,6 @@ FindTupleHashEntry(TupleHashTable hashtable, TupleTableSlot *slot,
 	MemoryContextSwitchTo(oldContext);
 
 	return entry;
-}
-
-/*
- * Remove an entry in the given TupleHashTable. This is useful for clearing
- * and reusing TupleHashTables without having to rebuild them
- */
-void
-RemoveTupleHashEntry(TupleHashTable hashtable, TupleTableSlot *slot)
-{
-	MemoryContext oldContext;
-	TupleHashTable saveCurHT;
-	TupleHashEntryData dummy;
-	bool found;
-
-	/* Need to run the hash functions in short-lived context */
-	oldContext = MemoryContextSwitchTo(hashtable->tempcxt);
-
-	hashtable->inputslot = slot;
-	hashtable->in_hash_funcs = hashtable->tab_hash_funcs;
-	hashtable->cur_eq_funcs = hashtable->tab_eq_funcs;
-
-	saveCurHT = CurTupleHashTable;
-	CurTupleHashTable = hashtable;
-
-	dummy.firstTuple = NULL;	/* flag to reference inputslot */
-	(void) hash_search(hashtable->hashtab,  &dummy, HASH_REMOVE, &found);
-
-	if (!found)
-		elog(ERROR, "cannot remove a nonexistent hash group from TupleHashTable");
-
-	CurTupleHashTable = saveCurHT;
-
-	MemoryContextSwitchTo(oldContext);
 }
 
 /*

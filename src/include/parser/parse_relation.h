@@ -4,7 +4,7 @@
  *	  prototypes for parse_relation.c.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -16,6 +16,24 @@
 #define PARSE_RELATION_H
 
 #include "parser/parse_node.h"
+
+
+/*
+ * Support for fuzzily matching column.
+ *
+ * This is for building diagnostic messages, where non-exact matching
+ * attributes are suggested to the user.  The struct's fields may be facets of
+ * a particular RTE, or of an entire range table, depending on context.
+ */
+typedef struct
+{
+	int			distance;		/* Weighted distance (lowest so far) */
+	RangeTblEntry *rfirst;		/* RTE of first */
+	AttrNumber	first;			/* Closest attribute so far */
+	RangeTblEntry *rsecond;		/* RTE of second */
+	AttrNumber	second;			/* Second closest attribute so far */
+} FuzzyAttrMatchState;
+
 
 extern RangeTblEntry *refnameRangeTblEntry(ParseState *pstate,
 					 const char *schemaname,
@@ -36,7 +54,8 @@ extern RangeTblEntry *GetRTEByRangeTablePosn(ParseState *pstate,
 extern CommonTableExpr *GetCTEForRTE(ParseState *pstate, RangeTblEntry *rte,
 			 int rtelevelsup);
 extern Node *scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte,
-				 char *colname, int location);
+				 char *colname, int location,
+				 int fuzzy_rte_penalty, FuzzyAttrMatchState *fuzzystate);
 extern Node *colNameToVar(ParseState *pstate, char *colname, bool localonly,
 			 int location);
 extern void markVarForSelectPriv(ParseState *pstate, Var *var,
@@ -86,9 +105,9 @@ extern bool isLockedRefname(ParseState *pstate, const char *refname);
 extern void addRTEtoQuery(ParseState *pstate, RangeTblEntry *rte,
 			  bool addToJoinList,
 			  bool addToRelNameSpace, bool addToVarNameSpace);
-extern void errorMissingRTE(ParseState *pstate, RangeVar *relation) __attribute__((noreturn));
+extern void errorMissingRTE(ParseState *pstate, RangeVar *relation) pg_attribute_noreturn();
 extern void errorMissingColumn(ParseState *pstate,
-	   char *relname, char *colname, int location) __attribute__((noreturn));
+		 char *relname, char *colname, int location) pg_attribute_noreturn();
 extern void expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 		  int location, bool include_dropped,
 		  List **colnames, List **colvars);

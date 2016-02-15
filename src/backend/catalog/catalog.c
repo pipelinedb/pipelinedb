@@ -5,7 +5,7 @@
  *		bits of hard-wired knowledge
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -33,6 +33,7 @@
 #include "catalog/pg_namespace.h"
 #include "catalog/pg_pltemplate.h"
 #include "catalog/pg_db_role_setting.h"
+#include "catalog/pg_replication_origin.h"
 #include "catalog/pg_shdepend.h"
 #include "catalog/pg_shdescription.h"
 #include "catalog/pg_shseclabel.h"
@@ -119,7 +120,7 @@ IsCatalogClass(Oid relid, Form_pg_class reltuple)
 	 * We could instead check whether the relation is pinned in pg_depend, but
 	 * this is noticeably cheaper and doesn't require catalog access.
 	 *
-	 * This test is safe since even a oid wraparound will preserve this
+	 * This test is safe since even an oid wraparound will preserve this
 	 * property (c.f. GetNewObjectId()) and it has the advantage that it works
 	 * correctly even if a user decides to create a relation in the pg_catalog
 	 * namespace.
@@ -228,7 +229,8 @@ IsSharedRelation(Oid relationId)
 		relationId == SharedSecLabelRelationId ||
 		relationId == TableSpaceRelationId ||
 		relationId == DbRoleSettingRelationId ||
-		relationId == PipelineDatabaseRelationId)
+		relationId == PipelineDatabaseRelationId ||
+		relationId == ReplicationOriginRelationId)
 		return true;
 	/* These are their indexes (see indexing.h) */
 	if (relationId == AuthIdRolnameIndexId ||
@@ -245,7 +247,9 @@ IsSharedRelation(Oid relationId)
 		relationId == TablespaceOidIndexId ||
 		relationId == TablespaceNameIndexId ||
 		relationId == DbRoleSettingDatidRolidIndexId ||
-		relationId == PipelineDatabaseDbIdIndexId)
+		relationId == PipelineDatabaseDbIdIndexId ||
+		relationId == ReplicationOriginIdentIndex ||
+		relationId == ReplicationOriginNameIndex)
 		return true;
 	/* These are their toast tables and toast indexes (see toasting.h) */
 	if (relationId == PgShdescriptionToastTable ||
@@ -253,7 +257,9 @@ IsSharedRelation(Oid relationId)
 		relationId == PgDbRoleSettingToastTable ||
 		relationId == PgDbRoleSettingToastIndex ||
 		relationId == PipelineDatabaseToastTable ||
-		relationId == PipelineDatabaseToastIndex)
+		relationId == PipelineDatabaseToastIndex ||
+		relationId == PgShseclabelToastTable ||
+		relationId == PgShseclabelToastIndex)
 		return true;
 	return false;
 }

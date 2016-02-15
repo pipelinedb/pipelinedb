@@ -4,7 +4,7 @@
  *		parse analysis for optimizable statements
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/parser/analyze.h
@@ -36,9 +36,10 @@ extern Query *transformStmt(ParseState *pstate, Node *parseTree);
 
 extern bool analyze_requires_snapshot(Node *parseTree);
 
-extern char *LCS_asString(LockClauseStrength strength);
+extern const char *LCS_asString(LockClauseStrength strength);
 extern void CheckSelectLocking(Query *qry, LockClauseStrength strength);
 extern void applyLockingClause(Query *qry, Index rtindex,
-				   LockClauseStrength strength, bool noWait, bool pushedDown);
+				   LockClauseStrength strength,
+				   LockWaitPolicy waitPolicy, bool pushedDown);
 
 #endif   /* ANALYZE_H */

@@ -26,7 +26,7 @@
  * restart needs to be forced.)
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -130,7 +130,7 @@ typedef struct
 
 	int			num_requests;	/* current # of requests */
 	int			max_requests;	/* allocated array size */
-	CheckpointerRequest requests[1];	/* VARIABLE LENGTH ARRAY */
+	CheckpointerRequest requests[FLEXIBLE_ARRAY_MEMBER];
 } CheckpointerShmemStruct;
 
 static CheckpointerShmemStruct *CheckpointerShmem;
@@ -195,17 +195,6 @@ CheckpointerMain(void)
 	MemoryContext checkpointer_context;
 
 	CheckpointerShmem->checkpointer_pid = MyProcPid;
-
-	/*
-	 * If possible, make this process a group leader, so that the postmaster
-	 * can signal any child processes too.  (checkpointer probably never has
-	 * any child processes, but for consistency we make all postmaster child
-	 * processes do this.)
-	 */
-#ifdef HAVE_SETSID
-	if (setsid() < 0)
-		elog(FATAL, "setsid() failed: %m");
-#endif
 
 	/*
 	 * Properly accept or ignore signals the postmaster might send us
@@ -371,7 +360,7 @@ CheckpointerMain(void)
 		int			rc;
 
 		/* Clear any already-pending wakeups */
-		ResetLatch(&MyProc->procLatch);
+		ResetLatch(MyLatch);
 
 		/*
 		 * Process any requests or signals received recently.
@@ -482,14 +471,16 @@ CheckpointerMain(void)
 				"checkpoints are occurring too frequently (%d seconds apart)",
 									   elapsed_secs,
 									   elapsed_secs),
-						 errhint("Consider increasing the configuration parameter \"checkpoint_segments\".")));
+						 errhint("Consider increasing the configuration parameter \"max_wal_size\".")));
 
 			/*
 			 * Initialize checkpointer-private variables used during
-			 * checkpoint
+			 * checkpoint.
 			 */
 			ckpt_active = true;
-			if (!do_restartpoint)
+			if (do_restartpoint)
+				ckpt_start_recptr = GetXLogReplayRecPtr(NULL);
+			else
 				ckpt_start_recptr = GetInsertRecPtr();
 			ckpt_start_time = now;
 			ckpt_cached_elapsed = 0;
@@ -570,7 +561,7 @@ CheckpointerMain(void)
 			cur_timeout = Min(cur_timeout, XLogArchiveTimeout - elapsed_secs);
 		}
 
-		rc = WaitLatch(&MyProc->procLatch,
+		rc = WaitLatch(MyLatch,
 					   WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
 					   cur_timeout * 1000L /* convert to ms */ );
 
@@ -731,7 +722,7 @@ CheckpointWriteDelay(int flags, double progress)
 
 /*
  * IsCheckpointOnSchedule -- are we on schedule to finish this checkpoint
- *		 in time?
+ *		 (or restartpoint) in time?
  *
  * Compares the current progress against the time/segments elapsed since last
  * checkpoint, and returns true if the progress we've made this far is greater
@@ -760,25 +751,35 @@ IsCheckpointOnSchedule(double progress)
 		return false;
 
 	/*
-	 * Check progress against WAL segments written and checkpoint_segments.
+	 * Check progress against WAL segments written and CheckPointSegments.
 	 *
 	 * We compare the current WAL insert location against the location
 	 * computed before calling CreateCheckPoint. The code in XLogInsert that
-	 * actually triggers a checkpoint when checkpoint_segments is exceeded
+	 * actually triggers a checkpoint when CheckPointSegments is exceeded
 	 * compares against RedoRecptr, so this is not completely accurate.
 	 * However, it's good enough for our purposes, we're only calculating an
 	 * estimate anyway.
+	 *
+	 * During recovery, we compare last replayed WAL record's location with
+	 * the location computed before calling CreateRestartPoint. That maintains
+	 * the same pacing as we have during checkpoints in normal operation, but
+	 * we might exceed max_wal_size by a fair amount. That's because there can
+	 * be a large gap between a checkpoint's redo-pointer and the checkpoint
+	 * record itself, and we only start the restartpoint after we've seen the
+	 * checkpoint record. (The gap is typically up to CheckPointSegments *
+	 * checkpoint_completion_target where checkpoint_completion_target is the
+	 * value that was in effect when the WAL was generated).
 	 */
-	if (!RecoveryInProgress())
-	{
+	if (RecoveryInProgress())
+		recptr = GetXLogReplayRecPtr(NULL);
+	else
 		recptr = GetInsertRecPtr();
-		elapsed_xlogs = (((double) (recptr - ckpt_start_recptr)) / XLogSegSize) / CheckPointSegments;
+	elapsed_xlogs = (((double) (recptr - ckpt_start_recptr)) / XLogSegSize) / CheckPointSegments;
 
-		if (progress < elapsed_xlogs)
-		{
-			ckpt_cached_elapsed = elapsed_xlogs;
-			return false;
-		}
+	if (progress < elapsed_xlogs)
+	{
+		ckpt_cached_elapsed = elapsed_xlogs;
+		return false;
 	}
 
 	/*
@@ -843,8 +844,7 @@ ChkptSigHupHandler(SIGNAL_ARGS)
 	int			save_errno = errno;
 
 	got_SIGHUP = true;
-	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -856,8 +856,7 @@ ReqCheckpointHandler(SIGNAL_ARGS)
 	int			save_errno = errno;
 
 	checkpoint_requested = true;
-	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -880,8 +879,7 @@ ReqShutdownHandler(SIGNAL_ARGS)
 	int			save_errno = errno;
 
 	shutdown_requested = true;
-	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -1212,13 +1210,12 @@ CompactCheckpointerRequestQueue(void)
 	MemSet(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(CheckpointerRequest);
 	ctl.entrysize = sizeof(struct CheckpointerSlotMapping);
-	ctl.hash = tag_hash;
 	ctl.hcxt = CurrentMemoryContext;
 
 	htab = hash_create("CompactCheckpointerRequestQueue",
 					   CheckpointerShmem->num_requests,
 					   &ctl,
-					   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
+					   HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
 	/*
 	 * The basic idea here is that a request can be skipped if it's followed
@@ -1305,19 +1302,6 @@ AbsorbFsyncRequests(void)
 	if (!AmCheckpointerProcess())
 		return;
 
-	/*
-	 * We have to PANIC if we fail to absorb all the pending requests (eg,
-	 * because our hashtable runs out of memory).  This is because the system
-	 * cannot run safely if we are unable to fsync what we have been told to
-	 * fsync.  Fortunately, the hashtable is so small that the problem is
-	 * quite unlikely to arise in practice.
-	 */
-	START_CRIT_SECTION();
-
-	/*
-	 * We try to avoid holding the lock for a long time by copying the request
-	 * array.
-	 */
 	LWLockAcquire(CheckpointerCommLock, LW_EXCLUSIVE);
 
 	/* Transfer stats counts into pending pgstats message */
@@ -1327,12 +1311,25 @@ AbsorbFsyncRequests(void)
 	CheckpointerShmem->num_backend_writes = 0;
 	CheckpointerShmem->num_backend_fsync = 0;
 
+	/*
+	 * We try to avoid holding the lock for a long time by copying the request
+	 * array, and processing the requests after releasing the lock.
+	 *
+	 * Once we have cleared the requests from shared memory, we have to PANIC
+	 * if we then fail to absorb them (eg, because our hashtable runs out of
+	 * memory).  This is because the system cannot run safely if we are unable
+	 * to fsync what we have been told to fsync.  Fortunately, the hashtable
+	 * is so small that the problem is quite unlikely to arise in practice.
+	 */
 	n = CheckpointerShmem->num_requests;
 	if (n > 0)
 	{
 		requests = (CheckpointerRequest *) palloc(n * sizeof(CheckpointerRequest));
 		memcpy(requests, CheckpointerShmem->requests, n * sizeof(CheckpointerRequest));
 	}
+
+	START_CRIT_SECTION();
+
 	CheckpointerShmem->num_requests = 0;
 
 	LWLockRelease(CheckpointerCommLock);
@@ -1340,10 +1337,10 @@ AbsorbFsyncRequests(void)
 	for (request = requests; n > 0; request++, n--)
 		RememberFsyncRequest(request->rnode, request->forknum, request->segno);
 
+	END_CRIT_SECTION();
+
 	if (requests)
 		pfree(requests);
-
-	END_CRIT_SECTION();
 }
 
 /*

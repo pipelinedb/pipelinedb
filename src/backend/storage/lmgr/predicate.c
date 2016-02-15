@@ -62,7 +62,7 @@
  *		an existing SIREAD lock for the same transaction, the SIREAD lock
  *		can be deleted.
  *
- * (7)	A write from a serializable transaction must ensure that a xact
+ * (7)	A write from a serializable transaction must ensure that an xact
  *		record exists for the transaction, with the same lifespan (until
  *		all concurrent transaction complete or the transaction is rolled
  *		back) so that rw-dependencies to that transaction can be
@@ -125,7 +125,7 @@
  *		- Protects both PredXact and SerializableXidHash.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -190,6 +190,7 @@
 #include "access/twophase.h"
 #include "access/twophase_rmgr.h"
 #include "access/xact.h"
+#include "access/xlog.h"
 #include "miscadmin.h"
 #include "storage/bufmgr.h"
 #include "storage/predicate.h"
@@ -285,7 +286,7 @@
  * the lock partition number from the hashcode.
  */
 #define PredicateLockTargetTagHashCode(predicatelocktargettag) \
-	(tag_hash((predicatelocktargettag), sizeof(PREDICATELOCKTARGETTAG)))
+	get_hash_value(PredicateLockTargetHash, predicatelocktargettag)
 
 /*
  * Given a predicate lock tag, and the hash for its target,
@@ -1094,7 +1095,6 @@ void
 InitPredicateLocks(void)
 {
 	HASHCTL		info;
-	int			hash_flags;
 	long		max_table_size;
 	Size		requestSize;
 	bool		found;
@@ -1112,15 +1112,14 @@ InitPredicateLocks(void)
 	MemSet(&info, 0, sizeof(info));
 	info.keysize = sizeof(PREDICATELOCKTARGETTAG);
 	info.entrysize = sizeof(PREDICATELOCKTARGET);
-	info.hash = tag_hash;
 	info.num_partitions = NUM_PREDICATELOCK_PARTITIONS;
-	hash_flags = (HASH_ELEM | HASH_FUNCTION | HASH_PARTITION | HASH_FIXED_SIZE);
 
 	PredicateLockTargetHash = ShmemInitHash("PREDICATELOCKTARGET hash",
 											max_table_size,
 											max_table_size,
 											&info,
-											hash_flags);
+											HASH_ELEM | HASH_BLOBS |
+											HASH_PARTITION | HASH_FIXED_SIZE);
 
 	/* Assume an average of 2 xacts per target */
 	max_table_size *= 2;
@@ -1142,13 +1141,13 @@ InitPredicateLocks(void)
 	info.entrysize = sizeof(PREDICATELOCK);
 	info.hash = predicatelock_hash;
 	info.num_partitions = NUM_PREDICATELOCK_PARTITIONS;
-	hash_flags = (HASH_ELEM | HASH_FUNCTION | HASH_PARTITION | HASH_FIXED_SIZE);
 
 	PredicateLockHash = ShmemInitHash("PREDICATELOCK hash",
 									  max_table_size,
 									  max_table_size,
 									  &info,
-									  hash_flags);
+									  HASH_ELEM | HASH_FUNCTION |
+									  HASH_PARTITION | HASH_FIXED_SIZE);
 
 	/*
 	 * Compute size for serializable transaction hashtable. Note these
@@ -1223,14 +1222,13 @@ InitPredicateLocks(void)
 	MemSet(&info, 0, sizeof(info));
 	info.keysize = sizeof(SERIALIZABLEXIDTAG);
 	info.entrysize = sizeof(SERIALIZABLEXID);
-	info.hash = tag_hash;
-	hash_flags = (HASH_ELEM | HASH_FUNCTION | HASH_FIXED_SIZE);
 
 	SerializableXidHash = ShmemInitHash("SERIALIZABLEXID hash",
 										max_table_size,
 										max_table_size,
 										&info,
-										hash_flags);
+										HASH_ELEM | HASH_BLOBS |
+										HASH_FIXED_SIZE);
 
 	/*
 	 * Allocate space for tracking rw-conflicts in lists attached to the
@@ -1655,6 +1653,14 @@ GetSerializableTransactionSnapshotInt(Snapshot snapshot,
 
 	Assert(!RecoveryInProgress());
 
+	/*
+	 * Since all parts of a serializable transaction must use the same
+	 * snapshot, it is too late to establish one after a parallel operation
+	 * has begun.
+	 */
+	if (IsInParallelMode())
+		elog(ERROR, "cannot establish serializable snapshot during a parallel operation");
+
 	proc = MyProc;
 	Assert(proc != NULL);
 	GET_VXID_FROM_PGPROC(vxid, *proc);
@@ -1792,11 +1798,10 @@ GetSerializableTransactionSnapshotInt(Snapshot snapshot,
 	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(PREDICATELOCKTARGETTAG);
 	hash_ctl.entrysize = sizeof(LOCALPREDICATELOCK);
-	hash_ctl.hash = tag_hash;
 	LocalPredicateLockHash = hash_create("Local predicate lock",
 										 max_predicate_locks_per_xact,
 										 &hash_ctl,
-										 HASH_ELEM | HASH_FUNCTION);
+										 HASH_ELEM | HASH_BLOBS);
 
 	return snapshot;
 }
@@ -3212,21 +3217,20 @@ ReleasePredicateLocks(bool isCommit)
 		return;
 	}
 
+	LWLockAcquire(SerializableXactHashLock, LW_EXCLUSIVE);
+
 	Assert(!isCommit || SxactIsPrepared(MySerializableXact));
 	Assert(!isCommit || !SxactIsDoomed(MySerializableXact));
 	Assert(!SxactIsCommitted(MySerializableXact));
 	Assert(!SxactIsRolledBack(MySerializableXact));
 
 	/* may not be serializable during COMMIT/ROLLBACK PREPARED */
-	if (MySerializableXact->pid != 0)
-		Assert(IsolationIsSerializable());
+	Assert(MySerializableXact->pid == 0 || IsolationIsSerializable());
 
 	/* We'd better not already be on the cleanup list. */
 	Assert(!SxactIsOnFinishedList(MySerializableXact));
 
 	topLevelIsDeclaredReadOnly = SxactIsReadOnly(MySerializableXact);
-
-	LWLockAcquire(SerializableXactHashLock, LW_EXCLUSIVE);
 
 	/*
 	 * We don't hold XidGenLock lock here, assuming that TransactionId is
@@ -4364,7 +4368,7 @@ CheckTableForSerializableConflictIn(Relation relation)
 	LWLockAcquire(SerializablePredicateLockListLock, LW_EXCLUSIVE);
 	for (i = 0; i < NUM_PREDICATELOCK_PARTITIONS; i++)
 		LWLockAcquire(PredicateLockHashPartitionLockByIndex(i), LW_SHARED);
-	LWLockAcquire(SerializableXactHashLock, LW_SHARED);
+	LWLockAcquire(SerializableXactHashLock, LW_EXCLUSIVE);
 
 	/* Scan through target list */
 	hash_seq_init(&seqstat, PredicateLockTargetHash);
@@ -4740,7 +4744,7 @@ AtPrepare_PredicateLocks(void)
 	if (MySerializableXact == InvalidSerializableXact)
 		return;
 
-	/* Generate a xact record for our SERIALIZABLEXACT */
+	/* Generate an xact record for our SERIALIZABLEXACT */
 	record.type = TWOPHASEPREDICATERECORD_XACT;
 	xactRecord->xmin = MySerializableXact->xmin;
 	xactRecord->flags = MySerializableXact->flags;

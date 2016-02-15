@@ -42,7 +42,7 @@ CQMatRelOpen(Relation matrel)
 	resultRelInfo->ri_RelationDesc = matrel;
 	resultRelInfo->ri_TrigDesc = NULL;
 
-	ExecOpenIndices(resultRelInfo);
+	ExecOpenIndices(resultRelInfo, false);
 
 	return resultRelInfo;
 }

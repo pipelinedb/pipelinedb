@@ -3,9 +3,8 @@
  * initsplan.c
  *	  Target list, qualification, joininfo initialization routines
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -16,9 +15,9 @@
 #include "postgres.h"
 
 #include "catalog/pg_type.h"
-#include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/clauses.h"
+#include "optimizer/cost.h"
 #include "optimizer/joininfo.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
@@ -48,7 +47,6 @@ typedef struct PostponedQual
 
 static void extract_lateral_references(PlannerInfo *root, RelOptInfo *brel,
 						   Index rtindex);
-static void add_lateral_info(PlannerInfo *root, Relids lhs, Relids rhs);
 static List *deconstruct_recurse(PlannerInfo *root, Node *jtnode,
 					bool below_outer_join,
 					Relids *qualscope, Relids *inner_join_rels,
@@ -57,6 +55,7 @@ static SpecialJoinInfo *make_outerjoininfo(PlannerInfo *root,
 				   Relids left_rels, Relids right_rels,
 				   Relids inner_join_rels,
 				   JoinType jointype, List *clause);
+static void compute_semijoin_info(SpecialJoinInfo *sjinfo, List *clause);
 static void distribute_qual_to_rels(PlannerInfo *root, Node *clause,
 						bool is_deduced,
 						bool below_outer_join,
@@ -73,6 +72,7 @@ static bool check_equivalence_delay(PlannerInfo *root,
 static bool check_redundant_nullability_qual(PlannerInfo *root, Node *clause);
 static void check_mergejoinable(RestrictInfo *restrictinfo);
 static void check_hashjoinable(RestrictInfo *restrictinfo);
+
 
 /*****************************************************************************
  *
@@ -305,7 +305,9 @@ extract_lateral_references(PlannerInfo *root, RelOptInfo *brel, Index rtindex)
 		return;
 
 	/* Fetch the appropriate variables */
-	if (rte->rtekind == RTE_SUBQUERY)
+	if (rte->rtekind == RTE_RELATION)
+		vars = pull_vars_of_level((Node *) rte->tablesample, 0);
+	else if (rte->rtekind == RTE_SUBQUERY)
 		vars = pull_vars_of_level((Node *) rte->subquery, 1);
 	else if (rte->rtekind == RTE_FUNCTION)
 		vars = pull_vars_of_level((Node *) rte->functions, 0);
@@ -379,11 +381,8 @@ extract_lateral_references(PlannerInfo *root, RelOptInfo *brel, Index rtindex)
 
 /*
  * create_lateral_join_info
- *	  For each unflattened LATERAL subquery, create LateralJoinInfo(s) and add
- *	  them to root->lateral_info_list, and fill in the per-rel lateral_relids
- *	  and lateral_referencers sets.  Also generate LateralJoinInfo(s) to
- *	  represent any lateral references within PlaceHolderVars (this part deals
- *	  with the effects of flattened LATERAL subqueries).
+ *	  Fill in the per-base-relation direct_lateral_relids, lateral_relids
+ *	  and lateral_referencers sets.
  *
  * This has to run after deconstruct_jointree, because we need to know the
  * final ph_eval_at values for PlaceHolderVars.
@@ -391,6 +390,7 @@ extract_lateral_references(PlannerInfo *root, RelOptInfo *brel, Index rtindex)
 void
 create_lateral_join_info(PlannerInfo *root)
 {
+	bool		found_laterals = false;
 	Index		rti;
 	ListCell   *lc;
 
@@ -427,8 +427,7 @@ create_lateral_join_info(PlannerInfo *root)
 			{
 				Var		   *var = (Var *) node;
 
-				add_lateral_info(root, bms_make_singleton(var->varno),
-								 brel->relids);
+				found_laterals = true;
 				lateral_relids = bms_add_member(lateral_relids,
 												var->varno);
 			}
@@ -438,7 +437,7 @@ create_lateral_join_info(PlannerInfo *root)
 				PlaceHolderInfo *phinfo = find_placeholder_info(root, phv,
 																false);
 
-				add_lateral_info(root, phinfo->ph_eval_at, brel->relids);
+				found_laterals = true;
 				lateral_relids = bms_add_members(lateral_relids,
 												 phinfo->ph_eval_at);
 			}
@@ -446,71 +445,153 @@ create_lateral_join_info(PlannerInfo *root)
 				Assert(false);
 		}
 
-		/* We now know all the relids needed for lateral refs in this rel */
-		if (bms_is_empty(lateral_relids))
-			continue;			/* ensure lateral_relids is NULL if empty */
-		brel->lateral_relids = lateral_relids;
+		/* We now have all the simple lateral refs from this rel */
+		brel->direct_lateral_relids = lateral_relids;
+		brel->lateral_relids = bms_copy(lateral_relids);
 	}
 
 	/*
-	 * Now check for lateral references within PlaceHolderVars, and make
-	 * LateralJoinInfos describing each such reference.  Unlike references in
-	 * unflattened LATERAL RTEs, the referencing location could be a join.
+	 * Now check for lateral references within PlaceHolderVars, and mark their
+	 * eval_at rels as having lateral references to the source rels.
+	 *
+	 * For a PHV that is due to be evaluated at a baserel, mark its source(s)
+	 * as direct lateral dependencies of the baserel (adding onto the ones
+	 * recorded above).  If it's due to be evaluated at a join, mark its
+	 * source(s) as indirect lateral dependencies of each baserel in the join,
+	 * ie put them into lateral_relids but not direct_lateral_relids.  This is
+	 * appropriate because we can't put any such baserel on the outside of a
+	 * join to one of the PHV's lateral dependencies, but on the other hand we
+	 * also can't yet join it directly to the dependency.
 	 */
 	foreach(lc, root->placeholder_list)
 	{
 		PlaceHolderInfo *phinfo = (PlaceHolderInfo *) lfirst(lc);
 		Relids		eval_at = phinfo->ph_eval_at;
+		int			varno;
 
-		if (phinfo->ph_lateral != NULL)
+		if (phinfo->ph_lateral == NULL)
+			continue;			/* PHV is uninteresting if no lateral refs */
+
+		found_laterals = true;
+
+		if (bms_get_singleton_member(eval_at, &varno))
 		{
-			List	   *vars = pull_var_clause((Node *) phinfo->ph_var->phexpr,
-											   PVC_RECURSE_AGGREGATES,
-											   PVC_INCLUDE_PLACEHOLDERS);
-			ListCell   *lc2;
+			/* Evaluation site is a baserel */
+			RelOptInfo *brel = find_base_rel(root, varno);
 
-			foreach(lc2, vars)
+			brel->direct_lateral_relids =
+				bms_add_members(brel->direct_lateral_relids,
+								phinfo->ph_lateral);
+			brel->lateral_relids =
+				bms_add_members(brel->lateral_relids,
+								phinfo->ph_lateral);
+		}
+		else
+		{
+			/* Evaluation site is a join */
+			varno = -1;
+			while ((varno = bms_next_member(eval_at, varno)) >= 0)
 			{
-				Node	   *node = (Node *) lfirst(lc2);
+				RelOptInfo *brel = find_base_rel(root, varno);
 
-				if (IsA(node, Var))
-				{
-					Var		   *var = (Var *) node;
-
-					if (!bms_is_member(var->varno, eval_at))
-						add_lateral_info(root,
-										 bms_make_singleton(var->varno),
-										 eval_at);
-				}
-				else if (IsA(node, PlaceHolderVar))
-				{
-					PlaceHolderVar *other_phv = (PlaceHolderVar *) node;
-					PlaceHolderInfo *other_phi;
-
-					other_phi = find_placeholder_info(root, other_phv,
-													  false);
-					if (!bms_is_subset(other_phi->ph_eval_at, eval_at))
-						add_lateral_info(root, other_phi->ph_eval_at, eval_at);
-				}
-				else
-					Assert(false);
+				brel->lateral_relids = bms_add_members(brel->lateral_relids,
+													   phinfo->ph_lateral);
 			}
-
-			list_free(vars);
 		}
 	}
 
-	/* If we found no lateral references, we're done. */
-	if (root->lateral_info_list == NIL)
+	/*
+	 * If we found no actual lateral references, we're done; but reset the
+	 * hasLateralRTEs flag to avoid useless work later.
+	 */
+	if (!found_laterals)
+	{
+		root->hasLateralRTEs = false;
 		return;
+	}
 
 	/*
-	 * Now that we've identified all lateral references, make a second pass in
-	 * which we mark each baserel with the set of relids of rels that
-	 * reference it laterally (essentially, the inverse mapping of
-	 * lateral_relids).  We'll need this for join_clause_is_movable_to().
+	 * Calculate the transitive closure of the lateral_relids sets, so that
+	 * they describe both direct and indirect lateral references.  If relation
+	 * X references Y laterally, and Y references Z laterally, then we will
+	 * have to scan X on the inside of a nestloop with Z, so for all intents
+	 * and purposes X is laterally dependent on Z too.
 	 *
-	 * Also, propagate lateral_relids and lateral_referencers from appendrel
+	 * This code is essentially Warshall's algorithm for transitive closure.
+	 * The outer loop considers each baserel, and propagates its lateral
+	 * dependencies to those baserels that have a lateral dependency on it.
+	 */
+	for (rti = 1; rti < root->simple_rel_array_size; rti++)
+	{
+		RelOptInfo *brel = root->simple_rel_array[rti];
+		Relids		outer_lateral_relids;
+		Index		rti2;
+
+		if (brel == NULL || brel->reloptkind != RELOPT_BASEREL)
+			continue;
+
+		/* need not consider baserel further if it has no lateral refs */
+		outer_lateral_relids = brel->lateral_relids;
+		if (outer_lateral_relids == NULL)
+			continue;
+
+		/* else scan all baserels */
+		for (rti2 = 1; rti2 < root->simple_rel_array_size; rti2++)
+		{
+			RelOptInfo *brel2 = root->simple_rel_array[rti2];
+
+			if (brel2 == NULL || brel2->reloptkind != RELOPT_BASEREL)
+				continue;
+
+			/* if brel2 has lateral ref to brel, propagate brel's refs */
+			if (bms_is_member(rti, brel2->lateral_relids))
+				brel2->lateral_relids = bms_add_members(brel2->lateral_relids,
+														outer_lateral_relids);
+		}
+	}
+
+	/*
+	 * Now that we've identified all lateral references, mark each baserel
+	 * with the set of relids of rels that reference it laterally (possibly
+	 * indirectly) --- that is, the inverse mapping of lateral_relids.
+	 */
+	for (rti = 1; rti < root->simple_rel_array_size; rti++)
+	{
+		RelOptInfo *brel = root->simple_rel_array[rti];
+		Relids		lateral_relids;
+		int			rti2;
+
+		if (brel == NULL || brel->reloptkind != RELOPT_BASEREL)
+			continue;
+
+		/* Nothing to do at rels with no lateral refs */
+		lateral_relids = brel->lateral_relids;
+		if (lateral_relids == NULL)
+			continue;
+
+		/*
+		 * We should not have broken the invariant that lateral_relids is
+		 * exactly NULL if empty.
+		 */
+		Assert(!bms_is_empty(lateral_relids));
+
+		/* Also, no rel should have a lateral dependency on itself */
+		Assert(!bms_is_member(rti, lateral_relids));
+
+		/* Mark this rel's referencees */
+		rti2 = -1;
+		while ((rti2 = bms_next_member(lateral_relids, rti2)) >= 0)
+		{
+			RelOptInfo *brel2 = root->simple_rel_array[rti2];
+
+			Assert(brel2 != NULL && brel2->reloptkind == RELOPT_BASEREL);
+			brel2->lateral_referencers =
+				bms_add_member(brel2->lateral_referencers, rti);
+		}
+	}
+
+	/*
+	 * Lastly, propagate lateral_relids and lateral_referencers from appendrel
 	 * parent rels to their child rels.  We intentionally give each child rel
 	 * the same minimum parameterization, even though it's quite possible that
 	 * some don't reference all the lateral rels.  This is because any append
@@ -522,29 +603,10 @@ create_lateral_join_info(PlannerInfo *root)
 	for (rti = 1; rti < root->simple_rel_array_size; rti++)
 	{
 		RelOptInfo *brel = root->simple_rel_array[rti];
-		Relids		lateral_referencers;
 
-		if (brel == NULL)
-			continue;
-		if (brel->reloptkind != RELOPT_BASEREL)
+		if (brel == NULL || brel->reloptkind != RELOPT_BASEREL)
 			continue;
 
-		/* Compute lateral_referencers using the finished lateral_info_list */
-		lateral_referencers = NULL;
-		foreach(lc, root->lateral_info_list)
-		{
-			LateralJoinInfo *ljinfo = (LateralJoinInfo *) lfirst(lc);
-
-			if (bms_is_member(brel->relid, ljinfo->lateral_lhs))
-				lateral_referencers = bms_add_members(lateral_referencers,
-													  ljinfo->lateral_rhs);
-		}
-		brel->lateral_referencers = lateral_referencers;
-
-		/*
-		 * If it's an appendrel parent, copy its lateral_relids and
-		 * lateral_referencers to each child rel.
-		 */
 		if (root->simple_rte_array[rti]->inh)
 		{
 			foreach(lc, root->append_rel_list)
@@ -556,6 +618,8 @@ create_lateral_join_info(PlannerInfo *root)
 					continue;
 				childrel = root->simple_rel_array[appinfo->child_relid];
 				Assert(childrel->reloptkind == RELOPT_OTHER_MEMBER_REL);
+				Assert(childrel->direct_lateral_relids == NULL);
+				childrel->direct_lateral_relids = brel->direct_lateral_relids;
 				Assert(childrel->lateral_relids == NULL);
 				childrel->lateral_relids = brel->lateral_relids;
 				Assert(childrel->lateral_referencers == NULL);
@@ -563,46 +627,6 @@ create_lateral_join_info(PlannerInfo *root)
 			}
 		}
 	}
-}
-
-/*
- * add_lateral_info
- *		Add a LateralJoinInfo to root->lateral_info_list, if needed
- *
- * We suppress redundant list entries.  The passed Relids are copied if saved.
- */
-static void
-add_lateral_info(PlannerInfo *root, Relids lhs, Relids rhs)
-{
-	LateralJoinInfo *ljinfo;
-	ListCell   *lc;
-
-	/* Sanity-check the input */
-	Assert(!bms_is_empty(lhs));
-	Assert(!bms_is_empty(rhs));
-	Assert(!bms_overlap(lhs, rhs));
-
-	/*
-	 * The input is redundant if it has the same RHS and an LHS that is a
-	 * subset of an existing entry's.  If an existing entry has the same RHS
-	 * and an LHS that is a subset of the new one, it's redundant, but we
-	 * don't trouble to get rid of it.  The only case that is really worth
-	 * worrying about is identical entries, and we handle that well enough
-	 * with this simple logic.
-	 */
-	foreach(lc, root->lateral_info_list)
-	{
-		ljinfo = (LateralJoinInfo *) lfirst(lc);
-		if (bms_equal(rhs, ljinfo->lateral_rhs) &&
-			bms_is_subset(lhs, ljinfo->lateral_lhs))
-			return;
-	}
-
-	/* Not there, so make a new entry */
-	ljinfo = makeNode(LateralJoinInfo);
-	ljinfo->lateral_lhs = bms_copy(lhs);
-	ljinfo->lateral_rhs = bms_copy(rhs);
-	root->lateral_info_list = lappend(root->lateral_info_list, ljinfo);
 }
 
 
@@ -1086,7 +1110,8 @@ make_outerjoininfo(PlannerInfo *root,
 	sjinfo->jointype = jointype;
 	/* this always starts out false */
 	sjinfo->delay_upper_joins = false;
-	sjinfo->join_quals = clause;
+
+	compute_semijoin_info(sjinfo, clause);
 
 	/* If it's a full join, no need to be very smart */
 	if (jointype == JOIN_FULL)
@@ -1124,6 +1149,9 @@ make_outerjoininfo(PlannerInfo *root,
 	min_righthand = bms_int_members(bms_union(clause_relids, inner_join_rels),
 									right_rels);
 
+	/*
+	 * Now check previous outer joins for ordering restrictions.
+	 */
 	foreach(l, root->join_info_list)
 	{
 		SpecialJoinInfo *otherinfo = (SpecialJoinInfo *) lfirst(l);
@@ -1163,9 +1191,15 @@ make_outerjoininfo(PlannerInfo *root,
 		 * For a lower OJ in our RHS, if our join condition does not use the
 		 * lower join's RHS and the lower OJ's join condition is strict, we
 		 * can interchange the ordering of the two OJs; otherwise we must add
-		 * the lower OJ's full syntactic relset to min_righthand.  Also, we
-		 * must preserve ordering anyway if either the current join or the
-		 * lower OJ is either a semijoin or an antijoin.
+		 * the lower OJ's full syntactic relset to min_righthand.
+		 *
+		 * Also, if our join condition does not use the lower join's LHS
+		 * either, force the ordering to be preserved.  Otherwise we can end
+		 * up with SpecialJoinInfos with identical min_righthands, which can
+		 * confuse join_is_legal (see discussion in backend/optimizer/README).
+		 *
+		 * Also, we must preserve ordering anyway if either the current join
+		 * or the lower OJ is either a semijoin or an antijoin.
 		 *
 		 * Here, we have to consider that "our join condition" includes any
 		 * clauses that syntactically appeared above the lower OJ and below
@@ -1181,6 +1215,7 @@ make_outerjoininfo(PlannerInfo *root,
 		if (bms_overlap(right_rels, otherinfo->syn_righthand))
 		{
 			if (bms_overlap(clause_relids, otherinfo->syn_righthand) ||
+				!bms_overlap(clause_relids, otherinfo->min_lefthand) ||
 				jointype == JOIN_SEMI ||
 				jointype == JOIN_ANTI ||
 				otherinfo->jointype == JOIN_SEMI ||
@@ -1237,6 +1272,182 @@ make_outerjoininfo(PlannerInfo *root,
 	sjinfo->min_righthand = min_righthand;
 
 	return sjinfo;
+}
+
+/*
+ * compute_semijoin_info
+ *	  Fill semijoin-related fields of a new SpecialJoinInfo
+ *
+ * Note: this relies on only the jointype and syn_righthand fields of the
+ * SpecialJoinInfo; the rest may not be set yet.
+ */
+static void
+compute_semijoin_info(SpecialJoinInfo *sjinfo, List *clause)
+{
+	List	   *semi_operators;
+	List	   *semi_rhs_exprs;
+	bool		all_btree;
+	bool		all_hash;
+	ListCell   *lc;
+
+	/* Initialize semijoin-related fields in case we can't unique-ify */
+	sjinfo->semi_can_btree = false;
+	sjinfo->semi_can_hash = false;
+	sjinfo->semi_operators = NIL;
+	sjinfo->semi_rhs_exprs = NIL;
+
+	/* Nothing more to do if it's not a semijoin */
+	if (sjinfo->jointype != JOIN_SEMI)
+		return;
+
+	/*
+	 * Look to see whether the semijoin's join quals consist of AND'ed
+	 * equality operators, with (only) RHS variables on only one side of each
+	 * one.  If so, we can figure out how to enforce uniqueness for the RHS.
+	 *
+	 * Note that the input clause list is the list of quals that are
+	 * *syntactically* associated with the semijoin, which in practice means
+	 * the synthesized comparison list for an IN or the WHERE of an EXISTS.
+	 * Particularly in the latter case, it might contain clauses that aren't
+	 * *semantically* associated with the join, but refer to just one side or
+	 * the other.  We can ignore such clauses here, as they will just drop
+	 * down to be processed within one side or the other.  (It is okay to
+	 * consider only the syntactically-associated clauses here because for a
+	 * semijoin, no higher-level quals could refer to the RHS, and so there
+	 * can be no other quals that are semantically associated with this join.
+	 * We do things this way because it is useful to have the set of potential
+	 * unique-ification expressions before we can extract the list of quals
+	 * that are actually semantically associated with the particular join.)
+	 *
+	 * Note that the semi_operators list consists of the joinqual operators
+	 * themselves (but commuted if needed to put the RHS value on the right).
+	 * These could be cross-type operators, in which case the operator
+	 * actually needed for uniqueness is a related single-type operator. We
+	 * assume here that that operator will be available from the btree or hash
+	 * opclass when the time comes ... if not, create_unique_plan() will fail.
+	 */
+	semi_operators = NIL;
+	semi_rhs_exprs = NIL;
+	all_btree = true;
+	all_hash = enable_hashagg;	/* don't consider hash if not enabled */
+	foreach(lc, clause)
+	{
+		OpExpr	   *op = (OpExpr *) lfirst(lc);
+		Oid			opno;
+		Node	   *left_expr;
+		Node	   *right_expr;
+		Relids		left_varnos;
+		Relids		right_varnos;
+		Relids		all_varnos;
+		Oid			opinputtype;
+
+		/* Is it a binary opclause? */
+		if (!IsA(op, OpExpr) ||
+			list_length(op->args) != 2)
+		{
+			/* No, but does it reference both sides? */
+			all_varnos = pull_varnos((Node *) op);
+			if (!bms_overlap(all_varnos, sjinfo->syn_righthand) ||
+				bms_is_subset(all_varnos, sjinfo->syn_righthand))
+			{
+				/*
+				 * Clause refers to only one rel, so ignore it --- unless it
+				 * contains volatile functions, in which case we'd better
+				 * punt.
+				 */
+				if (contain_volatile_functions((Node *) op))
+					return;
+				continue;
+			}
+			/* Non-operator clause referencing both sides, must punt */
+			return;
+		}
+
+		/* Extract data from binary opclause */
+		opno = op->opno;
+		left_expr = linitial(op->args);
+		right_expr = lsecond(op->args);
+		left_varnos = pull_varnos(left_expr);
+		right_varnos = pull_varnos(right_expr);
+		all_varnos = bms_union(left_varnos, right_varnos);
+		opinputtype = exprType(left_expr);
+
+		/* Does it reference both sides? */
+		if (!bms_overlap(all_varnos, sjinfo->syn_righthand) ||
+			bms_is_subset(all_varnos, sjinfo->syn_righthand))
+		{
+			/*
+			 * Clause refers to only one rel, so ignore it --- unless it
+			 * contains volatile functions, in which case we'd better punt.
+			 */
+			if (contain_volatile_functions((Node *) op))
+				return;
+			continue;
+		}
+
+		/* check rel membership of arguments */
+		if (!bms_is_empty(right_varnos) &&
+			bms_is_subset(right_varnos, sjinfo->syn_righthand) &&
+			!bms_overlap(left_varnos, sjinfo->syn_righthand))
+		{
+			/* typical case, right_expr is RHS variable */
+		}
+		else if (!bms_is_empty(left_varnos) &&
+				 bms_is_subset(left_varnos, sjinfo->syn_righthand) &&
+				 !bms_overlap(right_varnos, sjinfo->syn_righthand))
+		{
+			/* flipped case, left_expr is RHS variable */
+			opno = get_commutator(opno);
+			if (!OidIsValid(opno))
+				return;
+			right_expr = left_expr;
+		}
+		else
+		{
+			/* mixed membership of args, punt */
+			return;
+		}
+
+		/* all operators must be btree equality or hash equality */
+		if (all_btree)
+		{
+			/* oprcanmerge is considered a hint... */
+			if (!op_mergejoinable(opno, opinputtype) ||
+				get_mergejoin_opfamilies(opno) == NIL)
+				all_btree = false;
+		}
+		if (all_hash)
+		{
+			/* ... but oprcanhash had better be correct */
+			if (!op_hashjoinable(opno, opinputtype))
+				all_hash = false;
+		}
+		if (!(all_btree || all_hash))
+			return;
+
+		/* so far so good, keep building lists */
+		semi_operators = lappend_oid(semi_operators, opno);
+		semi_rhs_exprs = lappend(semi_rhs_exprs, copyObject(right_expr));
+	}
+
+	/* Punt if we didn't find at least one column to unique-ify */
+	if (semi_rhs_exprs == NIL)
+		return;
+
+	/*
+	 * The expressions we'd need to unique-ify mustn't be volatile.
+	 */
+	if (contain_volatile_functions((Node *) semi_rhs_exprs))
+		return;
+
+	/*
+	 * If we get here, we can unique-ify the semijoin's RHS using at least one
+	 * of sorting and hashing.  Save the information about how to do that.
+	 */
+	sjinfo->semi_can_btree = all_btree;
+	sjinfo->semi_can_hash = all_hash;
+	sjinfo->semi_operators = semi_operators;
+	sjinfo->semi_rhs_exprs = semi_rhs_exprs;
 }
 
 

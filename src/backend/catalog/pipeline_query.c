@@ -676,7 +676,6 @@ GetAdhocContinuousViewIds(void)
 	return result;
 }
 
-
 Oid
 GetContViewId(RangeVar *name)
 {

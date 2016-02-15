@@ -3,7 +3,7 @@
  * json.c
  *		JSON data type support.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -70,6 +70,15 @@ typedef enum					/* type categories for datum_to_json */
 	JSONTYPE_CAST,				/* something with an explicit cast to JSON */
 	JSONTYPE_OTHER				/* all else */
 } JsonTypeCategory;
+
+typedef struct JsonAggState
+{
+	StringInfo	str;
+	JsonTypeCategory key_category;
+	Oid			key_output_func;
+	JsonTypeCategory val_category;
+	Oid			val_output_func;
+} JsonAggState;
 
 static inline void json_lex(JsonLexContext *lex);
 static inline void json_lex_string(JsonLexContext *lex);
@@ -344,6 +353,45 @@ pg_parse_json(JsonLexContext *lex, JsonSemAction *sem)
 }
 
 /*
+ * json_count_array_elements
+ *
+ * Returns number of array elements in lex context at start of array token
+ * until end of array token at same nesting level.
+ *
+ * Designed to be called from array_start routines.
+ */
+int
+json_count_array_elements(JsonLexContext *lex)
+{
+	JsonLexContext copylex;
+	int			count;
+
+	/*
+	 * It's safe to do this with a shallow copy because the lexical routines
+	 * don't scribble on the input. They do scribble on the other pointers
+	 * etc, so doing this with a copy makes that safe.
+	 */
+	memcpy(&copylex, lex, sizeof(JsonLexContext));
+	copylex.strval = NULL;		/* not interested in values here */
+	copylex.lex_level++;
+
+	count = 0;
+	lex_expect(JSON_PARSE_ARRAY_START, &copylex, JSON_TOKEN_ARRAY_START);
+	if (lex_peek(&copylex) != JSON_TOKEN_ARRAY_END)
+	{
+		do
+		{
+			count++;
+			parse_array_element(&copylex, &nullSemAction);
+		}
+		while (lex_accept(&copylex, JSON_TOKEN_COMMA, NULL));
+	}
+	lex_expect(JSON_PARSE_ARRAY_NEXT, &copylex, JSON_TOKEN_ARRAY_END);
+
+	return count;
+}
+
+/*
  *	Recursive Descent parse routines. There is one for each structural
  *	element in a json document:
  *	  - scalar (string, number, true, false, null)
@@ -445,6 +493,8 @@ parse_object(JsonLexContext *lex, JsonSemAction *sem)
 	json_struct_action oend = sem->object_end;
 	JsonTokenType tok;
 
+	check_stack_depth();
+
 	if (ostart != NULL)
 		(*ostart) (sem->semstate);
 
@@ -522,6 +572,8 @@ parse_array(JsonLexContext *lex, JsonSemAction *sem)
 	 */
 	json_struct_action astart = sem->array_start;
 	json_struct_action aend = sem->array_end;
+
+	check_stack_depth();
 
 	if (astart != NULL)
 		(*astart) (sem->semstate);
@@ -842,8 +894,8 @@ json_lex_string(JsonLexContext *lex)
 					else
 					{
 						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-								 errmsg("invalid input syntax for type json"),
+								(errcode(ERRCODE_UNTRANSLATABLE_CHARACTER),
+							   errmsg("unsupported Unicode escape sequence"),
 								 errdetail("Unicode escape values cannot be used for code point values above 007F when the server encoding is not UTF8."),
 								 report_json_context(lex)));
 					}
@@ -1289,10 +1341,14 @@ json_categorize_type(Oid typoid,
 	/* Look through any domain */
 	typoid = getBaseType(typoid);
 
-	/* We'll usually need to return the type output function */
-	getTypeOutputInfo(typoid, outfuncoid, &typisvarlena);
+	*outfuncoid = InvalidOid;
 
-	/* Check for known types */
+	/*
+	 * We need to get the output function for everything except date and
+	 * timestamp types, array and composite types, booleans, and non-builtin
+	 * types where there's a cast to json.
+	 */
+
 	switch (typoid)
 	{
 		case BOOLOID:
@@ -1305,6 +1361,7 @@ json_categorize_type(Oid typoid,
 		case FLOAT4OID:
 		case FLOAT8OID:
 		case NUMERICOID:
+			getTypeOutputInfo(typoid, outfuncoid, &typisvarlena);
 			*tcategory = JSONTYPE_NUMERIC;
 			break;
 
@@ -1322,6 +1379,7 @@ json_categorize_type(Oid typoid,
 
 		case JSONOID:
 		case JSONBOID:
+			getTypeOutputInfo(typoid, outfuncoid, &typisvarlena);
 			*tcategory = JSONTYPE_JSON;
 			break;
 
@@ -1338,23 +1396,27 @@ json_categorize_type(Oid typoid,
 				/* but let's look for a cast to json, if it's not built-in */
 				if (typoid >= FirstNormalObjectId)
 				{
-					HeapTuple	tuple;
+					Oid			castfunc;
+					CoercionPathType ctype;
 
-					tuple = SearchSysCache2(CASTSOURCETARGET,
-											ObjectIdGetDatum(typoid),
-											ObjectIdGetDatum(JSONOID));
-					if (HeapTupleIsValid(tuple))
+					ctype = find_coercion_pathway(JSONOID, typoid,
+												  COERCION_EXPLICIT,
+												  &castfunc);
+					if (ctype == COERCION_PATH_FUNC && OidIsValid(castfunc))
 					{
-						Form_pg_cast castForm = (Form_pg_cast) GETSTRUCT(tuple);
-
-						if (castForm->castmethod == COERCION_METHOD_FUNCTION)
-						{
-							*tcategory = JSONTYPE_CAST;
-							*outfuncoid = castForm->castfunc;
-						}
-
-						ReleaseSysCache(tuple);
+						*tcategory = JSONTYPE_CAST;
+						*outfuncoid = castfunc;
 					}
+					else
+					{
+						/* non builtin type with no cast */
+						getTypeOutputInfo(typoid, outfuncoid, &typisvarlena);
+					}
+				}
+				else
+				{
+					/* any other builtin type */
+					getTypeOutputInfo(typoid, outfuncoid, &typisvarlena);
 				}
 			}
 			break;
@@ -1377,6 +1439,8 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 {
 	char	   *outputstr;
 	text	   *jsontext;
+
+	check_stack_depth();
 
 	/* callers are expected to ensure that null keys are not passed in */
 	Assert(!(key_scalar && is_null));
@@ -1431,19 +1495,16 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 				char		buf[MAXDATELEN + 1];
 
 				date = DatumGetDateADT(val);
-
+				/* Same as date_out(), but forcing DateStyle */
 				if (DATE_NOT_FINITE(date))
-				{
-					/* we have to format infinity ourselves */
-					appendStringInfoString(result,DT_INFINITY);
-				}
+					EncodeSpecialDate(date, buf);
 				else
 				{
 					j2date(date + POSTGRES_EPOCH_JDATE,
 						   &(tm.tm_year), &(tm.tm_mon), &(tm.tm_mday));
 					EncodeDateOnly(&tm, USE_XSD_DATES, buf);
-					appendStringInfo(result, "\"%s\"", buf);
 				}
+				appendStringInfo(result, "\"%s\"", buf);
 			}
 			break;
 		case JSONTYPE_TIMESTAMP:
@@ -1454,21 +1515,16 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 				char		buf[MAXDATELEN + 1];
 
 				timestamp = DatumGetTimestamp(val);
-
+				/* Same as timestamp_out(), but forcing DateStyle */
 				if (TIMESTAMP_NOT_FINITE(timestamp))
-				{
-					/* we have to format infinity ourselves */
-					appendStringInfoString(result,DT_INFINITY);
-				}
+					EncodeSpecialTimestamp(timestamp, buf);
 				else if (timestamp2tm(timestamp, NULL, &tm, &fsec, NULL, NULL) == 0)
-				{
 					EncodeDateTime(&tm, fsec, false, 0, NULL, USE_XSD_DATES, buf);
-					appendStringInfo(result, "\"%s\"", buf);
-				}
 				else
 					ereport(ERROR,
 							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
 							 errmsg("timestamp out of range")));
+				appendStringInfo(result, "\"%s\"", buf);
 			}
 			break;
 		case JSONTYPE_TIMESTAMPTZ:
@@ -1480,22 +1536,17 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 				const char *tzn = NULL;
 				char		buf[MAXDATELEN + 1];
 
-				timestamp = DatumGetTimestamp(val);
-
+				timestamp = DatumGetTimestampTz(val);
+				/* Same as timestamptz_out(), but forcing DateStyle */
 				if (TIMESTAMP_NOT_FINITE(timestamp))
-				{
-					/* we have to format infinity ourselves */
-					appendStringInfoString(result,DT_INFINITY);
-				}
+					EncodeSpecialTimestamp(timestamp, buf);
 				else if (timestamp2tm(timestamp, &tz, &tm, &fsec, &tzn, NULL) == 0)
-				{
 					EncodeDateTime(&tm, fsec, true, tz, tzn, USE_XSD_DATES, buf);
-					appendStringInfo(result, "\"%s\"", buf);
-				}
 				else
 					ereport(ERROR,
 							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
 							 errmsg("timestamp out of range")));
+				appendStringInfo(result, "\"%s\"", buf);
 			}
 			break;
 		case JSONTYPE_JSON:

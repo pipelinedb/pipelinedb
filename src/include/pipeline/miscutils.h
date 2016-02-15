@@ -8,8 +8,12 @@
 #ifndef MISCUTILS_H
 #define MISCUTILS_H
 
-#include "c.h"
+#include "postgres.h"
+
+#include "access/htup_details.h"
+#include "catalog/pg_type.h"
 #include "executor/tuptable.h"
+#include "miscadmin.h"
 #include "lib/stringinfo.h"
 #include "storage/dsm.h"
 #include "utils/typcache.h"

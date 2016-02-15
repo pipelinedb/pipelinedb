@@ -2,7 +2,7 @@
  *
  * clusterdb
  *
- * Portions Copyright (c) 2002-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2002-2015, PostgreSQL Global Development Group
  *
  * src/bin/scripts/clusterdb.c
  *
@@ -201,10 +201,10 @@ cluster_one_database(const char *dbname, bool verbose, const char *table,
 		appendPQExpBufferStr(&sql, " VERBOSE");
 	if (table)
 		appendPQExpBuffer(&sql, " %s", table);
-	appendPQExpBufferStr(&sql, ";");
+	appendPQExpBufferChar(&sql, ';');
 
 	conn = connectDatabase(dbname, host, port, username, prompt_password,
-						   progname, false);
+						   progname, false, false);
 	if (!executeMaintenanceCommand(conn, sql.data, echo))
 	{
 		if (table)

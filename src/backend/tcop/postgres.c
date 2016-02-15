@@ -3,7 +3,7 @@
  * postgres.c
  *	  POSTGRES C Backend Interface
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -38,6 +38,7 @@
 #include "rusagestub.h"
 #endif
 
+#include "access/parallel.h"
 #include "access/printtup.h"
 #include "access/xact.h"
 #include "access/htup_details.h"
@@ -328,17 +329,25 @@ InteractiveBackend(StringInfo inBuf)
  * interactive_getc -- collect one character from stdin
  *
  * Even though we are not reading from a "client" process, we still want to
- * respond to signals, particularly SIGTERM/SIGQUIT.  Hence we must use
- * prepare_for_client_read and client_read_ended.
+ * respond to signals, particularly SIGTERM/SIGQUIT.
  */
 static int
 interactive_getc(void)
 {
 	int			c;
 
-	prepare_for_client_read();
+	/*
+	 * This will not process catchup interrupts or notifications while
+	 * reading. But those can't really be relevant for a standalone backend
+	 * anyway. To properly handle SIGTERM there's a hack in die() that
+	 * directly processes interrupts at this stage...
+	 */
+	CHECK_FOR_INTERRUPTS();
+
 	c = getc(stdin);
-	client_read_ended();
+
+	ProcessClientReadInterrupt(true);
+
 	return c;
 }
 
@@ -422,7 +431,6 @@ SocketBackend(StringInfo inBuf)
 			break;
 
 		case 'F':				/* fastpath function call */
-			/* we let fastpath.c cope with old-style input of this */
 			doing_extended_query_message = false;
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
 			{
@@ -541,53 +549,78 @@ ReadCommand(StringInfo inBuf)
 }
 
 /*
- * prepare_for_client_read -- set up to possibly block on client input
+ * ProcessClientReadInterrupt() - Process interrupts specific to client reads
  *
- * This must be called immediately before any low-level read from the
- * client connection.  It is necessary to do it at a sufficiently low level
- * that there won't be any other operations except the read kernel call
- * itself between this call and the subsequent client_read_ended() call.
- * In particular there mustn't be use of malloc() or other potentially
- * non-reentrant libc functions.  This restriction makes it safe for us
- * to allow interrupt service routines to execute nontrivial code while
- * we are waiting for input.
+ * This is called just after low-level reads. That might be after the read
+ * finished successfully, or it was interrupted via interrupt.
+ *
+ * Must preserve errno!
  */
 void
-prepare_for_client_read(void)
+ProcessClientReadInterrupt(bool blocked)
 {
+	int			save_errno = errno;
+
 	if (DoingCommandRead)
 	{
-		/* Enable immediate processing of asynchronous signals */
-		EnableNotifyInterrupt();
-		EnableCatchupInterrupt();
+		/* Check for general interrupts that arrived while reading */
+		CHECK_FOR_INTERRUPTS();
 
-		/* Allow die interrupts to be processed while waiting */
-		ImmediateInterruptOK = true;
+		/* Process sinval catchup interrupts that happened while reading */
+		if (catchupInterruptPending)
+			ProcessCatchupInterrupt();
 
-		/* And don't forget to detect one that already arrived */
+		/* Process sinval catchup interrupts that happened while reading */
+		if (notifyInterruptPending)
+			ProcessNotifyInterrupt();
+	}
+	else if (ProcDiePending && blocked)
+	{
+		/*
+		 * We're dying. It's safe (and sane) to handle that now.
+		 */
 		CHECK_FOR_INTERRUPTS();
 	}
+
+	errno = save_errno;
 }
 
 /*
- * client_read_ended -- get out of the client-input state
+ * ProcessClientWriteInterrupt() - Process interrupts specific to client writes
  *
- * This is called just after low-level reads.  It must preserve errno!
+ * This is called just after low-level writes. That might be after the read
+ * finished successfully, or it was interrupted via interrupt. 'blocked' tells
+ * us whether the
+ *
+ * Must preserve errno!
  */
 void
-client_read_ended(void)
+ProcessClientWriteInterrupt(bool blocked)
 {
-	if (DoingCommandRead)
+	int			save_errno = errno;
+
+	/*
+	 * We only want to process the interrupt here if socket writes are
+	 * blocking to increase the chance to get an error message to the client.
+	 * If we're not blocked there'll soon be a CHECK_FOR_INTERRUPTS(). But if
+	 * we're blocked we'll never get out of that situation if the client has
+	 * died.
+	 */
+	if (ProcDiePending && blocked)
 	{
-		int			save_errno = errno;
+		/*
+		 * We're dying. It's safe (and sane) to handle that now. But we don't
+		 * want to send the client the error message as that a) would possibly
+		 * block again b) would possibly lead to sending an error message to
+		 * the client, while we already started to send something else.
+		 */
+		if (whereToSendOutput == DestRemote)
+			whereToSendOutput = DestNone;
 
-		ImmediateInterruptOK = false;
-
-		DisableNotifyInterrupt();
-		DisableCatchupInterrupt();
-
-		errno = save_errno;
+		CHECK_FOR_INTERRUPTS();
 	}
+
+	errno = save_errno;
 }
 
 /*
@@ -1638,9 +1671,8 @@ exec_bind_message(StringInfo input_message)
 	{
 		int			paramno;
 
-		/* sizeof(ParamListInfoData) includes the first array element */
-		params = (ParamListInfo) palloc(sizeof(ParamListInfoData) +
-								  (numParams - 1) * sizeof(ParamExternData));
+		params = (ParamListInfo) palloc(offsetof(ParamListInfoData, params) +
+										numParams * sizeof(ParamExternData));
 		/* we have static list of params, so no hooks needed */
 		params->paramFetch = NULL;
 		params->paramFetchArg = NULL;
@@ -2079,7 +2111,7 @@ exec_execute_message(const char *portal_name, long max_rows)
  * check_log_statement
  *		Determine whether command should be logged because of log_statement
  *
- * parsetree_list can be either raw grammar output or a list of planned
+ * stmt_list can be either raw grammar output or a list of planned
  * statements
  */
 static bool
@@ -2666,18 +2698,19 @@ die(SIGNAL_ARGS)
 	{
 		InterruptPending = true;
 		ProcDiePending = true;
-
-		/*
-		 * If we're waiting for input or a lock so that it's safe to
-		 * interrupt, service the interrupt immediately
-		 */
-		if (ImmediateInterruptOK)
-			ProcessInterrupts();
 	}
 
 	/* If we're still here, waken anything waiting on the process latch */
-	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+	SetLatch(MyLatch);
+
+	/*
+	 * If we're in single user mode, we want to quit immediately - we can't
+	 * rely on latches as they wouldn't work when stdin/stdout is a file.
+	 * Rather ugly, but it's unlikely to be worthwhile to invest much more
+	 * effort just for the benefit of single user mode.
+	 */
+	if (DoingCommandRead && whereToSendOutput != DestRemote)
+		ProcessInterrupts();
 
 	errno = save_errno;
 }
@@ -2698,18 +2731,10 @@ StatementCancelHandler(SIGNAL_ARGS)
 	{
 		InterruptPending = true;
 		QueryCancelPending = true;
-
-		/*
-		 * If we're waiting for input or a lock so that it's safe to
-		 * interrupt, service the interrupt immediately
-		 */
-		if (ImmediateInterruptOK)
-			ProcessInterrupts();
 	}
 
 	/* If we're still here, waken anything waiting on the process latch */
-	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -2734,8 +2759,7 @@ SigHupHandler(SIGNAL_ARGS)
 	int			save_errno = errno;
 
 	got_SIGHUP = true;
-	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -2847,13 +2871,6 @@ RecoveryConflictInterrupt(ProcSignalReason reason)
 		 */
 		if (reason == PROCSIG_RECOVERY_CONFLICT_DATABASE)
 			RecoveryConflictRetryable = false;
-
-		/*
-		 * If we're waiting for input or a lock so that it's safe to
-		 * interrupt, service the interrupt immediately
-		 */
-		if (ImmediateInterruptOK)
-			ProcessInterrupts();
 	}
 
 	/*
@@ -2863,8 +2880,7 @@ RecoveryConflictInterrupt(ProcSignalReason reason)
 	 * waiting on that latch, expecting to get interrupted by query cancels et
 	 * al., would also need to set set_latch_on_sigusr1.
 	 */
-	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -2879,22 +2895,24 @@ RecoveryConflictInterrupt(ProcSignalReason reason)
 void
 ProcessInterrupts(void)
 {
-	/* OK to accept any interrupt now? */
+	/* OK to accept any interrupts now? */
 	if (InterruptHoldoffCount != 0 || CritSectionCount != 0)
 		return;
 	InterruptPending = false;
+
 	if (ProcDiePending)
 	{
 		ProcDiePending = false;
 		QueryCancelPending = false;		/* ProcDie trumps QueryCancel */
-		ImmediateInterruptOK = false;	/* not idle anymore */
 		LockErrorCleanup();
-		DisableNotifyInterrupt();
-		DisableCatchupInterrupt();
 		/* As in quickdie, don't risk sending to client during auth */
 		if (ClientAuthInProgress && whereToSendOutput == DestRemote)
 			whereToSendOutput = DestNone;
-		if (IsAutoVacuumWorkerProcess())
+		if (ClientAuthInProgress)
+			ereport(FATAL,
+					(errcode(ERRCODE_QUERY_CANCELED),
+					 errmsg("canceling authentication due to timeout")));
+		else if (IsAutoVacuumWorkerProcess())
 			ereport(FATAL,
 					(errcode(ERRCODE_ADMIN_SHUTDOWN),
 					 errmsg("terminating autovacuum process due to administrator command")));
@@ -2924,10 +2942,7 @@ ProcessInterrupts(void)
 	if (ClientConnectionLost)
 	{
 		QueryCancelPending = false;		/* lost connection trumps QueryCancel */
-		ImmediateInterruptOK = false;	/* not idle anymore */
 		LockErrorCleanup();
-		DisableNotifyInterrupt();
-		DisableCatchupInterrupt();
 		/* don't send to client, we already know the connection to be dead. */
 		whereToSendOutput = DestNone;
 		ereport(FATAL,
@@ -2943,16 +2958,13 @@ ProcessInterrupts(void)
 	 */
 	if (RecoveryConflictPending && DoingCommandRead)
 	{
-		QueryCancelPending = false;			/* this trumps QueryCancel */
-		ImmediateInterruptOK = false;		/* not idle anymore */
+		QueryCancelPending = false;		/* this trumps QueryCancel */
 		RecoveryConflictPending = false;
 		LockErrorCleanup();
-		DisableNotifyInterrupt();
-		DisableCatchupInterrupt();
 		pgstat_report_recovery_conflict(RecoveryConflictReason);
 		ereport(FATAL,
 				(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-				 errmsg("terminating connection due to conflict with recovery"),
+			  errmsg("terminating connection due to conflict with recovery"),
 				 errdetail_recovery_conflict(),
 				 errhint("In a moment you should be able to reconnect to the"
 						 " database and repeat your command.")));
@@ -2977,19 +2989,6 @@ ProcessInterrupts(void)
 		}
 
 		QueryCancelPending = false;
-		if (ClientAuthInProgress)
-		{
-			ImmediateInterruptOK = false;		/* not idle anymore */
-			LockErrorCleanup();
-			DisableNotifyInterrupt();
-			DisableCatchupInterrupt();
-			/* As in quickdie, don't risk sending to client during auth */
-			if (whereToSendOutput == DestRemote)
-				whereToSendOutput = DestNone;
-			ereport(ERROR,
-					(errcode(ERRCODE_QUERY_CANCELED),
-					 errmsg("canceling authentication due to timeout")));
-		}
 
 		/*
 		 * If LOCK_TIMEOUT and STATEMENT_TIMEOUT indicators are both set, we
@@ -2997,41 +2996,30 @@ ProcessInterrupts(void)
 		 */
 		if (get_timeout_indicator(LOCK_TIMEOUT, true))
 		{
-			ImmediateInterruptOK = false;		/* not idle anymore */
 			(void) get_timeout_indicator(STATEMENT_TIMEOUT, true);
 			LockErrorCleanup();
-			DisableNotifyInterrupt();
-			DisableCatchupInterrupt();
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 					 errmsg("canceling statement due to lock timeout")));
 		}
 		if (get_timeout_indicator(STATEMENT_TIMEOUT, true))
 		{
-			ImmediateInterruptOK = false;		/* not idle anymore */
 			LockErrorCleanup();
-			DisableNotifyInterrupt();
-			DisableCatchupInterrupt();
 			ereport(ERROR,
 					(errcode(ERRCODE_QUERY_CANCELED),
 					 errmsg("canceling statement due to statement timeout")));
 		}
 		if (IsAutoVacuumWorkerProcess())
 		{
-			ImmediateInterruptOK = false;		/* not idle anymore */
 			LockErrorCleanup();
-			DisableNotifyInterrupt();
-			DisableCatchupInterrupt();
 			ereport(ERROR,
 					(errcode(ERRCODE_QUERY_CANCELED),
 					 errmsg("canceling autovacuum task")));
 		}
 		if (RecoveryConflictPending)
 		{
-			ImmediateInterruptOK = false;		/* not idle anymore */
 			RecoveryConflictPending = false;
-			DisableNotifyInterrupt();
-			DisableCatchupInterrupt();
+			LockErrorCleanup();
 			pgstat_report_recovery_conflict(RecoveryConflictReason);
 			ereport(ERROR,
 					(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
@@ -3046,16 +3034,15 @@ ProcessInterrupts(void)
 		 */
 		if (!DoingCommandRead)
 		{
-			ImmediateInterruptOK = false;		/* not idle anymore */
 			LockErrorCleanup();
-			DisableNotifyInterrupt();
-			DisableCatchupInterrupt();
 			ereport(ERROR,
 					(errcode(ERRCODE_QUERY_CANCELED),
 					 errmsg("canceling statement due to user request")));
 		}
 	}
-	/* If we get here, do nothing (probably, QueryCancelPending was reset) */
+
+	if (ParallelMessagePending)
+		HandleParallelMessages();
 }
 
 
@@ -3143,15 +3130,32 @@ restore_stack_base(pg_stack_base_t base)
 }
 
 /*
- * check_stack_depth: check for excessively deep recursion
+ * check_stack_depth/stack_is_too_deep: check for excessively deep recursion
  *
  * This should be called someplace in any recursive routine that might possibly
  * recurse deep enough to overflow the stack.  Most Unixen treat stack
  * overflow as an unrecoverable SIGSEGV, so we want to error out ourselves
  * before hitting the hardware limit.
+ *
+ * check_stack_depth() just throws an error summarily.  stack_is_too_deep()
+ * can be used by code that wants to handle the error condition itself.
  */
 void
 check_stack_depth(void)
+{
+	if (stack_is_too_deep())
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_STATEMENT_TOO_COMPLEX),
+				 errmsg("stack depth limit exceeded"),
+				 errhint("Increase the configuration parameter \"max_stack_depth\" (currently %dkB), "
+			  "after ensuring the platform's stack depth limit is adequate.",
+						 max_stack_depth)));
+	}
+}
+
+bool
+stack_is_too_deep(void)
 {
 	char		stack_top_loc;
 	long		stack_depth;
@@ -3177,14 +3181,7 @@ check_stack_depth(void)
 	 */
 	if (stack_depth > max_stack_depth_bytes &&
 		stack_base_ptr != NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_STATEMENT_TOO_COMPLEX),
-				 errmsg("stack depth limit exceeded"),
-				 errhint("Increase the configuration parameter \"max_stack_depth\" (currently %dkB), "
-			  "after ensuring the platform's stack depth limit is adequate.",
-						 max_stack_depth)));
-	}
+		return true;
 
 	/*
 	 * On IA64 there is a separate "register" stack that requires its own
@@ -3199,15 +3196,10 @@ check_stack_depth(void)
 
 	if (stack_depth > max_stack_depth_bytes &&
 		register_stack_base_ptr != NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_STATEMENT_TOO_COMPLEX),
-				 errmsg("stack depth limit exceeded"),
-				 errhint("Increase the configuration parameter \"max_stack_depth\" (currently %dkB), "
-			  "after ensuring the platform's stack depth limit is adequate.",
-						 max_stack_depth)));
-	}
+		return true;
 #endif   /* IA64 */
+
+	return false;
 }
 
 /* GUC check hook for max_stack_depth */
@@ -3347,7 +3339,7 @@ get_stats_option_name(const char *arg)
  * argv[0] is ignored in either case (it's assumed to be the program name).
  *
  * ctx is PGC_POSTMASTER for secure options, PGC_BACKEND for insecure options
- * coming from the client, or PGC_SUSET for insecure options coming from
+ * coming from the client, or PGC_SU_BACKEND for insecure options coming from
  * a superuser client.
  *
  * If a database name is present in the command line arguments, it's
@@ -3394,14 +3386,10 @@ process_postgres_switches(int argc, char *argv[], GucContext ctx,
 	 * postmaster/postmaster.c (the option sets should not conflict) and with
 	 * the common help() function in main/main.c.
 	 */
-	while ((flag = getopt(argc, argv, "A:B:bc:C:D:d:EeFf:h:ijk:lN:nOo:Pp:r:S:sTt:v:W:-:")) != -1)
+	while ((flag = getopt(argc, argv, "B:bc:C:D:d:EeFf:h:ijk:lN:nOo:Pp:r:S:sTt:v:W:-:")) != -1)
 	{
 		switch (flag)
 		{
-			case 'A':
-				SetConfigOption("debug_assertions", optarg, ctx, gucsource);
-				break;
-
 			case 'B':
 				SetConfigOption("shared_buffers", optarg, ctx, gucsource);
 				break;
@@ -3627,29 +3615,11 @@ PostgresMain(int argc, char *argv[],
 	sigjmp_buf	local_sigjmp_buf;
 	volatile bool send_ready_for_query = true;
 
-	/*
-	 * Initialize globals (already done if under postmaster, but not if
-	 * standalone).
-	 */
+	/* Initialize startup process environment if necessary. */
 	if (!IsUnderPostmaster)
-	{
-		MyProcPid = getpid();
-
-		MyStartTime = time(NULL);
-	}
+		InitStandaloneProcess(argv[0]);
 
 	SetProcessingMode(InitProcessing);
-
-	/* Compute paths, if we didn't inherit them from postmaster */
-	if (my_exec_path[0] == '\0')
-	{
-		if (find_my_exec(argv[0], my_exec_path) < 0)
-			elog(FATAL, "%s: could not locate my own executable path",
-				 argv[0]);
-	}
-
-	if (pkglib_path[0] == '\0')
-		get_pkglib_path(my_exec_path, pkglib_path);
 
 	/*
 	 * Set default values for command-line options.
@@ -3679,11 +3649,6 @@ PostgresMain(int argc, char *argv[],
 		if (!SelectConfigFiles(userDoption, progname))
 			proc_exit(1);
 	}
-
-	/*
-	 * You might expect to see a setsid() call here, but it's not needed,
-	 * because if we are under a postmaster then BackendInitialize() did it.
-	 */
 
 	/*
 	 * Set up signal handlers and masks.
@@ -3795,7 +3760,7 @@ PostgresMain(int argc, char *argv[],
 	 * it inside InitPostgres() instead.  In particular, anything that
 	 * involves database access should be there, not here.
 	 */
-	InitPostgres(dbname, InvalidOid, username, NULL);
+	InitPostgres(dbname, InvalidOid, username, InvalidOid, NULL);
 
 	/*
 	 * If the PostmasterContext is still around, recycle the space; we don't
@@ -3936,14 +3901,7 @@ PostgresMain(int argc, char *argv[],
 		disable_all_timeouts(false);
 		QueryCancelPending = false;		/* second to avoid race condition */
 
-		/*
-		 * Turn off these interrupts too.  This is only needed here and not in
-		 * other exception-catching places since these interrupts are only
-		 * enabled while we wait for client input.
-		 */
 		DoingCommandRead = false;
-		DisableNotifyInterrupt();
-		DisableCatchupInterrupt();
 
 		/* Make sure libpq is in a good state */
 		pq_comm_reset();
@@ -4004,7 +3962,7 @@ PostgresMain(int argc, char *argv[],
 		if (pq_is_reading_msg())
 			ereport(FATAL,
 					(errcode(ERRCODE_PROTOCOL_VIOLATION),
-					 errmsg("terminating connection because protocol sync was lost")));
+			errmsg("terminating connection because protocol synchronization was lost")));
 
 		/* Now we can allow interrupts again */
 		RESUME_INTERRUPTS();

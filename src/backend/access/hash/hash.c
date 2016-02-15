@@ -3,7 +3,7 @@
  * hash.c
  *	  Implementation of Margo Seltzer's Hashing package for postgres.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -142,26 +142,23 @@ hashbuildCallback(Relation index,
 	HashBuildState *buildstate = (HashBuildState *) state;
 	IndexTuple	itup;
 
-	/* form an index tuple and point it at the heap tuple */
-	itup = _hash_form_tuple(index, values, isnull);
-	itup->t_tid = htup->t_self;
-
 	/* Hash indexes don't index nulls, see notes in hashinsert */
-	if (IndexTupleHasNulls(itup))
-	{
-		pfree(itup);
+	if (isnull[0])
 		return;
-	}
 
 	/* Either spool the tuple for sorting, or just put it into the index */
 	if (buildstate->spool)
-		_h_spool(itup, buildstate->spool);
+		_h_spool(buildstate->spool, &htup->t_self, values, isnull);
 	else
+	{
+		/* form an index tuple and point it at the heap tuple */
+		itup = _hash_form_tuple(index, values, isnull);
+		itup->t_tid = htup->t_self;
 		_hash_doinsert(index, itup);
+		pfree(itup);
+	}
 
 	buildstate->indtuples += 1;
-
-	pfree(itup);
 }
 
 /*
@@ -184,10 +181,6 @@ hashinsert(PG_FUNCTION_ARGS)
 #endif
 	IndexTuple	itup;
 
-	/* generate an index tuple */
-	itup = _hash_form_tuple(rel, values, isnull);
-	itup->t_tid = *ht_ctid;
-
 	/*
 	 * If the single index key is null, we don't insert it into the index.
 	 * Hash tables support scans on '='. Relational algebra says that A = B
@@ -197,11 +190,12 @@ hashinsert(PG_FUNCTION_ARGS)
 	 * NOTNULL scans, but that's an artifact of the strategy map architecture
 	 * chosen in 1986, not of the way nulls are handled here.
 	 */
-	if (IndexTupleHasNulls(itup))
-	{
-		pfree(itup);
+	if (isnull[0])
 		PG_RETURN_BOOL(false);
-	}
+
+	/* generate an index tuple */
+	itup = _hash_form_tuple(rel, values, isnull);
+	itup->t_tid = *ht_ctid;
 
 	_hash_doinsert(rel, itup);
 
@@ -706,7 +700,7 @@ hashvacuumcleanup(PG_FUNCTION_ARGS)
 
 
 void
-hash_redo(XLogRecPtr lsn, XLogRecord *record)
+hash_redo(XLogReaderState *record)
 {
 	elog(PANIC, "hash_redo: unimplemented");
 }

@@ -3,7 +3,7 @@
  * heap.c
  *	  code to create and destroy POSTGRES heap relations
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -35,6 +35,7 @@
 #include "access/sysattr.h"
 #include "access/transam.h"
 #include "access/xact.h"
+#include "access/xlog.h"
 #include "catalog/binary_upgrade.h"
 #include "catalog/catalog.h"
 #include "catalog/dependency.h"
@@ -70,12 +71,13 @@
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
+#include "utils/ruleutils.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
 
-/* Potentially set by contrib/pg_upgrade_support functions */
+/* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_heap_pg_class_oid = InvalidOid;
 Oid			binary_upgrade_next_toast_pg_class_oid = InvalidOid;
 
@@ -88,7 +90,7 @@ static void AddNewRelationTuple(Relation pg_class_desc,
 					char relkind,
 					Datum relacl,
 					Datum reloptions);
-static Oid AddNewRelationType(const char *typeName,
+static ObjectAddress AddNewRelationType(const char *typeName,
 				   Oid typeNamespace,
 				   Oid new_rel_oid,
 				   char new_rel_kind,
@@ -96,7 +98,7 @@ static Oid AddNewRelationType(const char *typeName,
 				   Oid new_row_type,
 				   Oid new_array_type);
 static void RelationRemoveInheritance(Oid relid);
-static void StoreRelCheck(Relation rel, char *ccname, Node *expr,
+static Oid StoreRelCheck(Relation rel, char *ccname, Node *expr,
 			  bool is_validated, bool is_local, int inhcount,
 			  bool is_no_inherit, bool is_internal);
 static void StoreConstraints(Relation rel, List *cooked_constraints,
@@ -114,6 +116,7 @@ static List *insert_ordered_unique_oid(List *list, Oid datum);
 /* ----------------------------------------------------------------
  *				XXX UGLY HARD CODED BADNESS FOLLOWS XXX
  *
+
  *		these should all be moved to someplace in the lib/catalog
  *		module, if not obliterated first.
  * ----------------------------------------------------------------
@@ -802,6 +805,8 @@ InsertPgClassTuple(Relation pg_class_desc,
 	values[Anum_pg_class_relhaspkey - 1] = BoolGetDatum(rd_rel->relhaspkey);
 	values[Anum_pg_class_relhasrules - 1] = BoolGetDatum(rd_rel->relhasrules);
 	values[Anum_pg_class_relhastriggers - 1] = BoolGetDatum(rd_rel->relhastriggers);
+	values[Anum_pg_class_relrowsecurity - 1] = BoolGetDatum(rd_rel->relrowsecurity);
+	values[Anum_pg_class_relforcerowsecurity - 1] = BoolGetDatum(rd_rel->relforcerowsecurity);
 	values[Anum_pg_class_relhassubclass - 1] = BoolGetDatum(rd_rel->relhassubclass);
 	values[Anum_pg_class_relispopulated - 1] = BoolGetDatum(rd_rel->relispopulated);
 	values[Anum_pg_class_relreplident - 1] = CharGetDatum(rd_rel->relreplident);
@@ -935,7 +940,7 @@ AddNewRelationTuple(Relation pg_class_desc,
  *		define a composite type corresponding to the new relation
  * --------------------------------
  */
-static Oid
+static ObjectAddress
 AddNewRelationType(const char *typeName,
 				   Oid typeNamespace,
 				   Oid new_rel_oid,
@@ -1004,6 +1009,10 @@ AddNewRelationType(const char *typeName,
  *	use_user_acl: TRUE if should look for user-defined default permissions;
  *		if FALSE, relacl is always set NULL
  *	allow_system_table_mods: TRUE to allow creation in system namespaces
+ *	is_internal: is this a system-generated catalog?
+ *
+ * Output parameters:
+ *	typaddress: if not null, gets the object address of the new pg_type entry
  *
  * Returns the OID of the new relation
  * --------------------------------
@@ -1028,7 +1037,8 @@ heap_create_with_catalog(const char *relname,
 						 Datum reloptions,
 						 bool use_user_acl,
 						 bool allow_system_table_mods,
-						 bool is_internal)
+						 bool is_internal,
+						 ObjectAddress *typaddress)
 {
 	Relation	pg_class_desc;
 	Relation	new_rel_desc;
@@ -1036,6 +1046,7 @@ heap_create_with_catalog(const char *relname,
 	Oid			existing_relid;
 	Oid			old_type_oid;
 	Oid			new_type_oid;
+	ObjectAddress new_type_addr;
 	Oid			new_array_oid = InvalidOid;
 
 	pg_class_desc = heap_open(RelationRelationId, RowExclusiveLock);
@@ -1091,20 +1102,22 @@ heap_create_with_catalog(const char *relname,
 	 */
 	if (!OidIsValid(relid))
 	{
-		/*
-		 * Use binary-upgrade override for pg_class.oid/relfilenode, if
-		 * supplied.
-		 */
+		/* Use binary-upgrade override for pg_class.oid/relfilenode? */
 		if (IsBinaryUpgrade &&
-			OidIsValid(binary_upgrade_next_heap_pg_class_oid) &&
 			(relkind == RELKIND_RELATION || relkind == RELKIND_SEQUENCE ||
 			 relkind == RELKIND_VIEW || relkind == RELKIND_MATVIEW ||
 			 relkind == RELKIND_COMPOSITE_TYPE || relkind == RELKIND_FOREIGN_TABLE ||
 			 relkind == RELKIND_CONTVIEW || relkind == RELKIND_STREAM))
 		{
+			if (!OidIsValid(binary_upgrade_next_heap_pg_class_oid))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("pg_class heap OID value not set when in binary upgrade mode")));
+
 			relid = binary_upgrade_next_heap_pg_class_oid;
 			binary_upgrade_next_heap_pg_class_oid = InvalidOid;
 		}
+		/* There might be no TOAST table, so we have to test for it. */
 		else if (IsBinaryUpgrade &&
 				 OidIsValid(binary_upgrade_next_toast_pg_class_oid) &&
 				 relkind == RELKIND_TOASTVALUE)
@@ -1201,13 +1214,16 @@ heap_create_with_catalog(const char *relname,
 	 * creating the same type name in parallel but hadn't committed yet when
 	 * we checked for a duplicate name above.
 	 */
-	new_type_oid = AddNewRelationType(relname,
-									  relnamespace,
-									  relid,
-									  relkind,
-									  ownerid,
-									  reltypeid,
-									  new_array_oid);
+	new_type_addr = AddNewRelationType(relname,
+									   relnamespace,
+									   relid,
+									   relkind,
+									   ownerid,
+									   reltypeid,
+									   new_array_oid);
+	new_type_oid = new_type_addr.objectId;
+	if (typaddress)
+		*typaddress = new_type_addr;
 
 	/*
 	 * Now make the array type if wanted.
@@ -1295,7 +1311,8 @@ heap_create_with_catalog(const char *relname,
 	 * Also, skip this in bootstrap mode, since we don't make dependencies
 	 * while bootstrapping.
 	 */
-	if (relkind != RELKIND_COMPOSITE_TYPE && relkind != RELKIND_TOASTVALUE &&
+	if (relkind != RELKIND_COMPOSITE_TYPE &&
+		relkind != RELKIND_TOASTVALUE &&
 		!IsBootstrapProcessingMode())
 	{
 		ObjectAddress myself,
@@ -1860,8 +1877,10 @@ heap_drop_with_catalog(Oid relid)
 
 /*
  * Store a default expression for column attnum of relation rel.
+ *
+ * Returns the OID of the new pg_attrdef tuple.
  */
-void
+Oid
 StoreAttrDefault(Relation rel, AttrNumber attnum,
 				 Node *expr, bool is_internal)
 {
@@ -1966,6 +1985,8 @@ StoreAttrDefault(Relation rel, AttrNumber attnum,
 	 */
 	InvokeObjectPostCreateHookArg(AttrDefaultRelationId,
 								  RelationGetRelid(rel), attnum, is_internal);
+
+	return attrdefOid;
 }
 
 /*
@@ -1973,8 +1994,10 @@ StoreAttrDefault(Relation rel, AttrNumber attnum,
  *
  * Caller is responsible for updating the count of constraints
  * in the pg_class entry for the relation.
+ *
+ * The OID of the new constraint is returned.
  */
-static void
+static Oid
 StoreRelCheck(Relation rel, char *ccname, Node *expr,
 			  bool is_validated, bool is_local, int inhcount,
 			  bool is_no_inherit, bool is_internal)
@@ -1984,6 +2007,7 @@ StoreRelCheck(Relation rel, char *ccname, Node *expr,
 	List	   *varList;
 	int			keycount;
 	int16	   *attNos;
+	Oid			constrOid;
 
 	/*
 	 * Flatten expression to string form for storage.
@@ -2035,41 +2059,46 @@ StoreRelCheck(Relation rel, char *ccname, Node *expr,
 	/*
 	 * Create the Check Constraint
 	 */
-	CreateConstraintEntry(ccname,		/* Constraint Name */
-						  RelationGetNamespace(rel),	/* namespace */
-						  CONSTRAINT_CHECK,		/* Constraint Type */
-						  false,	/* Is Deferrable */
-						  false,	/* Is Deferred */
-						  is_validated,
-						  RelationGetRelid(rel),		/* relation */
-						  attNos,		/* attrs in the constraint */
-						  keycount,		/* # attrs in the constraint */
-						  InvalidOid,	/* not a domain constraint */
-						  InvalidOid,	/* no associated index */
-						  InvalidOid,	/* Foreign key fields */
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  0,
-						  ' ',
-						  ' ',
-						  ' ',
-						  NULL, /* not an exclusion constraint */
-						  expr, /* Tree form of check constraint */
-						  ccbin,	/* Binary form of check constraint */
-						  ccsrc,	/* Source form of check constraint */
-						  is_local,		/* conislocal */
-						  inhcount,		/* coninhcount */
-						  is_no_inherit,		/* connoinherit */
-						  is_internal); /* internally constructed? */
+	constrOid =
+		CreateConstraintEntry(ccname,	/* Constraint Name */
+							  RelationGetNamespace(rel),		/* namespace */
+							  CONSTRAINT_CHECK, /* Constraint Type */
+							  false,	/* Is Deferrable */
+							  false,	/* Is Deferred */
+							  is_validated,
+							  RelationGetRelid(rel),	/* relation */
+							  attNos,	/* attrs in the constraint */
+							  keycount, /* # attrs in the constraint */
+							  InvalidOid,		/* not a domain constraint */
+							  InvalidOid,		/* no associated index */
+							  InvalidOid,		/* Foreign key fields */
+							  NULL,
+							  NULL,
+							  NULL,
+							  NULL,
+							  0,
+							  ' ',
+							  ' ',
+							  ' ',
+							  NULL,		/* not an exclusion constraint */
+							  expr,		/* Tree form of check constraint */
+							  ccbin,	/* Binary form of check constraint */
+							  ccsrc,	/* Source form of check constraint */
+							  is_local, /* conislocal */
+							  inhcount, /* coninhcount */
+							  is_no_inherit,	/* connoinherit */
+							  is_internal);		/* internally constructed? */
 
 	pfree(ccbin);
 	pfree(ccsrc);
+
+	return constrOid;
 }
 
 /*
  * Store defaults and constraints (passed as a list of CookedConstraint).
+ *
+ * Each CookedConstraint struct is modified to store the new catalog tuple OID.
  *
  * NOTE: only pre-cooked expressions will be passed this way, which is to
  * say expressions inherited from an existing relation.  Newly parsed
@@ -2082,7 +2111,7 @@ StoreConstraints(Relation rel, List *cooked_constraints, bool is_internal)
 	int			numchecks = 0;
 	ListCell   *lc;
 
-	if (!cooked_constraints)
+	if (cooked_constraints == NIL)
 		return;					/* nothing to do */
 
 	/*
@@ -2099,12 +2128,15 @@ StoreConstraints(Relation rel, List *cooked_constraints, bool is_internal)
 		switch (con->contype)
 		{
 			case CONSTR_DEFAULT:
-				StoreAttrDefault(rel, con->attnum, con->expr, is_internal);
+				con->conoid = StoreAttrDefault(rel, con->attnum, con->expr,
+											   is_internal);
 				break;
 			case CONSTR_CHECK:
-				StoreRelCheck(rel, con->name, con->expr, !con->skip_validation,
-							  con->is_local, con->inhcount,
-							  con->is_no_inherit, is_internal);
+				con->conoid =
+					StoreRelCheck(rel, con->name, con->expr,
+								  !con->skip_validation, con->is_local,
+								  con->inhcount, con->is_no_inherit,
+								  is_internal);
 				numchecks++;
 				break;
 			default:
@@ -2192,6 +2224,7 @@ AddRelationNewConstraints(Relation rel,
 	{
 		RawColumnDefault *colDef = (RawColumnDefault *) lfirst(cell);
 		Form_pg_attribute atp = rel->rd_att->attrs[colDef->attnum - 1];
+		Oid			defOid;
 
 		expr = cookDefault(pstate, colDef->raw_default,
 						   atp->atttypid, atp->atttypmod,
@@ -2212,10 +2245,11 @@ AddRelationNewConstraints(Relation rel,
 			(IsA(expr, Const) &&((Const *) expr)->constisnull))
 			continue;
 
-		StoreAttrDefault(rel, colDef->attnum, expr, is_internal);
+		defOid = StoreAttrDefault(rel, colDef->attnum, expr, is_internal);
 
 		cooked = (CookedConstraint *) palloc(sizeof(CookedConstraint));
 		cooked->contype = CONSTR_DEFAULT;
+		cooked->conoid = defOid;
 		cooked->name = NULL;
 		cooked->attnum = colDef->attnum;
 		cooked->expr = expr;
@@ -2235,6 +2269,7 @@ AddRelationNewConstraints(Relation rel,
 	{
 		Constraint *cdef = (Constraint *) lfirst(cell);
 		char	   *ccname;
+		Oid			constrOid;
 
 		if (cdef->contype != CONSTR_CHECK)
 			continue;
@@ -2337,13 +2372,15 @@ AddRelationNewConstraints(Relation rel,
 		/*
 		 * OK, store it.
 		 */
-		StoreRelCheck(rel, ccname, expr, !cdef->skip_validation, is_local,
-					  is_local ? 0 : 1, cdef->is_no_inherit, is_internal);
+		constrOid =
+			StoreRelCheck(rel, ccname, expr, !cdef->skip_validation, is_local,
+						  is_local ? 0 : 1, cdef->is_no_inherit, is_internal);
 
 		numchecks++;
 
 		cooked = (CookedConstraint *) palloc(sizeof(CookedConstraint));
 		cooked->contype = CONSTR_CHECK;
+		cooked->conoid = constrOid;
 		cooked->name = ccname;
 		cooked->attnum = 0;
 		cooked->expr = expr;

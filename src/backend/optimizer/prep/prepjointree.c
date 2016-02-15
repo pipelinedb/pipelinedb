@@ -12,9 +12,8 @@
  *		reduce_outer_joins
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -34,6 +33,7 @@
 #include "optimizer/tlist.h"
 #include "parser/parse_relation.h"
 #include "parser/parsetree.h"
+#include "pipeline/cont_scheduler.h"
 #include "rewrite/rewriteManip.h"
 
 
@@ -66,12 +66,14 @@ static Node *pull_up_sublinks_qual_recurse(PlannerInfo *root, Node *node,
 static Node *pull_up_subqueries_recurse(PlannerInfo *root, Node *jtnode,
 						   JoinExpr *lowest_outer_join,
 						   JoinExpr *lowest_nulling_outer_join,
-						   AppendRelInfo *containing_appendrel);
+						   AppendRelInfo *containing_appendrel,
+						   bool deletion_ok);
 static Node *pull_up_simple_subquery(PlannerInfo *root, Node *jtnode,
 						RangeTblEntry *rte,
 						JoinExpr *lowest_outer_join,
 						JoinExpr *lowest_nulling_outer_join,
-						AppendRelInfo *containing_appendrel);
+						AppendRelInfo *containing_appendrel,
+						bool deletion_ok);
 static Node *pull_up_simple_union_all(PlannerInfo *root, Node *jtnode,
 						 RangeTblEntry *rte);
 static void pull_up_union_leaf_queries(Node *setOp, PlannerInfo *root,
@@ -80,7 +82,12 @@ static void pull_up_union_leaf_queries(Node *setOp, PlannerInfo *root,
 static void make_setop_translation_list(Query *query, Index newvarno,
 							List **translated_vars);
 static bool is_simple_subquery(Query *subquery, RangeTblEntry *rte,
-				   JoinExpr *lowest_outer_join);
+				   JoinExpr *lowest_outer_join,
+				   bool deletion_ok);
+static Node *pull_up_simple_values(PlannerInfo *root, Node *jtnode,
+					  RangeTblEntry *rte);
+static bool is_simple_values(PlannerInfo *root, RangeTblEntry *rte,
+				 bool deletion_ok);
 static bool is_simple_union_all(Query *subquery);
 static bool is_simple_union_all_recurse(Node *setOp, Query *setOpQuery,
 							List *colTypes);
@@ -96,6 +103,7 @@ static Node *pullup_replace_vars_callback(Var *var,
 							 replace_rte_variables_context *context);
 static Query *pullup_replace_vars_subquery(Query *query,
 							 pullup_replace_vars_context *context);
+static Node *pull_up_subqueries_cleanup(Node *jtnode);
 static reduce_outer_joins_state *reduce_outer_joins_pass1(Node *jtnode);
 static void reduce_outer_joins_pass2(Node *jtnode,
 						 reduce_outer_joins_state *state,
@@ -134,9 +142,9 @@ static Node *find_jointree_node_for_rel(Node *jtnode, int relid);
  * transformations if any are found.
  *
  * This routine has to run before preprocess_expression(), so the quals
- * clauses are not yet reduced to implicit-AND format.  That means we need
- * to recursively search through explicit AND clauses, which are
- * probably only binary ANDs.  We stop as soon as we hit a non-AND item.
+ * clauses are not yet reduced to implicit-AND format, and are not guaranteed
+ * to be AND/OR-flat either.  That means we need to recursively search through
+ * explicit AND clauses.  We stop as soon as we hit a non-AND item.
  */
 void
 pull_up_sublinks(PlannerInfo *root)
@@ -594,19 +602,32 @@ inline_set_returning_functions(PlannerInfo *root)
  *		grouping/aggregation then we can merge it into the parent's jointree.
  *		Also, subqueries that are simple UNION ALL structures can be
  *		converted into "append relations".
- *
- * This recursively processes the jointree and returns a modified jointree.
  */
-Node *
-pull_up_subqueries(PlannerInfo *root, Node *jtnode)
+void
+pull_up_subqueries(PlannerInfo *root)
 {
-	/* Start off with no containing join nor appendrel */
-	return pull_up_subqueries_recurse(root, jtnode, NULL, NULL, NULL);
+	/* Top level of jointree must always be a FromExpr */
+	Assert(IsA(root->parse->jointree, FromExpr));
+	/* Reset flag saying we need a deletion cleanup pass */
+	root->hasDeletedRTEs = false;
+	/* Recursion starts with no containing join nor appendrel */
+	root->parse->jointree = (FromExpr *)
+		pull_up_subqueries_recurse(root, (Node *) root->parse->jointree,
+								   NULL, NULL, NULL, false);
+	/* Apply cleanup phase if necessary */
+	if (root->hasDeletedRTEs)
+		root->parse->jointree = (FromExpr *)
+			pull_up_subqueries_cleanup((Node *) root->parse->jointree);
+	Assert(IsA(root->parse->jointree, FromExpr));
 }
 
 /*
  * pull_up_subqueries_recurse
  *		Recursive guts of pull_up_subqueries.
+ *
+ * This recursively processes the jointree and returns a modified jointree.
+ * Or, if it's valid to drop the current node from the jointree completely,
+ * it returns NULL.
  *
  * If this jointree node is within either side of an outer join, then
  * lowest_outer_join references the lowest such JoinExpr node; otherwise
@@ -623,28 +644,39 @@ pull_up_subqueries(PlannerInfo *root, Node *jtnode)
  * This forces use of the PlaceHolderVar mechanism for all non-Var targetlist
  * items, and puts some additional restrictions on what can be pulled up.
  *
+ * deletion_ok is TRUE if the caller can cope with us returning NULL for a
+ * deletable leaf node (for example, a VALUES RTE that could be pulled up).
+ * If it's FALSE, we'll avoid pullup in such cases.
+ *
  * A tricky aspect of this code is that if we pull up a subquery we have
  * to replace Vars that reference the subquery's outputs throughout the
  * parent query, including quals attached to jointree nodes above the one
  * we are currently processing!  We handle this by being careful not to
- * change the jointree structure while recursing: no nodes other than
- * subquery RangeTblRef entries will be replaced.  Also, we can't turn
- * pullup_replace_vars loose on the whole jointree, because it'll return a
- * mutated copy of the tree; we have to invoke it just on the quals, instead.
- * This behavior is what makes it reasonable to pass lowest_outer_join and
- * lowest_nulling_outer_join as pointers rather than some more-indirect way
- * of identifying the lowest OJs.  Likewise, we don't replace append_rel_list
- * members but only their substructure, so the containing_appendrel reference
- * is safe to use.
+ * change the jointree structure while recursing: no nodes other than leaf
+ * RangeTblRef entries and entirely-empty FromExprs will be replaced or
+ * deleted.  Also, we can't turn pullup_replace_vars loose on the whole
+ * jointree, because it'll return a mutated copy of the tree; we have to
+ * invoke it just on the quals, instead.  This behavior is what makes it
+ * reasonable to pass lowest_outer_join and lowest_nulling_outer_join as
+ * pointers rather than some more-indirect way of identifying the lowest
+ * OJs.  Likewise, we don't replace append_rel_list members but only their
+ * substructure, so the containing_appendrel reference is safe to use.
+ *
+ * Because of the rule that no jointree nodes with substructure can be
+ * replaced, we cannot fully handle the case of deleting nodes from the tree:
+ * when we delete one child of a JoinExpr, we need to replace the JoinExpr
+ * with a FromExpr, and that can't happen here.  Instead, we set the
+ * root->hasDeletedRTEs flag, which tells pull_up_subqueries() that an
+ * additional pass over the tree is needed to clean up.
  */
 static Node *
 pull_up_subqueries_recurse(PlannerInfo *root, Node *jtnode,
 						   JoinExpr *lowest_outer_join,
 						   JoinExpr *lowest_nulling_outer_join,
-						   AppendRelInfo *containing_appendrel)
+						   AppendRelInfo *containing_appendrel,
+						   bool deletion_ok)
 {
-	if (jtnode == NULL)
-		return NULL;
+	Assert(jtnode != NULL);
 	if (IsA(jtnode, RangeTblRef))
 	{
 		int			varno = ((RangeTblRef *) jtnode)->rtindex;
@@ -658,13 +690,15 @@ pull_up_subqueries_recurse(PlannerInfo *root, Node *jtnode,
 		 * unless is_safe_append_member says so.
 		 */
 		if (rte->rtekind == RTE_SUBQUERY &&
-			is_simple_subquery(rte->subquery, rte, lowest_outer_join) &&
+			is_simple_subquery(rte->subquery, rte,
+							   lowest_outer_join, deletion_ok) &&
 			(containing_appendrel == NULL ||
 			 is_safe_append_member(rte->subquery)))
 			return pull_up_simple_subquery(root, jtnode, rte,
 										   lowest_outer_join,
 										   lowest_nulling_outer_join,
-										   containing_appendrel);
+										   containing_appendrel,
+										   deletion_ok);
 
 		/*
 		 * Alternatively, is it a simple UNION ALL subquery?  If so, flatten
@@ -679,19 +713,69 @@ pull_up_subqueries_recurse(PlannerInfo *root, Node *jtnode,
 			is_simple_union_all(rte->subquery))
 			return pull_up_simple_union_all(root, jtnode, rte);
 
+		/*
+		 * Or perhaps it's a simple VALUES RTE?
+		 *
+		 * We don't allow VALUES pullup below an outer join nor into an
+		 * appendrel (such cases are impossible anyway at the moment).
+		 */
+		/* XXX PipelineDB: why does this break the combiner lookup plan? */
+		if (!IsContQueryCombinerProcess() && rte->rtekind == RTE_VALUES &&
+			lowest_outer_join == NULL &&
+			containing_appendrel == NULL &&
+			is_simple_values(root, rte, deletion_ok))
+			return pull_up_simple_values(root, jtnode, rte);
+
 		/* Otherwise, do nothing at this node. */
 	}
 	else if (IsA(jtnode, FromExpr))
 	{
 		FromExpr   *f = (FromExpr *) jtnode;
+		bool		have_undeleted_child = false;
 		ListCell   *l;
 
 		Assert(containing_appendrel == NULL);
+
+		/*
+		 * If the FromExpr has quals, it's not deletable even if its parent
+		 * would allow deletion.
+		 */
+		if (f->quals)
+			deletion_ok = false;
+
 		foreach(l, f->fromlist)
+		{
+			/*
+			 * In a non-deletable FromExpr, we can allow deletion of child
+			 * nodes so long as at least one child remains; so it's okay
+			 * either if any previous child survives, or if there's more to
+			 * come.  If all children are deletable in themselves, we'll force
+			 * the last one to remain unflattened.
+			 *
+			 * As a separate matter, we can allow deletion of all children of
+			 * the top-level FromExpr in a query, since that's a special case
+			 * anyway.
+			 */
+			bool		sub_deletion_ok = (deletion_ok ||
+										   have_undeleted_child ||
+										   lnext(l) != NULL ||
+										   f == root->parse->jointree);
+
 			lfirst(l) = pull_up_subqueries_recurse(root, lfirst(l),
 												   lowest_outer_join,
 												   lowest_nulling_outer_join,
-												   NULL);
+												   NULL,
+												   sub_deletion_ok);
+			if (lfirst(l) != NULL)
+				have_undeleted_child = true;
+		}
+
+		if (deletion_ok && !have_undeleted_child)
+		{
+			/* OK to delete this FromExpr entirely */
+			root->hasDeletedRTEs = true;		/* probably is set already */
+			return NULL;
+		}
 	}
 	else if (IsA(jtnode, JoinExpr))
 	{
@@ -702,14 +786,22 @@ pull_up_subqueries_recurse(PlannerInfo *root, Node *jtnode,
 		switch (j->jointype)
 		{
 			case JOIN_INNER:
+
+				/*
+				 * INNER JOIN can allow deletion of either child node, but not
+				 * both.  So right child gets permission to delete only if
+				 * left child didn't get removed.
+				 */
 				j->larg = pull_up_subqueries_recurse(root, j->larg,
 													 lowest_outer_join,
 												   lowest_nulling_outer_join,
-													 NULL);
+													 NULL,
+													 true);
 				j->rarg = pull_up_subqueries_recurse(root, j->rarg,
 													 lowest_outer_join,
 												   lowest_nulling_outer_join,
-													 NULL);
+													 NULL,
+													 j->larg != NULL);
 				break;
 			case JOIN_LEFT:
 			case JOIN_SEMI:
@@ -717,31 +809,37 @@ pull_up_subqueries_recurse(PlannerInfo *root, Node *jtnode,
 				j->larg = pull_up_subqueries_recurse(root, j->larg,
 													 j,
 												   lowest_nulling_outer_join,
-													 NULL);
+													 NULL,
+													 false);
 				j->rarg = pull_up_subqueries_recurse(root, j->rarg,
 													 j,
 													 j,
-													 NULL);
+													 NULL,
+													 false);
 				break;
 			case JOIN_FULL:
 				j->larg = pull_up_subqueries_recurse(root, j->larg,
 													 j,
 													 j,
-													 NULL);
+													 NULL,
+													 false);
 				j->rarg = pull_up_subqueries_recurse(root, j->rarg,
 													 j,
 													 j,
-													 NULL);
+													 NULL,
+													 false);
 				break;
 			case JOIN_RIGHT:
 				j->larg = pull_up_subqueries_recurse(root, j->larg,
 													 j,
 													 j,
-													 NULL);
+													 NULL,
+													 false);
 				j->rarg = pull_up_subqueries_recurse(root, j->rarg,
 													 j,
 												   lowest_nulling_outer_join,
-													 NULL);
+													 NULL,
+													 false);
 				break;
 			default:
 				elog(ERROR, "unrecognized join type: %d",
@@ -761,8 +859,8 @@ pull_up_subqueries_recurse(PlannerInfo *root, Node *jtnode,
  *
  * jtnode is a RangeTblRef that has been tentatively identified as a simple
  * subquery by pull_up_subqueries.  We return the replacement jointree node,
- * or jtnode itself if we determine that the subquery can't be pulled up after
- * all.
+ * or NULL if the subquery can be deleted entirely, or jtnode itself if we
+ * determine that the subquery can't be pulled up after all.
  *
  * rte is the RangeTblEntry referenced by jtnode.  Remaining parameters are
  * as for pull_up_subqueries_recurse.
@@ -771,7 +869,8 @@ static Node *
 pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 						JoinExpr *lowest_outer_join,
 						JoinExpr *lowest_nulling_outer_join,
-						AppendRelInfo *containing_appendrel)
+						AppendRelInfo *containing_appendrel,
+						bool deletion_ok)
 {
 	Query	   *parse = root->parse;
 	int			varno = ((RangeTblRef *) jtnode)->rtindex;
@@ -805,6 +904,7 @@ pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 	subroot->planner_cxt = CurrentMemoryContext;
 	subroot->init_plans = NIL;
 	subroot->cte_plan_ids = NIL;
+	subroot->multiexpr_params = NIL;
 	subroot->eq_classes = NIL;
 	subroot->append_rel_list = NIL;
 	subroot->rowMarks = NIL;
@@ -832,14 +932,12 @@ pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 	 * pull_up_subqueries' processing is complete for its jointree and
 	 * rangetable.
 	 *
-	 * Note: we should pass NULL for containing-join info even if we are
-	 * within an outer join in the upper query; the lower query starts with a
-	 * clean slate for outer-join semantics.  Likewise, we say we aren't
-	 * handling an appendrel member.
+	 * Note: it's okay that the subquery's recursion starts with NULL for
+	 * containing-join info, even if we are within an outer join in the upper
+	 * query; the lower query starts with a clean slate for outer-join
+	 * semantics.  Likewise, we needn't pass down appendrel state.
 	 */
-	subquery->jointree = (FromExpr *)
-		pull_up_subqueries_recurse(subroot, (Node *) subquery->jointree,
-								   NULL, NULL, NULL);
+	pull_up_subqueries(subroot);
 
 	/*
 	 * Now we must recheck whether the subquery is still simple enough to pull
@@ -849,7 +947,8 @@ pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 	 * easier just to keep this "if" looking the same as the one in
 	 * pull_up_subqueries_recurse.
 	 */
-	if (is_simple_subquery(subquery, rte, lowest_outer_join) &&
+	if (is_simple_subquery(subquery, rte,
+						   lowest_outer_join, deletion_ok) &&
 		(containing_appendrel == NULL || is_safe_append_member(subquery)))
 	{
 		/* good to go */
@@ -933,6 +1032,9 @@ pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 		pullup_replace_vars((Node *) parse->targetList, &rvcontext);
 	parse->returningList = (List *)
 		pullup_replace_vars((Node *) parse->returningList, &rvcontext);
+	if (parse->onConflict)
+		parse->onConflict->onConflictSet = (List *)
+			pullup_replace_vars((Node *) parse->onConflict->onConflictSet, &rvcontext);
 	replace_vars_in_jointree((Node *) parse->jointree, &rvcontext,
 							 lowest_nulling_outer_join);
 	Assert(parse->setOperations == NULL);
@@ -991,12 +1093,15 @@ pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 
 			switch (child_rte->rtekind)
 			{
+				case RTE_RELATION:
+					if (child_rte->tablesample)
+						child_rte->lateral = true;
+					break;
 				case RTE_SUBQUERY:
 				case RTE_FUNCTION:
 				case RTE_VALUES:
 					child_rte->lateral = true;
 					break;
-				case RTE_RELATION:
 				case RTE_JOIN:
 				case RTE_CTE:
 					/* these can't contain any lateral references */
@@ -1046,14 +1151,11 @@ pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 										subroot->append_rel_list);
 
 	/*
-	 * We don't have to do the equivalent bookkeeping for outer-join or
-	 * LATERAL info, because that hasn't been set up yet.  placeholder_list
-	 * likewise.
+	 * We don't have to do the equivalent bookkeeping for outer-join info,
+	 * because that hasn't been set up yet.  placeholder_list likewise.
 	 */
 	Assert(root->join_info_list == NIL);
 	Assert(subroot->join_info_list == NIL);
-	Assert(root->lateral_info_list == NIL);
-	Assert(subroot->lateral_info_list == NIL);
 	Assert(root->placeholder_list == NIL);
 	Assert(subroot->placeholder_list == NIL);
 
@@ -1075,8 +1177,18 @@ pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 
 	/*
 	 * Return the adjusted subquery jointree to replace the RangeTblRef entry
-	 * in parent's jointree.
+	 * in parent's jointree; or, if we're flattening a subquery with empty
+	 * FROM list, return NULL to signal deletion of the subquery from the
+	 * parent jointree (and set hasDeletedRTEs to ensure cleanup later).
 	 */
+	if (subquery->jointree->fromlist == NIL)
+	{
+		Assert(deletion_ok);
+		Assert(subquery->jointree->quals == NULL);
+		root->hasDeletedRTEs = true;
+		return NULL;
+	}
+
 	return (Node *) subquery->jointree;
 }
 
@@ -1203,12 +1315,15 @@ pull_up_union_leaf_queries(Node *setOp, PlannerInfo *root, int parentRTindex,
 		 * must build the AppendRelInfo first, because this will modify it.)
 		 * Note that we can pass NULL for containing-join info even if we're
 		 * actually under an outer join, because the child's expressions
-		 * aren't going to propagate up to the join.
+		 * aren't going to propagate up to the join.  Also, we ignore the
+		 * possibility that pull_up_subqueries_recurse() returns a different
+		 * jointree node than what we pass it; if it does, the important thing
+		 * is that it replaced the child relid in the AppendRelInfo node.
 		 */
 		rtr = makeNode(RangeTblRef);
 		rtr->rtindex = childRTindex;
 		(void) pull_up_subqueries_recurse(root, (Node *) rtr,
-										  NULL, NULL, appinfo);
+										  NULL, NULL, appinfo, false);
 	}
 	else if (IsA(setOp, SetOperationStmt))
 	{
@@ -1263,10 +1378,12 @@ make_setop_translation_list(Query *query, Index newvarno,
  * (Note subquery is not necessarily equal to rte->subquery; it could be a
  * processed copy of that.)
  * lowest_outer_join is the lowest outer join above the subquery, or NULL.
+ * deletion_ok is TRUE if it'd be okay to delete the subquery entirely.
  */
 static bool
 is_simple_subquery(Query *subquery, RangeTblEntry *rte,
-				   JoinExpr *lowest_outer_join)
+				   JoinExpr *lowest_outer_join,
+				   bool deletion_ok)
 {
 	/*
 	 * Let's just make sure it's a valid subselect ...
@@ -1297,6 +1414,7 @@ is_simple_subquery(Query *subquery, RangeTblEntry *rte,
 	if (subquery->hasAggs ||
 		subquery->hasWindowFuncs ||
 		subquery->groupClause ||
+		subquery->groupingSets ||
 		subquery->havingQual ||
 		subquery->sortClause ||
 		subquery->distinctClause ||
@@ -1312,6 +1430,44 @@ is_simple_subquery(Query *subquery, RangeTblEntry *rte,
 	 * about in the upper query.
 	 */
 	if (rte->security_barrier)
+		return false;
+
+	/*
+	 * Don't pull up a subquery with an empty jointree, unless it has no quals
+	 * and deletion_ok is TRUE and we're not underneath an outer join.
+	 *
+	 * query_planner() will correctly generate a Result plan for a jointree
+	 * that's totally empty, but we can't cope with an empty FromExpr
+	 * appearing lower down in a jointree: we identify join rels via baserelid
+	 * sets, so we couldn't distinguish a join containing such a FromExpr from
+	 * one without it.  We can only handle such cases if the place where the
+	 * subquery is linked is a FromExpr or inner JOIN that would still be
+	 * nonempty after removal of the subquery, so that it's still identifiable
+	 * via its contained baserelids.  Safe contexts are signaled by
+	 * deletion_ok.
+	 *
+	 * But even in a safe context, we must keep the subquery if it has any
+	 * quals, because it's unclear where to put them in the upper query.
+	 *
+	 * Also, we must forbid pullup if such a subquery is underneath an outer
+	 * join, because then we might need to wrap its output columns with
+	 * PlaceHolderVars, and the PHVs would then have empty relid sets meaning
+	 * we couldn't tell where to evaluate them.  (This test is separate from
+	 * the deletion_ok flag for possible future expansion: deletion_ok tells
+	 * whether the immediate parent site in the jointree could cope, not
+	 * whether we'd have PHV issues.  It's possible this restriction could be
+	 * fixed by letting the PHVs use the relids of the parent jointree item,
+	 * but that complication is for another day.)
+	 *
+	 * Note that deletion of a subquery is also dependent on the check below
+	 * that its targetlist contains no set-returning functions.  Deletion from
+	 * a FROM list or inner JOIN is okay only if the subquery must return
+	 * exactly one row.
+	 */
+	if (subquery->jointree->fromlist == NIL &&
+		(subquery->jointree->quals != NULL ||
+		 !deletion_ok ||
+		 lowest_outer_join != NULL))
 		return false;
 
 	/*
@@ -1373,7 +1529,7 @@ is_simple_subquery(Query *subquery, RangeTblEntry *rte,
 	 * Don't pull up a subquery that has any set-returning functions in its
 	 * targetlist.  Otherwise we might well wind up inserting set-returning
 	 * functions into places where they mustn't go, such as quals of higher
-	 * queries.
+	 * queries.  This also ensures deletion of an empty jointree is valid.
 	 */
 	if (expression_returns_set((Node *) subquery->targetList))
 		return false;
@@ -1389,19 +1545,162 @@ is_simple_subquery(Query *subquery, RangeTblEntry *rte,
 	if (contain_volatile_functions((Node *) subquery->targetList))
 		return false;
 
+	return true;
+}
+
+/*
+ * pull_up_simple_values
+ *		Pull up a single simple VALUES RTE.
+ *
+ * jtnode is a RangeTblRef that has been identified as a simple VALUES RTE
+ * by pull_up_subqueries.  We always return NULL indicating that the RTE
+ * can be deleted entirely (all failure cases should have been detected by
+ * is_simple_values()).
+ *
+ * rte is the RangeTblEntry referenced by jtnode.  Because of the limited
+ * possible usage of VALUES RTEs, we do not need the remaining parameters
+ * of pull_up_subqueries_recurse.
+ */
+static Node *
+pull_up_simple_values(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte)
+{
+	Query	   *parse = root->parse;
+	int			varno = ((RangeTblRef *) jtnode)->rtindex;
+	List	   *values_list;
+	List	   *tlist;
+	AttrNumber	attrno;
+	pullup_replace_vars_context rvcontext;
+	ListCell   *lc;
+
+	Assert(rte->rtekind == RTE_VALUES);
+	Assert(list_length(rte->values_lists) == 1);
+
 	/*
-	 * Don't pull up a subquery with an empty jointree.  query_planner() will
-	 * correctly generate a Result plan for a jointree that's totally empty,
-	 * but we can't cope with an empty FromExpr appearing lower down in a
-	 * jointree: we identify join rels via baserelid sets, so we couldn't
-	 * distinguish a join containing such a FromExpr from one without it. This
-	 * would for example break the PlaceHolderVar mechanism, since we'd have
-	 * no way to identify where to evaluate a PHV coming out of the subquery.
-	 * Not worth working hard on this, just to collapse SubqueryScan/Result
-	 * into Result; especially since the SubqueryScan can often be optimized
-	 * away by setrefs.c anyway.
+	 * Need a modifiable copy of the VALUES list to hack on, just in case it's
+	 * multiply referenced.
 	 */
-	if (subquery->jointree->fromlist == NIL)
+	values_list = (List *) copyObject(linitial(rte->values_lists));
+
+	/*
+	 * The VALUES RTE can't contain any Vars of level zero, let alone any that
+	 * are join aliases, so no need to flatten join alias Vars.
+	 */
+	Assert(!contain_vars_of_level((Node *) values_list, 0));
+
+	/*
+	 * Set up required context data for pullup_replace_vars.  In particular,
+	 * we have to make the VALUES list look like a subquery targetlist.
+	 */
+	tlist = NIL;
+	attrno = 1;
+	foreach(lc, values_list)
+	{
+		tlist = lappend(tlist,
+						makeTargetEntry((Expr *) lfirst(lc),
+										attrno,
+										NULL,
+										false));
+		attrno++;
+	}
+	rvcontext.root = root;
+	rvcontext.targetlist = tlist;
+	rvcontext.target_rte = rte;
+	rvcontext.relids = NULL;
+	rvcontext.outer_hasSubLinks = &parse->hasSubLinks;
+	rvcontext.varno = varno;
+	rvcontext.need_phvs = false;
+	rvcontext.wrap_non_vars = false;
+	/* initialize cache array with indexes 0 .. length(tlist) */
+	rvcontext.rv_cache = palloc0((list_length(tlist) + 1) *
+								 sizeof(Node *));
+
+	/*
+	 * Replace all of the top query's references to the RTE's outputs with
+	 * copies of the adjusted VALUES expressions, being careful not to replace
+	 * any of the jointree structure. (This'd be a lot cleaner if we could use
+	 * query_tree_mutator.)  Much of this should be no-ops in the dummy Query
+	 * that surrounds a VALUES RTE, but it's not enough code to be worth
+	 * removing.
+	 */
+	parse->targetList = (List *)
+		pullup_replace_vars((Node *) parse->targetList, &rvcontext);
+	parse->returningList = (List *)
+		pullup_replace_vars((Node *) parse->returningList, &rvcontext);
+	if (parse->onConflict)
+		parse->onConflict->onConflictSet = (List *)
+			pullup_replace_vars((Node *) parse->onConflict->onConflictSet, &rvcontext);
+	replace_vars_in_jointree((Node *) parse->jointree, &rvcontext, NULL);
+	Assert(parse->setOperations == NULL);
+	parse->havingQual = pullup_replace_vars(parse->havingQual, &rvcontext);
+
+	/*
+	 * There should be no appendrels to fix, nor any join alias Vars, nor any
+	 * outer joins and hence no PlaceHolderVars.
+	 */
+	Assert(root->append_rel_list == NIL);
+	Assert(list_length(parse->rtable) == 1);
+	Assert(root->join_info_list == NIL);
+	Assert(root->placeholder_list == NIL);
+
+	/*
+	 * Return NULL to signal deletion of the VALUES RTE from the parent
+	 * jointree (and set hasDeletedRTEs to ensure cleanup later).
+	 */
+	root->hasDeletedRTEs = true;
+	return NULL;
+}
+
+/*
+ * is_simple_values
+ *	  Check a VALUES RTE in the range table to see if it's simple enough
+ *	  to pull up into the parent query.
+ *
+ * rte is the RTE_VALUES RangeTblEntry to check.
+ * deletion_ok is TRUE if it'd be okay to delete the VALUES RTE entirely.
+ */
+static bool
+is_simple_values(PlannerInfo *root, RangeTblEntry *rte, bool deletion_ok)
+{
+	Assert(rte->rtekind == RTE_VALUES);
+
+	/*
+	 * We can only pull up a VALUES RTE if deletion_ok is TRUE.  It's
+	 * basically the same case as a sub-select with empty FROM list; see
+	 * comments in is_simple_subquery().
+	 */
+	if (!deletion_ok)
+		return false;
+
+	/*
+	 * Also, there must be exactly one VALUES list, else it's not semantically
+	 * correct to delete the VALUES RTE.
+	 */
+	if (list_length(rte->values_lists) != 1)
+		return false;
+
+	/*
+	 * Because VALUES can't appear under an outer join (or at least, we won't
+	 * try to pull it up if it does), we need not worry about LATERAL, nor
+	 * about validity of PHVs for the VALUES' outputs.
+	 */
+
+	/*
+	 * Don't pull up a VALUES that contains any set-returning or volatile
+	 * functions.  Again, the considerations here are basically identical to
+	 * restrictions on a subquery's targetlist.
+	 */
+	if (expression_returns_set((Node *) rte->values_lists) ||
+		contain_volatile_functions((Node *) rte->values_lists))
+		return false;
+
+	/*
+	 * Do not pull up a VALUES that's not the only RTE in its parent query.
+	 * This is actually the only case that the parser will generate at the
+	 * moment, and assuming this is true greatly simplifies
+	 * pull_up_simple_values().
+	 */
+	if (list_length(root->parse->rtable) != 1 ||
+		rte != (RangeTblEntry *) linitial(root->parse->rtable))
 		return false;
 
 	return true;
@@ -1627,6 +1926,13 @@ replace_vars_in_jointree(Node *jtnode,
 			{
 				switch (rte->rtekind)
 				{
+					case RTE_RELATION:
+						/* shouldn't be marked LATERAL unless tablesample */
+						Assert(rte->tablesample);
+						rte->tablesample = (TableSampleClause *)
+							pullup_replace_vars((Node *) rte->tablesample,
+												context);
+						break;
 					case RTE_SUBQUERY:
 						rte->subquery =
 							pullup_replace_vars_subquery(rte->subquery,
@@ -1642,7 +1948,6 @@ replace_vars_in_jointree(Node *jtnode,
 							pullup_replace_vars((Node *) rte->values_lists,
 												context);
 						break;
-					case RTE_RELATION:
 					case RTE_JOIN:
 					case RTE_CTE:
 						/* these shouldn't be marked LATERAL */
@@ -1907,6 +2212,65 @@ pullup_replace_vars_subquery(Query *query,
 										   pullup_replace_vars_callback,
 										   (void *) context,
 										   NULL);
+}
+
+/*
+ * pull_up_subqueries_cleanup
+ *		Recursively fix up jointree after deletion of some subqueries.
+ *
+ * The jointree now contains some NULL subtrees, which we need to get rid of.
+ * In a FromExpr, just rebuild the child-node list with null entries deleted.
+ * In an inner JOIN, replace the JoinExpr node with a one-child FromExpr.
+ */
+static Node *
+pull_up_subqueries_cleanup(Node *jtnode)
+{
+	Assert(jtnode != NULL);
+	if (IsA(jtnode, RangeTblRef))
+	{
+		/* Nothing to do at leaf nodes. */
+	}
+	else if (IsA(jtnode, FromExpr))
+	{
+		FromExpr   *f = (FromExpr *) jtnode;
+		List	   *newfrom = NIL;
+		ListCell   *l;
+
+		foreach(l, f->fromlist)
+		{
+			Node	   *child = (Node *) lfirst(l);
+
+			if (child == NULL)
+				continue;
+			child = pull_up_subqueries_cleanup(child);
+			newfrom = lappend(newfrom, child);
+		}
+		f->fromlist = newfrom;
+	}
+	else if (IsA(jtnode, JoinExpr))
+	{
+		JoinExpr   *j = (JoinExpr *) jtnode;
+
+		if (j->larg)
+			j->larg = pull_up_subqueries_cleanup(j->larg);
+		if (j->rarg)
+			j->rarg = pull_up_subqueries_cleanup(j->rarg);
+		if (j->larg == NULL)
+		{
+			Assert(j->jointype == JOIN_INNER);
+			Assert(j->rarg != NULL);
+			return (Node *) makeFromExpr(list_make1(j->rarg), j->quals);
+		}
+		else if (j->rarg == NULL)
+		{
+			Assert(j->jointype == JOIN_INNER);
+			return (Node *) makeFromExpr(list_make1(j->larg), j->quals);
+		}
+	}
+	else
+		elog(ERROR, "unrecognized node type: %d",
+			 (int) nodeTag(jtnode));
+	return jtnode;
 }
 
 
@@ -2472,7 +2836,6 @@ substitute_multiple_relids_walker(Node *node,
 	}
 	/* Shouldn't need to handle planner auxiliary nodes here */
 	Assert(!IsA(node, SpecialJoinInfo));
-	Assert(!IsA(node, LateralJoinInfo));
 	Assert(!IsA(node, AppendRelInfo));
 	Assert(!IsA(node, PlaceHolderInfo));
 	Assert(!IsA(node, MinMaxAggInfo));

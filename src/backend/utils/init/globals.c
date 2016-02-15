@@ -3,7 +3,7 @@
  * globals.c
  *	  global variable declarations
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -31,7 +31,6 @@ volatile bool InterruptPending = false;
 volatile bool QueryCancelPending = false;
 volatile bool ProcDiePending = false;
 volatile bool ClientConnectionLost = false;
-volatile bool ImmediateInterruptOK = false;
 volatile uint32 InterruptHoldoffCount = 0;
 volatile uint32 QueryCancelHoldoffCount = 0;
 volatile uint32 CritSectionCount = 0;
@@ -41,6 +40,15 @@ pg_time_t	MyStartTime;
 struct Port *MyProcPort;
 long		MyCancelKey;
 int			MyPMChildSlot;
+
+/*
+ * MyLatch points to the latch that should be used for signal handling by the
+ * current process. It will either point to a process local latch if the
+ * current process does not have a PGPROC entry in that moment, or to
+ * PGPROC->procLatch if it has. Thus it can always be used in signal handlers,
+ * without checking for its existence.
+ */
+struct Latch *MyLatch;
 
 /*
  * DataDir is the absolute path to the top level of the PGDATA directory tree.

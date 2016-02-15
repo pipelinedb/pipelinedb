@@ -4,7 +4,7 @@
  *	  vacuum for SP-GiST
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -18,6 +18,7 @@
 #include "access/genam.h"
 #include "access/spgist_private.h"
 #include "access/transam.h"
+#include "access/xloginsert.h"
 #include "catalog/storage_xlog.h"
 #include "commands/vacuum.h"
 #include "miscadmin.h"
@@ -126,7 +127,6 @@ vacuumLeafPage(spgBulkDeleteState *bds, Relation index, Buffer buffer,
 {
 	Page		page = BufferGetPage(buffer);
 	spgxlogVacuumLeaf xlrec;
-	XLogRecData rdata[8];
 	OffsetNumber toDead[MaxIndexTuplesPerPage];
 	OffsetNumber toPlaceholder[MaxIndexTuplesPerPage];
 	OffsetNumber moveSrc[MaxIndexTuplesPerPage];
@@ -322,20 +322,6 @@ vacuumLeafPage(spgBulkDeleteState *bds, Relation index, Buffer buffer,
 	if (nDeletable != xlrec.nDead + xlrec.nPlaceholder + xlrec.nMove)
 		elog(ERROR, "inconsistent counts of deletable tuples");
 
-	/* Prepare WAL record */
-	xlrec.node = index->rd_node;
-	xlrec.blkno = BufferGetBlockNumber(buffer);
-	STORE_STATE(&bds->spgstate, xlrec.stateSrc);
-
-	ACCEPT_RDATA_DATA(&xlrec, SizeOfSpgxlogVacuumLeaf, 0);
-	ACCEPT_RDATA_DATA(toDead, sizeof(OffsetNumber) * xlrec.nDead, 1);
-	ACCEPT_RDATA_DATA(toPlaceholder, sizeof(OffsetNumber) * xlrec.nPlaceholder, 2);
-	ACCEPT_RDATA_DATA(moveSrc, sizeof(OffsetNumber) * xlrec.nMove, 3);
-	ACCEPT_RDATA_DATA(moveDest, sizeof(OffsetNumber) * xlrec.nMove, 4);
-	ACCEPT_RDATA_DATA(chainSrc, sizeof(OffsetNumber) * xlrec.nChain, 5);
-	ACCEPT_RDATA_DATA(chainDest, sizeof(OffsetNumber) * xlrec.nChain, 6);
-	ACCEPT_RDATA_BUFFER(buffer, 7);
-
 	/* Do the updates */
 	START_CRIT_SECTION();
 
@@ -388,7 +374,22 @@ vacuumLeafPage(spgBulkDeleteState *bds, Relation index, Buffer buffer,
 	{
 		XLogRecPtr	recptr;
 
-		recptr = XLogInsert(RM_SPGIST_ID, XLOG_SPGIST_VACUUM_LEAF, rdata);
+		XLogBeginInsert();
+
+		STORE_STATE(&bds->spgstate, xlrec.stateSrc);
+
+		XLogRegisterData((char *) &xlrec, SizeOfSpgxlogVacuumLeaf);
+		/* sizeof(xlrec) should be a multiple of sizeof(OffsetNumber) */
+		XLogRegisterData((char *) toDead, sizeof(OffsetNumber) * xlrec.nDead);
+		XLogRegisterData((char *) toPlaceholder, sizeof(OffsetNumber) * xlrec.nPlaceholder);
+		XLogRegisterData((char *) moveSrc, sizeof(OffsetNumber) * xlrec.nMove);
+		XLogRegisterData((char *) moveDest, sizeof(OffsetNumber) * xlrec.nMove);
+		XLogRegisterData((char *) chainSrc, sizeof(OffsetNumber) * xlrec.nChain);
+		XLogRegisterData((char *) chainDest, sizeof(OffsetNumber) * xlrec.nChain);
+
+		XLogRegisterBuffer(0, buffer, REGBUF_STANDARD);
+
+		recptr = XLogInsert(RM_SPGIST_ID, XLOG_SPGIST_VACUUM_LEAF);
 
 		PageSetLSN(page, recptr);
 	}
@@ -406,12 +407,10 @@ vacuumLeafRoot(spgBulkDeleteState *bds, Relation index, Buffer buffer)
 {
 	Page		page = BufferGetPage(buffer);
 	spgxlogVacuumRoot xlrec;
-	XLogRecData rdata[3];
 	OffsetNumber toDelete[MaxIndexTuplesPerPage];
 	OffsetNumber i,
 				max = PageGetMaxOffsetNumber(page);
 
-	xlrec.blkno = BufferGetBlockNumber(buffer);
 	xlrec.nDelete = 0;
 
 	/* Scan page, identify tuples to delete, accumulate stats */
@@ -447,15 +446,6 @@ vacuumLeafRoot(spgBulkDeleteState *bds, Relation index, Buffer buffer)
 	if (xlrec.nDelete == 0)
 		return;					/* nothing more to do */
 
-	/* Prepare WAL record */
-	xlrec.node = index->rd_node;
-	STORE_STATE(&bds->spgstate, xlrec.stateSrc);
-
-	ACCEPT_RDATA_DATA(&xlrec, SizeOfSpgxlogVacuumRoot, 0);
-	/* sizeof(xlrec) should be a multiple of sizeof(OffsetNumber) */
-	ACCEPT_RDATA_DATA(toDelete, sizeof(OffsetNumber) * xlrec.nDelete, 1);
-	ACCEPT_RDATA_BUFFER(buffer, 2);
-
 	/* Do the update */
 	START_CRIT_SECTION();
 
@@ -468,7 +458,19 @@ vacuumLeafRoot(spgBulkDeleteState *bds, Relation index, Buffer buffer)
 	{
 		XLogRecPtr	recptr;
 
-		recptr = XLogInsert(RM_SPGIST_ID, XLOG_SPGIST_VACUUM_ROOT, rdata);
+		XLogBeginInsert();
+
+		/* Prepare WAL record */
+		STORE_STATE(&bds->spgstate, xlrec.stateSrc);
+
+		XLogRegisterData((char *) &xlrec, SizeOfSpgxlogVacuumRoot);
+		/* sizeof(xlrec) should be a multiple of sizeof(OffsetNumber) */
+		XLogRegisterData((char *) toDelete,
+						 sizeof(OffsetNumber) * xlrec.nDelete);
+
+		XLogRegisterBuffer(0, buffer, REGBUF_STANDARD);
+
+		recptr = XLogInsert(RM_SPGIST_ID, XLOG_SPGIST_VACUUM_ROOT);
 
 		PageSetLSN(page, recptr);
 	}
@@ -498,10 +500,7 @@ vacuumRedirectAndPlaceholder(Relation index, Buffer buffer)
 	OffsetNumber itemToPlaceholder[MaxIndexTuplesPerPage];
 	OffsetNumber itemnos[MaxIndexTuplesPerPage];
 	spgxlogVacuumRedirect xlrec;
-	XLogRecData rdata[3];
 
-	xlrec.node = index->rd_node;
-	xlrec.blkno = BufferGetBlockNumber(buffer);
 	xlrec.nToPlaceholder = 0;
 	xlrec.newestRedirectXid = InvalidTransactionId;
 
@@ -584,11 +583,15 @@ vacuumRedirectAndPlaceholder(Relation index, Buffer buffer)
 	{
 		XLogRecPtr	recptr;
 
-		ACCEPT_RDATA_DATA(&xlrec, SizeOfSpgxlogVacuumRedirect, 0);
-		ACCEPT_RDATA_DATA(itemToPlaceholder, sizeof(OffsetNumber) * xlrec.nToPlaceholder, 1);
-		ACCEPT_RDATA_BUFFER(buffer, 2);
+		XLogBeginInsert();
 
-		recptr = XLogInsert(RM_SPGIST_ID, XLOG_SPGIST_VACUUM_REDIRECT, rdata);
+		XLogRegisterData((char *) &xlrec, SizeOfSpgxlogVacuumRedirect);
+		XLogRegisterData((char *) itemToPlaceholder,
+						 sizeof(OffsetNumber) * xlrec.nToPlaceholder);
+
+		XLogRegisterBuffer(0, buffer, REGBUF_STANDARD);
+
+		recptr = XLogInsert(RM_SPGIST_ID, XLOG_SPGIST_VACUUM_REDIRECT);
 
 		PageSetLSN(page, recptr);
 	}
@@ -618,14 +621,10 @@ spgvacuumpage(spgBulkDeleteState *bds, BlockNumber blkno)
 	{
 		/*
 		 * We found an all-zero page, which could happen if the database
-		 * crashed just after extending the file.  Initialize and recycle it.
+		 * crashed just after extending the file.  Recycle it.
 		 */
-		SpGistInitBuffer(buffer, 0);
-		SpGistPageSetDeleted(page);
-		/* We don't bother to WAL-log this action; easy to redo */
-		MarkBufferDirty(buffer);
 	}
-	else if (SpGistPageIsDeleted(page))
+	else if (PageIsEmpty(page))
 	{
 		/* nothing to do */
 	}
@@ -651,29 +650,22 @@ spgvacuumpage(spgBulkDeleteState *bds, BlockNumber blkno)
 	/*
 	 * The root pages must never be deleted, nor marked as available in FSM,
 	 * because we don't want them ever returned by a search for a place to put
-	 * a new tuple.  Otherwise, check for empty/deletable page, and make sure
-	 * FSM knows about it.
+	 * a new tuple.  Otherwise, check for empty page, and make sure the FSM
+	 * knows about it.
 	 */
 	if (!SpGistBlockIsRoot(blkno))
 	{
-		/* If page is now empty, mark it deleted */
-		if (PageIsEmpty(page) && !SpGistPageIsDeleted(page))
-		{
-			SpGistPageSetDeleted(page);
-			/* We don't bother to WAL-log this action; easy to redo */
-			MarkBufferDirty(buffer);
-		}
-
-		if (SpGistPageIsDeleted(page))
+		if (PageIsNew(page) || PageIsEmpty(page))
 		{
 			RecordFreeIndexPage(index, blkno);
 			bds->stats->pages_deleted++;
 		}
 		else
+		{
+			SpGistSetLastUsedPage(index, buffer);
 			bds->lastFilledBlock = blkno;
+		}
 	}
-
-	SpGistSetLastUsedPage(index, buffer);
 
 	UnlockReleaseBuffer(buffer);
 }

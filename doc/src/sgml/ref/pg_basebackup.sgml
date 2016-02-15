@@ -313,7 +313,7 @@ PostgreSQL documentation
             Stream the transaction log while the backup is created. This will
             open a second connection to the server and start streaming the
             transaction log in parallel while running the backup. Therefore,
-            it will use up two slots configured by the
+            it will use up two connections configured by the
             <xref linkend="guc-max-wal-senders"> parameter. As long as the
              client can keep up with transaction log received, using this mode
              requires no extra transaction logs to be saved on the master.
@@ -580,7 +580,7 @@ PostgreSQL documentation
   <para>
    Tablespaces will in plain format by default be backed up to the same path
    they have on the server, unless the
-   option <replaceable>--tablespace-mapping</replaceable> is used.  Without
+   option <literal>--tablespace-mapping</literal> is used.  Without
    this option, running a plain format base backup on the same host as the
    server will not work if tablespaces are in use, because the backup would
    have to be written to the same directory locations as the original
@@ -588,10 +588,22 @@ PostgreSQL documentation
   </para>
 
   <para>
-   <application>pg_basebackup</application> works with servers of the same
-   or an older major version, down to 9.1. However, WAL streaming mode (-X
-   stream) only works with server version 9.3 and later.
+   When tar format mode is used, it is the user's responsibility to unpack each
+   tar file before starting the PostgreSQL server. If there are additional tablespaces, the
+   tar files for them need to be unpacked in the correct locations. In this
+   case the symbolic links for those tablespaces will be created by the server
+   according to the contents of the <filename>tablespace_map</> file that is
+   included in the <filename>base.tar</> file.
   </para>
+
+  <para>
+   <application>pg_basebackup</application> works with servers of the same
+   or an older major version, down to 9.1. However, WAL streaming mode (<literal>-X
+   stream</literal>) only works with server version 9.3 and later, and tar format mode
+   (<literal>--format=tar</literal>) of the current version only works with server version 9.5
+   or later.
+  </para>
+
  </refsect1>
 
  <refsect1>

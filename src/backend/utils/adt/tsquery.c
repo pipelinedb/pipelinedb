@@ -3,7 +3,7 @@
  * tsquery.c
  *	  I/O functions for tsquery
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -20,6 +20,7 @@
 #include "tsearch/ts_utils.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
+#include "utils/pg_crc.h"
 
 
 struct TSQueryParserStateData
@@ -280,9 +281,9 @@ pushValue(TSQueryParserState state, char *strval, int lenval, int16 weight, bool
 				 errmsg("word is too long in tsquery: \"%s\"",
 						state->buffer)));
 
-	INIT_CRC32(valcrc);
-	COMP_CRC32(valcrc, strval, lenval);
-	FIN_CRC32(valcrc);
+	INIT_LEGACY_CRC32(valcrc);
+	COMP_LEGACY_CRC32(valcrc, strval, lenval);
+	FIN_LEGACY_CRC32(valcrc);
 	pushValue_internal(state, valcrc, state->curop - state->op, lenval, weight, prefix);
 
 	/* append the value string to state.op, enlarging buffer if needed first */
@@ -456,10 +457,10 @@ findoprnd(QueryItem *ptr, int size)
 
 
 /*
- * Each value (operand) in the query is be passed to pushval. pushval can
+ * Each value (operand) in the query is passed to pushval. pushval can
  * transform the simple value to an arbitrarily complex expression using
  * pushValue and pushOperator. It must push a single value with pushValue,
- * a complete expression with all operands, or a a stopword placeholder
+ * a complete expression with all operands, or a stopword placeholder
  * with pushStop, otherwise the prefix notation representation will be broken,
  * having an operator with no operand.
  *
@@ -883,9 +884,9 @@ tsqueryrecv(PG_FUNCTION_ARGS)
 
 			/* Looks valid. */
 
-			INIT_CRC32(valcrc);
-			COMP_CRC32(valcrc, val, val_len);
-			FIN_CRC32(valcrc);
+			INIT_LEGACY_CRC32(valcrc);
+			COMP_LEGACY_CRC32(valcrc, val, val_len);
+			FIN_LEGACY_CRC32(valcrc);
 
 			item->qoperand.weight = weight;
 			item->qoperand.prefix = (prefix) ? true : false;

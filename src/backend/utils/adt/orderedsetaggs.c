@@ -3,7 +3,7 @@
  * orderedsetaggs.c
  *		Ordered-set aggregate functions.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -286,7 +286,9 @@ ordered_set_startup(FunctionCallInfo fcinfo, bool use_tuples)
 	osastate->qstate = qstate;
 	osastate->gcontext = gcontext;
 
-	/* Initialize tuplesort object */
+	/*
+	 * Initialize tuplesort object.
+	 */
 	if (use_tuples)
 		osastate->sortstate = tuplesort_begin_heap(qstate->tupdesc,
 												   qstate->numSortCols,
@@ -2483,7 +2485,10 @@ first_values_combine(PG_FUNCTION_ARGS)
 		memcpy(qstate->sortkey, fvstate->sortkey, sizeof(SortSupportData) * qstate->num_sort);
 
 		for (i = 0; i < qstate->num_sort; i++)
+		{
+			qstate->sortkey[i].comparator = NULL;
 			PrepareSortSupportFromOrderingOp(fvstate->sortop[i], &qstate->sortkey[i]);
+		}
 
 		MemoryContextSwitchTo(old);
 	}

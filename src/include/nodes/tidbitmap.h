@@ -13,7 +13,7 @@
  * fact that a particular page needs to be visited.
  *
  *
- * Copyright (c) 2003-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2003-2015, PostgreSQL Global Development Group
  *
  * src/include/nodes/tidbitmap.h
  *
@@ -41,8 +41,8 @@ typedef struct
 	int			ntuples;		/* -1 indicates lossy result */
 	bool		recheck;		/* should the tuples be rechecked? */
 	/* Note: recheck is always true if ntuples < 0 */
-	OffsetNumber offsets[1];	/* VARIABLE LENGTH ARRAY */
-} TBMIterateResult;				/* VARIABLE LENGTH STRUCT */
+	OffsetNumber offsets[FLEXIBLE_ARRAY_MEMBER];
+} TBMIterateResult;
 
 /* function prototypes in nodes/tidbitmap.c */
 

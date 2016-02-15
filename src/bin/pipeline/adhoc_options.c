@@ -1,3 +1,11 @@
+/*-------------------------------------------------------------------------
+ *
+ * adhoc_options.c
+ *
+ * Copyright (c) 2013-2016, PipelineDB
+ *
+ *-------------------------------------------------------------------------
+ */
 #include "adhoc_options.h"
 #include "postgres_fe.h"
 #include "common/username.h"

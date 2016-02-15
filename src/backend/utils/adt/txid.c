@@ -10,7 +10,7 @@
  * via functions such as SubTransGetTopmostTransaction().
  *
  *
- *	Copyright (c) 2003-2014, PostgreSQL Global Development Group
+ *	Copyright (c) 2003-2015, PostgreSQL Global Development Group
  *	Author: Jan Wieck, Afilias USA INC.
  *	64-bit txids: Marko Kreen, Skype Technologies
  *
@@ -23,6 +23,7 @@
 
 #include "access/transam.h"
 #include "access/xact.h"
+#include "access/xlog.h"
 #include "funcapi.h"
 #include "miscadmin.h"
 #include "libpq/pqformat.h"
@@ -33,7 +34,7 @@
 
 
 /* txid will be signed int8 in database, so must limit to 63 bits */
-#define MAX_TXID   UINT64CONST(0x7FFFFFFFFFFFFFFF)
+#define MAX_TXID   ((uint64) PG_INT64_MAX)
 
 /* Use unsigned variant internally */
 typedef uint64 txid;
@@ -63,7 +64,8 @@ typedef struct
 	uint32		nxip;			/* number of txids in xip array */
 	txid		xmin;
 	txid		xmax;
-	txid		xip[1];			/* in-progress txids, xmin <= xip[i] < xmax */
+	/* in-progress txids, xmin <= xip[i] < xmax: */
+	txid		xip[FLEXIBLE_ARRAY_MEMBER];
 } TxidSnapshot;
 
 #define TXID_SNAPSHOT_SIZE(nxip) \
@@ -140,8 +142,10 @@ cmp_txid(const void *aa, const void *bb)
 static void
 sort_snapshot(TxidSnapshot *snap)
 {
-	txid	last = 0;
-	int		nxip, idx1, idx2;
+	txid		last = 0;
+	int			nxip,
+				idx1,
+				idx2;
 
 	if (snap->nxip > 1)
 	{
@@ -330,8 +334,11 @@ parse_snapshot(const char *str)
 	return buf_finalize(buf);
 
 bad_format:
-	elog(ERROR, "invalid input for txid_snapshot: \"%s\"", str_start);
-	return NULL;
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+			 errmsg("invalid input syntax for type txid_snapshot: \"%s\"",
+					str_start)));
+	return NULL;				/* keep compiler quiet */
 }
 
 /*
@@ -522,8 +529,10 @@ txid_snapshot_recv(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(snap);
 
 bad_format:
-	elog(ERROR, "invalid snapshot data");
-	return (Datum) NULL;
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
+			 errmsg("invalid external txid_snapshot data")));
+	PG_RETURN_POINTER(NULL);	/* keep compiler quiet */
 }
 
 /*

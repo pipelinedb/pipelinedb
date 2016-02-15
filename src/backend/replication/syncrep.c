@@ -5,7 +5,7 @@
  * Synchronous replication is new as of PostgreSQL 9.1.
  *
  * If requested, transaction commits wait until their commit LSN is
- * acknowledged by the sync standby.
+ * acknowledged by the synchronous standby.
  *
  * This module contains the code for waiting and release of backends.
  * All code in this module executes on the primary. The core streaming
@@ -35,7 +35,7 @@
  * take some time. Once caught up, the current highest priority standby
  * will release waiters from the queue.
  *
- * Portions Copyright (c) 2010-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/syncrep.c
@@ -163,7 +163,7 @@ SyncRepWaitForLSN(XLogRecPtr XactCommitLSN)
 		int			syncRepState;
 
 		/* Must reset the latch before testing state. */
-		ResetLatch(&MyProc->procLatch);
+		ResetLatch(MyLatch);
 
 		/*
 		 * Try checking the state without the lock first.  There's no
@@ -173,20 +173,10 @@ SyncRepWaitForLSN(XLogRecPtr XactCommitLSN)
 		 * walsender changes the state to SYNC_REP_WAIT_COMPLETE, it will
 		 * never update it again, so we can't be seeing a stale value in that
 		 * case.
-		 *
-		 * Note: on machines with weak memory ordering, the acquisition of the
-		 * lock is essential to avoid race conditions: we cannot be sure the
-		 * sender's state update has reached main memory until we acquire the
-		 * lock.  We could get rid of this dance if SetLatch/ResetLatch
-		 * contained memory barriers.
 		 */
 		syncRepState = MyProc->syncRepState;
 		if (syncRepState == SYNC_REP_WAITING)
-		{
-			LWLockAcquire(SyncRepLock, LW_SHARED);
 			syncRepState = MyProc->syncRepState;
-			LWLockRelease(SyncRepLock);
-		}
 		if (syncRepState == SYNC_REP_WAIT_COMPLETE)
 			break;
 
@@ -246,7 +236,7 @@ SyncRepWaitForLSN(XLogRecPtr XactCommitLSN)
 		 * Wait on latch.  Any condition that should wake us up will set the
 		 * latch, so no need for timeout.
 		 */
-		WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, -1);
+		WaitLatch(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, -1);
 	}
 
 	/*
@@ -359,6 +349,60 @@ SyncRepInitConfig(void)
 }
 
 /*
+ * Find the WAL sender servicing the synchronous standby with the lowest
+ * priority value, or NULL if no synchronous standby is connected. If there
+ * are multiple standbys with the same lowest priority value, the first one
+ * found is selected. The caller must hold SyncRepLock.
+ */
+WalSnd *
+SyncRepGetSynchronousStandby(void)
+{
+	WalSnd	   *result = NULL;
+	int			result_priority = 0;
+	int			i;
+
+	for (i = 0; i < max_wal_senders; i++)
+	{
+		/* Use volatile pointer to prevent code rearrangement */
+		volatile WalSnd *walsnd = &WalSndCtl->walsnds[i];
+		int			this_priority;
+
+		/* Must be active */
+		if (walsnd->pid == 0)
+			continue;
+
+		/* Must be streaming */
+		if (walsnd->state != WALSNDSTATE_STREAMING)
+			continue;
+
+		/* Must be synchronous */
+		this_priority = walsnd->sync_standby_priority;
+		if (this_priority == 0)
+			continue;
+
+		/* Must have a lower priority value than any previous ones */
+		if (result != NULL && result_priority <= this_priority)
+			continue;
+
+		/* Must have a valid flush position */
+		if (XLogRecPtrIsInvalid(walsnd->flush))
+			continue;
+
+		result = (WalSnd *) walsnd;
+		result_priority = this_priority;
+
+		/*
+		 * If priority is equal to 1, there cannot be any other WAL senders
+		 * with a lower priority, so we're done.
+		 */
+		if (this_priority == 1)
+			return result;
+	}
+
+	return result;
+}
+
+/*
  * Update the LSNs on each queue based upon our latest state. This
  * implements a simple policy of first-valid-standby-releases-waiter.
  *
@@ -369,11 +413,9 @@ void
 SyncRepReleaseWaiters(void)
 {
 	volatile WalSndCtlData *walsndctl = WalSndCtl;
-	volatile WalSnd *syncWalSnd = NULL;
+	WalSnd	   *syncWalSnd;
 	int			numwrite = 0;
 	int			numflush = 0;
-	int			priority = 0;
-	int			i;
 
 	/*
 	 * If this WALSender is serving a standby that is not on the list of
@@ -388,33 +430,13 @@ SyncRepReleaseWaiters(void)
 
 	/*
 	 * We're a potential sync standby. Release waiters if we are the highest
-	 * priority standby. If there are multiple standbys with same priorities
-	 * then we use the first mentioned standby. If you change this, also
-	 * change pg_stat_get_wal_senders().
+	 * priority standby.
 	 */
 	LWLockAcquire(SyncRepLock, LW_EXCLUSIVE);
+	syncWalSnd = SyncRepGetSynchronousStandby();
 
-	for (i = 0; i < max_wal_senders; i++)
-	{
-		/* use volatile pointer to prevent code rearrangement */
-		volatile WalSnd *walsnd = &walsndctl->walsnds[i];
-
-		if (walsnd->pid != 0 &&
-			walsnd->state == WALSNDSTATE_STREAMING &&
-			walsnd->sync_standby_priority > 0 &&
-			(priority == 0 ||
-			 priority > walsnd->sync_standby_priority) &&
-			!XLogRecPtrIsInvalid(walsnd->flush))
-		{
-			priority = walsnd->sync_standby_priority;
-			syncWalSnd = walsnd;
-		}
-	}
-
-	/*
-	 * We should have found ourselves at least.
-	 */
-	Assert(syncWalSnd);
+	/* We should have found ourselves at least */
+	Assert(syncWalSnd != NULL);
 
 	/*
 	 * If we aren't managing the highest priority standby then just leave.

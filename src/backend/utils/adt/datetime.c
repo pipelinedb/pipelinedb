@@ -3,7 +3,7 @@
  * datetime.c
  *	  Support functions for date/time types.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -103,8 +103,8 @@ static const datetkn datetktbl[] = {
 	{"d", UNITS, DTK_DAY},		/* "day of month" for ISO input */
 	{"dec", MONTH, 12},
 	{"december", MONTH, 12},
-	{"dow", RESERV, DTK_DOW},	/* day of week */
-	{"doy", RESERV, DTK_DOY},	/* day of year */
+	{"dow", UNITS, DTK_DOW},	/* day of week */
+	{"doy", UNITS, DTK_DOY},	/* day of year */
 	{"dst", DTZMOD, SECS_PER_HOUR},
 	{EPOCH, RESERV, DTK_EPOCH}, /* "epoch" reserved for system epoch time */
 	{"feb", MONTH, 2},
@@ -114,7 +114,7 @@ static const datetkn datetktbl[] = {
 	{"h", UNITS, DTK_HOUR},		/* "hour" */
 	{LATE, RESERV, DTK_LATE},	/* "infinity" reserved for "late time" */
 	{INVALID, RESERV, DTK_INVALID},		/* "invalid" reserved for bad time */
-	{"isodow", RESERV, DTK_ISODOW},		/* ISO day of week, Sunday == 7 */
+	{"isodow", UNITS, DTK_ISODOW},		/* ISO day of week, Sunday == 7 */
 	{"isoyear", UNITS, DTK_ISOYEAR},	/* year in terms of the ISO week date */
 	{"j", UNITS, DTK_JULIAN},
 	{"jan", MONTH, 1},
@@ -4052,7 +4052,7 @@ EncodeDateTime(struct pg_tm * tm, fsec_t fsec, bool print_tz, int tz, const char
 			day = date2j(tm->tm_year, tm->tm_mon, tm->tm_mday);
 			tm->tm_wday = j2day(day);
 
-			strncpy(str, days[tm->tm_wday], 3);
+			memcpy(str, days[tm->tm_wday], 3);
 			strcpy(str + 3, " ");
 
 			if (DateOrder == DATEORDER_DMY)

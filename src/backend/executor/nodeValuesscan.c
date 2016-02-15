@@ -4,7 +4,7 @@
  *	  Support routines for scanning Values lists
  *	  ("VALUES (...), (...), ..." in rangetable).
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -246,7 +246,6 @@ ExecInitValuesScan(ValuesScan *node, EState *estate, int eflags)
 	/*
 	 * Other node-specific setup
 	 */
-	scanstate->marked_idx = -1;
 	scanstate->curr_idx = -1;
 	scanstate->array_len = list_length(node->values_lists);
 
@@ -291,30 +290,6 @@ ExecEndValuesScan(ValuesScanState *node)
 	 */
 	ExecClearTuple(node->ss.ps.ps_ResultTupleSlot);
 	ExecClearTuple(node->ss.ss_ScanTupleSlot);
-}
-
-/* ----------------------------------------------------------------
- *		ExecValuesMarkPos
- *
- *		Marks scan position.
- * ----------------------------------------------------------------
- */
-void
-ExecValuesMarkPos(ValuesScanState *node)
-{
-	node->marked_idx = node->curr_idx;
-}
-
-/* ----------------------------------------------------------------
- *		ExecValuesRestrPos
- *
- *		Restores scan position.
- * ----------------------------------------------------------------
- */
-void
-ExecValuesRestrPos(ValuesScanState *node)
-{
-	node->curr_idx = node->marked_idx;
 }
 
 /* ----------------------------------------------------------------

@@ -2,7 +2,7 @@
  *
  * PostgreSQL locale utilities
  *
- * Portions Copyright (c) 2002-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2002-2015, PostgreSQL Global Development Group
  *
  * src/backend/utils/adt/pg_locale.c
  *
@@ -183,6 +183,12 @@ pg_perm_setlocale(int category, const char *locale)
 	 */
 	if (category == LC_CTYPE)
 	{
+		static char save_lc_ctype[LC_ENV_BUFSIZE];
+
+		/* copy setlocale() return value before callee invokes it again */
+		strlcpy(save_lc_ctype, result, sizeof(save_lc_ctype));
+		result = save_lc_ctype;
+
 #ifdef ENABLE_NLS
 		SetMessageEncoding(pg_bind_textdomain_codeset(textdomain(NULL)));
 #else
@@ -635,7 +641,7 @@ cache_single_time(char **dst, const char *format, const struct tm * tm)
 	/*
 	 * MAX_L10N_DATA is sufficient buffer space for every known locale, and
 	 * POSIX defines no strftime() errors.  (Buffer space exhaustion is not an
-	 * error.)  An implementation might report errors (e.g. ENOMEM) by
+	 * error.)	An implementation might report errors (e.g. ENOMEM) by
 	 * returning 0 (or, less plausibly, a negative value) and setting errno.
 	 * Report errno just in case the implementation did that, but clear it in
 	 * advance of the call so we don't emit a stale, unrelated errno.
@@ -849,6 +855,64 @@ IsoLocaleName(const char *winlocname)
 
 
 /*
+ * Detect aging strxfrm() implementations that, in a subset of locales, write
+ * past the specified buffer length.  Affected users must update OS packages
+ * before using PostgreSQL 9.5 or later.
+ *
+ * Assume that the bug can come and go from one postmaster startup to another
+ * due to physical replication among diverse machines.  Assume that the bug's
+ * presence will not change during the life of a particular postmaster.  Given
+ * those assumptions, call this no less than once per postmaster startup per
+ * LC_COLLATE setting used.  No known-affected system offers strxfrm_l(), so
+ * there is no need to consider pg_collation locales.
+ */
+void
+check_strxfrm_bug(void)
+{
+	char		buf[32];
+	const int	canary = 0x7F;
+	bool		ok = true;
+
+	/*
+	 * Given a two-byte ASCII string and length limit 7, 8 or 9, Solaris 10
+	 * 05/08 returns 18 and modifies 10 bytes.  It respects limits above or
+	 * below that range.
+	 *
+	 * The bug is present in Solaris 8 as well; it is absent in Solaris 10
+	 * 01/13 and Solaris 11.2.  Affected locales include is_IS.ISO8859-1,
+	 * en_US.UTF-8, en_US.ISO8859-1, and ru_RU.KOI8-R.  Unaffected locales
+	 * include de_DE.UTF-8, de_DE.ISO8859-1, zh_TW.UTF-8, and C.
+	 */
+	buf[7] = canary;
+	(void) strxfrm(buf, "ab", 7);
+	if (buf[7] != canary)
+		ok = false;
+
+	/*
+	 * illumos bug #1594 was present in the source tree from 2010-10-11 to
+	 * 2012-02-01.  Given an ASCII string of any length and length limit 1,
+	 * affected systems ignore the length limit and modify a number of bytes
+	 * one less than the return value.  The problem inputs for this bug do not
+	 * overlap those for the Solaris bug, hence a distinct test.
+	 *
+	 * Affected systems include smartos-20110926T021612Z.  Affected locales
+	 * include en_US.ISO8859-1 and en_US.UTF-8.  Unaffected locales include C.
+	 */
+	buf[1] = canary;
+	(void) strxfrm(buf, "a", 1);
+	if (buf[1] != canary)
+		ok = false;
+
+	if (!ok)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYSTEM_ERROR),
+				 errmsg_internal("strxfrm(), in locale \"%s\", writes past the specified array length",
+								 setlocale(LC_COLLATE, NULL)),
+				 errhint("Apply system library package updates.")));
+}
+
+
+/*
  * Cache mechanism for collation information.
  *
  * We cache two flags: whether the collation's LC_COLLATE or LC_CTYPE is C
@@ -889,9 +953,8 @@ lookup_collation_cache(Oid collation, bool set_flags)
 		memset(&ctl, 0, sizeof(ctl));
 		ctl.keysize = sizeof(Oid);
 		ctl.entrysize = sizeof(collation_cache_entry);
-		ctl.hash = oid_hash;
 		collation_cache = hash_create("Collation cache", 100, &ctl,
-									  HASH_ELEM | HASH_FUNCTION);
+									  HASH_ELEM | HASH_BLOBS);
 	}
 
 	cache_entry = hash_search(collation_cache, &collation, HASH_ENTER, &found);

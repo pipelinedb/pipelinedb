@@ -984,6 +984,7 @@ GetCombinerLookupPlan(ContinuousView *view)
 	PlannedStmt *plan;
 	List *values = NIL;
 	ContExecutor exec;
+	bool save = am_cont_combiner;
 
 	exec.cxt = CurrentMemoryContext;
 	exec.current_query_id = view->id;
@@ -1034,7 +1035,9 @@ GetCombinerLookupPlan(ContinuousView *view)
 		values = get_values(state);
 	}
 
+	am_cont_combiner = true;
 	plan = get_cached_groups_plan(state, values);
+	am_cont_combiner = save;
 
 	tuplestore_end(state->batch);
 

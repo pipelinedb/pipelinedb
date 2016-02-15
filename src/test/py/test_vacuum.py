@@ -89,8 +89,9 @@ def test_disk_spill(pipeline, clean_db):
 
   while time.time() - start < DURATION:
     stats.append(get_stat())
-    time.sleep(10)
+    time.sleep(1)
 
+  time.sleep(10)
   stop = True
   t.join()
 

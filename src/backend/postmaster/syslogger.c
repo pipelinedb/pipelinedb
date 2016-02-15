@@ -13,7 +13,7 @@
  *
  * Author: Andreas Pflug <pgadmin@pse-consulting.de>
  *
- * Copyright (c) 2004-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2004-2015, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -85,7 +85,6 @@ static FILE *csvlogFile = NULL;
 NON_EXEC_STATIC pg_time_t first_syslogger_file_time = 0;
 static char *last_file_name = NULL;
 static char *last_csv_file_name = NULL;
-static Latch sysLoggerLatch;
 
 /*
  * Buffers for saving partial messages from different backends.
@@ -131,7 +130,7 @@ static volatile sig_atomic_t rotation_requested = false;
 static pid_t syslogger_forkexec(void);
 static void syslogger_parseArgs(int argc, char *argv[]);
 #endif
-NON_EXEC_STATIC void SysLoggerMain(int argc, char *argv[]) __attribute__((noreturn));
+NON_EXEC_STATIC void SysLoggerMain(int argc, char *argv[]) pg_attribute_noreturn();
 static void process_pipe_input(char *logbuffer, int *bytes_in_logbuffer);
 static void flush_pipe_input(char *logbuffer, int *bytes_in_logbuffer);
 static void open_csvlogfile(void);
@@ -164,11 +163,6 @@ SysLoggerMain(int argc, char *argv[])
 	int			currentLogRotationAge;
 	pg_time_t	now;
 
-	IsUnderPostmaster = true;	/* we are a postmaster subprocess now */
-
-	MyProcPid = getpid();		/* reset MyProcPid */
-
-	MyStartTime = time(NULL);	/* set our start time in case we call elog */
 	now = MyStartTime;
 
 #ifdef EXEC_BACKEND
@@ -237,22 +231,6 @@ SysLoggerMain(int argc, char *argv[])
 #endif
 
 	/*
-	 * If possible, make this process a group leader, so that the postmaster
-	 * can signal any child processes too.  (syslogger probably never has any
-	 * child processes, but for consistency we make all postmaster child
-	 * processes do this.)
-	 */
-#ifdef HAVE_SETSID
-	if (setsid() < 0)
-		elog(FATAL, "setsid() failed: %m");
-#endif
-
-	InitializeLatchSupport();	/* needed for latch waits */
-
-	/* Initialize private latch for use by signal handlers */
-	InitLatch(&sysLoggerLatch);
-
-	/*
 	 * Properly accept or ignore signals the postmaster might send us
 	 *
 	 * Note: we ignore all termination signals, and instead exit only when all
@@ -317,7 +295,7 @@ SysLoggerMain(int argc, char *argv[])
 #endif
 
 		/* Clear any already-pending wakeups */
-		ResetLatch(&sysLoggerLatch);
+		ResetLatch(MyLatch);
 
 		/*
 		 * Process any requests or signals received recently.
@@ -443,7 +421,7 @@ SysLoggerMain(int argc, char *argv[])
 		 * Sleep until there's something to do
 		 */
 #ifndef WIN32
-		rc = WaitLatchOrSocket(&sysLoggerLatch,
+		rc = WaitLatchOrSocket(MyLatch,
 							   WL_LATCH_SET | WL_SOCKET_READABLE | cur_flags,
 							   syslogPipe[0],
 							   cur_timeout);
@@ -495,7 +473,7 @@ SysLoggerMain(int argc, char *argv[])
 		 */
 		LeaveCriticalSection(&sysloggerSection);
 
-		(void) WaitLatch(&sysLoggerLatch,
+		(void) WaitLatch(MyLatch,
 						 WL_LATCH_SET | cur_flags,
 						 cur_timeout);
 
@@ -609,11 +587,10 @@ SysLogger_Start(void)
 #ifndef EXEC_BACKEND
 		case 0:
 			/* in postmaster child ... */
+			InitPostmasterChild();
+
 			/* Close the postmaster's sockets */
 			ClosePostmasterPorts(true);
-
-			/* Lose the postmaster's on-exit routines */
-			on_exit_reset();
 
 			/* Drop our connection to postmaster's shared memory, as well */
 			dsm_detach_all();
@@ -808,13 +785,13 @@ process_pipe_input(char *logbuffer, int *bytes_in_logbuffer)
 	int			dest = LOG_DESTINATION_STDERR;
 
 	/* While we have enough for a header, process data... */
-	while (count >= (int) sizeof(PipeProtoHeader))
+	while (count >= (int) (offsetof(PipeProtoHeader, data) +1))
 	{
 		PipeProtoHeader p;
 		int			chunklen;
 
 		/* Do we have a valid header? */
-		memcpy(&p, cursor, sizeof(PipeProtoHeader));
+		memcpy(&p, cursor, offsetof(PipeProtoHeader, data));
 		if (p.nuls[0] == '\0' && p.nuls[1] == '\0' &&
 			p.len > 0 && p.len <= PIPE_MAX_PAYLOAD &&
 			p.pid != 0 &&
@@ -1077,7 +1054,7 @@ pipeThread(void *arg)
 		{
 			if (ftell(syslogFile) >= Log_RotationSize * 1024L ||
 				(csvlogFile != NULL && ftell(csvlogFile) >= Log_RotationSize * 1024L))
-				SetLatch(&sysLoggerLatch);
+				SetLatch(MyLatch);
 		}
 		LeaveCriticalSection(&sysloggerSection);
 	}
@@ -1089,7 +1066,7 @@ pipeThread(void *arg)
 	flush_pipe_input(logbuffer, &bytes_in_logbuffer);
 
 	/* set the latch to waken the main thread, which will quit */
-	SetLatch(&sysLoggerLatch);
+	SetLatch(MyLatch);
 
 	LeaveCriticalSection(&sysloggerSection);
 	_endthread();
@@ -1369,7 +1346,7 @@ sigHupHandler(SIGNAL_ARGS)
 	int			save_errno = errno;
 
 	got_SIGHUP = true;
-	SetLatch(&sysLoggerLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -1381,7 +1358,7 @@ sigUsr1Handler(SIGNAL_ARGS)
 	int			save_errno = errno;
 
 	rotation_requested = true;
-	SetLatch(&sysLoggerLatch);
+	SetLatch(MyLatch);
 
 	errno = save_errno;
 }

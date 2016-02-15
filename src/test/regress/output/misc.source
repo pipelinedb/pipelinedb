@@ -591,10 +591,13 @@ SELECT user_relns() AS user_relns
  bb
  box_tbl
  bprime
+ brinopers
+ brintest
  bt_f8_heap
  bt_i4_heap
  bt_name_heap
  bt_txt_heap
+ btree_tall_tbl
  c
  c_star
  char_tbl
@@ -620,6 +623,8 @@ SELECT user_relns() AS user_relns
  float4_tbl
  float8_tbl
  func_index_heap
+ gin_test_tbl
+ gist_point_tbl
  hash_f8_heap
  hash_i4_heap
  hash_name_heap
@@ -666,9 +671,13 @@ SELECT user_relns() AS user_relns
  random_tbl
  real_city
  reltime_tbl
+ rls_tbl
+ rls_tbl_force
  road
  shighway
  slow_emp4000
+ spgist_point_tbl
+ spgist_text_tbl
  street
  stud_emp
  student
@@ -679,6 +688,9 @@ SELECT user_relns() AS user_relns
  test_range_excl
  test_range_gist
  test_range_spgist
+ test_tablesample
+ test_tablesample_v1
+ test_tablesample_v2
  test_tsvector
  testjsonb
  text_tbl
@@ -698,7 +710,7 @@ SELECT user_relns() AS user_relns
  tvvmv
  varchar_tbl
  xacttest
-(120 rows)
+(132 rows)
 
 SELECT name(equipment(hobby_construct(text 'skywalking', text 'mer')));
  name 

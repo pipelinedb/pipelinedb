@@ -5,7 +5,7 @@
  *		  Prototypes and macros around system calls, used to help make
  *		  threaded libraries reentrant and safe to use from threaded applications.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  *
  * src/port/thread.c
  *
@@ -82,7 +82,7 @@ pqStrerror(int errnum, char *strerrbuf, size_t buflen)
 
 /*
  * Wrapper around getpwuid() or getpwuid_r() to mimic POSIX getpwuid_r()
- * behaviour, if it is not available or required.
+ * behaviour, if that function is not available or required.
  *
  * Per POSIX, the possible cases are:
  * success: returns zero, *result is non-NULL
@@ -96,21 +96,7 @@ pqGetpwuid(uid_t uid, struct passwd * resultbuf, char *buffer,
 		   size_t buflen, struct passwd ** result)
 {
 #if defined(FRONTEND) && defined(ENABLE_THREAD_SAFETY) && defined(HAVE_GETPWUID_R)
-
-#ifdef GETPWUID_R_5ARG
-	/* POSIX version */
 	return getpwuid_r(uid, resultbuf, buffer, buflen, result);
-#else
-
-	/*
-	 * Early POSIX draft of getpwuid_r() returns 'struct passwd *'.
-	 * getpwuid_r(uid, resultbuf, buffer, buflen)
-	 */
-	errno = 0;
-	*result = getpwuid_r(uid, resultbuf, buffer, buflen);
-	/* paranoia: ensure we return zero on success */
-	return (*result == NULL) ? errno : 0;
-#endif
 #else
 	/* no getpwuid_r() available, just use getpwuid() */
 	errno = 0;

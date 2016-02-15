@@ -66,8 +66,9 @@ ContQueryProc *MyContQueryProc = NULL;
 /* flags to tell if we are in a continuous query process */
 static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
-static bool am_cont_combiner = false;
 static bool am_cont_adhoc = false;
+
+bool am_cont_combiner = false;
 
 /* guc parameters */
 bool continuous_queries_enabled;
@@ -261,6 +262,7 @@ StartContQueryScheduler(void)
 
 #ifndef EXEC_BACKEND
 	case 0:
+		InitPostmasterChild();
 		/* in postmaster child ... */
 		/* Close the postmaster's sockets */
 		ClosePostmasterPorts(false);
@@ -287,7 +289,7 @@ sighup_handler(SIGNAL_ARGS)
 
 	got_SIGHUP = true;
 	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+		SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -300,7 +302,7 @@ sigterm_handler(SIGNAL_ARGS)
 
 	got_SIGTERM = true;
 	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+		SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -313,7 +315,7 @@ sigusr2_handler(SIGNAL_ARGS)
 
 	got_SIGUSR2 = true;
 	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+		SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -326,7 +328,7 @@ sigint_handler(SIGNAL_ARGS)
 
 	got_SIGINT = true;
 	if (MyProc)
-		SetLatch(&MyProc->procLatch);
+		SetLatch(MyLatch);
 
 	errno = save_errno;
 }
@@ -448,11 +450,15 @@ cont_bgworker_main(Datum arg)
 
 	BackgroundWorkerUnblockSignals();
 	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_meta->db_name), NULL);
+#define BACKTRACE_SEGFAULTS
+#ifdef BACKTRACE_SEGFAULTS
+	pqsignal(SIGSEGV, debug_segfault);
+#endif
 
 	/* if we got a cancel signal in prior command, quit */
 	CHECK_FOR_INTERRUPTS();
 
-	proc->latch = &MyProc->procLatch;
+	proc->latch = MyLatch;
 
 	switch (proc->type)
 	{
@@ -617,7 +623,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	/* Create dsm_segment for all worker queues */
 	CurrentResourceOwner = ResourceOwnerCreate(NULL, "Database dsm_segment ResourceOwner");
 
-	db_meta->segment = dsm_create(continuous_query_ipc_shared_mem * 1024 * NUM_BG_WORKERS);
+	db_meta->segment = dsm_create(continuous_query_ipc_shared_mem * 1024 * NUM_BG_WORKERS, 0);
 	dsm_pin_mapping(db_meta->segment);
 	db_meta->handle = dsm_segment_handle(db_meta->segment);
 
@@ -703,16 +709,6 @@ ContQuerySchedulerMain(int argc, char *argv[])
 	SetProcessingMode(InitProcessing);
 
 	/*
-	 * If possible, make this process a group leader, so that the postmaster
-	 * can signal any child processes too. This is only for consistency sake, we
-	 * never fork the scheduler process. Instead dynamic bgworkers are used.
-	 */
-#ifdef HAVE_SETSID
-	if (setsid() < 0)
-		elog(FATAL, "setsid() failed: %m");
-#endif
-
-	/*
 	 * Set up signal handlers.  We operate on databases much like a regular
 	 * backend, so we use the same signal handling.  See equivalent code in
 	 * tcop/postgres.c.
@@ -748,7 +744,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 	InitProcess();
 #endif
 
-	InitPostgres(NULL, InvalidOid, NULL, NULL);
+	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, NULL);
 
 	SetProcessingMode(NormalProcessing);
 
@@ -858,17 +854,12 @@ ContQuerySchedulerMain(int argc, char *argv[])
 				terminate_database_workers(db_meta);
 		}
 
-		/* Allow sinval catchup interrupts while sleeping */
-		EnableCatchupInterrupt();
-
 		/*
 		 * Wait until naptime expires or we get some type of signal (all the
 		 * signal handlers will wake us by calling SetLatch).
 		 */
-		rc = WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, 5000);
-		ResetLatch(&MyProc->procLatch);
-
-		DisableCatchupInterrupt();
+		rc = WaitLatch(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, 5000);
+		ResetLatch(MyLatch);
 
 		/*
 		 * Emergency bailout if postmaster has died.  This is to avoid the
@@ -1047,7 +1038,7 @@ AdhocContQueryProcGet(void)
 
 		proc->type = Adhoc;
 		proc->id = rand();
-		proc->latch = &MyProc->procLatch;
+		proc->latch = MyLatch;
 		proc->db_meta = db_meta;
 
 		proc->dsm_handle = 0;

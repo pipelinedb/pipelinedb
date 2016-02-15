@@ -32,7 +32,7 @@ listPipelineQuery(void)
 	initPQExpBuffer(&buf);
 	printfPQExpBuffer(&buf,	"SELECT * FROM pipeline_queries()");
 
-	res = PSQLexec(buf.data, false);
+	res = PSQLexec(buf.data);
 	termPQExpBuffer(&buf);
 	if (!res)
 		return false;
@@ -47,7 +47,7 @@ listPipelineQuery(void)
 		myopt.title = _("List of continuous views");
 		myopt.translate_header = true;
 
-		printQuery(res, &myopt, pset.queryFout, pset.logfile);
+		printQuery(res, &myopt, pset.queryFout, false, pset.logfile);
 	}
 
 	PQclear(res);

@@ -3,7 +3,7 @@
  * fdwapi.h
  *	  API for foreign-data wrappers
  *
- * Copyright (c) 2010-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2010-2015, PostgreSQL Global Development Group
  *
  * src/include/foreign/fdwapi.h
  *
@@ -36,16 +36,27 @@ typedef ForeignScan *(*GetForeignPlan_function) (PlannerInfo *root,
 														  Oid foreigntableid,
 													  ForeignPath *best_path,
 															 List *tlist,
-														 List *scan_clauses);
+														  List *scan_clauses,
+														   Plan *outer_plan);
 
 typedef void (*BeginForeignScan_function) (ForeignScanState *node,
 													   int eflags);
 
 typedef TupleTableSlot *(*IterateForeignScan_function) (ForeignScanState *node);
 
+typedef bool (*RecheckForeignScan_function) (ForeignScanState *node,
+													   TupleTableSlot *slot);
+
 typedef void (*ReScanForeignScan_function) (ForeignScanState *node);
 
 typedef void (*EndForeignScan_function) (ForeignScanState *node);
+
+typedef void (*GetForeignJoinPaths_function) (PlannerInfo *root,
+														  RelOptInfo *joinrel,
+														RelOptInfo *outerrel,
+														RelOptInfo *innerrel,
+														  JoinType jointype,
+												   JoinPathExtraData *extra);
 
 typedef void (*AddForeignUpdateTargets_function) (Query *parsetree,
 												   RangeTblEntry *target_rte,
@@ -82,6 +93,14 @@ typedef void (*EndForeignModify_function) (EState *estate,
 
 typedef int (*IsForeignRelUpdatable_function) (Relation rel);
 
+typedef RowMarkType (*GetForeignRowMarkType_function) (RangeTblEntry *rte,
+												LockClauseStrength strength);
+
+typedef HeapTuple (*RefetchForeignRow_function) (EState *estate,
+															 ExecRowMark *erm,
+															 Datum rowid,
+															 bool *updated);
+
 typedef void (*ExplainForeignScan_function) (ForeignScanState *node,
 													struct ExplainState *es);
 
@@ -99,6 +118,9 @@ typedef int (*AcquireSampleRowsFunc) (Relation relation, int elevel,
 typedef bool (*AnalyzeForeignTable_function) (Relation relation,
 												 AcquireSampleRowsFunc *func,
 													BlockNumber *totalpages);
+
+typedef List *(*ImportForeignSchema_function) (ImportForeignSchemaStmt *stmt,
+														   Oid serverOid);
 
 /*
  * FdwRoutine is the struct returned by a foreign-data wrapper's handler
@@ -128,6 +150,9 @@ typedef struct FdwRoutine
 	 * are not provided.
 	 */
 
+	/* Functions for remote-join planning */
+	GetForeignJoinPaths_function GetForeignJoinPaths;
+
 	/* Functions for updating foreign tables */
 	AddForeignUpdateTargets_function AddForeignUpdateTargets;
 	PlanForeignModify_function PlanForeignModify;
@@ -138,18 +163,30 @@ typedef struct FdwRoutine
 	EndForeignModify_function EndForeignModify;
 	IsForeignRelUpdatable_function IsForeignRelUpdatable;
 
+	/* Functions for SELECT FOR UPDATE/SHARE row locking */
+	GetForeignRowMarkType_function GetForeignRowMarkType;
+	RefetchForeignRow_function RefetchForeignRow;
+	RecheckForeignScan_function RecheckForeignScan;
+
 	/* Support functions for EXPLAIN */
 	ExplainForeignScan_function ExplainForeignScan;
 	ExplainForeignModify_function ExplainForeignModify;
 
 	/* Support functions for ANALYZE */
 	AnalyzeForeignTable_function AnalyzeForeignTable;
+
+	/* Support functions for IMPORT FOREIGN SCHEMA */
+	ImportForeignSchema_function ImportForeignSchema;
 } FdwRoutine;
 
 
 /* Functions in foreign/foreign.c */
 extern FdwRoutine *GetFdwRoutine(Oid fdwhandler);
+extern Oid	GetForeignServerIdByRelId(Oid relid);
+extern FdwRoutine *GetFdwRoutineByServerId(Oid serverid);
 extern FdwRoutine *GetFdwRoutineByRelId(Oid relid);
 extern FdwRoutine *GetFdwRoutineForRelation(Relation relation, bool makecopy);
+extern bool IsImportableForeignTable(const char *tablename,
+						 ImportForeignSchemaStmt *stmt);
 
 #endif   /* FDWAPI_H */

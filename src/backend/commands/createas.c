@@ -12,7 +12,7 @@
  * to assorted legacy behaviors that we still try to preserve, notably that
  * we must return a tuples-processed count in the completionTag.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -27,6 +27,8 @@
 #include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "access/xact.h"
+#include "access/xlog.h"
+#include "catalog/namespace.h"
 #include "catalog/toasting.h"
 #include "commands/createas.h"
 #include "commands/matview.h"
@@ -41,6 +43,7 @@
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
+#include "utils/rls.h"
 #include "utils/snapmgr.h"
 
 
@@ -55,6 +58,9 @@ typedef struct
 	BulkInsertState bistate;	/* bulk insert state */
 } DR_intorel;
 
+/* the address of the created table, for ExecCreateTableAs consumption */
+static ObjectAddress CreateAsReladdr = {InvalidOid, InvalidOid, 0};
+
 static void intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo);
 static void intorel_receive(TupleTableSlot *slot, DestReceiver *self);
 static void intorel_shutdown(DestReceiver *self);
@@ -64,7 +70,7 @@ static void intorel_destroy(DestReceiver *self);
 /*
  * ExecCreateTableAs -- execute a CREATE TABLE AS command
  */
-void
+ObjectAddress
 ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 				  ParamListInfo params, char *completionTag)
 {
@@ -75,10 +81,27 @@ ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 	Oid			save_userid = InvalidOid;
 	int			save_sec_context = 0;
 	int			save_nestlevel = 0;
+	ObjectAddress address;
 	List	   *rewritten;
 	PlannedStmt *plan;
 	QueryDesc  *queryDesc;
 	ScanDirection dir;
+
+	if (stmt->if_not_exists)
+	{
+		Oid			nspid;
+
+		nspid = RangeVarGetCreationNamespace(stmt->into->rel);
+
+		if (get_relname_relid(stmt->into->rel->relname, nspid))
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_DUPLICATE_TABLE),
+					 errmsg("relation \"%s\" already exists, skipping",
+							stmt->into->rel->relname)));
+			return InvalidObjectAddress;
+		}
+	}
 
 	/*
 	 * Create the tuple receiver object and insert info it will need
@@ -98,7 +121,9 @@ ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 		Assert(!is_matview);	/* excluded by syntax */
 		ExecuteQuery(estmt, into, queryString, params, dest, completionTag);
 
-		return;
+		address = CreateAsReladdr;
+		CreateAsReladdr = InvalidObjectAddress;
+		return address;
 	}
 	Assert(query->commandType == CMD_SELECT);
 
@@ -190,6 +215,11 @@ ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 		/* Restore userid and security context */
 		SetUserIdAndSecContext(save_userid, save_sec_context);
 	}
+
+	address = CreateAsReladdr;
+	CreateAsReladdr = InvalidObjectAddress;
+
+	return address;
 }
 
 /*
@@ -258,7 +288,7 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 	bool		is_matview;
 	char		relkind;
 	CreateStmt *create;
-	Oid			intoRelationId;
+	ObjectAddress intoRelationAddr;
 	Relation	intoRelationDesc;
 	RangeTblEntry *rte;
 	Datum		toast_options;
@@ -355,7 +385,7 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 	/*
 	 * Actually create the target table
 	 */
-	intoRelationId = DefineRelation(create, relkind, InvalidOid);
+	intoRelationAddr = DefineRelation(create, relkind, InvalidOid, NULL);
 
 	/*
 	 * If necessary, create a TOAST table for the target table.  Note that
@@ -373,7 +403,7 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 
-	NewRelationCreateToastTable(intoRelationId, toast_options);
+	NewRelationCreateToastTable(intoRelationAddr.objectId, toast_options);
 
 	/* Create the "view" part of a materialized view. */
 	if (is_matview)
@@ -381,14 +411,14 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 		/* StoreViewQuery scribbles on tree, so make a copy */
 		Query	   *query = (Query *) copyObject(into->viewQuery);
 
-		StoreViewQuery(intoRelationId, query, false);
+		StoreViewQuery(intoRelationAddr.objectId, query, false);
 		CommandCounterIncrement();
 	}
 
 	/*
 	 * Finally we can open the target table
 	 */
-	intoRelationDesc = heap_open(intoRelationId, AccessExclusiveLock);
+	intoRelationDesc = heap_open(intoRelationAddr.objectId, AccessExclusiveLock);
 
 	/*
 	 * Check INSERT permission on the constructed table.
@@ -398,15 +428,28 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 	 */
 	rte = makeNode(RangeTblEntry);
 	rte->rtekind = RTE_RELATION;
-	rte->relid = intoRelationId;
+	rte->relid = intoRelationAddr.objectId;
 	rte->relkind = relkind;
 	rte->requiredPerms = ACL_INSERT;
 
 	for (attnum = 1; attnum <= intoRelationDesc->rd_att->natts; attnum++)
-		rte->modifiedCols = bms_add_member(rte->modifiedCols,
+		rte->insertedCols = bms_add_member(rte->insertedCols,
 								attnum - FirstLowInvalidHeapAttributeNumber);
 
 	ExecCheckRTPerms(list_make1(rte), true);
+
+	/*
+	 * Make sure the constructed table does not have RLS enabled.
+	 *
+	 * check_enable_rls() will ereport(ERROR) itself if the user has requested
+	 * something invalid, and otherwise will return RLS_ENABLED if RLS should
+	 * be enabled here.  We don't actually support that currently, so throw
+	 * our own ereport(ERROR) if that happens.
+	 */
+	if (check_enable_rls(intoRelationAddr.objectId, InvalidOid, false) == RLS_ENABLED)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 (errmsg("policies not yet implemented for this command"))));
 
 	/*
 	 * Tentatively mark the target as populated, if it's a matview and we're
@@ -420,6 +463,9 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 	 */
 	myState->rel = intoRelationDesc;
 	myState->output_cid = GetCurrentCommandId(true);
+
+	/* and remember the new relation's address for ExecCreateTableAs */
+	CreateAsReladdr = intoRelationAddr;
 
 	/*
 	 * We can skip WAL-logging the insertions, unless PITR or streaming

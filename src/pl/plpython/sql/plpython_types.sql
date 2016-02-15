@@ -122,6 +122,7 @@ SELECT * FROM test_type_conversion_float8(100);
 SELECT * FROM test_type_conversion_float8(-100);
 SELECT * FROM test_type_conversion_float8(5000000000.5);
 SELECT * FROM test_type_conversion_float8(null);
+SELECT * FROM test_type_conversion_float8(100100100.654321);
 
 
 CREATE FUNCTION test_type_conversion_oid(x oid) RETURNS oid AS $$
@@ -269,7 +270,7 @@ SELECT * FROM test_type_conversion_array_mixed2();
 
 
 CREATE FUNCTION test_type_conversion_array_record() RETURNS type_record[] AS $$
-return [None]
+return [{'first': 'one', 'second': 42}, {'first': 'two', 'second': 11}]
 $$ LANGUAGE plpythonu;
 
 SELECT * FROM test_type_conversion_array_record();

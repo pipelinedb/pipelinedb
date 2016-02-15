@@ -3,7 +3,7 @@
  * file_fdw.c
  *		  foreign-data wrapper for server-side flat files.
  *
- * Copyright (c) 2010-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2010-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  contrib/file_fdw/file_fdw.c
@@ -34,6 +34,7 @@
 #include "optimizer/var.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
+#include "utils/sampling.h"
 
 PG_MODULE_MAGIC;
 
@@ -120,7 +121,8 @@ static ForeignScan *fileGetForeignPlan(PlannerInfo *root,
 				   Oid foreigntableid,
 				   ForeignPath *best_path,
 				   List *tlist,
-				   List *scan_clauses);
+				   List *scan_clauses,
+				   Plan *outer_plan);
 static void fileExplainForeignScan(ForeignScanState *node, ExplainState *es);
 static void fileBeginForeignScan(ForeignScanState *node, int eflags);
 static TupleTableSlot *fileIterateForeignScan(ForeignScanState *node);
@@ -524,6 +526,7 @@ fileGetForeignPaths(PlannerInfo *root,
 									 total_cost,
 									 NIL,		/* no pathkeys */
 									 NULL,		/* no outer rel either */
+									 NULL,		/* no extra plan */
 									 coptions));
 
 	/*
@@ -543,7 +546,8 @@ fileGetForeignPlan(PlannerInfo *root,
 				   Oid foreigntableid,
 				   ForeignPath *best_path,
 				   List *tlist,
-				   List *scan_clauses)
+				   List *scan_clauses,
+				   Plan *outer_plan)
 {
 	Index		scan_relid = baserel->relid;
 
@@ -561,7 +565,10 @@ fileGetForeignPlan(PlannerInfo *root,
 							scan_clauses,
 							scan_relid,
 							NIL,	/* no expressions to evaluate */
-							best_path->fdw_private);
+							best_path->fdw_private,
+							NIL,	/* no custom tlist */
+							NIL,	/* no remote quals */
+							outer_plan);
 }
 
 /*
@@ -932,7 +939,7 @@ estimate_size(PlannerInfo *root, RelOptInfo *baserel,
 		int			tuple_width;
 
 		tuple_width = MAXALIGN(baserel->width) +
-			MAXALIGN(sizeof(HeapTupleHeaderData));
+			MAXALIGN(SizeofHeapTupleHeader);
 		ntuples = clamp_row_est((double) stat_buf.st_size /
 								(double) tuple_width);
 	}
@@ -1005,7 +1012,7 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 {
 	int			numrows = 0;
 	double		rowstoskip = -1;	/* -1 means not set yet */
-	double		rstate;
+	ReservoirStateData rstate;
 	TupleDesc	tupDesc;
 	Datum	   *values;
 	bool	   *nulls;
@@ -1043,7 +1050,7 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 									   ALLOCSET_DEFAULT_MAXSIZE);
 
 	/* Prepare for sampling rows */
-	rstate = anl_init_selection_state(targrows);
+	reservoir_init_selection_state(&rstate, targrows);
 
 	/* Set up callback to identify error line number. */
 	errcallback.callback = CopyFromErrorCallback;
@@ -1087,7 +1094,7 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 			 * not-yet-incremented value of totalrows as t.
 			 */
 			if (rowstoskip < 0)
-				rowstoskip = anl_get_next_S(*totalrows, targrows, &rstate);
+				rowstoskip = reservoir_get_next_S(&rstate, *totalrows, targrows);
 
 			if (rowstoskip <= 0)
 			{
@@ -1095,7 +1102,7 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 				 * Found a suitable tuple, so save it, replacing one old tuple
 				 * at random
 				 */
-				int			k = (int) (targrows * anl_random_fract());
+				int			k = (int) (targrows * sampler_random_fract(rstate.randstate));
 
 				Assert(k >= 0 && k < targrows);
 				heap_freetuple(rows[k]);

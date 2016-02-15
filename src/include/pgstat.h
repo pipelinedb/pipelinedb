@@ -3,7 +3,7 @@
  *
  *	Definitions for the PostgreSQL statistics collector daemon.
  *
- *	Portions Copyright (c) 2001-2014, PostgreSQL Global Development Group
+ *	Portions Copyright (c) 2001-2015, PostgreSQL Global Development Group
  *  Portions Copyright (c) 2013-2015, PipelineDB
  *
  *	src/include/pgstat.h
@@ -17,6 +17,7 @@
 #include "libpq/pqcomm.h"
 #include "portability/instr_time.h"
 #include "postmaster/pgarch.h"
+#include "storage/barrier.h"
 #include "utils/hsearch.h"
 #include "utils/relcache.h"
 
@@ -107,6 +108,7 @@ typedef struct PgStat_TableCounts
 	PgStat_Counter t_tuples_updated;
 	PgStat_Counter t_tuples_deleted;
 	PgStat_Counter t_tuples_hot_updated;
+	bool		t_truncated;
 
 	PgStat_Counter t_delta_live_tuples;
 	PgStat_Counter t_delta_dead_tuples;
@@ -168,6 +170,10 @@ typedef struct PgStat_TableXactStatus
 	PgStat_Counter tuples_inserted;		/* tuples inserted in (sub)xact */
 	PgStat_Counter tuples_updated;		/* tuples updated in (sub)xact */
 	PgStat_Counter tuples_deleted;		/* tuples deleted in (sub)xact */
+	bool		truncated;		/* relation truncated in this (sub)xact */
+	PgStat_Counter inserted_pre_trunc;	/* tuples inserted prior to truncate */
+	PgStat_Counter updated_pre_trunc;	/* tuples updated prior to truncate */
+	PgStat_Counter deleted_pre_trunc;	/* tuples deleted prior to truncate */
 	int			nest_level;		/* subtransaction nest level */
 	/* links to other structs for same relation: */
 	struct PgStat_TableXactStatus *upper;		/* next higher subxact if any */
@@ -549,7 +555,7 @@ typedef union PgStat_Msg
  * ------------------------------------------------------------
  */
 
-#define PGSTAT_FILE_FORMAT_ID	0x01A5BC9C
+#define PGSTAT_FILE_FORMAT_ID	0x01A5BC9D
 
 /* ----------
  * PgStat_StatDBEntry			The collector's data per database
@@ -704,6 +710,23 @@ typedef enum BackendState
  */
 
 
+/*
+ * PgBackendSSLStatus
+ *
+ * For each backend, we keep the SSL status in a separate struct, that
+ * is only filled in if SSL is enabled.
+ */
+typedef struct PgBackendSSLStatus
+{
+	/* Information about SSL connection */
+	int			ssl_bits;
+	bool		ssl_compression;
+	char		ssl_version[NAMEDATALEN];		/* MUST be null-terminated */
+	char		ssl_cipher[NAMEDATALEN];		/* MUST be null-terminated */
+	char		ssl_clientdn[NAMEDATALEN];		/* MUST be null-terminated */
+} PgBackendSSLStatus;
+
+
 /* ----------
  * PgBackendStatus
  *
@@ -723,6 +746,12 @@ typedef struct PgBackendStatus
 	 * st_changecount again.  If the value hasn't changed, and if it's even,
 	 * the copy is valid; otherwise start over.  This makes updates cheap
 	 * while reads are potentially expensive, but that's the tradeoff we want.
+	 *
+	 * The above protocol needs the memory barriers to ensure that the
+	 * apparent order of execution is as it desires. Otherwise, for example,
+	 * the CPU might rearrange the code so that st_changecount is incremented
+	 * twice before the modification on a machine with weak memory ordering.
+	 * This surprising result can lead to bugs.
 	 */
 	int			st_changecount;
 
@@ -741,6 +770,10 @@ typedef struct PgBackendStatus
 	SockAddr	st_clientaddr;
 	char	   *st_clienthostname;		/* MUST be null-terminated */
 
+	/* Information about SSL connection */
+	bool		st_ssl;
+	PgBackendSSLStatus *st_sslstatus;
+
 	/* Is backend currently waiting on an lmgr lock? */
 	bool		st_waiting;
 
@@ -753,6 +786,43 @@ typedef struct PgBackendStatus
 	/* current command string; MUST be null-terminated */
 	char	   *st_activity;
 } PgBackendStatus;
+
+/*
+ * Macros to load and store st_changecount with the memory barriers.
+ *
+ * pgstat_increment_changecount_before() and
+ * pgstat_increment_changecount_after() need to be called before and after
+ * PgBackendStatus entries are modified, respectively. This makes sure that
+ * st_changecount is incremented around the modification.
+ *
+ * Also pgstat_save_changecount_before() and pgstat_save_changecount_after()
+ * need to be called before and after PgBackendStatus entries are copied into
+ * private memory, respectively.
+ */
+#define pgstat_increment_changecount_before(beentry)	\
+	do {	\
+		beentry->st_changecount++;	\
+		pg_write_barrier(); \
+	} while (0)
+
+#define pgstat_increment_changecount_after(beentry) \
+	do {	\
+		pg_write_barrier(); \
+		beentry->st_changecount++;	\
+		Assert((beentry->st_changecount & 1) == 0); \
+	} while (0)
+
+#define pgstat_save_changecount_before(beentry, save_changecount)	\
+	do {	\
+		save_changecount = beentry->st_changecount; \
+		pg_read_barrier();	\
+	} while (0)
+
+#define pgstat_save_changecount_after(beentry, save_changecount)	\
+	do {	\
+		pg_read_barrier();	\
+		save_changecount = beentry->st_changecount; \
+	} while (0)
 
 /* ----------
  * LocalPgBackendStatus
@@ -835,7 +905,7 @@ extern void pgstat_reset_all(void);
 extern void allow_immediate_pgstat_restart(void);
 
 #ifdef EXEC_BACKEND
-extern void PgstatCollectorMain(int argc, char *argv[]) __attribute__((noreturn));
+extern void PgstatCollectorMain(int argc, char *argv[]) pg_attribute_noreturn();
 #endif
 
 
@@ -925,6 +995,7 @@ extern void pgstat_initstats(Relation rel);
 extern void pgstat_count_heap_insert(Relation rel, int n);
 extern void pgstat_count_heap_update(Relation rel, bool hot);
 extern void pgstat_count_heap_delete(Relation rel);
+extern void pgstat_count_truncate(Relation rel);
 extern void pgstat_update_heap_dead_tuples(Relation rel, int delta);
 
 extern void pgstat_init_function_usage(FunctionCallInfoData *fcinfo,

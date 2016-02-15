@@ -4,7 +4,7 @@
  *	  prototypes for pathnode.c, relnode.c.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -33,6 +33,8 @@ extern bool add_path_precheck(RelOptInfo *parent_rel,
 
 extern Path *create_seqscan_path(PlannerInfo *root, RelOptInfo *rel,
 					Relids required_outer);
+extern Path *create_samplescan_path(PlannerInfo *root, RelOptInfo *rel,
+					   Relids required_outer);
 extern IndexPath *create_index_path(PlannerInfo *root,
 				  IndexOptInfo *index,
 				  List *indexclauses,
@@ -82,6 +84,7 @@ extern ForeignPath *create_foreignscan_path(PlannerInfo *root, RelOptInfo *rel,
 						double rows, Cost startup_cost, Cost total_cost,
 						List *pathkeys,
 						Relids required_outer,
+						Path *fdw_outerpath,
 						List *fdw_private);
 
 extern Relids calc_nestloop_required_outer(Path *outer_path, Path *inner_path);
@@ -133,15 +136,13 @@ extern Path *create_streamscan_path(PlannerInfo *root, RelOptInfo *rel, Relids r
 extern Path *create_tuplestore_scan_path(RelOptInfo *parent);
 
 extern StreamTableJoinPath *create_stream_table_join_path(PlannerInfo *root,
-					 RelOptInfo *joinrel,
-					 JoinType jointype,
-					 SpecialJoinInfo *sjinfo,
-					 SemiAntiJoinFactors *semifactors,
-					 Path *outer_path,
-					 Path *inner_path,
-					 List *restrict_clauses,
-					 Relids required_outer,
-					 List *hash_clauses);
+		 RelOptInfo *joinrel,
+		 JoinType jointype,
+		 Path *outer_path,
+		 Path *inner_path,
+		 Relids required_outer,
+		 List *hashclauses,
+		 JoinPathExtraData *extra);
 
 /*
  * prototypes for relnode.c
@@ -157,6 +158,10 @@ extern RelOptInfo *build_join_rel(PlannerInfo *root,
 			   RelOptInfo *inner_rel,
 			   SpecialJoinInfo *sjinfo,
 			   List **restrictlist_ptr);
+extern Relids min_join_parameterization(PlannerInfo *root,
+						  Relids joinrelids,
+						  RelOptInfo *outer_rel,
+						  RelOptInfo *inner_rel);
 extern RelOptInfo *build_empty_join_rel(PlannerInfo *root);
 extern AppendRelInfo *find_childrel_appendrelinfo(PlannerInfo *root,
 							RelOptInfo *rel);

@@ -31,7 +31,7 @@
  * different) code.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -75,6 +75,7 @@ typedef enum
 #define BGW_DEFAULT_RESTART_INTERVAL	60
 #define BGW_NEVER_RESTART				-1
 #define BGW_MAXLEN						64
+#define BGW_EXTRALEN					128
 
 typedef struct BackgroundWorker
 {
@@ -86,6 +87,7 @@ typedef struct BackgroundWorker
 	char		bgw_library_name[BGW_MAXLEN];	/* only if bgw_main is NULL */
 	char		bgw_function_name[BGW_MAXLEN];	/* only if bgw_main is NULL */
 	Datum		bgw_main_arg;
+	char		bgw_extra[BGW_EXTRALEN];
 	pid_t		bgw_notify_pid; /* SIGUSR1 this backend on start/stop */
 
 	/*
@@ -124,6 +126,8 @@ extern BgwHandleStatus GetBackgroundWorkerPid(BackgroundWorkerHandle *handle,
 extern BgwHandleStatus
 WaitForBackgroundWorkerStartup(BackgroundWorkerHandle *
 							   handle, pid_t *pid);
+extern BgwHandleStatus
+			WaitForBackgroundWorkerShutdown(BackgroundWorkerHandle *);
 
 /* Terminate a bgworker */
 extern void TerminateBackgroundWorker(BackgroundWorkerHandle *handle);
@@ -143,6 +147,9 @@ extern PGDLLIMPORT BackgroundWorker *MyBgworkerEntry;
  * only shared catalogs can be accessed.
  */
 extern void BackgroundWorkerInitializeConnection(char *dbname, char *username);
+
+/* Just like the above, but specifying database and user by OID. */
+extern void BackgroundWorkerInitializeConnectionByOid(Oid dboid, Oid useroid);
 
 /* Block/unblock signals in a background worker process */
 extern void BackgroundWorkerBlockSignals(void);

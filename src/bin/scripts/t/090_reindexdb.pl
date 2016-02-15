@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use TestLib;
-use Test::More tests => 16;
+use Test::More tests => 20;
 
 program_help_ok('reindexdb');
 program_version_ok('reindexdb');
@@ -28,6 +28,14 @@ issues_sql_like(
 	qr/statement: REINDEX INDEX test1x;/,
 	'reindex specific index');
 issues_sql_like(
+	[ 'reindexdb', '-S', 'pg_catalog', 'postgres' ],
+	qr/statement: REINDEX SCHEMA pg_catalog;/,
+	'reindex specific schema');
+issues_sql_like(
 	[ 'reindexdb', '-s', 'postgres' ],
 	qr/statement: REINDEX SYSTEM postgres;/,
 	'reindex system tables');
+issues_sql_like(
+	[ 'reindexdb', '-v', '-t', 'test1', 'postgres' ],
+	qr/statement: REINDEX \(VERBOSE\) TABLE test1;/,
+	'reindex with verbose output');

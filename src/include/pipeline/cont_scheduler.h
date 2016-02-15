@@ -105,6 +105,8 @@ extern void ContQuerySchedulerShmemInit(void);
 extern ContQueryRunParams *GetContQueryRunParams(void);
 extern int GetContSchedulerTrancheId(void);
 
+extern bool am_cont_combiner;
+
 /* status inquiry functions */
 extern bool IsContQuerySchedulerProcess(void);
 extern bool IsContQueryWorkerProcess(void);

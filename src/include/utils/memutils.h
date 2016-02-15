@@ -7,7 +7,7 @@
  *	  of the API of the memory management subsystem.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -86,6 +86,9 @@ extern PGDLLIMPORT MemoryContext ContQueryBatchContext;
 /* This is a transient link to the active portal's memory context: */
 extern PGDLLIMPORT MemoryContext PortalContext;
 
+/* Backwards compatibility macro */
+#define MemoryContextResetAndDeleteChildren(ctx) MemoryContextReset(ctx)
+
 
 /*
  * Memory-context-type-independent functions in mcxt.c
@@ -93,6 +96,7 @@ extern PGDLLIMPORT MemoryContext PortalContext;
 extern void MemoryContextInit(void);
 extern void MemoryContextReset(MemoryContext context);
 extern void MemoryContextDelete(MemoryContext context);
+extern void MemoryContextResetOnly(MemoryContext context);
 extern void MemoryContextResetChildren(MemoryContext context);
 extern void MemoryContextDeleteChildren(MemoryContext context);
 extern void MemoryContextResetAndDeleteChildren(MemoryContext context);
@@ -103,6 +107,8 @@ extern MemoryContext GetMemoryChunkContext(void *pointer);
 extern MemoryContext MemoryContextGetParent(MemoryContext context);
 extern bool MemoryContextIsEmpty(MemoryContext context);
 extern void MemoryContextStats(MemoryContext context);
+extern void MemoryContextAllowInCriticalSection(MemoryContext context,
+									bool allow);
 
 #ifdef MEMORY_CONTEXT_CHECKING
 extern void MemoryContextCheck(MemoryContext context);
@@ -146,5 +152,13 @@ extern MemoryContext AllocSetContextCreate(MemoryContext parent,
 #define ALLOCSET_SMALL_MINSIZE	 0
 #define ALLOCSET_SMALL_INITSIZE  (1 * 1024)
 #define ALLOCSET_SMALL_MAXSIZE	 (8 * 1024)
+
+/*
+ * Threshold above which a request in an AllocSet context is certain to be
+ * allocated separately (and thereby have constant allocation overhead).
+ * Few callers should be interested in this, but tuplesort/tuplestore need
+ * to know it.
+ */
+#define ALLOCSET_SEPARATE_THRESHOLD  8192
 
 #endif   /* MEMUTILS_H */

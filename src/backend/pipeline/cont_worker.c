@@ -199,7 +199,7 @@ ContinuousQueryWorkerMain(void)
 				set_cont_executor(state->query_desc->planstate, cont_exec);
 
 				ExecutePlan(estate, state->query_desc->planstate, state->query_desc->operation,
-						true, 0, 0, ForwardScanDirection, state->dest);
+						true, 0, ForwardScanDirection, state->dest);
 
 				/* free up any resources used by this plan before committing */
 				ExecEndNode(state->query_desc->planstate);

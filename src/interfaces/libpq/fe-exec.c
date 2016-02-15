@@ -3,7 +3,7 @@
  * fe-exec.c
  *	  functions related to sending a query down to the backend
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -892,7 +892,8 @@ pqSaveMessageField(PGresult *res, char code, const char *value)
 
 	pfield = (PGMessageField *)
 		pqResultAlloc(res,
-					  sizeof(PGMessageField) + strlen(value),
+					  offsetof(PGMessageField, contents) +
+					  strlen(value) + 1,
 					  TRUE);
 	if (!pfield)
 		return;					/* out of memory? */
@@ -2908,9 +2909,9 @@ PQoidStatus(const PGresult *res)
 		return "";
 
 	len = strspn(res->cmdStatus + 7, "0123456789");
-	if (len > 23)
-		len = 23;
-	strncpy(buf, res->cmdStatus + 7, len);
+	if (len > sizeof(buf) - 1)
+		len = sizeof(buf) - 1;
+	memcpy(buf, res->cmdStatus + 7, len);
 	buf[len] = '\0';
 
 	return buf;

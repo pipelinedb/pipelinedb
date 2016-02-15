@@ -22,7 +22,7 @@ extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);
 extern void GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid);
 extern void GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid);
 extern ForeignScan *GetStreamScanPlan(PlannerInfo *root, RelOptInfo *baserel,
-		Oid streamid, ForeignPath *best_path, List *tlist, List *scan_clauses);
+		Oid streamid, ForeignPath *best_path, List *tlist, List *scan_clauses, Plan *outer_plan);
 extern void BeginStreamScan(ForeignScanState *node, int eflags);
 extern List *PlanStreamModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int subplan_index);
 extern TupleTableSlot *IterateStreamScan(ForeignScanState *node);

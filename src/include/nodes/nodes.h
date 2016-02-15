@@ -4,7 +4,7 @@
  *	  Definitions for tagged nodes.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -52,6 +52,7 @@ typedef enum NodeTag
 	T_BitmapOr,
 	T_Scan,
 	T_SeqScan,
+	T_SampleScan,
 	T_IndexScan,
 	T_IndexOnlyScan,
 	T_BitmapIndexScan,
@@ -63,6 +64,7 @@ typedef enum NodeTag
 	T_CteScan,
 	T_WorkTableScan,
 	T_ForeignScan,
+	T_CustomScan,
 	T_Join,
 	T_NestLoop,
 	T_MergeJoin,
@@ -97,6 +99,7 @@ typedef enum NodeTag
 	T_BitmapOrState,
 	T_ScanState,
 	T_SeqScanState,
+	T_SampleScanState,
 	T_IndexScanState,
 	T_IndexOnlyScanState,
 	T_BitmapIndexScanState,
@@ -108,6 +111,7 @@ typedef enum NodeTag
 	T_CteScanState,
 	T_WorkTableScanState,
 	T_ForeignScanState,
+	T_CustomScanState,
 	T_JoinState,
 	T_NestLoopState,
 	T_MergeJoinState,
@@ -133,6 +137,7 @@ typedef enum NodeTag
 	T_Const,
 	T_Param,
 	T_Aggref,
+	T_GroupingFunc,
 	T_WindowFunc,
 	T_ArrayRef,
 	T_FuncExpr,
@@ -167,10 +172,12 @@ typedef enum NodeTag
 	T_CoerceToDomainValue,
 	T_SetToDefault,
 	T_CurrentOfExpr,
+	T_InferenceElem,
 	T_TargetEntry,
 	T_RangeTblRef,
 	T_JoinExpr,
 	T_FromExpr,
+	T_OnConflictExpr,
 	T_IntoClause,
 
 	/*
@@ -183,6 +190,7 @@ typedef enum NodeTag
 	T_GenericExprState,
 	T_WholeRowVarExprState,
 	T_AggrefExprState,
+	T_GroupingFuncExprState,
 	T_WindowFuncExprState,
 	T_ArrayRefExprState,
 	T_FuncExprState,
@@ -225,6 +233,7 @@ typedef enum NodeTag
 	T_HashPath,
 	T_TidPath,
 	T_ForeignPath,
+	T_CustomPath,
 	T_AppendPath,
 	T_MergeAppendPath,
 	T_ResultPath,
@@ -236,7 +245,6 @@ typedef enum NodeTag
 	T_RestrictInfo,
 	T_PlaceHolderVar,
 	T_SpecialJoinInfo,
-	T_LateralJoinInfo,
 	T_AppendRelInfo,
 	T_PlaceHolderInfo,
 	T_MinMaxAggInfo,
@@ -358,6 +366,7 @@ typedef enum NodeTag
 	T_AlterTableMoveAllStmt,
 	T_SecLabelStmt,
 	T_CreateForeignTableStmt,
+	T_ImportForeignSchemaStmt,
 	T_CreateExtensionStmt,
 	T_AlterExtensionStmt,
 	T_AlterExtensionContentsStmt,
@@ -366,6 +375,9 @@ typedef enum NodeTag
 	T_RefreshMatViewStmt,
 	T_ReplicaIdentityStmt,
 	T_AlterSystemStmt,
+	T_CreatePolicyStmt,
+	T_AlterPolicyStmt,
+	T_CreateTransformStmt,
 
 	/*
 	 * TAGS FOR PARSE TREE NODES (parsenodes.h)
@@ -380,12 +392,14 @@ typedef enum NodeTag
 	T_A_Indirection,
 	T_A_ArrayExpr,
 	T_ResTarget,
+	T_MultiAssignRef,
 	T_TypeCast,
 	T_CollateClause,
 	T_SortBy,
 	T_WindowDef,
 	T_RangeSubselect,
 	T_RangeFunction,
+	T_RangeTableSample,
 	T_TypeName,
 	T_ColumnDef,
 	T_IndexElem,
@@ -393,10 +407,11 @@ typedef enum NodeTag
 	T_DefElem,
 	T_RangeTblEntry,
 	T_RangeTblFunction,
+	T_TableSampleClause,
 	T_WithCheckOption,
 	T_SortGroupClause,
+	T_GroupingSet,
 	T_WindowClause,
-	T_PrivGrantee,
 	T_FuncWithArgs,
 	T_AccessPriv,
 	T_CreateOpClassItem,
@@ -406,7 +421,10 @@ typedef enum NodeTag
 	T_RowMarkClause,
 	T_XmlSerialize,
 	T_WithClause,
+	T_InferClause,
+	T_OnConflictClause,
 	T_CommonTableExpr,
+	T_RoleSpec,
 
 	/*
 	 * TAGS FOR REPLICATION GRAMMAR PARSE NODES (replnodes.h)
@@ -433,6 +451,7 @@ typedef enum NodeTag
 	T_TIDBitmap,				/* in nodes/tidbitmap.h */
 	T_InlineCodeBlock,			/* in nodes/parsenodes.h */
 	T_FdwRoutine,				/* in foreign/fdwapi.h */
+	T_TsmRoutine,				/* in access/tsmapi.h */
 
 	/*
 	 * TAGS FOR PIPELINEDB
@@ -641,5 +660,18 @@ typedef enum JoinType
 	   (1 << JOIN_FULL) | \
 	   (1 << JOIN_RIGHT) | \
 	   (1 << JOIN_ANTI))) != 0)
+
+/*
+ * OnConflictAction -
+ *	  "ON CONFLICT" clause type of query
+ *
+ * This is needed in both parsenodes.h and plannodes.h, so put it here...
+ */
+typedef enum OnConflictAction
+{
+	ONCONFLICT_NONE,			/* No "ON CONFLICT" clause */
+	ONCONFLICT_NOTHING,			/* ON CONFLICT ... DO NOTHING */
+	ONCONFLICT_UPDATE			/* ON CONFLICT ... DO UPDATE */
+} OnConflictAction;
 
 #endif   /* NODES_H */

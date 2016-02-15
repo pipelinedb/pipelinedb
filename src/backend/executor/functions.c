@@ -3,7 +3,7 @@
  * functions.c
  *	  Execution of SQL-language functions
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -513,6 +513,9 @@ init_execution_state(List *queryTree_list,
 					   errmsg("%s is not allowed in a non-volatile function",
 							  CreateCommandTag(stmt))));
 
+			if (IsInParallelMode() && !CommandIsReadOnly(stmt))
+				PreventCommandIfParallelMode(CreateCommandTag(stmt));
+
 			/* OK, build the execution_state for this query */
 			newes = (execution_state *) palloc(sizeof(execution_state));
 			if (preves)
@@ -896,9 +899,9 @@ postquel_sub_params(SQLFunctionCachePtr fcache,
 
 		if (fcache->paramLI == NULL)
 		{
-			/* sizeof(ParamListInfoData) includes the first array element */
-			paramLI = (ParamListInfo) palloc(sizeof(ParamListInfoData) +
-									  (nargs - 1) * sizeof(ParamExternData));
+			paramLI = (ParamListInfo)
+				palloc(offsetof(ParamListInfoData, params) +
+					   nargs * sizeof(ParamExternData));
 			/* we have static list of params, so no hooks needed */
 			paramLI->paramFetch = NULL;
 			paramLI->paramFetchArg = NULL;

@@ -5,16 +5,12 @@
  *
  * src/backend/pipeline/miscutils.c
  */
-#include "postgres.h"
 
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <math.h>
 #include <unistd.h>
 
-#include "access/htup_details.h"
-#include "catalog/pg_type.h"
-#include "miscadmin.h"
 #include "pipeline/miscutils.h"
 #include "port.h"
 #include "utils/datum.h"

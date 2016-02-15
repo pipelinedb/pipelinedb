@@ -139,7 +139,7 @@ PGconn *PQconnectdbParams(const char * const *keywords,
       </para>
 
       <para>
-       If  any  parameter is <symbol>NULL</symbol> or an emptry string, the corresponding
+       If  any  parameter is <symbol>NULL</symbol> or an empty string, the corresponding
        environment variable (see <xref linkend="libpq-envars">) is checked.
        If the  environment  variable is not set either, then the indicated
        built-in defaults are used.
@@ -1016,10 +1016,13 @@ postgresql://%2Fvar%2Flib%2Fpostgresql/dbname
       <term><literal>options</literal></term>
       <listitem>
        <para>
-        Adds command-line options to send to the server at run-time.
-        For example, setting this to <literal>-c geqo=off</> sets the
+        Specifies command-line options to send to the server at connection
+        start.  For example, setting this to <literal>-c geqo=off</> sets the
         session's value of the <varname>geqo</> parameter to
-        <literal>off</>.  For a detailed discussion of the available
+        <literal>off</>.  Spaces within this string are considered to
+        separate command-line arguments, unless escaped with a backslash
+        (<literal>\</>); write <literal>\\</> to represent a literal
+        backslash.  For a detailed discussion of the available
         options, consult <xref linkend="runtime-config">.
        </para>
       </listitem>
@@ -1182,7 +1185,7 @@ postgresql://%2Fvar%2Flib%2Fpostgresql/dbname
            <para>
             only try an <acronym>SSL</> connection, verify that the
             server certificate is issued by a
-            trusted <acronym>CA</> and that the server host name
+            trusted <acronym>CA</> and that the requested server host name
             matches that in the certificate
            </para>
           </listitem>
@@ -1848,6 +1851,154 @@ int PQconnectionUsedPassword(const PGconn *conn);
       </para>
      </listitem>
     </varlistentry>
+   </variablelist>
+  </para>
+
+  <para>
+    The following functions return information related to SSL. This information
+    usually doesn't change after a connection is established.
+
+    <variablelist>
+    <varlistentry id="libpq-pqsslinuse">
+     <term><function>PQsslInUse</function><indexterm><primary>PQsslInUse</></></term>
+     <listitem>
+      <para>
+        Returns true (1) if the connection uses SSL, false (0) if not.
+
+<synopsis>
+int PQsslInUse(const PGconn *conn);
+</synopsis>
+      </para>
+
+     </listitem>
+    </varlistentry>
+
+    <varlistentry id="libpq-pqsslattribute">
+     <term><function>PQsslAttribute</function><indexterm><primary>PQsslAttribute</></></term>
+     <listitem>
+      <para>
+        Returns SSL-related information about the connection.
+
+<synopsis>
+const char *PQsslAttribute(const PGconn *conn, const char *attribute_name);
+</synopsis>
+      </para>
+
+      <para>
+       The list of available attributes varies depending on the SSL library
+       being used, and the type of connection. If an attribute is not
+       available, returns NULL.
+      </para>
+
+      <para>
+       The following attributes are commonly available:
+       <variablelist>
+        <varlistentry>
+         <term><literal>library</literal></term>
+          <listitem>
+           <para>
+            Name of the SSL implementation in use. (Currently, only
+            <literal>"OpenSSL"</literal> is implemented)
+           </para>
+          </listitem>
+         </varlistentry>
+        <varlistentry>
+         <term><literal>protocol</literal></term>
+          <listitem>
+           <para>
+             SSL/TLS version in use. Common values
+             are <literal>"SSLv2"</literal>, <literal>"SSLv3"</literal>,
+             <literal>"TLSv1"</literal>, <literal>"TLSv1.1"</literal>
+             and <literal>"TLSv1.2"</literal>, but an implementation may
+             return other strings if some other protocol is used.
+           </para>
+          </listitem>
+         </varlistentry>
+        <varlistentry>
+         <term><literal>key_bits</literal></term>
+          <listitem>
+           <para>
+            Number of key bits used by the encryption algorithm.
+           </para>
+          </listitem>
+         </varlistentry>
+        <varlistentry>
+         <term><literal>cipher</literal></term>
+          <listitem>
+           <para>
+            A short name of the ciphersuite used, e.g.
+            <literal>"DHE-RSA-DES-CBC3-SHA"</literal>. The names are specific
+            to each SSL implementation.
+           </para>
+          </listitem>
+         </varlistentry>
+        <varlistentry>
+         <term><literal>compression</literal></term>
+          <listitem>
+           <para>
+            If SSL compression is in use, returns the name of the compression
+            algorithm, or "on" if compression is used but the algorithm is
+            not known. If compression is not in use, returns "off".
+           </para>
+          </listitem>
+         </varlistentry>
+       </variablelist>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry id="libpq-pqsslattributenames">
+     <term><function>PQsslAttributeNames</function><indexterm><primary>PQsslAttributeNames</></></term>
+     <listitem>
+      <para>
+       Return an array of SSL attribute names available. The array is terminated by a NULL pointer.
+<synopsis>
+const char * const * PQsslAttributeNames(const PGconn *conn);
+</synopsis>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry id="libpq-pqsslstruct">
+     <term><function>PQsslStruct</function><indexterm><primary>PQsslStruct</></></term>
+     <listitem>
+      <para>
+       Return a pointer to an SSL-implementation-specific object describing
+       the connection.
+<synopsis>
+void *PQsslStruct(const PGconn *conn, const char *struct_name);
+</synopsis>
+      </para>
+      <para>
+       The struct(s) available depend on the SSL implementation in use.
+       For OpenSSL, there is one struct, available under the name "OpenSSL",
+       and it returns a pointer to the OpenSSL <literal>SSL</literal> struct.
+       To use this function, code along the following lines could be used:
+<programlisting><![CDATA[
+#include <libpq-fe.h>
+#include <openssl/ssl.h>
+
+...
+
+    SSL *ssl;
+
+    dbconn = PQconnectdb(...);
+    ...
+
+    ssl = PQsslStruct(dbconn, "OpenSSL");
+    if (ssl)
+    {
+        /* use OpenSSL functions to access ssl */
+    }
+]]></programlisting>
+      </para>
+      <para>
+       This structure can be used to verify encryption levels, check server
+       certificates, and more. Refer to the <productname>OpenSSL</>
+       documentation for information about this structure.
+      </para>
+     </listitem>
+    </varlistentry>
 
     <varlistentry id="libpq-pqgetssl">
      <term><function>PQgetssl</function><indexterm><primary>PQgetssl</></></term>
@@ -1863,35 +2014,12 @@ void *PQgetssl(const PGconn *conn);
       </para>
 
       <para>
-       This structure can be used to verify encryption levels, check server
-       certificates, and more. Refer to the <productname>OpenSSL</>
-       documentation for information about this structure.
-      </para>
-
-      <para>
-       The actual return value is of type <type>SSL *</type>,
-       where <type>SSL</type> is a type defined by
-       the <productname>OpenSSL</productname> library, but it is not declared
-       this way to avoid requiring the <productname>OpenSSL</productname>
-       header files.  To use this function, code along the following lines
-       could be used:
-<programlisting><![CDATA[
-#include <libpq-fe.h>
-#include <openssl/ssl.h>
-
-...
-
-    SSL *ssl;
-
-    dbconn = PQconnectdb(...);
-    ...
-
-    ssl = PQgetssl(dbconn);
-    if (ssl)
-    {
-        /* use OpenSSL functions to access ssl */
-    }
-]]></programlisting>
+       This function is equivalent to <literal>PQsslStruct(conn, "OpenSSL")</literal>. It should
+       not be used in new applications, because the returned struct is
+       specific to OpenSSL and will not be available if another SSL
+       implementation is used. To check if a connection uses SSL, call
+       <function>PQsslInUse</> instead, and for more details about the
+       connection, use <function>PQsslAttribute</>.
       </para>
      </listitem>
     </varlistentry>
@@ -4318,8 +4446,8 @@ int PQsetnonblocking(PGconn *conn, int arg);
       <para>
        In the nonblocking state, calls to
        <function>PQsendQuery</function>, <function>PQputline</function>,
-       <function>PQputnbytes</function>, and
-       <function>PQendcopy</function> will not block but instead return
+       <function>PQputnbytes</function>, <function>PQputCopyData</function>,
+       and <function>PQendcopy</function> will not block but instead return
        an error if they need to be called again.
       </para>
 
@@ -4975,9 +5103,9 @@ int PQputCopyData(PGconn *conn,
       <para>
        Transmits the <command>COPY</command> data in the specified
        <parameter>buffer</>, of length <parameter>nbytes</>, to the server.
-       The result is 1 if the data was sent, zero if it was not sent
-       because the attempt would block (this case is only possible if the
-       connection is in nonblocking mode), or -1 if an error occurred.
+       The result is 1 if the data was queued, zero if it was not queued
+       because of full buffers (this will only happen in nonblocking mode),
+       or -1 if an error occurred.
        (Use <function>PQerrorMessage</function> to retrieve details if
        the return value is -1.  If the value is zero, wait for write-ready
        and try again.)
@@ -5024,12 +5152,17 @@ int PQputCopyEnd(PGconn *conn,
       </para>
 
       <para>
-       The result is 1 if the termination data was sent, zero if it was
-       not sent because the attempt would block (this case is only possible
-       if the connection is in nonblocking mode), or -1 if an error
-       occurred.  (Use <function>PQerrorMessage</function> to retrieve
-       details if the return value is -1.  If the value is zero, wait for
-       write-ready and try again.)
+       The result is 1 if the termination message was sent; or in
+       nonblocking mode, this may only indicate that the termination
+       message was successfully queued.  (In nonblocking mode, to be
+       certain that the data has been sent, you should next wait for
+       write-ready and call <function>PQflush</>, repeating until it
+       returns zero.)  Zero indicates that the function could not queue
+       the termination message because of full buffers; this will only
+       happen in nonblocking mode.  (In this case, wait for
+       write-ready and try the <function>PQputCopyEnd</> call
+       again.)  If a hard error occurs, -1 is returned; you can use
+       <function>PQerrorMessage</function> to retrieve details.
       </para>
 
       <para>
@@ -6877,7 +7010,7 @@ myEventProc(PGEventId evtId, void *evtInfo, void *passThrough)
        <primary><envar>PGLOCALEDIR</envar></primary>
       </indexterm>
       <envar>PGLOCALEDIR</envar> sets the directory containing the
-      <literal>locale</> files for message internationalization.
+      <literal>locale</> files for message localization.
      </para>
     </listitem>
    </itemizedlist>
@@ -7119,10 +7252,12 @@ ldap://ldap.acme.com/cn=dbserver,cn=hosts?pgconnectinfo?base?(objectclass=*)
   </para>
 
   <para>
-   In <literal>verify-full</> mode, the <literal>cn</> (Common Name) attribute
-   of the certificate is matched against the host name. If the <literal>cn</>
-   attribute starts with an asterisk (<literal>*</>), it will be treated as
-   a wildcard, and will match all characters <emphasis>except</> a dot
+   In <literal>verify-full</> mode, the host name is matched against the
+   certificate's Subject Alternative Name attribute(s), or against the
+   Common Name attribute if no Subject Alternative Name of type dNSName is
+   present.  If the certificate's name attribute starts with an asterisk
+   (<literal>*</>), the asterisk will be treated as
+   a wildcard, which will match all characters <emphasis>except</> a dot
    (<literal>.</>). This means the certificate will not match subdomains.
    If the connection is made using an IP address instead of a host name, the
    IP address will be matched (without doing any DNS lookups).
@@ -7441,7 +7576,7 @@ ldap://ldap.acme.com/cn=dbserver,cn=hosts?pgconnectinfo?base?(objectclass=*)
    <application>libpq</application> will not also initialize those libraries.
    <!-- If this URL changes replace it with a URL to www.archive.org. -->
    See <ulink
-   url="http://h71000.www7.hp.com/doc/83final/BA554_90007/ch04.html"></ulink>
+   url="http://h71000.www7.hp.com/doc/83final/ba554_90007/ch04.html"></ulink>
    for details on the SSL API.
   </para>
 

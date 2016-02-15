@@ -1,4 +1,4 @@
-; DEF file for Borland C++ Builder
+; DEF file for bcc32.mak (Borland C++ Builder)
 LIBRARY BLIBPQ
 EXPORTS
     _PQconnectdb               @ 1
@@ -166,6 +166,10 @@ EXPORTS
     _lo_tell64                 @ 163
     _lo_truncate64             @ 164
     _PQconninfo                @ 165
+    _PQsslInUse                @ 166
+    _PQsslStruct               @ 167
+    _PQsslAttributeNames       @ 168
+    _PQsslAttribute            @ 169
 
 ; Aliases for MS compatible names
     PQconnectdb               = _PQconnectdb
@@ -333,3 +337,7 @@ EXPORTS
     lo_tell64                 = _lo_tell64
     lo_truncate64             = _lo_truncate64
     PQconninfo                = _PQconninfo
+    PQsslInUse                = _PQsslInUse
+    PQsslStruct               = _PQsslStruct
+    PQsslAttributeNames       = _PQsslAttributeNames
+    PQsslAttribute            = _PQsslAttribute

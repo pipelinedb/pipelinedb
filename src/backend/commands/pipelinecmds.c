@@ -167,6 +167,7 @@ create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query *query, 
 	Node *expr = NULL;
 	char *indexcolname = NULL;
 	Oid index_oid;
+	ObjectAddress address;
 
 	if (query->groupClause == NIL && !is_sw)
 		return InvalidOid;
@@ -206,7 +207,8 @@ create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query *query, 
 	index->accessMethod = CQ_MATREL_INDEX_TYPE;
 	index->indexParams = list_make1(indexcol);
 
-	index_oid = DefineIndex(matrelid, index, InvalidOid, false, false, false, false);
+	address = DefineIndex(matrelid, index, InvalidOid, false, false, false, false);
+	index_oid = address.objectId;
 	CommandCounterIncrement();
 
 	return index_oid;
@@ -218,6 +220,7 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 	IndexStmt *index;
 	IndexElem *indexcol;
 	Oid index_oid;
+	ObjectAddress address;
 
 	indexcol = makeNode(IndexElem);
 	indexcol->name = colname;
@@ -232,7 +235,8 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 	index->unique = true;
 	index->isconstraint = true;
 
-	index_oid = DefineIndex(matrelid, index, InvalidOid, false, false, false, false);
+	address = DefineIndex(matrelid, index, InvalidOid, false, false, false, false);
+	index_oid = address.objectId;
 	CommandCounterIncrement();
 
 	return index_oid;
@@ -401,6 +405,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	Constraint *pkey;
 	DefElem *pk;
 	ColumnDef *pk_coldef = NULL;
+	ObjectAddress address;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -534,7 +539,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	create_stmt->oncommit = stmt->into->onCommit;
 	create_stmt->options = stmt->into->options;
 
-	matreloid = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid);
+	address = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid, NULL);
+	matreloid = address.objectId;
 	CommandCounterIncrement();
 
 	toast_options = transformRelOptions((Datum) 0, create_stmt->options, "toast",
@@ -549,7 +555,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	create_seq_stmt = makeNode(CreateSeqStmt);
 	create_seq_stmt->sequence = seqrel;
 
-	seqreloid = DefineSequence(create_seq_stmt);
+	address = DefineSequence(create_seq_stmt);
+	seqreloid = address.objectId;
 	CommandCounterIncrement();
 
 	/*
@@ -570,7 +577,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	view_stmt->query = (Node *) viewselect;
 	viewselect->forContinuousView = true;
 
-	viewoid = DefineView(view_stmt, cont_select_sql);
+	address = DefineView(view_stmt, cont_select_sql);
+	viewoid = address.objectId;
 	CommandCounterIncrement();
 
 	/* Create group look up index and record dependencies */
@@ -702,7 +710,7 @@ void
 ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 			 ParamListInfo params, DestReceiver *dest)
 {
-	ExplainState es;
+	ExplainState *es = NewExplainState();
 	ListCell *lc;
 	TupleDesc desc;
 	ContinuousView *view;
@@ -724,9 +732,8 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 	ReleaseSysCache(tuple);
 
 	/* Initialize ExplainState. */
-	ExplainInitState(&es);
-	es.format = EXPLAIN_FORMAT_TEXT;
-	pfree(es.str);
+	es->format = EXPLAIN_FORMAT_TEXT;
+	pfree(es->str);
 
 	/* Parse options list. */
 	foreach(lc, stmt->options)
@@ -734,9 +741,9 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 		DefElem *opt = (DefElem *) lfirst(lc);
 
 		if (strcmp(opt->defname, "verbose") == 0)
-			es.verbose = defGetBoolean(opt);
+			es->verbose = defGetBoolean(opt);
 		else if (strcmp(opt->defname, "costs") == 0)
-			es.costs = defGetBoolean(opt);
+			es->costs = defGetBoolean(opt);
 		else if (strcmp(opt->defname, "format") == 0)
 		{
 			char *p = defGetString(opt);
@@ -758,7 +765,7 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 
 	view = GetContinuousView(cq_id);
 
-	explain_cont_plan("Worker Plan", GetContPlan(view, Worker), &es, desc, dest);
+	explain_cont_plan("Worker Plan", GetContPlan(view, Worker), es, desc, dest);
 
 	plan = GetContPlan(view, Combiner);
 	tupstore = tuplestore_begin_heap(false, false, work_mem);
@@ -766,10 +773,10 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 	rel = relation_openrv(view->matrel, NoLock);
 	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
 	relation_close(rel, NoLock);
-	explain_cont_plan("Combiner Plan", plan, &es, desc, dest);
+	explain_cont_plan("Combiner Plan", plan, es, desc, dest);
 	tuplestore_end(tupstore);
 
-	explain_cont_plan("Combiner Lookup Plan", GetCombinerLookupPlan(view), &es, desc, dest);
+	explain_cont_plan("Combiner Lookup Plan", GetCombinerLookupPlan(view), es, desc, dest);
 }
 
 static void

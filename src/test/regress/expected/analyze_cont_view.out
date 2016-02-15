@@ -309,7 +309,7 @@ CREATE CONTINUOUS VIEW cqregress5 AS SELECT count(DISTINCT x::int), percentile_c
  percentile_cont | double precision |           | plain   | 
 View definition:
  SELECT count(DISTINCT x::integer) AS count,
-    percentile_cont(0.1::double precision) WITHIN GROUP (ORDER BY x::integer::double precision) AS percentile_cont
+    percentile_cont(0.1::double precision) WITHIN GROUP (ORDER BY (x::integer::double precision)) AS percentile_cont
    FROM ONLY analyze_cont_stream;
 
 DROP CONTINUOUS VIEW cqregress1;

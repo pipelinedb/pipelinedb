@@ -3,7 +3,7 @@
  * pl_comp.c		- Compiler part of the PL/pgSQL
  *			  procedural language
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -559,8 +559,6 @@ do_compile(FunctionCallInfo fcinfo,
 			{
 				function->fn_retbyval = typeStruct->typbyval;
 				function->fn_rettyplen = typeStruct->typlen;
-				function->fn_rettypioparam = getTypeIOParam(typeTup);
-				fmgr_info(typeStruct->typinput, &(function->fn_retinput));
 
 				/*
 				 * install $0 reference, but only for polymorphic return
@@ -803,7 +801,6 @@ plpgsql_compile_inline(char *proc_source)
 	char	   *func_name = "inline_code_block";
 	PLpgSQL_function *function;
 	ErrorContextCallback plerrcontext;
-	Oid			typinput;
 	PLpgSQL_variable *var;
 	int			parse_rc;
 	MemoryContext func_cxt;
@@ -876,8 +873,6 @@ plpgsql_compile_inline(char *proc_source)
 	/* a bit of hardwired knowledge about type VOID here */
 	function->fn_retbyval = true;
 	function->fn_rettyplen = sizeof(int32);
-	getTypeInputInfo(VOIDOID, &typinput, &function->fn_rettypioparam);
-	fmgr_info(typinput, &(function->fn_retinput));
 
 	/*
 	 * Remember if function is STABLE/IMMUTABLE.  XXX would it be better to
@@ -2200,12 +2195,27 @@ build_datatype(HeapTuple typeTup, int32 typmod, Oid collation)
 	}
 	typ->typlen = typeStruct->typlen;
 	typ->typbyval = typeStruct->typbyval;
+	typ->typtype = typeStruct->typtype;
 	typ->typrelid = typeStruct->typrelid;
-	typ->typioparam = getTypeIOParam(typeTup);
 	typ->collation = typeStruct->typcollation;
 	if (OidIsValid(collation) && OidIsValid(typ->collation))
 		typ->collation = collation;
-	fmgr_info(typeStruct->typinput, &(typ->typinput));
+	/* Detect if type is true array, or domain thereof */
+	/* NB: this is only used to decide whether to apply expand_array */
+	if (typeStruct->typtype == TYPTYPE_BASE)
+	{
+		/* this test should match what get_element_type() checks */
+		typ->typisarray = (typeStruct->typlen == -1 &&
+						   OidIsValid(typeStruct->typelem));
+	}
+	else if (typeStruct->typtype == TYPTYPE_DOMAIN)
+	{
+		/* we can short-circuit looking up base types if it's not varlena */
+		typ->typisarray = (typeStruct->typlen == -1 &&
+				 OidIsValid(get_base_element_type(typeStruct->typbasetype)));
+	}
+	else
+		typ->typisarray = false;
 	typ->atttypmod = typmod;
 
 	return typ;
@@ -2519,11 +2529,10 @@ plpgsql_HashTableInit(void)
 	memset(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(PLpgSQL_func_hashkey);
 	ctl.entrysize = sizeof(plpgsql_HashEnt);
-	ctl.hash = tag_hash;
 	plpgsql_HashTable = hash_create("PLpgSQL function cache",
 									FUNCS_PER_USER,
 									&ctl,
-									HASH_ELEM | HASH_FUNCTION);
+									HASH_ELEM | HASH_BLOBS);
 }
 
 static PLpgSQL_function *

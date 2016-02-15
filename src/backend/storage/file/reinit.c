@@ -3,7 +3,7 @@
  * reinit.c
  *	  Reinitialization of unlogged relations
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -341,11 +341,11 @@ ResetUnloggedRelationsInDbspaceDir(const char *dbspacedirname, int op)
 		FreeDir(dbspace_dir);
 
 		/*
-		 * copy_file() above has already called pg_flush_data() on the
-		 * files it created. Now we need to fsync those files, because
-		 * a checkpoint won't do it for us while we're in recovery. We
-		 * do this in a separate pass to allow the kernel to perform
-		 * all the flushes (especially the metadata ones) at once.
+		 * copy_file() above has already called pg_flush_data() on the files
+		 * it created. Now we need to fsync those files, because a checkpoint
+		 * won't do it for us while we're in recovery. We do this in a
+		 * separate pass to allow the kernel to perform all the flushes
+		 * (especially the metadata ones) at once.
 		 */
 		dbspace_dir = AllocateDir(dbspacedirname);
 		if (dbspace_dir == NULL)

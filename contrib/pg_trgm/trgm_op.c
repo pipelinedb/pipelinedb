@@ -10,7 +10,7 @@
 #include "catalog/pg_type.h"
 #include "tsearch/ts_locale.h"
 #include "utils/memutils.h"
-
+#include "utils/pg_crc.h"
 
 PG_MODULE_MAGIC;
 
@@ -109,9 +109,9 @@ compact_trigram(trgm *tptr, char *str, int bytelen)
 	{
 		pg_crc32	crc;
 
-		INIT_CRC32(crc);
-		COMP_CRC32(crc, str, bytelen);
-		FIN_CRC32(crc);
+		INIT_LEGACY_CRC32(crc);
+		COMP_LEGACY_CRC32(crc, str, bytelen);
+		FIN_LEGACY_CRC32(crc);
 
 		/*
 		 * use only 3 upper bytes from crc, hope, it's good enough hashing

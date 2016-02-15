@@ -3,6 +3,8 @@
  * pipeline_tstate.c
  *	  routines to support manipulation of the pipeline_tstate relation
  *
+ * Copyright (c) 2013-2016, PipelineDB
+ *
  * IDENTIFICATION
  *	  src/backend/catalog/pipeline_tstate.c
  *

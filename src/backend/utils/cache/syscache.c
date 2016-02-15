@@ -3,7 +3,7 @@
  * syscache.c
  *	  System cache management routines
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
@@ -55,8 +55,10 @@
 #include "catalog/pg_shdepend.h"
 #include "catalog/pg_shdescription.h"
 #include "catalog/pg_shseclabel.h"
+#include "catalog/pg_replication_origin.h"
 #include "catalog/pg_statistic.h"
 #include "catalog/pg_tablespace.h"
+#include "catalog/pg_transform.h"
 #include "catalog/pg_ts_config.h"
 #include "catalog/pg_ts_config_map.h"
 #include "catalog/pg_ts_dict.h"
@@ -670,7 +672,7 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		2048
 	},
-	{PipelineDatabaseRelationId,	/* PIPELINECOMBINEOID */
+	{PipelineDatabaseRelationId,	/* PIPELINEDATABASEDBID */
 		PipelineDatabaseDbIdIndexId,
 		1,
 		{
@@ -736,6 +738,28 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		128
 	},
+	{ReplicationOriginRelationId,		/* REPLORIGIDENT */
+		ReplicationOriginIdentIndex,
+		1,
+		{
+			Anum_pg_replication_origin_roident,
+			0,
+			0,
+			0
+		},
+		16
+	},
+	{ReplicationOriginRelationId,		/* REPLORIGNAME */
+		ReplicationOriginNameIndex,
+		1,
+		{
+			Anum_pg_replication_origin_roname,
+			0,
+			0,
+			0
+		},
+		16
+	},
 	{RewriteRelationId,			/* RULERELNAME */
 		RewriteRelRulenameIndexId,
 		2,
@@ -768,6 +792,28 @@ static const struct cachedesc cacheinfo[] = {
 			0,
 		},
 		4
+	},
+	{TransformRelationId,		/* TRFOID */
+		TransformOidIndexId,
+		1,
+		{
+			ObjectIdAttributeNumber,
+			0,
+			0,
+			0,
+		},
+		16
+	},
+	{TransformRelationId,		/* TRFTYPELANG */
+		TransformTypeLangIndexId,
+		2,
+		{
+			Anum_pg_transform_trftype,
+			Anum_pg_transform_trflang,
+			0,
+			0,
+		},
+		16
 	},
 	{TSConfigMapRelationId,		/* TSCONFIGMAP */
 		TSConfigMapIndexId,

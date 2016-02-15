@@ -2,7 +2,7 @@
  * dbsize.c
  *		Database object size functions, and related inquiries
  *
- * Copyright (c) 2002-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2002-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/adt/dbsize.c
@@ -836,7 +836,7 @@ pg_relation_filepath(PG_FUNCTION_ARGS)
 			backend = InvalidBackendId;
 			break;
 		case RELPERSISTENCE_TEMP:
-			if (isTempOrToastNamespace(relform->relnamespace))
+			if (isTempOrTempToastNamespace(relform->relnamespace))
 				backend = MyBackendId;
 			else
 			{

@@ -2,6 +2,7 @@
 
 #include "postgres_fe.h"
 #include <ctype.h>
+#include <float.h>
 #include <limits.h>
 
 #include "extern.h"
@@ -1376,7 +1377,7 @@ PGTYPESnumeric_cmp(numeric *var1, numeric *var2)
 	if (var1->sign == NUMERIC_NEG && var2->sign == NUMERIC_NEG)
 	{
 		/*
-		 * instead of inverting the result, we invert the paramter ordering
+		 * instead of inverting the result, we invert the parameter ordering
 		 */
 		return cmp_abs(var2, var1);
 	}
@@ -1497,11 +1498,11 @@ PGTYPESnumeric_copy(numeric *src, numeric *dst)
 int
 PGTYPESnumeric_from_double(double d, numeric *dst)
 {
-	char		buffer[100];
+	char		buffer[DBL_DIG + 100];
 	numeric    *tmp;
 	int			i;
 
-	if (sprintf(buffer, "%f", d) == 0)
+	if (sprintf(buffer, "%.*g", DBL_DIG, d) <= 0)
 		return -1;
 
 	if ((tmp = PGTYPESnumeric_from_asc(buffer, NULL)) == NULL)

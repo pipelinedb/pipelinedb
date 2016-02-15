@@ -48,7 +48,7 @@
  * in the file to be read or written while holding only shared lock.
  *
  *
- * Copyright (c) 2008-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2008-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  contrib/pg_stat_statements/pg_stat_statements.c
@@ -57,6 +57,7 @@
  */
 #include "postgres.h"
 
+#include <math.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -75,7 +76,6 @@
 #include "tcop/utility.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
-
 
 PG_MODULE_MAGIC;
 
@@ -116,7 +116,8 @@ typedef enum pgssVersion
 {
 	PGSS_V1_0 = 0,
 	PGSS_V1_1,
-	PGSS_V1_2
+	PGSS_V1_2,
+	PGSS_V1_3
 } pgssVersion;
 
 /*
@@ -137,6 +138,10 @@ typedef struct Counters
 {
 	int64		calls;			/* # of times executed */
 	double		total_time;		/* total execution time, in msec */
+	double		min_time;		/* minimim execution time in msec */
+	double		max_time;		/* maximum execution time in msec */
+	double		mean_time;		/* mean execution time in msec */
+	double		sum_var_time;	/* sum of variances in execution time in msec */
 	int64		rows;			/* total # of retrieved or affected rows */
 	int64		shared_blks_hit;	/* # of shared buffer hits */
 	int64		shared_blks_read;		/* # of shared disk blocks read */
@@ -165,7 +170,7 @@ typedef struct pgssEntry
 	pgssHashKey key;			/* hash key of entry - MUST BE FIRST */
 	Counters	counters;		/* the statistics for this query */
 	Size		query_offset;	/* query text offset in external file */
-	int			query_len;		/* # of valid bytes in query string */
+	int			query_len;		/* # of valid bytes in query string, or -1 */
 	int			encoding;		/* query text encoding */
 	slock_t		mutex;			/* protects the counters only */
 } pgssEntry;
@@ -275,6 +280,7 @@ void		_PG_fini(void);
 
 PG_FUNCTION_INFO_V1(pg_stat_statements_reset);
 PG_FUNCTION_INFO_V1(pg_stat_statements_1_2);
+PG_FUNCTION_INFO_V1(pg_stat_statements_1_3);
 PG_FUNCTION_INFO_V1(pg_stat_statements);
 
 static void pgss_shmem_startup(void);
@@ -1216,6 +1222,31 @@ pgss_store(const char *query, uint32 queryId,
 
 		e->counters.calls += 1;
 		e->counters.total_time += total_time;
+		if (e->counters.calls == 1)
+		{
+			e->counters.min_time = total_time;
+			e->counters.max_time = total_time;
+			e->counters.mean_time = total_time;
+		}
+		else
+		{
+			/*
+			 * Welford's method for accurately computing variance. See
+			 * <http://www.johndcook.com/blog/standard_deviation/>
+			 */
+			double		old_mean = e->counters.mean_time;
+
+			e->counters.mean_time +=
+				(total_time - old_mean) / e->counters.calls;
+			e->counters.sum_var_time +=
+				(total_time - old_mean) * (total_time - e->counters.mean_time);
+
+			/* calculate min and max time */
+			if (e->counters.min_time > total_time)
+				e->counters.min_time = total_time;
+			if (e->counters.max_time < total_time)
+				e->counters.max_time = total_time;
+		}
 		e->counters.rows += rows;
 		e->counters.shared_blks_hit += bufusage->shared_blks_hit;
 		e->counters.shared_blks_read += bufusage->shared_blks_read;
@@ -1260,7 +1291,8 @@ pg_stat_statements_reset(PG_FUNCTION_ARGS)
 #define PG_STAT_STATEMENTS_COLS_V1_0	14
 #define PG_STAT_STATEMENTS_COLS_V1_1	18
 #define PG_STAT_STATEMENTS_COLS_V1_2	19
-#define PG_STAT_STATEMENTS_COLS			19		/* maximum of above */
+#define PG_STAT_STATEMENTS_COLS_V1_3	23
+#define PG_STAT_STATEMENTS_COLS			23		/* maximum of above */
 
 /*
  * Retrieve statement statistics.
@@ -1272,6 +1304,16 @@ pg_stat_statements_reset(PG_FUNCTION_ARGS)
  * expected API version is identified by embedding it in the C name of the
  * function.  Unfortunately we weren't bright enough to do that for 1.1.
  */
+Datum
+pg_stat_statements_1_3(PG_FUNCTION_ARGS)
+{
+	bool		showtext = PG_GETARG_BOOL(0);
+
+	pg_stat_statements_internal(fcinfo, PGSS_V1_3, showtext);
+
+	return (Datum) 0;
+}
+
 Datum
 pg_stat_statements_1_2(PG_FUNCTION_ARGS)
 {
@@ -1361,6 +1403,10 @@ pg_stat_statements_internal(FunctionCallInfo fcinfo,
 			if (api_version != PGSS_V1_2)
 				elog(ERROR, "incorrect number of output arguments");
 			break;
+		case PG_STAT_STATEMENTS_COLS_V1_3:
+			if (api_version != PGSS_V1_3)
+				elog(ERROR, "incorrect number of output arguments");
+			break;
 		default:
 			elog(ERROR, "incorrect number of output arguments");
 	}
@@ -1444,6 +1490,7 @@ pg_stat_statements_internal(FunctionCallInfo fcinfo,
 		bool		nulls[PG_STAT_STATEMENTS_COLS];
 		int			i = 0;
 		Counters	tmp;
+		double		stddev;
 		int64		queryid = entry->key.queryid;
 
 		memset(values, 0, sizeof(values));
@@ -1520,6 +1567,24 @@ pg_stat_statements_internal(FunctionCallInfo fcinfo,
 
 		values[i++] = Int64GetDatumFast(tmp.calls);
 		values[i++] = Float8GetDatumFast(tmp.total_time);
+		if (api_version >= PGSS_V1_3)
+		{
+			values[i++] = Float8GetDatumFast(tmp.min_time);
+			values[i++] = Float8GetDatumFast(tmp.max_time);
+			values[i++] = Float8GetDatumFast(tmp.mean_time);
+
+			/*
+			 * Note we are calculating the population variance here, not the
+			 * sample variance, as we have data for the whole population, so
+			 * Bessel's correction is not used, and we don't divide by
+			 * tmp.calls - 1.
+			 */
+			if (tmp.calls > 1)
+				stddev = sqrt(tmp.sum_var_time / tmp.calls);
+			else
+				stddev = 0.0;
+			values[i++] = Float8GetDatumFast(stddev);
+		}
 		values[i++] = Int64GetDatumFast(tmp.rows);
 		values[i++] = Int64GetDatumFast(tmp.shared_blks_hit);
 		values[i++] = Int64GetDatumFast(tmp.shared_blks_read);
@@ -1542,6 +1607,7 @@ pg_stat_statements_internal(FunctionCallInfo fcinfo,
 		Assert(i == (api_version == PGSS_V1_0 ? PG_STAT_STATEMENTS_COLS_V1_0 :
 					 api_version == PGSS_V1_1 ? PG_STAT_STATEMENTS_COLS_V1_1 :
 					 api_version == PGSS_V1_2 ? PG_STAT_STATEMENTS_COLS_V1_2 :
+					 api_version == PGSS_V1_3 ? PG_STAT_STATEMENTS_COLS_V1_3 :
 					 -1 /* fail if you forget to update this assert */ ));
 
 		tuplestore_putvalues(tupstore, tupdesc, values, nulls);
@@ -1639,7 +1705,8 @@ entry_cmp(const void *lhs, const void *rhs)
 }
 
 /*
- * Deallocate least used entries.
+ * Deallocate least-used entries.
+ *
  * Caller must hold an exclusive lock on pgss->lock.
  */
 static void
@@ -1650,17 +1717,27 @@ entry_dealloc(void)
 	pgssEntry  *entry;
 	int			nvictims;
 	int			i;
-	Size		totlen = 0;
+	Size		tottextlen;
+	int			nvalidtexts;
 
 	/*
 	 * Sort entries by usage and deallocate USAGE_DEALLOC_PERCENT of them.
 	 * While we're scanning the table, apply the decay factor to the usage
-	 * values.
+	 * values, and update the mean query length.
+	 *
+	 * Note that the mean query length is almost immediately obsolete, since
+	 * we compute it before not after discarding the least-used entries.
+	 * Hopefully, that doesn't affect the mean too much; it doesn't seem worth
+	 * making two passes to get a more current result.  Likewise, the new
+	 * cur_median_usage includes the entries we're about to zap.
 	 */
 
 	entries = palloc(hash_get_num_entries(pgss_hash) * sizeof(pgssEntry *));
 
 	i = 0;
+	tottextlen = 0;
+	nvalidtexts = 0;
+
 	hash_seq_init(&hash_seq, pgss_hash);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
@@ -1670,20 +1747,27 @@ entry_dealloc(void)
 			entry->counters.usage *= STICKY_DECREASE_FACTOR;
 		else
 			entry->counters.usage *= USAGE_DECREASE_FACTOR;
-		/* Accumulate total size, too. */
-		totlen += entry->query_len + 1;
+		/* In the mean length computation, ignore dropped texts. */
+		if (entry->query_len >= 0)
+		{
+			tottextlen += entry->query_len + 1;
+			nvalidtexts++;
+		}
 	}
 
+	/* Sort into increasing order by usage */
 	qsort(entries, i, sizeof(pgssEntry *), entry_cmp);
 
+	/* Record the (approximate) median usage */
 	if (i > 0)
-	{
-		/* Record the (approximate) median usage */
 		pgss->cur_median_usage = entries[i / 2]->counters.usage;
-		/* Record the mean query length */
-		pgss->mean_query_len = totlen / i;
-	}
+	/* Record the mean query length */
+	if (nvalidtexts > 0)
+		pgss->mean_query_len = tottextlen / nvalidtexts;
+	else
+		pgss->mean_query_len = ASSUMED_LENGTH_INIT;
 
+	/* Now zap an appropriate fraction of lowest-usage entries */
 	nvictims = Max(10, i * USAGE_DEALLOC_PERCENT / 100);
 	nvictims = Min(nvictims, i);
 
@@ -1826,7 +1910,7 @@ qtext_load_file(Size *buffer_size)
 	}
 
 	/* Allocate buffer; beware that off_t might be wider than size_t */
-	if (stat.st_size <= MaxAllocSize)
+	if (stat.st_size <= MaxAllocHugeSize)
 		buf = (char *) malloc(stat.st_size);
 	else
 		buf = NULL;
@@ -1834,7 +1918,9 @@ qtext_load_file(Size *buffer_size)
 	{
 		ereport(LOG,
 				(errcode(ERRCODE_OUT_OF_MEMORY),
-				 errmsg("out of memory")));
+				 errmsg("out of memory"),
+				 errdetail("Could not allocate enough memory to read pg_stat_statement file \"%s\".",
+						   PGSS_TEXT_FILE)));
 		CloseTransientFile(fd);
 		return NULL;
 	}
@@ -1936,13 +2022,17 @@ need_gc_qtexts(void)
  * occur in the foreseeable future.
  *
  * The caller must hold an exclusive lock on pgss->lock.
+ *
+ * At the first sign of trouble we unlink the query text file to get a clean
+ * slate (although existing statistics are retained), rather than risk
+ * thrashing by allowing the same problem case to recur indefinitely.
  */
 static void
 gc_qtexts(void)
 {
 	char	   *qbuffer;
 	Size		qbuffer_size;
-	FILE	   *qfile;
+	FILE	   *qfile = NULL;
 	HASH_SEQ_STATUS hash_seq;
 	pgssEntry  *entry;
 	Size		extent;
@@ -1957,12 +2047,15 @@ gc_qtexts(void)
 		return;
 
 	/*
-	 * Load the old texts file.  If we fail (out of memory, for instance) just
-	 * skip the garbage collection.
+	 * Load the old texts file.  If we fail (out of memory, for instance),
+	 * invalidate query texts.  Hopefully this is rare.  It might seem better
+	 * to leave things alone on an OOM failure, but the problem is that the
+	 * file is only going to get bigger; hoping for a future non-OOM result is
+	 * risky and can easily lead to complete denial of service.
 	 */
 	qbuffer = qtext_load_file(&qbuffer_size);
 	if (qbuffer == NULL)
-		return;
+		goto gc_fail;
 
 	/*
 	 * We overwrite the query texts file in place, so as to reduce the risk of
@@ -1997,6 +2090,7 @@ gc_qtexts(void)
 			/* Trouble ... drop the text */
 			entry->query_offset = 0;
 			entry->query_len = -1;
+			/* entry will not be counted in mean query length computation */
 			continue;
 		}
 
@@ -2081,7 +2175,36 @@ gc_fail:
 		entry->query_len = -1;
 	}
 
-	/* Seems like a good idea to bump the GC count even though we failed */
+	/*
+	 * Destroy the query text file and create a new, empty one
+	 */
+	(void) unlink(PGSS_TEXT_FILE);
+	qfile = AllocateFile(PGSS_TEXT_FILE, PG_BINARY_W);
+	if (qfile == NULL)
+		ereport(LOG,
+				(errcode_for_file_access(),
+			  errmsg("could not write new pg_stat_statement file \"%s\": %m",
+					 PGSS_TEXT_FILE)));
+	else
+		FreeFile(qfile);
+
+	/* Reset the shared extent pointer */
+	pgss->extent = 0;
+
+	/* Reset mean_query_len to match the new state */
+	pgss->mean_query_len = ASSUMED_LENGTH_INIT;
+
+	/*
+	 * Bump the GC count even though we failed.
+	 *
+	 * This is needed to make concurrent readers of file without any lock on
+	 * pgss->lock notice existence of new version of file.  Once readers
+	 * subsequently observe a change in GC count with pgss->lock held, that
+	 * forces a safe reopen of file.  Writers also require that we bump here,
+	 * of course.  (As required by locking protocol, readers and writers don't
+	 * trust earlier file contents until gc_count is found unchanged after
+	 * pgss->lock acquired in shared or exclusive mode respectively.)
+	 */
 	record_gc_qtexts();
 }
 
@@ -2199,8 +2322,10 @@ JumbleQuery(pgssJumbleState *jstate, Query *query)
 	JumbleRangeTable(jstate, query->rtable);
 	JumbleExpr(jstate, (Node *) query->jointree);
 	JumbleExpr(jstate, (Node *) query->targetList);
+	JumbleExpr(jstate, (Node *) query->onConflict);
 	JumbleExpr(jstate, (Node *) query->returningList);
 	JumbleExpr(jstate, (Node *) query->groupClause);
+	JumbleExpr(jstate, (Node *) query->groupingSets);
 	JumbleExpr(jstate, query->havingQual);
 	JumbleExpr(jstate, (Node *) query->windowClause);
 	JumbleExpr(jstate, (Node *) query->distinctClause);
@@ -2228,8 +2353,8 @@ JumbleRangeTable(pgssJumbleState *jstate, List *rtable)
 		switch (rte->rtekind)
 		{
 			case RTE_RELATION:
-			case RTE_STREAM:
 				APP_JUMB(rte->relid);
+				JumbleExpr(jstate, (Node *) rte->tablesample);
 				break;
 			case RTE_SUBQUERY:
 				JumbleQuery(jstate, rte->subquery);
@@ -2332,6 +2457,13 @@ JumbleExpr(pgssJumbleState *jstate, Node *node)
 				JumbleExpr(jstate, (Node *) expr->aggfilter);
 			}
 			break;
+		case T_GroupingFunc:
+			{
+				GroupingFunc *grpnode = (GroupingFunc *) node;
+
+				JumbleExpr(jstate, (Node *) grpnode->refs);
+			}
+			break;
 		case T_WindowFunc:
 			{
 				WindowFunc *expr = (WindowFunc *) node;
@@ -2400,6 +2532,7 @@ JumbleExpr(pgssJumbleState *jstate, Node *node)
 				SubLink    *sublink = (SubLink *) node;
 
 				APP_JUMB(sublink->subLinkType);
+				APP_JUMB(sublink->subLinkId);
 				JumbleExpr(jstate, (Node *) sublink->testexpr);
 				JumbleQuery(jstate, (Query *) sublink->subselect);
 			}
@@ -2566,6 +2699,15 @@ JumbleExpr(pgssJumbleState *jstate, Node *node)
 				APP_JUMB(ce->cursor_param);
 			}
 			break;
+		case T_InferenceElem:
+			{
+				InferenceElem *ie = (InferenceElem *) node;
+
+				APP_JUMB(ie->infercollid);
+				APP_JUMB(ie->inferopclass);
+				JumbleExpr(jstate, ie->expr);
+			}
+			break;
 		case T_TargetEntry:
 			{
 				TargetEntry *tle = (TargetEntry *) node;
@@ -2602,10 +2744,30 @@ JumbleExpr(pgssJumbleState *jstate, Node *node)
 				JumbleExpr(jstate, from->quals);
 			}
 			break;
+		case T_OnConflictExpr:
+			{
+				OnConflictExpr *conf = (OnConflictExpr *) node;
+
+				APP_JUMB(conf->action);
+				JumbleExpr(jstate, (Node *) conf->arbiterElems);
+				JumbleExpr(jstate, conf->arbiterWhere);
+				JumbleExpr(jstate, (Node *) conf->onConflictSet);
+				JumbleExpr(jstate, conf->onConflictWhere);
+				APP_JUMB(conf->constraint);
+				APP_JUMB(conf->exclRelIndex);
+				JumbleExpr(jstate, (Node *) conf->exclRelTlist);
+			}
+			break;
 		case T_List:
 			foreach(temp, (List *) node)
 			{
 				JumbleExpr(jstate, (Node *) lfirst(temp));
+			}
+			break;
+		case T_IntList:
+			foreach(temp, (List *) node)
+			{
+				APP_JUMB(lfirst_int(temp));
 			}
 			break;
 		case T_SortGroupClause:
@@ -2616,6 +2778,13 @@ JumbleExpr(pgssJumbleState *jstate, Node *node)
 				APP_JUMB(sgc->eqop);
 				APP_JUMB(sgc->sortop);
 				APP_JUMB(sgc->nulls_first);
+			}
+			break;
+		case T_GroupingSet:
+			{
+				GroupingSet *gsnode = (GroupingSet *) node;
+
+				JumbleExpr(jstate, (Node *) gsnode->content);
 			}
 			break;
 		case T_WindowClause:
@@ -2654,6 +2823,15 @@ JumbleExpr(pgssJumbleState *jstate, Node *node)
 				RangeTblFunction *rtfunc = (RangeTblFunction *) node;
 
 				JumbleExpr(jstate, rtfunc->funcexpr);
+			}
+			break;
+		case T_TableSampleClause:
+			{
+				TableSampleClause *tsc = (TableSampleClause *) node;
+
+				APP_JUMB(tsc->tsmhandler);
+				JumbleExpr(jstate, (Node *) tsc->args);
+				JumbleExpr(jstate, (Node *) tsc->repeatable);
 			}
 			break;
 		default:
@@ -2816,6 +2994,9 @@ fill_in_constant_lengths(pgssJumbleState *jstate, const char *query)
 							 &yyextra,
 							 ScanKeywords,
 							 NumScanKeywords);
+
+	/* we don't want to re-emit any escape string warnings */
+	yyextra.escape_string_warning = false;
 
 	/* Search for each constant, in sequence */
 	for (i = 0; i < jstate->clocations_count; i++)

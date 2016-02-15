@@ -3,7 +3,7 @@
  * fe-protocol2.c
  *	  functions that are specific to frontend/backend protocol version 2
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -498,10 +498,17 @@ pqParseInput2(PGconn *conn)
 						conn->result = PQmakeEmptyPGresult(conn,
 														   PGRES_COMMAND_OK);
 						if (!conn->result)
-							return;
+						{
+							printfPQExpBuffer(&conn->errorMessage,
+											  libpq_gettext("out of memory"));
+							pqSaveErrorResult(conn);
+						}
 					}
-					strlcpy(conn->result->cmdStatus, conn->workBuffer.data,
-							CMDSTATUS_LEN);
+					if (conn->result)
+					{
+						strlcpy(conn->result->cmdStatus, conn->workBuffer.data,
+								CMDSTATUS_LEN);
+					}
 					checkXactStatus(conn, conn->workBuffer.data);
 					conn->asyncStatus = PGASYNC_READY;
 					break;
@@ -522,8 +529,16 @@ pqParseInput2(PGconn *conn)
 										 "unexpected character %c following empty query response (\"I\" message)",
 										 id);
 					if (conn->result == NULL)
+					{
 						conn->result = PQmakeEmptyPGresult(conn,
 														   PGRES_EMPTY_QUERY);
+						if (!conn->result)
+						{
+							printfPQExpBuffer(&conn->errorMessage,
+											  libpq_gettext("out of memory"));
+							pqSaveErrorResult(conn);
+						}
+					}
 					conn->asyncStatus = PGASYNC_READY;
 					break;
 				case 'K':		/* secret key data from the backend */
@@ -965,14 +980,17 @@ pqGetErrorNotice2(PGconn *conn, bool isError)
 	 * Make a PGresult to hold the message.  We temporarily lie about the
 	 * result status, so that PQmakeEmptyPGresult doesn't uselessly copy
 	 * conn->errorMessage.
+	 *
+	 * NB: This allocation can fail, if you run out of memory. The rest of the
+	 * function handles that gracefully, and we still try to set the error
+	 * message as the connection's error message.
 	 */
 	res = PQmakeEmptyPGresult(conn, PGRES_EMPTY_QUERY);
-	if (!res)
-		goto failure;
-	res->resultStatus = isError ? PGRES_FATAL_ERROR : PGRES_NONFATAL_ERROR;
-	res->errMsg = pqResultStrdup(res, workBuf.data);
-	if (!res->errMsg)
-		goto failure;
+	if (res)
+	{
+		res->resultStatus = isError ? PGRES_FATAL_ERROR : PGRES_NONFATAL_ERROR;
+		res->errMsg = pqResultStrdup(res, workBuf.data);
+	}
 
 	/*
 	 * Break the message into fields.  We can't do very much here, but we can
@@ -1024,15 +1042,22 @@ pqGetErrorNotice2(PGconn *conn, bool isError)
 		pqClearAsyncResult(conn);
 		conn->result = res;
 		resetPQExpBuffer(&conn->errorMessage);
-		appendPQExpBufferStr(&conn->errorMessage, res->errMsg);
+		if (res && !PQExpBufferDataBroken(workBuf) && res->errMsg)
+			appendPQExpBufferStr(&conn->errorMessage, res->errMsg);
+		else
+			printfPQExpBuffer(&conn->errorMessage,
+							  libpq_gettext("out of memory"));
 		if (conn->xactStatus == PQTRANS_INTRANS)
 			conn->xactStatus = PQTRANS_INERROR;
 	}
 	else
 	{
-		if (res->noticeHooks.noticeRec != NULL)
-			(*res->noticeHooks.noticeRec) (res->noticeHooks.noticeRecArg, res);
-		PQclear(res);
+		if (res)
+		{
+			if (res->noticeHooks.noticeRec != NULL)
+				(*res->noticeHooks.noticeRec) (res->noticeHooks.noticeRecArg, res);
+			PQclear(res);
+		}
 	}
 
 	termPQExpBuffer(&workBuf);
@@ -1586,6 +1611,7 @@ pqBuildStartupPacket2(PGconn *conn, int *packetlen,
 
 	startpacket->protoVersion = htonl(conn->pversion);
 
+	/* strncpy is safe here: postmaster will handle full fields correctly */
 	strncpy(startpacket->user, conn->pguser, SM_USER);
 	strncpy(startpacket->database, conn->dbName, SM_DATABASE);
 	strncpy(startpacket->tty, conn->pgtty, SM_TTY);

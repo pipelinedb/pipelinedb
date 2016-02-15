@@ -11,7 +11,7 @@
  * bms_is_empty() in preference to testing for NULL.)
  *
  *
- * Portions Copyright (c) 2003-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2003-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/nodes/bitmapset.h
@@ -36,8 +36,8 @@ typedef int32 signedbitmapword; /* must be the matching signed type */
 typedef struct Bitmapset
 {
 	int			nwords;			/* number of words in array */
-	bitmapword	words[1];		/* really [nwords] */
-} Bitmapset;					/* VARIABLE LENGTH STRUCT */
+	bitmapword	words[FLEXIBLE_ARRAY_MEMBER];	/* really [nwords] */
+} Bitmapset;
 
 
 /* result of bms_subset_compare */
@@ -76,6 +76,7 @@ extern bool bms_is_member(int x, const Bitmapset *a);
 extern bool bms_overlap(const Bitmapset *a, const Bitmapset *b);
 extern bool bms_nonempty_difference(const Bitmapset *a, const Bitmapset *b);
 extern int	bms_singleton_member(const Bitmapset *a);
+extern bool bms_get_singleton_member(const Bitmapset *a, int *member);
 extern int	bms_num_members(const Bitmapset *a);
 
 /* optimized tests when we don't need to know exact membership count: */
@@ -93,6 +94,7 @@ extern Bitmapset *bms_join(Bitmapset *a, Bitmapset *b);
 
 /* support for iterating through the integer elements of a set: */
 extern int	bms_first_member(Bitmapset *a);
+extern int	bms_next_member(const Bitmapset *a, int prevbit);
 
 /* support for hashtables using Bitmapsets as keys: */
 extern uint32 bms_hash_value(const Bitmapset *a);

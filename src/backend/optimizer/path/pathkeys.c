@@ -7,7 +7,7 @@
  * the nature and use of path keys.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -17,7 +17,7 @@
  */
 #include "postgres.h"
 
-#include "access/skey.h"
+#include "access/stratnum.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/plannodes.h"
@@ -1373,7 +1373,7 @@ pathkeys_useful_for_merging(PlannerInfo *root, RelOptInfo *rel, List *pathkeys)
 		 * surely possible to generate a mergejoin clause using them.
 		 */
 		if (rel->has_eclass_joins &&
-			eclass_useful_for_merging(pathkey->pk_eclass, rel))
+			eclass_useful_for_merging(root, pathkey->pk_eclass, rel))
 			matched = true;
 		else
 		{

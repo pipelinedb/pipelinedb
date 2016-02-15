@@ -411,7 +411,7 @@ REFRESH MATERIALIZED VIEW mv;
 ERROR:  could not create unique index "mv_a_idx"
 DETAIL:  Key (a)=(1) is duplicated.
 REFRESH MATERIALIZED VIEW CONCURRENTLY mv;
-ERROR:  new data for "mv" contains duplicate rows without any null columns
+ERROR:  new data for materialized view "mv" contains duplicate rows without any null columns
 DETAIL:  Row: (1,10)
 DROP TABLE foo CASCADE;
 NOTICE:  drop cascades to materialized view mv
@@ -508,6 +508,10 @@ SET ROLE user_dw;
 CREATE TABLE foo_data AS SELECT i, md5(random()::text)
   FROM generate_series(1, 10) i;
 CREATE MATERIALIZED VIEW mv_foo AS SELECT * FROM foo_data;
+CREATE MATERIALIZED VIEW mv_foo AS SELECT * FROM foo_data;
+ERROR:  relation "mv_foo" already exists
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_foo AS SELECT * FROM foo_data;
+NOTICE:  relation "mv_foo" already exists, skipping
 CREATE UNIQUE INDEX ON mv_foo (i);
 RESET ROLE;
 REFRESH MATERIALIZED VIEW mv_foo;

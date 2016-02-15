@@ -7,7 +7,7 @@
  * type.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -112,9 +112,9 @@
  *
  * With the current parameters, request sizes up to 8K are treated as chunks,
  * larger requests go into dedicated blocks.  Change ALLOCSET_NUM_FREELISTS
- * to adjust the boundary point.  (But in contexts with small maxBlockSize,
- * we may set the allocChunkLimit to less than 8K, so as to avoid space
- * wastage.)
+ * to adjust the boundary point; and adjust ALLOCSET_SEPARATE_THRESHOLD in
+ * memutils.h to agree.  (Note: in contexts with small maxBlockSize, we may
+ * set the allocChunkLimit to less than 8K, so as to avoid space wastage.)
  *--------------------
  */
 
@@ -438,14 +438,14 @@ AllocSetContextCreate(MemoryContext parent,
 					  Size initBlockSize,
 					  Size maxBlockSize)
 {
-	AllocSet	context;
+	AllocSet	set;
 
 	/* Do the type-independent part of context creation */
-	context = (AllocSet) MemoryContextCreate(T_AllocSetContext,
-											 sizeof(AllocSetContext),
-											 &AllocSetMethods,
-											 parent,
-											 name);
+	set = (AllocSet) MemoryContextCreate(T_AllocSetContext,
+										 sizeof(AllocSetContext),
+										 &AllocSetMethods,
+										 parent,
+										 name);
 
 	/*
 	 * Make sure alloc parameters are reasonable, and save them.
@@ -459,9 +459,9 @@ AllocSetContextCreate(MemoryContext parent,
 	if (maxBlockSize < initBlockSize)
 		maxBlockSize = initBlockSize;
 	Assert(AllocHugeSizeIsValid(maxBlockSize)); /* must be safe to double */
-	context->initBlockSize = initBlockSize;
-	context->maxBlockSize = maxBlockSize;
-	context->nextBlockSize = initBlockSize;
+	set->initBlockSize = initBlockSize;
+	set->maxBlockSize = maxBlockSize;
+	set->nextBlockSize = initBlockSize;
 
 	/*
 	 * Compute the allocation chunk size limit for this context.  It can't be
@@ -476,11 +476,16 @@ AllocSetContextCreate(MemoryContext parent,
 	 * We have to have allocChunkLimit a power of two, because the requested
 	 * and actually-allocated sizes of any chunk must be on the same side of
 	 * the limit, else we get confused about whether the chunk is "big".
+	 *
+	 * Also, allocChunkLimit must not exceed ALLOCSET_SEPARATE_THRESHOLD.
 	 */
-	context->allocChunkLimit = ALLOC_CHUNK_LIMIT;
-	while ((Size) (context->allocChunkLimit + ALLOC_CHUNKHDRSZ) >
+	StaticAssertStmt(ALLOC_CHUNK_LIMIT == ALLOCSET_SEPARATE_THRESHOLD,
+					 "ALLOC_CHUNK_LIMIT != ALLOCSET_SEPARATE_THRESHOLD");
+
+	set->allocChunkLimit = ALLOC_CHUNK_LIMIT;
+	while ((Size) (set->allocChunkLimit + ALLOC_CHUNKHDRSZ) >
 		   (Size) ((maxBlockSize - ALLOC_BLOCKHDRSZ) / ALLOC_CHUNK_FRACTION))
-		context->allocChunkLimit >>= 1;
+		set->allocChunkLimit >>= 1;
 
 	/*
 	 * Grab always-allocated space, if requested
@@ -500,20 +505,20 @@ AllocSetContextCreate(MemoryContext parent,
 					 errdetail("Failed while creating memory context \"%s\".",
 							   name)));
 		}
-		block->aset = context;
+		block->aset = set;
 		block->freeptr = ((char *) block) + ALLOC_BLOCKHDRSZ;
 		block->endptr = ((char *) block) + blksize;
-		block->next = context->blocks;
-		context->blocks = block;
+		block->next = set->blocks;
+		set->blocks = block;
 		/* Mark block as not to be released at reset time */
-		context->keeper = block;
+		set->keeper = block;
 
 		/* Mark unallocated space NOACCESS; leave the block header alone. */
 		VALGRIND_MAKE_MEM_NOACCESS(block->freeptr,
 								   blksize - ALLOC_BLOCKHDRSZ);
 	}
 
-	return (MemoryContext) context;
+	return (MemoryContext) set;
 }
 
 /*
@@ -642,8 +647,8 @@ AllocSetDelete(MemoryContext context)
 
 /*
  * AllocSetAlloc
- *		Returns pointer to allocated memory of given size; memory is added
- *		to the set.
+ *		Returns pointer to allocated memory of given size or NULL if
+ *		request could not be completed; memory is added to the set.
  *
  * No request may exceed:
  *		MAXALIGN_DOWN(SIZE_MAX) - ALLOC_BLOCKHDRSZ - ALLOC_CHUNKHDRSZ
@@ -671,13 +676,7 @@ AllocSetAlloc(MemoryContext context, Size size)
 		blksize = chunk_size + ALLOC_BLOCKHDRSZ + ALLOC_CHUNKHDRSZ;
 		block = (AllocBlock) malloc(blksize);
 		if (block == NULL)
-		{
-			MemoryContextStats(TopMemoryContext);
-			ereport(ERROR,
-					(errcode(ERRCODE_OUT_OF_MEMORY),
-					 errmsg("out of memory"),
-					 errdetail("Failed on request of size %zu.", size)));
-		}
+			return NULL;
 		block->aset = set;
 		block->freeptr = block->endptr = ((char *) block) + blksize;
 
@@ -865,13 +864,7 @@ AllocSetAlloc(MemoryContext context, Size size)
 		}
 
 		if (block == NULL)
-		{
-			MemoryContextStats(TopMemoryContext);
-			ereport(ERROR,
-					(errcode(ERRCODE_OUT_OF_MEMORY),
-					 errmsg("out of memory"),
-					 errdetail("Failed on request of size %zu.", size)));
-		}
+			return NULL;
 
 		block->aset = set;
 		block->freeptr = ((char *) block) + ALLOC_BLOCKHDRSZ;
@@ -1002,9 +995,10 @@ AllocSetFree(MemoryContext context, void *pointer)
 
 /*
  * AllocSetRealloc
- *		Returns new pointer to allocated memory of given size; this memory
- *		is added to the set.  Memory associated with given pointer is copied
- *		into the new memory, and the old memory is freed.
+ *		Returns new pointer to allocated memory of given size or NULL if
+ *		request could not be completed; this memory is added to the set.
+ *		Memory associated with given pointer is copied into the new memory,
+ *		and the old memory is freed.
  *
  * Without MEMORY_CONTEXT_CHECKING, we don't know the old request size.  This
  * makes our Valgrind client requests less-precise, hazarding false negatives.
@@ -1107,13 +1101,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 		blksize = chksize + ALLOC_BLOCKHDRSZ + ALLOC_CHUNKHDRSZ;
 		block = (AllocBlock) realloc(block, blksize);
 		if (block == NULL)
-		{
-			MemoryContextStats(TopMemoryContext);
-			ereport(ERROR,
-					(errcode(ERRCODE_OUT_OF_MEMORY),
-					 errmsg("out of memory"),
-					 errdetail("Failed on request of size %zu.", size)));
-		}
+			return NULL;
 		block->freeptr = block->endptr = ((char *) block) + blksize;
 
 		/* Update pointers since block has likely been moved */
@@ -1178,6 +1166,10 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 
 		/* allocate new chunk */
 		newPointer = AllocSetAlloc((MemoryContext) set, size);
+
+		/* leave immediately if request was not completed */
+		if (newPointer == NULL)
+			return NULL;
 
 		/*
 		 * AllocSetAlloc() just made the region NOACCESS.  Change it to

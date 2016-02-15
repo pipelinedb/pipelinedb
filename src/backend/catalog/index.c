@@ -3,7 +3,7 @@
  * index.c
  *	  code to create and destroy POSTGRES index relations
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -63,13 +63,14 @@
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/pg_rusage.h"
 #include "utils/syscache.h"
 #include "utils/tuplesort.h"
 #include "utils/snapmgr.h"
 #include "utils/tqual.h"
 
 
-/* Potentially set by contrib/pg_upgrade_support functions */
+/* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_index_pg_class_oid = InvalidOid;
 
 /* state info for validate_index bulkdelete callback */
@@ -674,6 +675,8 @@ UpdateIndexRelation(Oid indexoid,
  *		will be marked "invalid" and the caller must take additional steps
  *		to fix it up.
  * is_internal: if true, post creation hook for new index
+ * if_not_exists: if true, do not throw an error if a relation with
+ *		the same name already exists.
  *
  * Returns the OID of the created index.
  */
@@ -697,7 +700,8 @@ index_create(Relation heapRelation,
 			 bool allow_system_table_mods,
 			 bool skip_build,
 			 bool concurrent,
-			 bool is_internal)
+			 bool is_internal,
+			 bool if_not_exists)
 {
 	Oid			heapRelationId = RelationGetRelid(heapRelation);
 	Relation	pg_class;
@@ -773,10 +777,22 @@ index_create(Relation heapRelation,
 		elog(ERROR, "shared relations must be placed in pg_global tablespace");
 
 	if (get_relname_relid(indexRelationName, namespaceId))
+	{
+		if (if_not_exists)
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_DUPLICATE_TABLE),
+					 errmsg("relation \"%s\" already exists, skipping",
+							indexRelationName)));
+			heap_close(pg_class, RowExclusiveLock);
+			return InvalidOid;
+		}
+
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_TABLE),
 				 errmsg("relation \"%s\" already exists",
 						indexRelationName)));
+	}
 
 	/*
 	 * construct tuple descriptor for index tuples
@@ -796,13 +812,14 @@ index_create(Relation heapRelation,
 	 */
 	if (!OidIsValid(indexRelationId))
 	{
-		/*
-		 * Use binary-upgrade override for pg_class.oid/relfilenode, if
-		 * supplied.
-		 */
-		if (IsBinaryUpgrade &&
-			OidIsValid(binary_upgrade_next_index_pg_class_oid))
+		/* Use binary-upgrade override for pg_class.oid/relfilenode? */
+		if (IsBinaryUpgrade)
 		{
+			if (!OidIsValid(binary_upgrade_next_index_pg_class_oid))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("pg_class index OID value not set when in binary upgrade mode")));
+
 			indexRelationId = binary_upgrade_next_index_pg_class_oid;
 			binary_upgrade_next_index_pg_class_oid = InvalidOid;
 		}
@@ -1095,7 +1112,8 @@ index_create(Relation heapRelation,
 /*
  * index_constraint_create
  *
- * Set up a constraint associated with an index
+ * Set up a constraint associated with an index.  Return the new constraint's
+ * address.
  *
  * heapRelation: table owning the index (must be suitably locked by caller)
  * indexRelationId: OID of the index
@@ -1112,7 +1130,7 @@ index_create(Relation heapRelation,
  * allow_system_table_mods: allow table to be a system catalog
  * is_internal: index is constructed due to internal process
  */
-void
+ObjectAddress
 index_constraint_create(Relation heapRelation,
 						Oid indexRelationId,
 						IndexInfo *indexInfo,
@@ -1300,6 +1318,8 @@ index_constraint_create(Relation heapRelation,
 		heap_freetuple(indexTuple);
 		heap_close(pg_index, RowExclusiveLock);
 	}
+
+	return referenced;
 }
 
 /*
@@ -1646,12 +1666,63 @@ BuildIndexInfo(Relation index)
 	/* other info */
 	ii->ii_Unique = indexStruct->indisunique;
 	ii->ii_ReadyForInserts = IndexIsReady(indexStruct);
+	/* assume not doing speculative insertion for now */
+	ii->ii_UniqueOps = NULL;
+	ii->ii_UniqueProcs = NULL;
+	ii->ii_UniqueStrats = NULL;
 
 	/* initialize index-build state to default */
 	ii->ii_Concurrent = false;
 	ii->ii_BrokenHotChain = false;
 
 	return ii;
+}
+
+/* ----------------
+ *		BuildSpeculativeIndexInfo
+ *			Add extra state to IndexInfo record
+ *
+ * For unique indexes, we usually don't want to add info to the IndexInfo for
+ * checking uniqueness, since the B-Tree AM handles that directly.  However,
+ * in the case of speculative insertion, additional support is required.
+ *
+ * Do this processing here rather than in BuildIndexInfo() to not incur the
+ * overhead in the common non-speculative cases.
+ * ----------------
+ */
+void
+BuildSpeculativeIndexInfo(Relation index, IndexInfo *ii)
+{
+	int			ncols = index->rd_rel->relnatts;
+	int			i;
+
+	/*
+	 * fetch info for checking unique indexes
+	 */
+	Assert(ii->ii_Unique);
+
+	if (index->rd_rel->relam != BTREE_AM_OID)
+		elog(ERROR, "unexpected non-btree speculative unique index");
+
+	ii->ii_UniqueOps = (Oid *) palloc(sizeof(Oid) * ncols);
+	ii->ii_UniqueProcs = (Oid *) palloc(sizeof(Oid) * ncols);
+	ii->ii_UniqueStrats = (uint16 *) palloc(sizeof(uint16) * ncols);
+
+	/*
+	 * We have to look up the operator's strategy number.  This provides a
+	 * cross-check that the operator does match the index.
+	 */
+	/* We need the func OIDs and strategy numbers too */
+	for (i = 0; i < ncols; i++)
+	{
+		ii->ii_UniqueStrats[i] = BTEqualStrategyNumber;
+		ii->ii_UniqueOps[i] =
+			get_opfamily_member(index->rd_opfamily[i],
+								index->rd_opcintype[i],
+								index->rd_opcintype[i],
+								ii->ii_UniqueStrats[i]);
+		ii->ii_UniqueProcs[i] = get_opcode(ii->ii_UniqueOps[i]);
+	}
 }
 
 /* ----------------
@@ -1964,7 +2035,7 @@ index_build(Relation heapRelation,
 	 * created it, or truncated twice in a subsequent transaction, the
 	 * relfilenode won't change, and nothing needs to be done here.
 	 */
-	if (heapRelation->rd_rel->relpersistence == RELPERSISTENCE_UNLOGGED &&
+	if (indexRelation->rd_rel->relpersistence == RELPERSISTENCE_UNLOGGED &&
 		!smgrexists(indexRelation->rd_smgr, INIT_FORKNUM))
 	{
 		RegProcedure ambuildempty = indexRelation->rd_am->ambuildempty;
@@ -2088,6 +2159,34 @@ IndexBuildHeapScan(Relation heapRelation,
 				   IndexBuildCallback callback,
 				   void *callback_state)
 {
+	return IndexBuildHeapRangeScan(heapRelation, indexRelation,
+								   indexInfo, allow_sync,
+								   false,
+								   0, InvalidBlockNumber,
+								   callback, callback_state);
+}
+
+/*
+ * As above, except that instead of scanning the complete heap, only the given
+ * number of blocks are scanned.  Scan to end-of-rel can be signalled by
+ * passing InvalidBlockNumber as numblocks.  Note that restricting the range
+ * to scan cannot be done when requesting syncscan.
+ *
+ * When "anyvisible" mode is requested, all tuples visible to any transaction
+ * are considered, including those inserted or deleted by transactions that are
+ * still in progress.
+ */
+double
+IndexBuildHeapRangeScan(Relation heapRelation,
+						Relation indexRelation,
+						IndexInfo *indexInfo,
+						bool allow_sync,
+						bool anyvisible,
+						BlockNumber start_blockno,
+						BlockNumber numblocks,
+						IndexBuildCallback callback,
+						void *callback_state)
+{
 	bool		is_system_catalog;
 	bool		checking_uniqueness;
 	HeapScanDesc scan;
@@ -2117,6 +2216,12 @@ IndexBuildHeapScan(Relation heapRelation,
 						   indexInfo->ii_ExclusionOps != NULL);
 
 	/*
+	 * "Any visible" mode is not compatible with uniqueness checks; make sure
+	 * only one of those is requested.
+	 */
+	Assert(!(anyvisible && checking_uniqueness));
+
+	/*
 	 * Need an EState for evaluation of index expressions and partial-index
 	 * predicates.  Also a slot to hold the current tuple.
 	 */
@@ -2143,6 +2248,9 @@ IndexBuildHeapScan(Relation heapRelation,
 	{
 		snapshot = RegisterSnapshot(GetTransactionSnapshot());
 		OldestXmin = InvalidTransactionId;		/* not used */
+
+		/* "any visible" mode is not compatible with this */
+		Assert(!anyvisible);
 	}
 	else
 	{
@@ -2157,6 +2265,16 @@ IndexBuildHeapScan(Relation heapRelation,
 								NULL,	/* scan key */
 								true,	/* buffer access strategy OK */
 								allow_sync);	/* syncscan OK? */
+
+	/* set our scan endpoints */
+	if (!allow_sync)
+		heap_setscanlimits(scan, start_blockno, numblocks);
+	else
+	{
+		/* syncscan can only be requested on whole relation */
+		Assert(start_blockno == 0);
+		Assert(numblocks == InvalidBlockNumber);
+	}
 
 	reltuples = 0;
 
@@ -2261,6 +2379,17 @@ IndexBuildHeapScan(Relation heapRelation,
 				case HEAPTUPLE_INSERT_IN_PROGRESS:
 
 					/*
+					 * In "anyvisible" mode, this tuple is visible and we don't
+					 * need any further checks.
+					 */
+					if (anyvisible)
+					{
+						indexIt = true;
+						tupleIsAlive = true;
+						break;
+					}
+
+					/*
 					 * Since caller should hold ShareLock or better, normally
 					 * the only way to see this is if it was inserted earlier
 					 * in our own transaction.  However, it can happen in
@@ -2306,8 +2435,16 @@ IndexBuildHeapScan(Relation heapRelation,
 
 					/*
 					 * As with INSERT_IN_PROGRESS case, this is unexpected
-					 * unless it's our own deletion or a system catalog.
+					 * unless it's our own deletion or a system catalog;
+					 * but in anyvisible mode, this tuple is visible.
 					 */
+					if (anyvisible)
+					{
+						indexIt = true;
+						tupleIsAlive = false;
+						break;
+					}
+
 					xwait = HeapTupleHeaderGetUpdateXid(heapTuple->t_data);
 					if (!TransactionIdIsCurrentTransactionId(xwait))
 					{
@@ -2569,7 +2706,7 @@ IndexCheckExclusion(Relation heapRelation,
 		check_exclusion_constraint(heapRelation,
 								   indexRelation, indexInfo,
 								   &(heapTuple->t_self), values, isnull,
-								   estate, true, false);
+								   estate, true);
 	}
 
 	heap_endscan(scan);
@@ -3090,13 +3227,17 @@ IndexGetRelation(Oid indexId, bool missing_ok)
  * reindex_index - This routine is used to recreate a single index
  */
 void
-reindex_index(Oid indexId, bool skip_constraint_checks)
+reindex_index(Oid indexId, bool skip_constraint_checks, char persistence,
+			  int options)
 {
 	Relation	iRel,
 				heapRelation;
 	Oid			heapId;
 	IndexInfo  *indexInfo;
 	volatile bool skipped_constraint = false;
+	PGRUsage	ru0;
+
+	pg_rusage_init(&ru0);
 
 	/*
 	 * Open and lock the parent heap relation.  ShareLock is sufficient since
@@ -3152,7 +3293,7 @@ reindex_index(Oid indexId, bool skip_constraint_checks)
 		}
 
 		/* We'll build a new physical relation for the index */
-		RelationSetNewRelfilenode(iRel, InvalidTransactionId,
+		RelationSetNewRelfilenode(iRel, persistence, InvalidTransactionId,
 								  InvalidMultiXactId);
 
 		/* Initialize the index and rebuild */
@@ -3240,6 +3381,14 @@ reindex_index(Oid indexId, bool skip_constraint_checks)
 		heap_close(pg_index, RowExclusiveLock);
 	}
 
+	/* Log what we did */
+	if (options & REINDEXOPT_VERBOSE)
+		ereport(INFO,
+				(errmsg("index \"%s\" was reindexed",
+						get_rel_name(indexId)),
+				 errdetail("%s.",
+						   pg_rusage_show(&ru0))));
+
 	/* Close rels, but keep locks */
 	index_close(iRel, NoLock);
 	heap_close(heapRelation, NoLock);
@@ -3270,12 +3419,18 @@ reindex_index(Oid indexId, bool skip_constraint_checks)
  * performance, other callers should include the flag only after transforming
  * the data in a manner that risks a change in constraint validity.
  *
+ * REINDEX_REL_FORCE_INDEXES_UNLOGGED: if true, set the persistence of the
+ * rebuilt indexes to unlogged.
+ *
+ * REINDEX_REL_FORCE_INDEXES_PERMANENT: if true, set the persistence of the
+ * rebuilt indexes to permanent.
+ *
  * Returns true if any indexes were rebuilt (including toast table's index
  * when relevant).  Note that a CommandCounterIncrement will occur after each
  * index rebuild.
  */
 bool
-reindex_relation(Oid relid, int flags)
+reindex_relation(Oid relid, int flags, int options)
 {
 	Relation	rel;
 	Oid			toast_relid;
@@ -3331,6 +3486,7 @@ reindex_relation(Oid relid, int flags)
 	{
 		List	   *doneIndexes;
 		ListCell   *indexId;
+		char		persistence;
 
 		if (flags & REINDEX_REL_SUPPRESS_INDEX_USE)
 		{
@@ -3344,6 +3500,17 @@ reindex_relation(Oid relid, int flags)
 			CommandCounterIncrement();
 		}
 
+		/*
+		 * Compute persistence of indexes: same as that of owning rel, unless
+		 * caller specified otherwise.
+		 */
+		if (flags & REINDEX_REL_FORCE_INDEXES_UNLOGGED)
+			persistence = RELPERSISTENCE_UNLOGGED;
+		else if (flags & REINDEX_REL_FORCE_INDEXES_PERMANENT)
+			persistence = RELPERSISTENCE_PERMANENT;
+		else
+			persistence = rel->rd_rel->relpersistence;
+
 		/* Reindex all the indexes. */
 		doneIndexes = NIL;
 		foreach(indexId, indexIds)
@@ -3353,7 +3520,8 @@ reindex_relation(Oid relid, int flags)
 			if (is_pg_class)
 				RelationSetIndexList(rel, doneIndexes, InvalidOid);
 
-			reindex_index(indexOid, !(flags & REINDEX_REL_CHECK_CONSTRAINTS));
+			reindex_index(indexOid, !(flags & REINDEX_REL_CHECK_CONSTRAINTS),
+						  persistence, options);
 
 			CommandCounterIncrement();
 
@@ -3388,7 +3556,7 @@ reindex_relation(Oid relid, int flags)
 	 * still hold the lock on the master table.
 	 */
 	if ((flags & REINDEX_REL_PROCESS_TOAST) && OidIsValid(toast_relid))
-		result |= reindex_relation(toast_relid, flags);
+		result |= reindex_relation(toast_relid, flags, options);
 
 	return result;
 }

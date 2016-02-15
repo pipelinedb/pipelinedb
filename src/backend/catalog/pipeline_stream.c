@@ -764,7 +764,7 @@ bool IsStream(Oid relid)
 void
 CreateInferredStream(RangeVar *rv)
 {
-	Oid relid;
+	ObjectAddress address;
 	CreateStreamStmt *stmt;
 
 	stmt = makeNode(CreateStreamStmt);
@@ -776,12 +776,12 @@ CreateInferredStream(RangeVar *rv)
 
 	transformCreateStreamStmt(stmt);
 
-	relid = DefineRelation((CreateStmt *) stmt,
+	address = DefineRelation((CreateStmt *) stmt,
 							RELKIND_STREAM,
-							InvalidOid);
+							InvalidOid, NULL);
 
-	CreateForeignTable((CreateForeignTableStmt *) stmt, relid);
-	CreatePipelineStreamEntry(stmt, relid);
+	CreateForeignTable((CreateForeignTableStmt *) stmt, address.objectId);
+	CreatePipelineStreamEntry(stmt, address.objectId);
 }
 
 /*

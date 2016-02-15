@@ -4,7 +4,7 @@
  *	  prototypes for various files in optimizer/plan
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/optimizer/planmain.h
@@ -44,7 +44,9 @@ extern Plan *create_plan(PlannerInfo *root, Path *best_path);
 extern SubqueryScan *make_subqueryscan(List *qptlist, List *qpqual,
 				  Index scanrelid, Plan *subplan);
 extern ForeignScan *make_foreignscan(List *qptlist, List *qpqual,
-				 Index scanrelid, List *fdw_exprs, List *fdw_private);
+				 Index scanrelid, List *fdw_exprs, List *fdw_private,
+				 List *fdw_scan_tlist, List *fdw_recheck_quals,
+				 Plan *outer_plan);
 extern Append *make_append(List *appendplans, List *tlist);
 extern RecursiveUnion *make_recursive_union(List *tlist,
 					 Plan *lefttree, Plan *righttree, int wtParam,
@@ -58,6 +60,7 @@ extern Sort *make_sort_from_groupcols(PlannerInfo *root, List *groupcls,
 extern Agg *make_agg(PlannerInfo *root, List *tlist, List *qual,
 		 AggStrategy aggstrategy, const AggClauseCosts *aggcosts,
 		 int numGroupCols, AttrNumber *grpColIdx, Oid *grpOperators,
+		 List *groupingSets,
 		 long numGroups,
 		 Plan *lefttree);
 extern WindowAgg *make_windowagg(PlannerInfo *root, List *tlist,
@@ -82,9 +85,10 @@ extern Result *make_result(PlannerInfo *root, List *tlist,
 			Node *resconstantqual, Plan *subplan);
 extern ModifyTable *make_modifytable(PlannerInfo *root,
 				 CmdType operation, bool canSetTag,
+				 Index nominalRelation,
 				 List *resultRelations, List *subplans,
 				 List *withCheckOptionLists, List *returningLists,
-				 List *rowMarks, int epqParam);
+				 List *rowMarks, OnConflictExpr *onconflict, int epqParam);
 extern bool is_projection_capable_plan(Plan *plan);
 
 /*
@@ -122,6 +126,8 @@ extern RestrictInfo *build_implied_join_equality(Oid opno,
  * prototypes for plan/analyzejoins.c
  */
 extern List *remove_useless_joins(PlannerInfo *root, List *joinlist);
+extern bool query_supports_distinctness(Query *query);
+extern bool query_is_distinct_for(Query *query, List *colnos, List *opids);
 
 /*
  * prototypes for plan/setrefs.c
@@ -133,6 +139,7 @@ extern void set_sa_opfuncid(ScalarArrayOpExpr *opexpr);
 extern void record_plan_function_dependency(PlannerInfo *root, Oid funcid);
 extern void extract_query_dependencies(Node *query,
 						   List **relationOids,
-						   List **invalItems);
+						   List **invalItems,
+						   bool *hasRowSecurity);
 
 #endif   /* PLANMAIN_H */

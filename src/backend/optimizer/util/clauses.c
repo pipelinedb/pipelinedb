@@ -3,10 +3,9 @@
  * clauses.c
  *	  routines to manipulate qualification clauses
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2013-2015, PipelineDB
- *
  *
  * IDENTIFICATION
  *	  src/backend/optimizer/util/clauses.c
@@ -98,7 +97,7 @@ static bool contain_mutable_functions_walker(Node *node, void *context);
 static bool contain_volatile_functions_walker(Node *node, void *context);
 static bool contain_volatile_functions_not_nextval_walker(Node *node, void *context);
 static bool contain_nonstrict_functions_walker(Node *node, void *context);
-static bool contain_leaky_functions_walker(Node *node, void *context);
+static bool contain_leaked_vars_walker(Node *node, void *context);
 static Relids find_nonnullable_rels_walker(Node *node, bool top_level);
 static List *find_nonnullable_vars_walker(Node *node, bool top_level);
 static bool is_strict_saop(ScalarArrayOpExpr *expr, bool falseOK);
@@ -391,7 +390,7 @@ make_ands_implicit(Expr *clause)
 
 /*
  * contain_agg_clause
- *	  Recursively search for Aggref nodes within a clause.
+ *	  Recursively search for Aggref/GroupingFunc nodes within a clause.
  *
  *	  Returns true if any aggregate found.
  *
@@ -416,6 +415,11 @@ contain_agg_clause_walker(Node *node, void *context)
 	if (IsA(node, Aggref))
 	{
 		Assert(((Aggref *) node)->agglevelsup == 0);
+		return true;			/* abort the tree traversal and return true */
+	}
+	if (IsA(node, GroupingFunc))
+	{
+		Assert(((GroupingFunc *) node)->agglevelsup == 0);
 		return true;			/* abort the tree traversal and return true */
 	}
 	Assert(!IsA(node, SubLink));
@@ -1332,26 +1336,30 @@ contain_nonstrict_functions_walker(Node *node, void *context)
 }
 
 /*****************************************************************************
- *		  Check clauses for non-leakproof functions
+ *		  Check clauses for Vars passed to non-leakproof functions
  *****************************************************************************/
 
 /*
- * contain_leaky_functions
- *		Recursively search for leaky functions within a clause.
+ * contain_leaked_vars
+ *		Recursively scan a clause to discover whether it contains any Var
+ *		nodes (of the current query level) that are passed as arguments to
+ *		leaky functions.
  *
- * Returns true if any function call with side-effect may be present in the
- * clause.  Qualifiers from outside the a security_barrier view should not
- * be pushed down into the view, lest the contents of tuples intended to be
- * filtered out be revealed via side effects.
+ * Returns true if the clause contains any non-leakproof functions that are
+ * passed Var nodes of the current query level, and which might therefore leak
+ * data.  Qualifiers from outside a security_barrier view that might leak data
+ * in this way should not be pushed down into the view in case the contents of
+ * tuples intended to be filtered out by the view are revealed by the leaky
+ * functions.
  */
 bool
-contain_leaky_functions(Node *clause)
+contain_leaked_vars(Node *clause)
 {
-	return contain_leaky_functions_walker(clause, NULL);
+	return contain_leaked_vars_walker(clause, NULL);
 }
 
 static bool
-contain_leaky_functions_walker(Node *node, void *context)
+contain_leaked_vars_walker(Node *node, void *context)
 {
 	if (node == NULL)
 		return false;
@@ -1383,7 +1391,8 @@ contain_leaky_functions_walker(Node *node, void *context)
 			{
 				FuncExpr   *expr = (FuncExpr *) node;
 
-				if (!get_func_leakproof(expr->funcid))
+				if (!get_func_leakproof(expr->funcid) &&
+					contain_var_clause((Node *) expr->args))
 					return true;
 			}
 			break;
@@ -1395,7 +1404,8 @@ contain_leaky_functions_walker(Node *node, void *context)
 				OpExpr	   *expr = (OpExpr *) node;
 
 				set_opfuncid(expr);
-				if (!get_func_leakproof(expr->opfuncid))
+				if (!get_func_leakproof(expr->opfuncid) &&
+					contain_var_clause((Node *) expr->args))
 					return true;
 			}
 			break;
@@ -1405,7 +1415,8 @@ contain_leaky_functions_walker(Node *node, void *context)
 				ScalarArrayOpExpr *expr = (ScalarArrayOpExpr *) node;
 
 				set_sa_opfuncid(expr);
-				if (!get_func_leakproof(expr->opfuncid))
+				if (!get_func_leakproof(expr->opfuncid) &&
+					contain_var_clause((Node *) expr->args))
 					return true;
 			}
 			break;
@@ -1415,15 +1426,29 @@ contain_leaky_functions_walker(Node *node, void *context)
 				CoerceViaIO *expr = (CoerceViaIO *) node;
 				Oid			funcid;
 				Oid			ioparam;
+				bool		leakproof;
 				bool		varlena;
 
+				/*
+				 * Data may be leaked if either the input or the output
+				 * function is leaky.
+				 */
 				getTypeInputInfo(exprType((Node *) expr->arg),
 								 &funcid, &ioparam);
-				if (!get_func_leakproof(funcid))
-					return true;
+				leakproof = get_func_leakproof(funcid);
 
-				getTypeOutputInfo(expr->resulttype, &funcid, &varlena);
-				if (!get_func_leakproof(funcid))
+				/*
+				 * If the input function is leakproof, then check the output
+				 * function.
+				 */
+				if (leakproof)
+				{
+					getTypeOutputInfo(expr->resulttype, &funcid, &varlena);
+					leakproof = get_func_leakproof(funcid);
+				}
+
+				if (!leakproof &&
+					contain_var_clause((Node *) expr->arg))
 					return true;
 			}
 			break;
@@ -1433,14 +1458,29 @@ contain_leaky_functions_walker(Node *node, void *context)
 				ArrayCoerceExpr *expr = (ArrayCoerceExpr *) node;
 				Oid			funcid;
 				Oid			ioparam;
+				bool		leakproof;
 				bool		varlena;
 
+				/*
+				 * Data may be leaked if either the input or the output
+				 * function is leaky.
+				 */
 				getTypeInputInfo(exprType((Node *) expr->arg),
 								 &funcid, &ioparam);
-				if (!get_func_leakproof(funcid))
-					return true;
-				getTypeOutputInfo(expr->resulttype, &funcid, &varlena);
-				if (!get_func_leakproof(funcid))
+				leakproof = get_func_leakproof(funcid);
+
+				/*
+				 * If the input function is leakproof, then check the output
+				 * function.
+				 */
+				if (leakproof)
+				{
+					getTypeOutputInfo(expr->resulttype, &funcid, &varlena);
+					leakproof = get_func_leakproof(funcid);
+				}
+
+				if (!leakproof &&
+					contain_var_clause((Node *) expr->arg))
 					return true;
 			}
 			break;
@@ -1449,16 +1489,36 @@ contain_leaky_functions_walker(Node *node, void *context)
 			{
 				RowCompareExpr *rcexpr = (RowCompareExpr *) node;
 				ListCell   *opid;
+				ListCell   *larg;
+				ListCell   *rarg;
 
-				foreach(opid, rcexpr->opnos)
+				/*
+				 * Check the comparison function and arguments passed to it
+				 * for each pair of row elements.
+				 */
+				forthree(opid, rcexpr->opnos,
+						 larg, rcexpr->largs,
+						 rarg, rcexpr->rargs)
 				{
 					Oid			funcid = get_opcode(lfirst_oid(opid));
 
-					if (!get_func_leakproof(funcid))
+					if (!get_func_leakproof(funcid) &&
+						(contain_var_clause((Node *) lfirst(larg)) ||
+						 contain_var_clause((Node *) lfirst(rarg))))
 						return true;
 				}
 			}
 			break;
+
+		case T_CurrentOfExpr:
+
+			/*
+			 * WHERE CURRENT OF doesn't contain function calls.  Moreover, it
+			 * is important that this can be pushed down into a
+			 * security_barrier view, since the planner must always generate
+			 * a TID scan when CURRENT OF is present -- c.f. cost_tidscan.
+			 */
+			return false;
 
 		default:
 
@@ -1469,7 +1529,7 @@ contain_leaky_functions_walker(Node *node, void *context)
 			 */
 			return true;
 	}
-	return expression_tree_walker(node, contain_leaky_functions_walker,
+	return expression_tree_walker(node, contain_leaked_vars_walker,
 								  context);
 }
 
@@ -2459,7 +2519,6 @@ eval_const_expressions_mutator(Node *node,
 				newexpr->winref = expr->winref;
 				newexpr->winstar = expr->winstar;
 				newexpr->winagg = expr->winagg;
-				newexpr->winaggkind = expr->winaggkind;
 				newexpr->location = expr->location;
 
 				return (Node *) newexpr;
@@ -3327,6 +3386,7 @@ eval_const_expressions_mutator(Node *node,
 						newntest->arg = (Expr *) relem;
 						newntest->nulltesttype = ntest->nulltesttype;
 						newntest->argisrow = type_is_rowtype(exprType(relem));
+						newntest->location = ntest->location;
 						newargs = lappend(newargs, newntest);
 					}
 					/* If all the inputs were constants, result is TRUE */
@@ -3365,6 +3425,7 @@ eval_const_expressions_mutator(Node *node,
 				newntest->arg = (Expr *) arg;
 				newntest->nulltesttype = ntest->nulltesttype;
 				newntest->argisrow = ntest->argisrow;
+				newntest->location = ntest->location;
 				return (Node *) newntest;
 			}
 		case T_BooleanTest:
@@ -3417,6 +3478,7 @@ eval_const_expressions_mutator(Node *node,
 				newbtest = makeNode(BooleanTest);
 				newbtest->arg = (Expr *) arg;
 				newbtest->booltesttype = btest->booltesttype;
+				newbtest->location = btest->location;
 				return (Node *) newbtest;
 			}
 		case T_PlaceHolderVar:
@@ -3479,12 +3541,15 @@ simplify_or_arguments(List *args,
 	List	   *unprocessed_args;
 
 	/*
-	 * Since the parser considers OR to be a binary operator, long OR lists
-	 * become deeply nested expressions.  We must flatten these into long
-	 * argument lists of a single OR operator.  To avoid blowing out the stack
-	 * with recursion of eval_const_expressions, we resort to some tenseness
-	 * here: we keep a list of not-yet-processed inputs, and handle flattening
-	 * of nested ORs by prepending to the to-do list instead of recursing.
+	 * We want to ensure that any OR immediately beneath another OR gets
+	 * flattened into a single OR-list, so as to simplify later reasoning.
+	 *
+	 * To avoid stack overflow from recursion of eval_const_expressions, we
+	 * resort to some tenseness here: we keep a list of not-yet-processed
+	 * inputs, and handle flattening of nested ORs by prepending to the to-do
+	 * list instead of recursing.  Now that the parser generates N-argument
+	 * ORs from simple lists, this complexity is probably less necessary than
+	 * it once was, but we might as well keep the logic.
 	 */
 	unprocessed_args = list_copy(args);
 	while (unprocessed_args)
@@ -4323,6 +4388,7 @@ inline_function(Oid funcid, Oid result_type, Oid result_collid,
 		querytree->jointree->fromlist ||
 		querytree->jointree->quals ||
 		querytree->groupClause ||
+		querytree->groupingSets ||
 		querytree->havingQual ||
 		querytree->windowClause ||
 		querytree->distinctClause ||

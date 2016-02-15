@@ -12,7 +12,7 @@
 #include <math.h>
 
 #include "access/gist.h"
-#include "access/skey.h"
+#include "access/stratnum.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
 
@@ -25,11 +25,6 @@ PG_MODULE_MAGIC;
  */
 #define ARRPTR(x)  ( (double *) ARR_DATA_PTR(x) )
 #define ARRNELEMS(x)  ArrayGetNItems( ARR_NDIM(x), ARR_DIMS(x))
-
-extern int	cube_yyparse(NDBOX **result);
-extern void cube_yyerror(NDBOX **result, const char *message);
-extern void cube_scanner_init(const char *str);
-extern void cube_scanner_finish(void);
 
 /*
 ** Input/Output routines
@@ -819,7 +814,7 @@ cube_inter(PG_FUNCTION_ARGS)
 									Max(LL_COORD(b, i), UR_COORD(b, i))
 			);
 	}
-	/* continue on the higher dimemsions only present in 'a' */
+	/* continue on the higher dimensions only present in 'a' */
 	for (; i < DIM(a); i++)
 	{
 		result->x[i] = Max(0,

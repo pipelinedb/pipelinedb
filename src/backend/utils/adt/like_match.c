@@ -16,7 +16,7 @@
  * do_like_escape - name of function if wanted - needs CHAREQ and CopyAdvChar
  * MATCH_LOWER - define for case (4) to specify case folding for 1-byte chars
  *
- * Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Copyright (c) 1996-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	src/backend/utils/adt/like_match.c
@@ -82,6 +82,9 @@ MatchText(char *t, int tlen, char *p, int plen,
 	/* Fast path for match-everything pattern */
 	if (plen == 1 && *p == '%')
 		return LIKE_TRUE;
+
+	/* Since this function recurses, it could be driven to stack overflow */
+	check_stack_depth();
 
 	/*
 	 * In this loop, we advance by char when matching wildcards (and thus on

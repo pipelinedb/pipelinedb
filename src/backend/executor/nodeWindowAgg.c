@@ -2084,6 +2084,7 @@ ExecEndWindowAgg(WindowAggState *node)
 void
 ExecReScanWindowAgg(WindowAggState *node)
 {
+	PlanState  *outerPlan = outerPlanState(node);
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 
 	node->all_done = false;
@@ -2109,8 +2110,8 @@ ExecReScanWindowAgg(WindowAggState *node)
 	 * if chgParam of subnode is not null then plan will be re-scanned by
 	 * first ExecProcNode.
 	 */
-	if (node->ss.ps.lefttree->chgParam == NULL)
-		ExecReScan(node->ss.ps.lefttree);
+	if (outerPlan->chgParam == NULL)
+		ExecReScan(outerPlan);
 }
 
 /*

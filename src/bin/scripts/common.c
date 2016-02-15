@@ -4,7 +4,7 @@
  *		Common support routines for bin/scripts/
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/scripts/common.c
@@ -19,10 +19,9 @@
 
 #include "common.h"
 
-static void SetCancelConn(PGconn *conn);
-static void ResetCancelConn(void);
 
 static PGcancel *volatile cancelConn = NULL;
+bool		CancelRequested = false;
 
 #ifdef WIN32
 static CRITICAL_SECTION cancelConnLock;
@@ -53,19 +52,33 @@ handle_help_version_opts(int argc, char *argv[],
 
 
 /*
- * Make a database connection with the given parameters.  An
- * interactive password prompt is automatically issued if required.
+ * Make a database connection with the given parameters.
+ *
+ * An interactive password prompt is automatically issued if needed and
+ * allowed by prompt_password.
+ *
+ * If allow_password_reuse is true, we will try to re-use any password
+ * given during previous calls to this routine.  (Callers should not pass
+ * allow_password_reuse=true unless reconnecting to the same database+user
+ * as before, else we might create password exposure hazards.)
  */
 PGconn *
 connectDatabase(const char *dbname, const char *pghost, const char *pgport,
 				const char *pguser, enum trivalue prompt_password,
-				const char *progname, bool fail_ok)
+				const char *progname, bool fail_ok, bool allow_password_reuse)
 {
 	PGconn	   *conn;
-	char	   *password = NULL;
+	static char *password = NULL;
 	bool		new_pass;
 
-	if (prompt_password == TRI_YES)
+	if (!allow_password_reuse)
+	{
+		if (password)
+			free(password);
+		password = NULL;
+	}
+
+	if (password == NULL && prompt_password == TRI_YES)
 		password = simple_prompt("Password: ", 100, false);
 
 	/*
@@ -74,9 +87,8 @@ connectDatabase(const char *dbname, const char *pghost, const char *pgport,
 	 */
 	do
 	{
-#define PARAMS_ARRAY_SIZE	7
-		const char **keywords = pg_malloc(PARAMS_ARRAY_SIZE * sizeof(*keywords));
-		const char **values = pg_malloc(PARAMS_ARRAY_SIZE * sizeof(*values));
+		const char *keywords[7];
+		const char *values[7];
 
 		keywords[0] = "host";
 		values[0] = pghost;
@@ -96,29 +108,27 @@ connectDatabase(const char *dbname, const char *pghost, const char *pgport,
 		new_pass = false;
 		conn = PQconnectdbParams(keywords, values, true);
 
-		free(keywords);
-		free(values);
-
 		if (!conn)
 		{
-			fprintf(stderr, _("%s: could not connect to database %s\n"),
+			fprintf(stderr, _("%s: could not connect to database %s: out of memory\n"),
 					progname, dbname);
 			exit(1);
 		}
 
+		/*
+		 * No luck?  Trying asking (again) for a password.
+		 */
 		if (PQstatus(conn) == CONNECTION_BAD &&
 			PQconnectionNeedsPassword(conn) &&
-			password == NULL &&
 			prompt_password != TRI_NO)
 		{
 			PQfinish(conn);
+			if (password)
+				free(password);
 			password = simple_prompt("Password: ", 100, false);
 			new_pass = true;
 		}
 	} while (new_pass);
-
-	if (password)
-		free(password);
 
 	/* check to see that the backend connection was successfully made */
 	if (PQstatus(conn) == CONNECTION_BAD)
@@ -150,14 +160,14 @@ connectMaintenanceDatabase(const char *maintenance_db, const char *pghost,
 	/* If a maintenance database name was specified, just connect to it. */
 	if (maintenance_db)
 		return connectDatabase(maintenance_db, pghost, pgport, pguser,
-							   prompt_password, progname, false);
+							   prompt_password, progname, false, false);
 
 	/* Otherwise, try postgres first and then template1. */
 	conn = connectDatabase("postgres", pghost, pgport, pguser, prompt_password,
-						   progname, true);
+						   progname, true, false);
 	if (!conn)
 		conn = connectDatabase("template1", pghost, pgport, pguser,
-							   prompt_password, progname, false);
+							   prompt_password, progname, false, false);
 
 	return conn;
 }
@@ -291,7 +301,7 @@ yesno_prompt(const char *question)
  *
  * Set cancelConn to point to the current database connection.
  */
-static void
+void
 SetCancelConn(PGconn *conn)
 {
 	PGcancel   *oldCancelConn;
@@ -321,7 +331,7 @@ SetCancelConn(PGconn *conn)
  *
  * Free the current cancel connection, if any, and set to NULL.
  */
-static void
+void
 ResetCancelConn(void)
 {
 	PGcancel   *oldCancelConn;
@@ -345,9 +355,8 @@ ResetCancelConn(void)
 
 #ifndef WIN32
 /*
- * Handle interrupt signals by canceling the current command,
- * if it's being executed through executeMaintenanceCommand(),
- * and thus has a cancelConn set.
+ * Handle interrupt signals by canceling the current command, if a cancelConn
+ * is set.
  */
 static void
 handle_sigint(SIGNAL_ARGS)
@@ -359,10 +368,15 @@ handle_sigint(SIGNAL_ARGS)
 	if (cancelConn != NULL)
 	{
 		if (PQcancel(cancelConn, errbuf, sizeof(errbuf)))
+		{
+			CancelRequested = true;
 			fprintf(stderr, _("Cancel request sent\n"));
+		}
 		else
 			fprintf(stderr, _("Could not send cancel request: %s"), errbuf);
 	}
+	else
+		CancelRequested = true;
 
 	errno = save_errno;			/* just in case the write changed it */
 }
@@ -392,10 +406,16 @@ consoleHandler(DWORD dwCtrlType)
 		if (cancelConn != NULL)
 		{
 			if (PQcancel(cancelConn, errbuf, sizeof(errbuf)))
+			{
 				fprintf(stderr, _("Cancel request sent\n"));
+				CancelRequested = true;
+			}
 			else
 				fprintf(stderr, _("Could not send cancel request: %s"), errbuf);
 		}
+		else
+			CancelRequested = true;
+
 		LeaveCriticalSection(&cancelConnLock);
 
 		return TRUE;

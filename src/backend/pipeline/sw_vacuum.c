@@ -20,6 +20,7 @@
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
+#include "optimizer/clauses.h"
 #include "optimizer/planner.h"
 #include "parser/parse_expr.h"
 #include "pipeline/cont_analyze.h"
@@ -39,7 +40,7 @@ get_sw_vacuum_expr(RangeVar *rv)
 {
 	Node *expr = GetSWExpr(rv);
 	Assert(expr);
-	return (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, expr, -1);
+	return (Node *) make_notclause((Expr *) expr);
 }
 
 

@@ -3,6 +3,8 @@
  * nodeUnique.c
  *	  Routines to handle unique'ing of continuous queries using HLL.
  *
+ * Copyright (c) 2013-2016, PipelineDB
+ *
  * IDENTIFICATION
  *	  src/backend/executor/nodeContinuousUnique.c
  *

@@ -3,7 +3,7 @@
  * catcache.c
  *	  System catalog cache for tuples matching a key.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -150,6 +150,8 @@ GetCCHashEqFuncs(Oid keytype, PGFunction *hashfunc, RegProcedure *eqfunc)
 		case REGTYPEOID:
 		case REGCONFIGOID:
 		case REGDICTIONARYOID:
+		case REGROLEOID:
+		case REGNAMESPACEOID:
 			*hashfunc = hashoid;
 
 			*eqfunc = F_OIDEQ;
@@ -553,41 +555,38 @@ void
 AtEOXact_CatCache(bool isCommit)
 {
 #ifdef USE_ASSERT_CHECKING
-	if (assert_enabled)
+	slist_iter	cache_iter;
+
+	slist_foreach(cache_iter, &CacheHdr->ch_caches)
 	{
-		slist_iter	cache_iter;
+		CatCache   *ccp = slist_container(CatCache, cc_next, cache_iter.cur);
+		dlist_iter	iter;
+		int			i;
 
-		slist_foreach(cache_iter, &CacheHdr->ch_caches)
+		/* Check CatCLists */
+		dlist_foreach(iter, &ccp->cc_lists)
 		{
-			CatCache   *ccp = slist_container(CatCache, cc_next, cache_iter.cur);
-			dlist_iter	iter;
-			int			i;
+			CatCList   *cl;
 
-			/* Check CatCLists */
-			dlist_foreach(iter, &ccp->cc_lists)
+			cl = dlist_container(CatCList, cache_elem, iter.cur);
+			Assert(cl->cl_magic == CL_MAGIC);
+			Assert(cl->refcount == 0);
+			Assert(!cl->dead);
+		}
+
+		/* Check individual tuples */
+		for (i = 0; i < ccp->cc_nbuckets; i++)
+		{
+			dlist_head *bucket = &ccp->cc_bucket[i];
+
+			dlist_foreach(iter, bucket)
 			{
-				CatCList   *cl;
+				CatCTup    *ct;
 
-				cl = dlist_container(CatCList, cache_elem, iter.cur);
-				Assert(cl->cl_magic == CL_MAGIC);
-				Assert(cl->refcount == 0);
-				Assert(!cl->dead);
-			}
-
-			/* Check individual tuples */
-			for (i = 0; i < ccp->cc_nbuckets; i++)
-			{
-				dlist_head *bucket = &ccp->cc_bucket[i];
-
-				dlist_foreach(iter, bucket)
-				{
-					CatCTup    *ct;
-
-					ct = dlist_container(CatCTup, cache_elem, iter.cur);
-					Assert(ct->ct_magic == CT_MAGIC);
-					Assert(ct->refcount == 0);
-					Assert(!ct->dead);
-				}
+				ct = dlist_container(CatCTup, cache_elem, iter.cur);
+				Assert(ct->ct_magic == CT_MAGIC);
+				Assert(ct->refcount == 0);
+				Assert(!ct->dead);
 			}
 		}
 	}
@@ -934,7 +933,13 @@ CatalogCacheInitializeCache(CatCache *cache)
 		CatalogCacheInitializeCache_DEBUG2;
 
 		if (cache->cc_key[i] > 0)
-			keytype = tupdesc->attrs[cache->cc_key[i] - 1]->atttypid;
+		{
+			Form_pg_attribute attr = tupdesc->attrs[cache->cc_key[i] - 1];
+
+			keytype = attr->atttypid;
+			/* cache key columns should always be NOT NULL */
+			Assert(attr->attnotnull);
+		}
 		else
 		{
 			if (cache->cc_key[i] != ObjectIdAttributeNumber)
@@ -1006,6 +1011,16 @@ InitCatCachePhase2(CatCache *cache, bool touch_index)
 		 */
 		LockRelationOid(cache->cc_reloid, AccessShareLock);
 		idesc = index_open(cache->cc_indexoid, AccessShareLock);
+
+		/*
+		 * While we've got the index open, let's check that it's unique (and
+		 * not just deferrable-unique, thank you very much).  This is just to
+		 * catch thinkos in definitions of new catcaches, so we don't worry
+		 * about the pg_am indexes not getting tested.
+		 */
+		Assert(idesc->rd_index->indisunique &&
+			   idesc->rd_index->indimmediate);
+
 		index_close(idesc, AccessShareLock);
 		UnlockRelationOid(cache->cc_reloid, AccessShareLock);
 	}
@@ -1108,7 +1123,7 @@ SearchCatCache(CatCache *cache,
 	SysScanDesc scandesc;
 	HeapTuple	ntp;
 
-	/* Make sure we're in a xact, even if this ends up being a cache hit */
+	/* Make sure we're in an xact, even if this ends up being a cache hit */
 	Assert(IsTransactionState());
 
 	/*
@@ -1577,7 +1592,7 @@ SearchCatCacheList(CatCache *cache,
 		oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
 		nmembers = list_length(ctlist);
 		cl = (CatCList *)
-			palloc(sizeof(CatCList) + nmembers * sizeof(CatCTup *));
+			palloc(offsetof(CatCList, members) +nmembers * sizeof(CatCTup *));
 		heap_copytuple_with_tuple(ntp, &cl->tuple);
 		MemoryContextSwitchTo(oldcxt);
 		heap_freetuple(ntp);
