@@ -19,7 +19,7 @@ SELECT keyed_min(x::numeric, x * 100) FROM generate_series(1, 1000) AS x;
 SELECT keyed_min('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'::text, x + 1) FROM generate_series(1, 1000) AS x;
  keyed_min 
 -----------
-         2
+      1001
 (1 row)
 
 SELECT keyed_min(-x, 'xxxxxxxxxxxxxxxxxxxxxxxxxx'::text) FROM generate_series(1, 1000) AS x;
@@ -80,7 +80,7 @@ SELECT keyed_max(x::numeric, x * 100) FROM generate_series(1, 1000) AS x;
 SELECT keyed_max('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'::text, x + 1) FROM generate_series(1, 1000) AS x;
  keyed_max 
 -----------
-         2
+      1001
 (1 row)
 
 SELECT keyed_max(x, 'xxxxxxxxxxxxxxxxxxxxxxxxxx'::text) FROM generate_series(1, 1000) AS x;
@@ -123,7 +123,7 @@ SELECT keyed_max(NULL::float8, NULL::float8) FROM generate_series(1, 1000) AS x;
 SELECT keyed_max('192.168.0.1'::inet, -x) FROM generate_series(1, 1000) AS x;
  keyed_max 
 -----------
-        -1
+     -1000
 (1 row)
 
 CREATE CONTINUOUS VIEW keyed_min_max0 AS
