@@ -491,6 +491,39 @@ FindTupleHashEntry(TupleHashTable hashtable, TupleTableSlot *slot,
 }
 
 /*
+ * Remove an entry in the given TupleHashTable. This is useful for clearing
+ * and reusing TupleHashTables without having to rebuild them
+ */
+void
+RemoveTupleHashEntry(TupleHashTable hashtable, TupleTableSlot *slot)
+{
+	MemoryContext oldContext;
+	TupleHashTable saveCurHT;
+	TupleHashEntryData dummy;
+	bool found;
+
+	/* Need to run the hash functions in short-lived context */
+	oldContext = MemoryContextSwitchTo(hashtable->tempcxt);
+
+	hashtable->inputslot = slot;
+	hashtable->in_hash_funcs = hashtable->tab_hash_funcs;
+	hashtable->cur_eq_funcs = hashtable->tab_eq_funcs;
+
+	saveCurHT = CurTupleHashTable;
+	CurTupleHashTable = hashtable;
+
+	dummy.firstTuple = NULL;	/* flag to reference inputslot */
+	(void) hash_search(hashtable->hashtab,  &dummy, HASH_REMOVE, &found);
+
+	if (!found)
+		elog(ERROR, "cannot remove a nonexistent hash group from TupleHashTable");
+
+	CurTupleHashTable = saveCurHT;
+
+	MemoryContextSwitchTo(oldContext);
+}
+
+/*
  * Compute the hash value for a tuple
  *
  * The passed-in key is a pointer to TupleHashEntryData.  In an actual hash

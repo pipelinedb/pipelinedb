@@ -24,10 +24,24 @@
 #include "miscadmin.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
+#include "utils/int8.h"
+#include "utils/jsonapi.h"
 #include "utils/lsyscache.h"
 #include "utils/pipelinefuncs.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
+
+typedef struct JsonObjectIntSumState
+{
+	char *current_key;
+	HTAB *kv;
+} JsonObjectIntSumState;
+
+typedef struct JsonObjectIntSumEntry
+{
+	char key[NAMEDATALEN];
+	int64 value;
+} JsonObjectIntSumEntry;
 
 /*
  * cq_proc_stat_get
@@ -614,4 +628,139 @@ Datum
 pipeline_version(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_TEXT_P(cstring_to_text(PIPELINE_VERSION_STR));
+}
+
+/*
+ * handle_key_start
+ */
+static void
+handle_key_start(void *_state, char *fname, bool isnull)
+{
+	JsonObjectIntSumState *state = (JsonObjectIntSumState *) _state;
+
+	if (strlen(fname) > NAMEDATALEN)
+		elog(ERROR, "json_object_sum requires keys to be no longer than %d characters", NAMEDATALEN);
+
+	state->current_key = fname;
+}
+
+/*
+ * handle_scalar
+ */
+static void
+handle_scalar(void *_state, char *token, JsonTokenType tokentype)
+{
+	bool found;
+	JsonObjectIntSumState *state = (JsonObjectIntSumState *) _state;
+	JsonObjectIntSumEntry *entry = (JsonObjectIntSumEntry *) hash_search(state->kv, state->current_key, HASH_ENTER, &found);
+	int64 result;
+
+	if (!found)
+		entry->value = 0;
+
+	(void) scanint8(token, false, &result);
+	entry->value += result;
+}
+
+/*
+ * json_object_int_sum_startup
+ */
+static JsonObjectIntSumState *
+json_object_int_sum_startup(FunctionCallInfo fcinfo)
+{
+	MemoryContext oldcontext;
+	JsonSemAction *sem;
+	JsonObjectIntSumState *state;
+	HASHCTL ctl;
+
+	oldcontext = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+	state = palloc0(sizeof(JsonObjectIntSumState));
+
+	MemSet(&ctl, 0, sizeof(HASHCTL));
+	ctl.keysize = NAMEDATALEN;
+	ctl.entrysize = sizeof(JsonObjectIntSumEntry);
+	ctl.hcxt = CurrentMemoryContext;
+	state->kv = hash_create("json_object_sum", 32, &ctl, HASH_ELEM | HASH_CONTEXT);
+
+	sem = palloc0(sizeof(JsonSemAction));
+	sem->semstate = (void *) state;
+	sem->object_field_start = handle_key_start;
+	sem->scalar = handle_scalar;
+	fcinfo->flinfo->fn_extra = (void *) sem;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	return state;
+}
+
+/*
+ * json_object_int_sum_transfn
+ */
+Datum
+json_object_int_sum_transfn(PG_FUNCTION_ARGS)
+{
+	MemoryContext aggcontext;
+	MemoryContext oldcontext;
+	JsonObjectIntSumState *state;
+	JsonLexContext *lex;
+	JsonSemAction *sem;
+	char *raw = TextDatumGetCString(PG_GETARG_TEXT_P(1));
+
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
+	{
+		/* cannot be called directly because of internal-type argument */
+		elog(ERROR, "json_object_sum_transfn called in non-aggregate context");
+	}
+
+	if (PG_ARGISNULL(0))
+	{
+		oldcontext = MemoryContextSwitchTo(aggcontext);
+		state = json_object_int_sum_startup(fcinfo);
+		MemoryContextSwitchTo(oldcontext);
+	}
+	else
+	{
+		state = (JsonObjectIntSumState *) PG_GETARG_POINTER(0);
+	}
+
+	lex = makeJsonLexContextCstringLen(raw, strlen(raw), true);
+	sem = (JsonSemAction *) fcinfo->flinfo->fn_extra;
+	sem->semstate = (void *) state;
+	pg_parse_json(lex, sem);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
+ * json_object_int_sum_transout
+ */
+Datum
+json_object_int_sum_transout(PG_FUNCTION_ARGS)
+{
+	JsonObjectIntSumState *state;
+	HASH_SEQ_STATUS seq;
+	JsonObjectIntSumEntry *entry;
+	StringInfoData buf;
+	bool first = true;
+
+	if (!IsContQueryProcess())
+		PG_RETURN_TEXT_P(PG_GETARG_TEXT_P(0));
+
+	state = (JsonObjectIntSumState *) PG_GETARG_POINTER(0);
+	initStringInfo(&buf);
+	appendStringInfoString(&buf, "{ ");
+
+	hash_seq_init(&seq, state->kv);
+	while ((entry = (JsonObjectIntSumEntry *) hash_seq_search(&seq)) != NULL)
+	{
+		if (!first)
+			appendStringInfo(&buf, ", \"%s\": %ld", entry->key, entry->value);
+		else
+			appendStringInfo(&buf, "\"%s\": %ld", entry->key, entry->value);
+		first = false;
+	}
+
+	appendStringInfoString(&buf, " }");
+
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(buf.data, buf.len));
 }

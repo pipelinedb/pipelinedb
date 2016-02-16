@@ -165,3 +165,15 @@ DROP CONTINUOUS VIEW test_array_agg;
 DROP FUNCTION array_sort(anyarray);
 DROP FUNCTION json_to_array(json);
 DROP FUNCTION json_keys_array(json);
+
+CREATE CONTINUOUS VIEW jois AS SELECT x::integer, json_object_int_sum(payload::text), COUNT(*) FROM cqobjectagg_stream GROUP BY x;
+
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+
+SELECT * FROM jois ORDER BY x;
+
+DROP CONTINUOUS VIEW jois;

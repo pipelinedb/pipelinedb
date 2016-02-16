@@ -271,3 +271,25 @@ DROP CONTINUOUS VIEW test_array_agg;
 DROP FUNCTION array_sort(anyarray);
 DROP FUNCTION json_to_array(json);
 DROP FUNCTION json_keys_array(json);
+CREATE CONTINUOUS VIEW jois AS SELECT x::integer, json_object_int_sum(payload::text), COUNT(*) FROM cqobjectagg_stream GROUP BY x;
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
+SELECT * FROM jois ORDER BY x;
+ x |                                                    json_object_int_sum                                                     | count 
+---+----------------------------------------------------------------------------------------------------------------------------+-------
+ 0 | { "k100": 500, "k80": 400, "k50": 250, "k90": 450, "k30": 150, "k40": 200, "k20": 100, "k60": 300, "k70": 350, "k10": 50 } |    50
+ 1 | { "k51": 255, "k71": 355, "k41": 205, "k81": 405, "k31": 155, "k91": 455, "k1": 5, "k61": 305, "k11": 55, "k21": 105 }     |    50
+ 2 | { "k82": 410, "k32": 160, "k52": 260, "k12": 60, "k62": 310, "k2": 10, "k22": 110, "k92": 460, "k72": 360, "k42": 210 }    |    50
+ 3 | { "k13": 65, "k93": 465, "k3": 15, "k73": 365, "k43": 215, "k63": 315, "k23": 115, "k33": 165, "k53": 265, "k83": 415 }    |    50
+ 4 | { "k44": 220, "k74": 370, "k34": 170, "k94": 470, "k24": 120, "k4": 20, "k64": 320, "k14": 70, "k84": 420, "k54": 270 }    |    50
+ 5 | { "k25": 125, "k45": 225, "k85": 425, "k75": 375, "k95": 475, "k55": 275, "k5": 25, "k65": 325, "k15": 75, "k35": 175 }    |    50
+ 6 | { "k6": 30, "k56": 280, "k36": 180, "k76": 380, "k26": 130, "k16": 80, "k96": 480, "k66": 330, "k46": 230, "k86": 430 }    |    50
+ 7 | { "k67": 335, "k87": 435, "k27": 135, "k17": 85, "k37": 185, "k77": 385, "k57": 285, "k47": 235, "k97": 485, "k7": 35 }    |    50
+ 8 | { "k78": 390, "k88": 440, "k28": 140, "k68": 340, "k38": 190, "k8": 40, "k18": 90, "k58": 290, "k48": 240, "k98": 490 }    |    50
+ 9 | { "k39": 195, "k19": 95, "k89": 445, "k49": 245, "k69": 345, "k79": 395, "k29": 145, "k99": 495, "k9": 45, "k59": 295 }    |    50
+(10 rows)
+
+DROP CONTINUOUS VIEW jois;

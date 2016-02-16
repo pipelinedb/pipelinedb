@@ -400,6 +400,8 @@ DATA(insert ( 4467	n 0 set_agg_trans		set_cardinality				-				-				-				f f 0 22
 
 DATA(insert ( 4469	o 1 first_values_trans	first_values_final				-				-				-				t f 0 2281	0	0		0	_null_ _null_ ));
 
+DATA(insert ( 4476	n 0 json_object_int_sum_transfn	json_object_int_sum_transout				-				-				-				t f 0 2281	0	0		0	_null_ _null_ ));
+
 /*
  * prototypes for functions in pg_aggregate.c
  */

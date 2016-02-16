@@ -212,4 +212,7 @@ DATA(insert (set_cardinality set_agg_trans  arrayaggstatesend arrayaggstaterecv 
 /* first_values */
 DATA(insert (first_values_final first_values_trans first_values_send first_values_recv first_values_combine 17));
 
+/* json_object_int_sum */
+DATA(insert (json_object_int_sum_transout json_object_int_sum_transfn json_object_int_sum_transout 0 json_object_int_sum_transfn 114));
+
 #endif

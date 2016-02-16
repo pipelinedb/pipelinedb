@@ -5889,6 +5889,13 @@ DESCR("first_values final");
 DATA(insert OID = 4475 ( pipeline_combine_table	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 16 "25 25" _null_ _null_ _null_ _null_ _null_ pipeline_combine_table _null_ _null_ _null_ ));
 DESCR("combine a table into a continuous view");
 
+DATA(insert OID = 4476 (  json_object_int_sum		   PGNSP PGUID 12 1 0 0 0 t f f f f f s 1 0 114 "25" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("sum all keys of a json object");
+DATA(insert OID = 4477 (  json_object_int_sum_transfn	 PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 2281 "2281 25" _null_ _null_ _null_ _null_ _null_ json_object_int_sum_transfn _null_ _null_ _null_ ));
+DESCR("json_object_sum transition function");
+DATA(insert OID = 4478 (  json_object_int_sum_transout PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 114 "2281" _null_ _null_ _null_ _null_ _null_ json_object_int_sum_transout _null_ _null_ _null_ ));
+DESCR("json_object_sum transition out function");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

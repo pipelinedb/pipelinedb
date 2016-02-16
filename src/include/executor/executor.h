@@ -154,6 +154,7 @@ extern TupleHashEntry FindTupleHashEntry(TupleHashTable hashtable,
 				   TupleTableSlot *slot,
 				   FmgrInfo *eqfunctions,
 				   FmgrInfo *hashfunctions);
+extern void RemoveTupleHashEntry(TupleHashTable hashtable, TupleTableSlot *slot);
 
 /*
  * prototypes from functions in execJunk.c
