@@ -130,3 +130,35 @@ SELECT * FROM test_view ORDER BY uid;
 CREATE CONTINUOUS VIEW v AS SELECT array_agg(ARRAY[x::int, y::int]) FROM stream;
 CREATE CONTINUOUS VIEW v AS SELECT x::int, count(*) FROM stream;
 CREATE CONTINUOUS VIEW v AS SELECT x::int, y::int, count(*) FROM stream GROUP BY x;
+
+-- #1357
+CREATE FUNCTION jsonb_element_bigint_agg_state(acc jsonb, elem jsonb)
+RETURNS jsonb LANGUAGE SQL AS $$
+SELECT json_object_agg(key,value)::jsonb
+FROM (SELECT key, sum(value) as value
+        FROM (SELECT key, value::bigint AS value
+                FROM jsonb_each_text(acc)
+                UNION ALL
+                SELECT key, value::bigint AS value
+                FROM jsonb_each_text(elem)) x
+        GROUP BY 1) y;
+$$;
+
+CREATE AGGREGATE jsonb_element_bigint_agg(jsonb)
+(
+    stype = jsonb,
+    initcond = '{}',
+    sfunc = jsonb_element_bigint_agg_state
+);
+
+CREATE STREAM jsonb_test_stream (key integer, values jsonb);
+CREATE CONTINUOUS VIEW test_json_udf_agg AS SELECT key, jsonb_element_bigint_agg(values) FROM jsonb_test_stream GROUP BY key;
+
+INSERT INTO jsonb_test_stream (key, values) VALUES (1, '{"a": 1}'::jsonb);
+INSERT INTO jsonb_test_stream (key, values) VALUES (1, '{"a": 1}'::jsonb);
+SELECT * from test_json_udf_agg;
+
+DROP CONTINUOUS VIEW test_json_udf_agg;
+DROP AGGREGATE jsonb_element_bigint_agg(jsonb);
+DROP FUNCTION jsonb_element_bigint_agg_state(acc jsonb, elem jsonb);
+DROP STREAM jsonb_test_stream;
