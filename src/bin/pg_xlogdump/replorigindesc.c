@@ -1,1 +1,0 @@
-../../../src/backend/access/rmgrdesc/replorigindesc.c
