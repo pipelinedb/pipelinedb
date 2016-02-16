@@ -1272,52 +1272,53 @@ WHERE a.aggfnoid = p.oid AND
          NOT binary_coercible(p.proargtypes[2], pfn.proargtypes[3]))
      -- we could carry the check further, but 3 args is enough for now
     );
- aggfnoid |      proname       | oid  |             proname             
-----------+--------------------+------+---------------------------------
-     5002 | cq_percent_rank    | 5004 | cq_percent_rank_final
-     5005 | cq_cume_dist       | 5007 | cq_cume_dist_final
-     5014 | hll_count_distinct | 5019 | hll_count_distinct_final
-     5023 | cq_percentile_cont | 5027 | cq_percentile_cont_float8_final
-     4420 | keyed_min          | 4460 | keyed_min_max_finalize
-     4421 | keyed_min          | 4460 | keyed_min_max_finalize
-     4422 | keyed_min          | 4460 | keyed_min_max_finalize
-     4423 | keyed_min          | 4460 | keyed_min_max_finalize
-     4424 | keyed_min          | 4460 | keyed_min_max_finalize
-     4425 | keyed_min          | 4460 | keyed_min_max_finalize
-     4426 | keyed_min          | 4460 | keyed_min_max_finalize
-     4427 | keyed_min          | 4460 | keyed_min_max_finalize
-     4428 | keyed_min          | 4460 | keyed_min_max_finalize
-     4429 | keyed_min          | 4460 | keyed_min_max_finalize
-     4430 | keyed_min          | 4460 | keyed_min_max_finalize
-     4431 | keyed_min          | 4460 | keyed_min_max_finalize
-     4432 | keyed_min          | 4460 | keyed_min_max_finalize
-     4433 | keyed_min          | 4460 | keyed_min_max_finalize
-     4434 | keyed_min          | 4460 | keyed_min_max_finalize
-     4435 | keyed_min          | 4460 | keyed_min_max_finalize
-     4436 | keyed_min          | 4460 | keyed_min_max_finalize
-     4437 | keyed_min          | 4460 | keyed_min_max_finalize
-     4438 | keyed_min          | 4460 | keyed_min_max_finalize
-     4439 | keyed_max          | 4460 | keyed_min_max_finalize
-     4440 | keyed_max          | 4460 | keyed_min_max_finalize
-     4441 | keyed_max          | 4460 | keyed_min_max_finalize
-     4442 | keyed_max          | 4460 | keyed_min_max_finalize
-     4443 | keyed_max          | 4460 | keyed_min_max_finalize
-     4444 | keyed_max          | 4460 | keyed_min_max_finalize
-     4445 | keyed_max          | 4460 | keyed_min_max_finalize
-     4446 | keyed_max          | 4460 | keyed_min_max_finalize
-     4447 | keyed_max          | 4460 | keyed_min_max_finalize
-     4448 | keyed_max          | 4460 | keyed_min_max_finalize
-     4449 | keyed_max          | 4460 | keyed_min_max_finalize
-     4450 | keyed_max          | 4460 | keyed_min_max_finalize
-     4451 | keyed_max          | 4460 | keyed_min_max_finalize
-     4452 | keyed_max          | 4460 | keyed_min_max_finalize
-     4453 | keyed_max          | 4460 | keyed_min_max_finalize
-     4454 | keyed_max          | 4460 | keyed_min_max_finalize
-     4455 | keyed_max          | 4460 | keyed_min_max_finalize
-     4456 | keyed_max          | 4460 | keyed_min_max_finalize
-     4457 | keyed_max          | 4460 | keyed_min_max_finalize
-     4463 | set_agg            | 2334 | array_agg_finalfn
-(43 rows)
+ aggfnoid |       proname       | oid  |             proname             
+----------+---------------------+------+---------------------------------
+     5002 | cq_percent_rank     | 5004 | cq_percent_rank_final
+     5005 | cq_cume_dist        | 5007 | cq_cume_dist_final
+     5014 | hll_count_distinct  | 5019 | hll_count_distinct_final
+     5023 | cq_percentile_cont  | 5027 | cq_percentile_cont_float8_final
+     4420 | keyed_min           | 4460 | keyed_min_max_finalize
+     4421 | keyed_min           | 4460 | keyed_min_max_finalize
+     4422 | keyed_min           | 4460 | keyed_min_max_finalize
+     4423 | keyed_min           | 4460 | keyed_min_max_finalize
+     4424 | keyed_min           | 4460 | keyed_min_max_finalize
+     4425 | keyed_min           | 4460 | keyed_min_max_finalize
+     4426 | keyed_min           | 4460 | keyed_min_max_finalize
+     4427 | keyed_min           | 4460 | keyed_min_max_finalize
+     4428 | keyed_min           | 4460 | keyed_min_max_finalize
+     4429 | keyed_min           | 4460 | keyed_min_max_finalize
+     4430 | keyed_min           | 4460 | keyed_min_max_finalize
+     4431 | keyed_min           | 4460 | keyed_min_max_finalize
+     4432 | keyed_min           | 4460 | keyed_min_max_finalize
+     4433 | keyed_min           | 4460 | keyed_min_max_finalize
+     4434 | keyed_min           | 4460 | keyed_min_max_finalize
+     4435 | keyed_min           | 4460 | keyed_min_max_finalize
+     4436 | keyed_min           | 4460 | keyed_min_max_finalize
+     4437 | keyed_min           | 4460 | keyed_min_max_finalize
+     4438 | keyed_min           | 4460 | keyed_min_max_finalize
+     4439 | keyed_max           | 4460 | keyed_min_max_finalize
+     4440 | keyed_max           | 4460 | keyed_min_max_finalize
+     4441 | keyed_max           | 4460 | keyed_min_max_finalize
+     4442 | keyed_max           | 4460 | keyed_min_max_finalize
+     4443 | keyed_max           | 4460 | keyed_min_max_finalize
+     4444 | keyed_max           | 4460 | keyed_min_max_finalize
+     4445 | keyed_max           | 4460 | keyed_min_max_finalize
+     4446 | keyed_max           | 4460 | keyed_min_max_finalize
+     4447 | keyed_max           | 4460 | keyed_min_max_finalize
+     4448 | keyed_max           | 4460 | keyed_min_max_finalize
+     4449 | keyed_max           | 4460 | keyed_min_max_finalize
+     4450 | keyed_max           | 4460 | keyed_min_max_finalize
+     4451 | keyed_max           | 4460 | keyed_min_max_finalize
+     4452 | keyed_max           | 4460 | keyed_min_max_finalize
+     4453 | keyed_max           | 4460 | keyed_min_max_finalize
+     4454 | keyed_max           | 4460 | keyed_min_max_finalize
+     4455 | keyed_max           | 4460 | keyed_min_max_finalize
+     4456 | keyed_max           | 4460 | keyed_min_max_finalize
+     4457 | keyed_max           | 4460 | keyed_min_max_finalize
+     4463 | set_agg             | 2334 | array_agg_finalfn
+     4476 | json_object_int_sum | 4478 | json_object_int_sum_transout
+(44 rows)
 
 -- If transfn is strict then either initval should be non-NULL, or
 -- input type should match transtype so that the first non-null input
