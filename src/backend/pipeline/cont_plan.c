@@ -248,7 +248,7 @@ SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
  * Returns the function expression used to index the given matrel
  */
 FuncExpr *
-GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri)
+GetGroupHashIndexExpr(ResultRelInfo *ri)
 {
 	FuncExpr *result = NULL;
 	int i;
@@ -272,8 +272,7 @@ GetGroupHashIndexExpr(int group_len, ResultRelInfo *ri)
 			continue;
 
 		func = (FuncExpr *) n;
-		if ((func->funcid != HASH_GROUP_OID && func->funcid != LS_HASH_GROUP_OID) ||
-				list_length(func->args) != group_len)
+		if (func->funcid != HASH_GROUP_OID && func->funcid != LS_HASH_GROUP_OID)
 			continue;
 
 		result = copyObject(func);
