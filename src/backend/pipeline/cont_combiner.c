@@ -762,7 +762,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 		ri = CQMatRelOpen(matrel);
 
 		if (state->ngroupatts)
-			state->hashfunc = GetGroupHashIndexExpr(state->ngroupatts, ri);
+			state->hashfunc = GetGroupHashIndexExpr(ri);
 
 		CQMatRelClose(ri);
 

@@ -123,7 +123,7 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 
 		if (agg->numCols)
 		{
-			FuncExpr *hash = GetGroupHashIndexExpr(agg->numCols, ri);
+			FuncExpr *hash = GetGroupHashIndexExpr(ri);
 			if (hash == NULL)
 			{
 				/* matrel has been dropped */

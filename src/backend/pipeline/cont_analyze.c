@@ -2433,27 +2433,46 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	tmp_list = NIL;
 	for (i = 0; i < grp_len; i++)
 	{
-		Node *node = (Node *) list_nth(proc->groupClause, i);
-		ColumnRef *cref = hoist_node(&proc->targetList, node, context);
+		Node *group_node = (Node *) list_nth(proc->groupClause, i);
+		List *nodes;
+		ListCell *glc;
 
-		/*
-		 * For workers, don't add the hoisted column because it can lead to ambiguity, for example if
-		 * there is an id column in t for the query below:
-		 *   CREATE CONTINUOUS VIEW v AS SELECT s.id, t.str, sum(s.val + t.val) FROM s JOIN t ON s.id = t.id GROUP BY s.id;
-		 */
-		if (proc_type == Combiner)
-			tmp_list = lappend(tmp_list, cref);
+		if (IsA(group_node, GroupingSet))
+			nodes = ((GroupingSet *) group_node)->content;
 		else
-			tmp_list = lappend(tmp_list, node);
+			nodes = list_make1(group_node);
 
-		/*
-		 * If the view combines, then the view will have a GROUP BY equivalent to that
-		 * of the continuous query. The extra GROUP BY expression on the worker will be
-		 * aggregated over in the view. The view MUST always reference the hoisted column reference
-		 * of the matrel.
-		 */
-		if (context->view_combines)
-			view->groupClause = lappend(view->groupClause, cref);
+		foreach(glc, nodes)
+		{
+			Node *node = (Node *) lfirst(glc);
+			ColumnRef *cref = hoist_node(&proc->targetList, node, context);
+
+			/*
+			 * If the view combines, then the view will have a GROUP BY equivalent to that
+			 * of the continuous query. The extra GROUP BY expression on the worker will be
+			 * aggregated over in the view. The view MUST always reference the hoisted column reference
+			 * of the matrel.
+			 */
+			if (context->view_combines)
+				view->groupClause = lappend(view->groupClause, cref);
+
+			/* The entire grouping set will be added to the worker's group clause later */
+			if (IsA(group_node, GroupingSet) && proc_type == Worker)
+				continue;
+
+			/*
+			 * For workers, don't add the hoisted column because it can lead to ambiguity, for example if
+			 * there is an id column in t for the query below:
+			 *   CREATE CONTINUOUS VIEW v AS SELECT s.id, t.str, sum(s.val + t.val) FROM s JOIN t ON s.id = t.id GROUP BY s.id;
+			 */
+			if (proc_type == Combiner)
+				tmp_list = lappend(tmp_list, cref);
+			else
+				tmp_list = lappend(tmp_list, node);
+		}
+
+		if (IsA(group_node, GroupingSet) && proc_type == Worker)
+			tmp_list = lappend(tmp_list, group_node);
 	}
 
 	for (; i < list_length(proc->groupClause); i++)
