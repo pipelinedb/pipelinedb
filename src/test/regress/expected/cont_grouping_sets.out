@@ -1,11 +1,138 @@
 CREATE CONTINUOUS VIEW test_gs0 AS SELECT x::integer, y::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY CUBE (x, y);
+SELECT pipeline_get_worker_querydef('test_gs0');
+      pipeline_get_worker_querydef       
+-----------------------------------------
+  SELECT x::integer,                    +
+     y::integer,                        +
+     count(*) AS count                  +
+    FROM ONLY test_gs_stream            +
+   GROUP BY CUBE(x::integer, y::integer)
+(1 row)
+
+SELECT pipeline_get_combiner_querydef('test_gs0');
+ pipeline_get_combiner_querydef 
+--------------------------------
+  SELECT x,                    +
+     y,                        +
+     combine(count) AS count   +
+    FROM test_gs0_mrel         +
+   GROUP BY x, y
+(1 row)
+
+SELECT pipeline_get_overlay_viewdef('test_gs0');
+ pipeline_get_overlay_viewdef 
+------------------------------
+  SELECT test_gs0_mrel.x,    +
+     test_gs0_mrel.y,        +
+     test_gs0_mrel.count     +
+    FROM test_gs0_mrel;
+(1 row)
+
 CREATE CONTINUOUS VIEW test_gs1 AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY GROUPING SETS (x), (x, y), (x, y, z), (x, z);
+SELECT pipeline_get_worker_querydef('test_gs1');
+         pipeline_get_worker_querydef          
+-----------------------------------------------
+  SELECT x::integer,                          +
+     y::integer,                              +
+     z::integer,                              +
+     count(*) AS count                        +
+    FROM ONLY test_gs_stream                  +
+   GROUP BY x::integer, y::integer, z::integer
+(1 row)
+
+SELECT pipeline_get_combiner_querydef('test_gs1');
+ pipeline_get_combiner_querydef 
+--------------------------------
+  SELECT x,                    +
+     y,                        +
+     z,                        +
+     combine(count) AS count   +
+    FROM test_gs1_mrel         +
+   GROUP BY x, y, z
+(1 row)
+
+SELECT pipeline_get_overlay_viewdef('test_gs1');
+ pipeline_get_overlay_viewdef 
+------------------------------
+  SELECT test_gs1_mrel.x,    +
+     test_gs1_mrel.y,        +
+     test_gs1_mrel.z,        +
+     test_gs1_mrel.count     +
+    FROM test_gs1_mrel;
+(1 row)
+
 CREATE CONTINUOUS VIEW test_gs2 AS SELECT x::integer, y::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY GROUPING SETS (x), (x, y);
+SELECT pipeline_get_worker_querydef('test_gs2');
+   pipeline_get_worker_querydef    
+-----------------------------------
+  SELECT x::integer,              +
+     y::integer,                  +
+     count(*) AS count            +
+    FROM ONLY test_gs_stream      +
+   GROUP BY x::integer, y::integer
+(1 row)
+
+SELECT pipeline_get_combiner_querydef('test_gs2');
+ pipeline_get_combiner_querydef 
+--------------------------------
+  SELECT x,                    +
+     y,                        +
+     combine(count) AS count   +
+    FROM test_gs2_mrel         +
+   GROUP BY x, y
+(1 row)
+
+SELECT pipeline_get_overlay_viewdef('test_gs2');
+ pipeline_get_overlay_viewdef 
+------------------------------
+  SELECT test_gs2_mrel.x,    +
+     test_gs2_mrel.y,        +
+     test_gs2_mrel.count     +
+    FROM test_gs2_mrel;
+(1 row)
+
 CREATE CONTINUOUS VIEW test_gs3 WITH (max_age = '5 seconds') AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY GROUPING SETS (x, y, z);
+SELECT pipeline_get_worker_querydef('test_gs3');
+                                                            pipeline_get_worker_querydef                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT date_round(arrival_timestamp::timestamp with time zone, '@ 1 sec'::interval) AS arrival_timestamp,                                         +
+     x::integer,                                                                                                                                    +
+     y::integer,                                                                                                                                    +
+     z::integer,                                                                                                                                    +
+     count(*) AS count                                                                                                                              +
+    FROM ONLY test_gs_stream                                                                                                                        +
+   WHERE (arrival_timestamp::timestamp with time zone > (clock_timestamp() - '@ 5 secs'::interval))                                                 +
+   GROUP BY GROUPING SETS ((x::integer), (y::integer), (z::integer)), (date_round(arrival_timestamp::timestamp with time zone, '@ 1 sec'::interval))
+(1 row)
+
+SELECT pipeline_get_combiner_querydef('test_gs3');
+    pipeline_get_combiner_querydef     
+---------------------------------------
+  SELECT arrival_timestamp,           +
+     x,                               +
+     y,                               +
+     z,                               +
+     combine(count) AS count          +
+    FROM test_gs3_mrel                +
+   GROUP BY x, y, z, arrival_timestamp
+(1 row)
+
+SELECT pipeline_get_overlay_viewdef('test_gs3');
+                              pipeline_get_overlay_viewdef                              
+----------------------------------------------------------------------------------------
+  SELECT test_gs3_mrel.x,                                                              +
+     test_gs3_mrel.y,                                                                  +
+     test_gs3_mrel.z,                                                                  +
+     combine(test_gs3_mrel.count) AS count                                             +
+    FROM test_gs3_mrel                                                                 +
+   WHERE (test_gs3_mrel.arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval))+
+   GROUP BY test_gs3_mrel.x, test_gs3_mrel.y, test_gs3_mrel.z;
+(1 row)
+
 INSERT INTO test_gs_stream (x, y, z) SELECT x, x * 2 AS y, -x AS z FROM generate_series(1, 100) AS x;
 INSERT INTO test_gs_stream (x, y, z) SELECT x, x * 2 AS y, -x AS z FROM generate_series(1, 100) AS x;
 INSERT INTO test_gs_stream (x, y, z) SELECT x, x * 2 AS y, -x AS z FROM generate_series(1, 100) AS x;
