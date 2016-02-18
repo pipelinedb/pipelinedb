@@ -33,7 +33,6 @@ dsm_cqueue_offset(dsm_cqueue *cq, uint64_t ptr)
 	return ptr % cq->size;
 }
 
-
 static inline bool
 dsm_cqueue_needs_wrap(dsm_cqueue *cq, uint64_t start, int len)
 {
@@ -48,7 +47,7 @@ dsm_cqueue_slot_get(dsm_cqueue *cq, uint64_t ptr)
 }
 
 void
-dsm_cqueue_init(void *ptr, Size size, int tranche_id)
+dsm_cqueue_init(void *ptr, Size size, LWLock *lock)
 {
 	dsm_cqueue *cq;
 
@@ -71,8 +70,7 @@ dsm_cqueue_init(void *ptr, Size size, int tranche_id)
 	pg_atomic_init_u64(&cq->producer_latch, 0);
 	pg_atomic_init_u64(&cq->consumer_latch, 0);
 
-	/* Initialize producer lock. */
-	LWLockInitialize(&cq->lock, tranche_id);
+	cq->lock = lock;
 
 	/* This marks the dsm_cqueue as initialized. */
 	cq->magic = MAGIC;
@@ -111,7 +109,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	bool needs_wrap = false;
 
 	Assert(cq->magic == MAGIC);
-	Assert(LWLockHeldByMe(&cq->lock));
+	Assert(LWLockHeldByMe(cq->lock));
 
 	len_needed = sizeof(dsm_cqueue_slot) + len;
 	if (len_needed > cq->size)
@@ -336,19 +334,19 @@ void
 dsm_cqueue_lock(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
-	LWLockAcquire(&cq->lock, LW_EXCLUSIVE);
+	LWLockAcquire(cq->lock, LW_EXCLUSIVE);
 }
 
 void
 dsm_cqueue_unlock(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
-	LWLockRelease(&cq->lock);
+	LWLockRelease(cq->lock);
 }
 
 bool
 dsm_cqueue_lock_nowait(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
-	return LWLockConditionalAcquire(&cq->lock, LW_EXCLUSIVE);
+	return LWLockConditionalAcquire(cq->lock, LW_EXCLUSIVE);
 }

@@ -39,7 +39,7 @@ typedef enum
 
 typedef struct ContQueryDatabaseMetadata ContQueryDatabaseMetadata;
 
-typedef struct
+typedef struct ContQueryProc
 {
 	ContQueryProcType type;
 	int volatile group_id; /* unqiue [0, n) for each db_oid, type pair */
@@ -61,6 +61,8 @@ struct ContQueryDatabaseMetadata
 	slock_t  mutex;
 	sig_atomic_t terminate;
 
+	int lock_idx; /* ContQuerySchedulerShmem->locks index where the locks for this DB's workers start */
+
 	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
 	ContQueryProc *db_procs;
 	dsm_segment *segment;
@@ -71,7 +73,7 @@ struct ContQueryDatabaseMetadata
 	ContQueryProc *adhoc_procs;
 };
 
-typedef struct
+typedef struct ContQueryRunParams
 {
 	int batch_size;
 	int max_wait;
