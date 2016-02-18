@@ -51,6 +51,7 @@
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
 #define INIT_PROC_TABLE_SZ 4
 #define NUM_BG_WORKERS (continuous_query_num_workers + continuous_query_num_combiners)
+#define NUM_LOCKS_PER_DB (NUM_BG_WORKERS + 1) /* add a lock for all adhoc processes */
 #define MIN_WAIT_TERMINATE_MS 250
 
 typedef struct
@@ -620,7 +621,7 @@ get_unused_lock_idx(void)
 
 	Assert(lock_idx != -1);
 
-	for (i = 0; i < NUM_BG_WORKERS; i++)
+	for (i = 0; i < NUM_LOCKS_PER_DB + 1; i++)
 	{
 		LWLockSlot *slot = &ContQuerySchedulerShmem->locks[lock_idx + i];
 		Assert(!slot->used);
@@ -639,7 +640,7 @@ release_locks(ContQueryDatabaseMetadata *db_meta)
 
 	LWLockAcquire(ContQuerySchedulerLock, LW_EXCLUSIVE);
 
-	for (i = 0; i < NUM_BG_WORKERS; i++)
+	for (i = 0; i < NUM_LOCKS_PER_DB; i++)
 	{
 		LWLockSlot *slot = &ContQuerySchedulerShmem->locks[db_meta->lock_idx + i];
 		Assert(slot->used);
@@ -1216,14 +1217,28 @@ GetContQueryAdhocProcs(void)
 	return procs;
 }
 
-int
-GetContProcTrancheId(void)
+LWLock *
+GetContAdhocProcLWLock(void)
 {
-	return ContQuerySchedulerShmem->tranche_id;
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+	int lock_idx = -1;
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+			ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		elog(ERROR, "failed to find database metadata for continuous queries");
+
+	SpinLockAcquire(&db_meta->mutex);
+	lock_idx = db_meta->lock_idx;
+	SpinLockRelease(&db_meta->mutex);
+
+	return (LWLock *) &ContQuerySchedulerShmem->locks[lock_idx + NUM_BG_WORKERS];
 }
 
 bool
-ContQueriesEnabled(void)
+AreContQueriesEnabled(void)
 {
 	HeapTuple tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
 	bool enabled;

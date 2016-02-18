@@ -114,7 +114,7 @@ extern bool IsContQuerySchedulerProcess(void);
 extern bool IsContQueryWorkerProcess(void);
 extern bool IsContQueryCombinerProcess(void);
 extern bool IsContQueryAdhocProcess(void);
-extern bool ContQueriesEnabled(void);
+extern bool AreContQueriesEnabled(void);
 
 #define IsContQueryProcess() \
 	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess())
@@ -136,9 +136,9 @@ extern void SignalContQuerySchedulerRefresh(void);
 extern void SetAmContQueryAdhoc(bool value);
 extern ContQueryProc *AdhocContQueryProcGet(void);
 extern void AdhocContQueryProcRelease(ContQueryProc *proc);
+extern LWLock *GetContAdhocProcLWLock(void);
 
 extern dsm_handle GetDatabaseDSMHandle(char *dbname);
 extern ContQueryProc *GetContQueryAdhocProcs(void);
-extern int GetContProcTrancheId(void);
 
 #endif   /* CONT_SCHEDULER_H */
