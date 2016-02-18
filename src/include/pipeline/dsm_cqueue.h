@@ -15,12 +15,7 @@
 #include "postgres.h"
 #include "pg_config.h"
 
-#ifdef HAVE_STDATOMIC_H
-#include <stdatomic.h>
-#else
-#include "stdatomic.h"
-#endif
-
+#include "port/atomics.h"
 #include "storage/dsm.h"
 #include "storage/latch.h"
 #include "storage/lwlock.h"
@@ -47,12 +42,12 @@ typedef struct dsm_cqueue
 
 	int        size; /* physical size of buffer */
 
-	atomic_ullong head;
-	atomic_ullong tail;
-	atomic_ullong cursor;
+	pg_atomic_uint64 head;
+	pg_atomic_uint64 tail;
+	pg_atomic_uint64 cursor;
 
-	atomic_uintptr_t producer_latch;
-	atomic_uintptr_t consumer_latch;
+	pg_atomic_uint64 producer_latch;
+	pg_atomic_uint64 consumer_latch;
 
 	dsm_cqueue_peek_fn peek_fn;
 	dsm_cqueue_pop_fn  pop_fn;

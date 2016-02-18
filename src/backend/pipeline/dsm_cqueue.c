@@ -65,11 +65,11 @@ dsm_cqueue_init(void *ptr, Size size, int tranche_id)
 	cq->size = size - sizeof(dsm_cqueue) - sizeof(dsm_cqueue_slot);
 
 	/* Initialize atomic types. */
-	atomic_init(&cq->head, 0);
-	atomic_init(&cq->tail, 0);
-	atomic_init(&cq->cursor, 0);
-	atomic_init(&cq->producer_latch, 0);
-	atomic_init(&cq->consumer_latch, 0);
+	pg_atomic_init_u64(&cq->head, 0);
+	pg_atomic_init_u64(&cq->tail, 0);
+	pg_atomic_init_u64(&cq->cursor, 0);
+	pg_atomic_init_u64(&cq->producer_latch, 0);
+	pg_atomic_init_u64(&cq->consumer_latch, 0);
 
 	/* Initialize producer lock. */
 	LWLockInitialize(&cq->lock, tranche_id);
@@ -81,13 +81,13 @@ dsm_cqueue_init(void *ptr, Size size, int tranche_id)
 bool
 dsm_cqueue_is_empty(dsm_cqueue *cq)
 {
-	return atomic_load(&cq->head) == atomic_load(&cq->tail);
+	return pg_atomic_read_u64(&cq->head) == pg_atomic_read_u64(&cq->tail);
 }
 
 bool
 dsm_cqueue_has_unread(dsm_cqueue *cq)
 {
-	return atomic_load(&cq->head) > atomic_load(&cq->cursor);
+	return pg_atomic_read_u64(&cq->head) > pg_atomic_read_u64(&cq->cursor);
 }
 
 void
@@ -117,7 +117,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	if (len_needed > cq->size)
 		elog(ERROR, "item size %d exceeds dsm_cqueue size %d", len, cq->size);
 
-	head = atomic_load(&cq->head);
+	head = pg_atomic_read_u64(&cq->head);
 
 	/*
 	 *If we need to wrap around, we waste the space at the end of the buffer. This is simpler
@@ -138,14 +138,14 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	 * updated value for tail and therefore the effect is the same as being woken up after that change was made.
 	 */
 	producer_latch = MyLatch;
-	atomic_store(&cq->producer_latch, producer_latch);
+	pg_atomic_write_u64(&cq->producer_latch, (uint64) producer_latch);
 
 	/* FIXME(usmanm): On postmaster shutdown, this stays looping, we must break out. */
 	for (;;)
 	{
 		int space_used;
 
-		tail = atomic_load(&cq->tail);
+		tail = pg_atomic_read_u64(&cq->tail);
 		space_used = head - tail;
 
 		/* Is there enough space in the buffer? */
@@ -157,7 +157,7 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 		ResetLatch(producer_latch);
 	}
 
-	atomic_store(&cq->producer_latch, NULL);
+	pg_atomic_write_u64(&cq->producer_latch, (uint64) NULL);
 
 	slot = dsm_cqueue_slot_get(cq, head);
 	slot->len = len;
@@ -183,9 +183,9 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 
 	head += len_needed;
 	slot->next = head;
-	atomic_store(&cq->head, head);
+	pg_atomic_write_u64(&cq->head, head);
 
-	consumer_latch = (Latch *) atomic_load(&cq->consumer_latch);
+	consumer_latch = (Latch *) pg_atomic_read_u64(&cq->consumer_latch);
 	if (consumer_latch)
 		SetLatch(consumer_latch);
 }
@@ -205,14 +205,14 @@ dsm_cqueue_peek_next(dsm_cqueue *cq, int *len)
 		return NULL;
 	}
 
-	slot = dsm_cqueue_slot_get(cq, atomic_load(&cq->cursor));
+	slot = dsm_cqueue_slot_get(cq, pg_atomic_read_u64(&cq->cursor));
 
 	if (slot->wraps)
 		pos = cq->bytes;
 	else
 		pos = slot->bytes;
 
-	atomic_store(&cq->cursor, slot->next);
+	pg_atomic_write_u64(&cq->cursor, slot->next);
 
 	*len = slot->len;
 
@@ -229,14 +229,14 @@ void
 dsm_cqueue_unpeek(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
-	atomic_store(&cq->cursor, atomic_load(&cq->tail));
+	pg_atomic_write_u64(&cq->cursor, pg_atomic_read_u64(&cq->tail));
 }
 
 bool
 dsm_cqueue_has_unpopped(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
-	return atomic_load(&cq->tail) == atomic_load(&cq->cursor);
+	return pg_atomic_read_u64(&cq->tail) == pg_atomic_read_u64(&cq->cursor);
 }
 
 void
@@ -248,8 +248,8 @@ dsm_cqueue_pop_peeked(dsm_cqueue *cq)
 
 	Assert(cq->magic == MAGIC);
 
-	tail = atomic_load(&cq->tail);
-	cur = atomic_load(&cq->cursor);
+	tail = pg_atomic_read_u64(&cq->tail);
+	cur = pg_atomic_read_u64(&cq->cursor);
 
 	Assert(tail <= cur);
 
@@ -277,8 +277,8 @@ dsm_cqueue_pop_peeked(dsm_cqueue *cq)
 	 * before getting the new value for tail. This guarantees that we don't
 	 * miss a wake up.
 	 */
-	atomic_store(&cq->tail, cur);
-	producer_latch = (Latch *) atomic_load(&cq->producer_latch);
+	pg_atomic_write_u64(&cq->tail, cur);
+	producer_latch = (Latch *) pg_atomic_read_u64(&cq->producer_latch);
 	if (producer_latch != NULL)
 		SetLatch(producer_latch);
 }
@@ -293,8 +293,8 @@ dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
 
 	Assert(cq->magic == MAGIC);
 
-	head = atomic_load(&cq->head);
-	tail = atomic_load(&cq->tail);
+	head = pg_atomic_read_u64(&cq->head);
+	tail = pg_atomic_read_u64(&cq->tail);
 
 	Assert(tail <= head);
 
@@ -302,7 +302,7 @@ dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
 		return;
 
 	consumer_latch = MyLatch;
-	atomic_store(&cq->consumer_latch, consumer_latch);
+	pg_atomic_write_u64(&cq->consumer_latch, (uint64) consumer_latch);
 
 	flags = WL_LATCH_SET | WL_POSTMASTER_DEATH;
 	if (timeoutms > 0)
@@ -310,7 +310,7 @@ dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
 
 	for (;;)
 	{
-		head = atomic_load(&cq->head);
+		head = pg_atomic_read_u64(&cq->head);
 
 		if (head > tail)
 			break;
@@ -320,7 +320,7 @@ dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
 		ResetLatch(consumer_latch);
 	}
 
-	atomic_store(&cq->consumer_latch, NULL);
+	pg_atomic_write_u64(&cq->consumer_latch, (uint64) NULL);
 }
 
 void

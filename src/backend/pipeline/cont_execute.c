@@ -272,17 +272,17 @@ InsertBatchCreate(void)
 {
 	InsertBatch *batch = (InsertBatch *) ShmemDynAlloc0(sizeof(InsertBatch));
 	batch->id = rand() ^ (int) MyProcPid;
-	atomic_init(&batch->num_cacks, 0);
-	atomic_init(&batch->num_ctups, 0);
-	atomic_init(&batch->num_wacks, 0);
+	pg_atomic_init_u32(&batch->num_cacks, 0);
+	pg_atomic_init_u32(&batch->num_ctups, 0);
+	pg_atomic_init_u32(&batch->num_wacks, 0);
 	return batch;
 }
 
 static inline bool
 InsertBatchAllAcked(InsertBatch *batch)
 {
-	return (atomic_load(&batch->num_wacks) >= batch->num_wtups &&
-			atomic_load(&batch->num_cacks) >= atomic_load(&batch->num_ctups));
+	return (pg_atomic_read_u32(&batch->num_wacks) >= batch->num_wtups &&
+			pg_atomic_read_u32(&batch->num_cacks) >= pg_atomic_read_u32(&batch->num_ctups));
 }
 
 void
@@ -304,7 +304,7 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 void
 InsertBatchIncrementNumCTuples(InsertBatch *batch)
 {
-	atomic_fetch_add(&batch->num_ctups, 1);
+	pg_atomic_fetch_add_u32(&batch->num_ctups, 1);
 }
 
 void
@@ -314,9 +314,9 @@ InsertBatchAckTuple(InsertBatchAck *ack)
 		return;
 
 	if (IsContQueryWorkerProcess())
-		atomic_fetch_add(&ack->batch->num_wacks, 1);
+		pg_atomic_fetch_add_u32(&ack->batch->num_wacks, 1);
 	else if (IsContQueryCombinerProcess())
-		atomic_fetch_add(&ack->batch->num_cacks, 1);
+		pg_atomic_fetch_add_u32(&ack->batch->num_cacks, 1);
 }
 
 static dsm_segment *

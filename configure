@@ -15596,25 +15596,6 @@ cat >>confdefs.h <<_ACEOF
 #define PG_VERSION_NUM $PG_VERSION_NUM
 _ACEOF
 
-
-
-
-#
-# stdatomic.h
-#
-for ac_header in stdatomic.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "stdatomic.h" "ac_cv_header_stdatomic_h" "$ac_includes_default"
-if test "x$ac_cv_header_stdatomic_h" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_STDATOMIC_H 1
-_ACEOF
-
-fi
-
-done
-
-
 # Begin output steps
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: using compiler=$cc_string" >&5
@@ -17119,4 +17100,3 @@ else
   as_fn_error $? "ncurses library not found (https://www.gnu.org/software/ncurses/)" "$LINENO" 5
 fi
 ac_cv_lib_ncurses=ac_cv_lib_ncurses_main
-

@@ -14,12 +14,6 @@
 #include "postgres.h"
 #include "pg_config.h"
 
-#ifdef HAVE_STDATOMIC_H
-#include <stdatomic.h>
-#else
-#include "stdatomic.h"
-#endif
-
 #include "access/htup.h"
 #include "access/tupdesc.h"
 #include "catalog/pipeline_query_fn.h"
@@ -28,6 +22,7 @@
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/dsm_cqueue.h"
+#include "port/atomics.h"
 #include "storage/spin.h"
 #include "utils/timestamp.h"
 
@@ -36,13 +31,13 @@ typedef struct InsertBatch
 {
 	int id;
 	/* Number of acks from workers */
-	atomic_int num_wacks;
+	pg_atomic_uint32 num_wacks;
 	/* Number of acks from combiners */
-	atomic_int num_cacks;
+	pg_atomic_uint32 num_cacks;
 	/* Total number of tuples sent to workers */
 	int num_wtups;
 	/* Total number of tuples sent to combiners */
-	atomic_int num_ctups;
+	pg_atomic_uint32 num_ctups;
 } InsertBatch;
 
 /* Represents the number of tuples processed for the stream batch. */
