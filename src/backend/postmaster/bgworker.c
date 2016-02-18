@@ -18,6 +18,7 @@
 
 #include "miscadmin.h"
 #include "libpq/pqsignal.h"
+#include "nodes/print.h"
 #include "pipeline/cont_scheduler.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/postmaster.h"
@@ -645,6 +646,11 @@ StartBackgroundWorker(void)
 	pqsignal(SIGPIPE, SIG_IGN);
 	pqsignal(SIGUSR2, SIG_IGN);
 	pqsignal(SIGCHLD, SIG_DFL);
+
+#define BACKTRACE_SEGFAULTS
+#ifdef BACKTRACE_SEGFAULTS
+	pqsignal(SIGSEGV, debug_segfault);
+#endif
 
 	/*
 	 * If an exception is encountered, processing resumes here.
