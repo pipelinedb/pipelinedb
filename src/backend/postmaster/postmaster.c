@@ -843,9 +843,6 @@ PostmasterMain(int argc, char *argv[])
 		ExitPostmaster(0);
 	}
 
-	if (VerifyConfigurationHook != NULL)
-		VerifyConfigurationHook();
-
 	/* Verify that DataDir looks reasonable */
 	checkDataDir();
 
@@ -1847,6 +1844,9 @@ ServerLoop(void)
 			TouchSocketLockFiles();
 			last_touch_time = now;
 		}
+
+		if (VerifyConfigurationHook != NULL)
+			VerifyConfigurationHook();
 	}
 }
 
