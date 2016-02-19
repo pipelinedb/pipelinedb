@@ -36,7 +36,8 @@
 #define UPDATE_AVAILABLE 201
 #define NO_UPDATES 200
 
-#define REQUEST_FMT "POST /check HTTP/1.1\r\nHost: anonymous.pipelinedb.com\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s"
+#define CHECK_PATH "/check"
+#define REQUEST_FMT "POST %s HTTP/1.1\r\nHost: anonymous.pipelinedb.com\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s"
 #define PROC_PAYLOAD_FMT 	"{ \"t\": \"%c\", \"e\": \"%s\", \"v\": \"%s\", \"s\": \"%s\", \"sr\": \"%s\", \"sv\": \"%s\", \"ri\": %ld, \"bi\": %ld, \"ro\": %ld, \"bo\": %ld, \"er\": %ld, \"cc\": %ld, \"cd\": %ld, \"id\": \"%s\"}"
 #define PAYLOAD_FMT "[%s,%s]"
 
@@ -50,6 +51,7 @@
 bool anonymous_update_checks;
 
 GetInstallationIdFunc GetInstallationIdHook = NULL;
+VerifyConfigurationFunc VerifyConfigurationHook = NULL;
 
 /*
  * parse_response_code
@@ -97,8 +99,8 @@ parse_response_code(char *resp)
 /*
  * POST the HTTP request
  */
-static int
-post(char *payload)
+int
+AnonymousPost(char *path, char *payload, char *resp_buf, int resp_len)
 {
 	struct hostent *server;
 	struct sockaddr_in serv_addr;
@@ -107,7 +109,6 @@ post(char *payload)
 	int sent;
 	int received;
 	int total;
-	char response[4096];
 	StringInfo buf = makeStringInfo();
 
 	sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -126,7 +127,7 @@ post(char *payload)
 	if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
 		FAIL(sock);
 
-	appendStringInfo(buf, REQUEST_FMT, (int) strlen(payload), payload);
+	appendStringInfo(buf, REQUEST_FMT, path, (int) strlen(payload), payload);
 
 	/* send request */
 	sent = 0;
@@ -141,13 +142,13 @@ post(char *payload)
 	} while (sent < buf->len);
 
 	/* receive response */
-	MemSet(response, 0, sizeof(response));
-	total = sizeof(response) - 1;
+	MemSet(resp_buf, 0, resp_len);
+	total = resp_len - 1;
 	received = 0;
 
 	do
 	{
-		bytes = read(sock, response + received, total - received);
+		bytes = read(sock, resp_buf + received, total - received);
 		if (bytes < 0)
 			FAIL(sock);
 		if (bytes == 0)
@@ -157,7 +158,7 @@ post(char *payload)
 
 	close(sock);
 
-	return parse_response_code(response);
+	return parse_response_code(resp_buf);
 }
 
 /*
@@ -236,6 +237,7 @@ UpdateCheck(HTAB *all_dbs, bool startup)
 	StringInfoData payload;
 	char *combiner = get_stats(all_dbs, startup, CQ_STAT_COMBINER);
 	char *worker = get_stats(all_dbs, startup, CQ_STAT_WORKER);
+	char buf[4096];
 
 	if (combiner == NULL)
 		return;
@@ -246,6 +248,6 @@ UpdateCheck(HTAB *all_dbs, bool startup)
 	initStringInfo(&payload);
 	appendStringInfo(&payload, PAYLOAD_FMT, combiner, worker);
 
-	if (post(payload.data) == UPDATE_AVAILABLE)
+	if (AnonymousPost(CHECK_PATH, payload.data, buf, sizeof(buf)) == UPDATE_AVAILABLE)
 		elog(NOTICE, "a newer version of PipelineDB is available");
 }
