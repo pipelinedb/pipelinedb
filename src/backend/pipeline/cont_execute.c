@@ -393,7 +393,7 @@ GetWorkerQueue(void)
 	}
 
 	Assert(cq);
-	Assert(LWLockHeldByMe(&cq->lock));
+	Assert(LWLockHeldByMe(cq->lock));
 
 	return cq;
 }

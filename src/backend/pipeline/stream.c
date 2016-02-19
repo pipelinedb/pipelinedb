@@ -58,7 +58,7 @@ GetStreamReaders(Oid relid)
 	Bitmapset *targets;
 	char *name = get_rel_name(relid);;
 
-	if (!ContQueriesEnabled())
+	if (!AreContQueriesEnabled())
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot insert into stream %s since continuous queries are disabled", name),

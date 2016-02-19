@@ -727,7 +727,7 @@ create_dsm_cqueue(ResourceOwner owner)
 
 	/* Initialize dsm_cqueue. */
 	ptr = dsm_segment_address(segment);
-	dsm_cqueue_init(ptr, size, GetContProcTrancheId());
+	dsm_cqueue_init(ptr, size, GetContAdhocProcLWLock());
 	dsm_cqueue_set_handlers((dsm_cqueue *) ptr, StreamTupleStatePeekFn, NULL, StreamTupleStateCopyFn);
 
 	MyContQueryProc->dsm_handle = handle;

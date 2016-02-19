@@ -51,6 +51,7 @@
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
 #define INIT_PROC_TABLE_SZ 4
 #define NUM_BG_WORKERS (continuous_query_num_workers + continuous_query_num_combiners)
+#define NUM_LOCKS_PER_DB (NUM_BG_WORKERS + 1) /* add a lock for all adhoc processes */
 #define MIN_WAIT_TERMINATE_MS 250
 
 typedef struct
@@ -93,26 +94,29 @@ static volatile sig_atomic_t got_SIGTERM = false;
 static volatile sig_atomic_t got_SIGUSR2 = false;
 static volatile sig_atomic_t got_SIGINT = false;
 
+typedef struct LWLockSlot
+{
+	LWLock lock;
+	bool   used;
+} LWLockSlot;
+
 /* the main continuous process scheduler shmem struct */
-typedef struct
+typedef struct ContQuerySchedulerShmemStruct
 {
 	pid_t pid;
-	HTAB  *proc_table;
-	int   tranche_id;
+
+	HTAB *proc_table;
 
 	ContQueryRunParams params;
+
+	int tranche_id;
+	LWLockTranche tranche;
+	LWLockSlot *locks;
 } ContQuerySchedulerShmemStruct;
 
 static ContQuerySchedulerShmemStruct *ContQuerySchedulerShmem;
 
 NON_EXEC_STATIC void ContQuerySchedulerMain(int argc, char *argv[]) __attribute__((noreturn));
-
-/* shared memory stuff */
-Size
-ContQuerySchedulerShmemSize(void)
-{
-	return MAXALIGN(sizeof(ContQuerySchedulerShmemStruct));
-}
 
 static void
 update_run_params(void)
@@ -122,11 +126,20 @@ update_run_params(void)
 	params->max_wait = continuous_query_max_wait;
 }
 
-#define ContQueryDatabaseMetadataSize() (sizeof(ContQueryDatabaseMetadata) + \
-		(sizeof(ContQueryProc) * NUM_BG_WORKERS) + \
-	(sizeof(ContQueryProc) * max_worker_processes))
+static Size
+ContQueryDatabaseMetadataSize(void)
+{
+	return (sizeof(ContQueryDatabaseMetadata) +
+			(sizeof(ContQueryProc) * NUM_BG_WORKERS) +
+			(sizeof(ContQueryProc) * max_worker_processes));
+}
 
-static LWLockTranche DummyLWLockTranche = {"dummy", NULL, 1};
+/* shared memory stuff */
+Size
+ContQuerySchedulerShmemSize(void)
+{
+	return MAXALIGN(sizeof(ContQuerySchedulerShmemStruct) + (sizeof(LWLockSlot) * max_worker_processes));
+}
 
 void
 ContQuerySchedulerShmemInit(void)
@@ -139,8 +152,10 @@ ContQuerySchedulerShmemInit(void)
 	if (!found)
 	{
 		HASHCTL info;
+		char *ptr;
+		int i;
 
-		MemSet(ContQuerySchedulerShmem, 0, ContQuerySchedulerShmemSize());
+		MemSet(ContQuerySchedulerShmem, 0, size);
 
 		info.keysize = sizeof(Oid);
 		info.entrysize = ContQueryDatabaseMetadataSize();
@@ -152,9 +167,23 @@ ContQuerySchedulerShmemInit(void)
 		update_run_params();
 
 		ContQuerySchedulerShmem->tranche_id = LWLockNewTrancheId();
+
+		ptr = (void *) ContQuerySchedulerShmem;
+		ptr += sizeof(ContQuerySchedulerShmemStruct);
+		ContQuerySchedulerShmem->locks = (LWLockSlot *) ptr;
+
+		ContQuerySchedulerShmem->tranche.name = "ContProcLWLocks";
+		ContQuerySchedulerShmem->tranche.array_base = ptr;
+		ContQuerySchedulerShmem->tranche.array_stride = sizeof(LWLockSlot);
+
+		for (i = 0; i < max_worker_processes; i++)
+		{
+			LWLockSlot *slot = &ContQuerySchedulerShmem->locks[i];
+			LWLockInitialize(&slot->lock, ContQuerySchedulerShmem->tranche_id);
+		}
 	}
 
-	LWLockRegisterTranche(ContQuerySchedulerShmem->tranche_id, &DummyLWLockTranche);
+	LWLockRegisterTranche(ContQuerySchedulerShmem->tranche_id, &ContQuerySchedulerShmem->tranche);
 }
 
 ContQueryRunParams *
@@ -511,6 +540,8 @@ dsm_cqueue_setup(ContQueryProc *proc)
 	dsm_cqueue_copy_fn cpy_fn;
 	void *ptr;
 	Size size;
+	LWLock *lock;
+	int lock_idx;
 
 	if (proc->type == Combiner)
 	{
@@ -527,9 +558,14 @@ dsm_cqueue_setup(ContQueryProc *proc)
 	else
 		return;
 
+	lock_idx = proc->id + proc->db_meta->lock_idx;
+	Assert(lock_idx >= 0);
+
+	lock = (LWLock *) &ContQuerySchedulerShmem->locks[lock_idx];
+
 	size = continuous_query_ipc_shared_mem * 1024;
 	ptr = (char *) dsm_segment_address(proc->db_meta->segment) + (size * proc->id);
-	dsm_cqueue_init(ptr, size, GetContProcTrancheId());
+	dsm_cqueue_init(ptr, size, lock);
 	dsm_cqueue_set_handlers((dsm_cqueue *) ptr, peek_fn, pop_fn, cpy_fn);
 }
 
@@ -563,6 +599,55 @@ run_cont_bgworker(ContQueryProc *proc)
 		proc->bgw_handle = handle;
 
 	return success;
+}
+
+static int
+get_unused_lock_idx(void)
+{
+	int i;
+	int lock_idx = -1;
+
+	LWLockAcquire(ContQuerySchedulerLock, LW_EXCLUSIVE);
+
+	for (i = 0; i < max_worker_processes; i++)
+	{
+		LWLockSlot *slot = &ContQuerySchedulerShmem->locks[i];
+		if (!slot->used)
+		{
+			lock_idx = i;
+			break;
+		}
+	}
+
+	Assert(lock_idx != -1);
+
+	for (i = 0; i < NUM_LOCKS_PER_DB; i++)
+	{
+		LWLockSlot *slot = &ContQuerySchedulerShmem->locks[lock_idx + i];
+		Assert(!slot->used);
+		slot->used = true;
+	}
+
+	LWLockRelease(ContQuerySchedulerLock);
+
+	return lock_idx;
+}
+
+static void
+release_locks(ContQueryDatabaseMetadata *db_meta)
+{
+	int i;
+
+	LWLockAcquire(ContQuerySchedulerLock, LW_EXCLUSIVE);
+
+	for (i = 0; i < NUM_LOCKS_PER_DB; i++)
+	{
+		LWLockSlot *slot = &ContQuerySchedulerShmem->locks[db_meta->lock_idx + i];
+		Assert(slot->used);
+		slot->used = false;
+	}
+
+	LWLockRelease(ContQuerySchedulerLock);
 }
 
 static void
@@ -600,6 +685,8 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	dsm_detach(db_meta->segment);
 	db_meta->handle = 0;
 
+	release_locks(db_meta);
+
 	SpinLockRelease(&db_meta->mutex);
 
 	hash_search(ContQuerySchedulerShmem->proc_table, &db_meta->db_oid, HASH_REMOVE, &found);
@@ -632,6 +719,8 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	ResourceOwnerDelete(res);
 
 	db_meta->terminate = false;
+
+	db_meta->lock_idx = get_unused_lock_idx();
 
 	/* Start worker processes. */
 	for (slot_idx = 0, group_id = 0; slot_idx < continuous_query_num_workers; slot_idx++, group_id++)
@@ -1128,14 +1217,28 @@ GetContQueryAdhocProcs(void)
 	return procs;
 }
 
-int
-GetContProcTrancheId(void)
+LWLock *
+GetContAdhocProcLWLock(void)
 {
-	return ContQuerySchedulerShmem->tranche_id;
+	bool found;
+	ContQueryDatabaseMetadata *db_meta;
+	int lock_idx = -1;
+
+	db_meta = (ContQueryDatabaseMetadata *) hash_search(
+			ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		elog(ERROR, "failed to find database metadata for continuous queries");
+
+	SpinLockAcquire(&db_meta->mutex);
+	lock_idx = db_meta->lock_idx;
+	SpinLockRelease(&db_meta->mutex);
+
+	return (LWLock *) &ContQuerySchedulerShmem->locks[lock_idx + NUM_BG_WORKERS];
 }
 
 bool
-ContQueriesEnabled(void)
+AreContQueriesEnabled(void)
 {
 	HeapTuple tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
 	bool enabled;

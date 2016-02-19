@@ -177,7 +177,7 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
   attempts = 0
   pipeline.conn = None
 
-  while attempts < 10:
+  while attempts < 15:
     try:
       pipeline.conn = pipeline.engine.connect()
       break
@@ -194,6 +194,7 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
 
   result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
   assert result['count'] == expected_combiners
+
 
 def test_activate_deactivate(pipeline, clean_db):
   pipeline.create_cv('v', 'SELECT count(*) FROM stream')

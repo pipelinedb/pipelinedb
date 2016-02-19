@@ -38,9 +38,9 @@ typedef struct dsm_cqueue
 {
 	int magic;
 
-	LWLock  lock;
+	LWLock *lock;
 
-	int        size; /* physical size of buffer */
+	int size; /* physical size of buffer */
 
 	pg_atomic_uint64 head;
 	pg_atomic_uint64 tail;
@@ -56,7 +56,7 @@ typedef struct dsm_cqueue
 	char bytes[1];
 } dsm_cqueue;
 
-extern void dsm_cqueue_init(void *ptr, Size size, int tranche_id);
+extern void dsm_cqueue_init(void *ptr, Size size, LWLock *lock);
 extern void dsm_cqueue_set_handlers(dsm_cqueue *cq, dsm_cqueue_peek_fn peek_fn,
 		dsm_cqueue_pop_fn pop_fn, dsm_cqueue_copy_fn cpy_fn);
 
