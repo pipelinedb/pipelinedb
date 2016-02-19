@@ -621,7 +621,7 @@ get_unused_lock_idx(void)
 
 	Assert(lock_idx != -1);
 
-	for (i = 0; i < NUM_LOCKS_PER_DB + 1; i++)
+	for (i = 0; i < NUM_LOCKS_PER_DB; i++)
 	{
 		LWLockSlot *slot = &ContQuerySchedulerShmem->locks[lock_idx + i];
 		Assert(!slot->used);
