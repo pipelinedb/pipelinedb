@@ -142,6 +142,7 @@ AnonymousPost(char *path, char *payload, char *resp_buf, int resp_len)
 	} while (sent < buf->len);
 
 	/* receive response */
+	MemSet(resp_buf, 0, resp_len);
 	total = resp_len - 1;
 	received = 0;
 
