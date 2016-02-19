@@ -240,11 +240,6 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table or view",
 						RelationGetRelationName(rel))));
-	else
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is not a table or view",
-						RelationGetRelationName(rel))));
 
 	if (!allowSystemTableMods && IsSystemRelation(rel))
 		ereport(ERROR,
