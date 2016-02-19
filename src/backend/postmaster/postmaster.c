@@ -105,6 +105,7 @@
 #include "nodes/print.h"
 #include "pg_getopt.h"
 #include "pgstat.h"
+#include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/fork_process.h"
@@ -841,6 +842,9 @@ PostmasterMain(int argc, char *argv[])
 		puts(GetConfigOption(output_config_variable, false, false));
 		ExitPostmaster(0);
 	}
+
+	if (VerifyConfigurationHook != NULL)
+		VerifyConfigurationHook();
 
 	/* Verify that DataDir looks reasonable */
 	checkDataDir();
