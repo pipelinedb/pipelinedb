@@ -900,7 +900,7 @@ SnapBuildEndTxn(SnapBuild *builder, XLogRecPtr lsn, TransactionId xid)
 			 * None of the originally running transaction is running anymore,
 			 * so our incrementaly built snapshot now is consistent.
 			 */
-			ereport(LOG,
+			ereport(DEBUG1,
 				  (errmsg("logical decoding found consistent point at %X/%X",
 						  (uint32) (lsn >> 32), (uint32) lsn),
 				   errdetail("Transaction ID %u finished; no more running transactions.",
@@ -1265,7 +1265,7 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 
 		builder->state = SNAPBUILD_CONSISTENT;
 
-		ereport(LOG,
+		ereport(DEBUG1,
 				(errmsg("logical decoding found consistent point at %X/%X",
 						(uint32) (lsn >> 32), (uint32) lsn),
 				 errdetail("There are no running transactions.")));

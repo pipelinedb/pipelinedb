@@ -421,7 +421,7 @@ CreateDecodingContext(XLogRecPtr start_lsn,
 		startup_cb_wrapper(ctx, &ctx->options, false);
 	MemoryContextSwitchTo(old_context);
 
-	ereport(LOG,
+	ereport(DEBUG1,
 			(errmsg("starting logical decoding for slot \"%s\"",
 					NameStr(slot->data.name)),
 			 errdetail("streaming transactions committing after %X/%X, reading WAL from %X/%X",
