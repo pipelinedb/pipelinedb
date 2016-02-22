@@ -786,15 +786,16 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 		form = (Form_pg_index) GETSTRUCT(tup);
 		if (form->indisprimary)
 		{
-			TupleDesc desc = RelationGetDescr(matrel);
 			Assert(form->indnatts == 1);
 			state->pk = form->indkey.values[0];
-			if (pg_strcasecmp(NameStr(desc->attrs[state->pk - 1]->attname), "$pk") == 0)
-				state->seq_pk = true;
 		}
 		ReleaseSysCache(tup);
 	}
+
 	heap_close(matrel, AccessShareLock);
+
+	Assert(state->pk != InvalidAttrNumber);
+	state->seq_pk = base->view->seqrel != InvalidOid;
 
 	return base;
 }

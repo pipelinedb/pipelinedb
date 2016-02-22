@@ -516,7 +516,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	pkey = makeNode(Constraint);
 	pkey->contype = CONSTR_PRIMARY;
 
-	if (!pk_coldef)
+	if (!pk)
 	{
 		/* Add primary key column */
 		pk_coldef = MakeMatRelColumnDef(CQ_MATREL_PKEY, INT8OID, InvalidOid);
@@ -552,12 +552,17 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	AlterTableCreateToastTable(matreloid, toast_options, AccessExclusiveLock);
 
 	/* Create the sequence for primary keys */
-	create_seq_stmt = makeNode(CreateSeqStmt);
-	create_seq_stmt->sequence = seqrel;
+	if (!pk)
+	{
+		create_seq_stmt = makeNode(CreateSeqStmt);
+		create_seq_stmt->sequence = seqrel;
 
-	address = DefineSequence(create_seq_stmt);
-	seqreloid = address.objectId;
-	CommandCounterIncrement();
+		address = DefineSequence(create_seq_stmt);
+		seqreloid = address.objectId;
+		CommandCounterIncrement();
+	}
+	else
+		seqreloid = InvalidOid;
 
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog
