@@ -270,11 +270,14 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
 	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
 	/* Record dependency between sequence relation and view */
-	dependent.classId = RelationRelationId;
-	dependent.objectId = seqreloid;
-	dependent.objectSubId = 0;
+	if (seqreloid != InvalidOid)
+	{
+		dependent.classId = RelationRelationId;
+		dependent.objectId = seqreloid;
+		dependent.objectSubId = 0;
 
-	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
+		recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
+	}
 
 	/*
 	 * Record a dependency between the view its pipeline_query entry so that when
