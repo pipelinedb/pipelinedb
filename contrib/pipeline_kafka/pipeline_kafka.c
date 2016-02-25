@@ -52,13 +52,14 @@ PG_MODULE_MAGIC;
 #define PIPELINE_KAFKA_LIB "pipeline_kafka"
 
 #define CONSUMER_RELATION "pipeline_kafka_consumers"
-#define CONSUMER_RELATION_NATTS				6
+#define CONSUMER_RELATION_NATTS				7
 #define CONSUMER_ATTR_RELATION 				1
 #define CONSUMER_ATTR_TOPIC						2
 #define CONSUMER_ATTR_BATCH_SIZE 			3
 #define CONSUMER_ATTR_PARALLELISM 		4
 #define CONSUMER_ATTR_FORMAT 					5
 #define CONSUMER_ATTR_DELIMITER 			6
+#define CONSUMER_ATTR_QUOTE						7
 
 #define OFFSETS_RELATION "pipeline_kafka_offsets"
 #define OFFSETS_RELATION_NATTS				3
@@ -82,6 +83,7 @@ PG_MODULE_MAGIC;
 #define OPTION_DELIMITER "delimiter"
 #define OPTION_FORMAT "format"
 #define FORMAT_CSV "csv"
+#define OPTION_QUOTE "quote"
 
 static volatile sig_atomic_t got_sigterm = false;
 
@@ -122,6 +124,7 @@ typedef struct KafkaConsumer
 	size_t batch_size;
 	char *format;
 	char *delimiter;
+	char *quote;
 	int parallelism;
 	int num_partitions;
 	int64_t *offsets;
@@ -360,6 +363,10 @@ load_consumer_state(Oid worker_id, KafkaConsumer *consumer)
 	d = slot_getattr(slot, CONSUMER_ATTR_DELIMITER, &isnull);
 	consumer->delimiter = TextDatumGetCString(d);
 
+	/* quote character */
+	d = slot_getattr(slot, CONSUMER_ATTR_QUOTE, &isnull);
+	consumer->quote = TextDatumGetCString(d);
+
 	/* now load all brokers */
 	consumer->brokers = get_all_brokers();
 	MemoryContextSwitchTo(old);
@@ -491,6 +498,7 @@ get_copy_statement(KafkaConsumer *consumer)
 	TupleDesc desc;
 	DefElem *delim = makeNode(DefElem);
 	DefElem *format = makeNode(DefElem);
+	DefElem *quote = makeNode(DefElem);
 	int i;
 
 	stmt->relation = consumer->rel;
@@ -525,6 +533,10 @@ get_copy_statement(KafkaConsumer *consumer)
 	format->defname = OPTION_FORMAT;
 	format->arg = (Node *) makeString(consumer->format);
 	stmt->options = lappend(stmt->options, format);
+
+	quote->defname = OPTION_QUOTE;
+	quote->arg = (Node *) makeString(consumer->quote);
+	stmt->options = lappend(stmt->options, quote);
 
 	heap_close(rel, NoLock);
 
@@ -747,7 +759,7 @@ done:
  */
 static Oid
 create_consumer(Relation consumers, text *relation, text *topic,
-		text *format, text *delimiter, int batchsize, int parallelism)
+		text *format, text *delimiter, text *quote, int batchsize, int parallelism)
 {
 	HeapTuple tup;
 	Datum values[CONSUMER_RELATION_NATTS];
@@ -777,6 +789,7 @@ create_consumer(Relation consumers, text *relation, text *topic,
 		values[CONSUMER_ATTR_PARALLELISM - 1] = Int32GetDatum(parallelism);
 		values[CONSUMER_ATTR_FORMAT - 1] = PointerGetDatum(format);
 		values[CONSUMER_ATTR_DELIMITER - 1] = PointerGetDatum(delimiter);
+		values[CONSUMER_ATTR_QUOTE - 1] = PointerGetDatum(quote);
 
 		tup = heap_modify_tuple(tup, RelationGetDescr(consumers), values, nulls, replace);
 		simple_heap_update(consumers, &tup->t_self, tup);
@@ -792,6 +805,7 @@ create_consumer(Relation consumers, text *relation, text *topic,
 		values[CONSUMER_ATTR_PARALLELISM - 1] = Int32GetDatum(parallelism);
 		values[CONSUMER_ATTR_FORMAT - 1] = PointerGetDatum(format);
 		values[CONSUMER_ATTR_DELIMITER - 1] = PointerGetDatum(delimiter);
+		values[CONSUMER_ATTR_QUOTE - 1] = PointerGetDatum(quote);
 
 		tup = heap_form_tuple(RelationGetDescr(consumers), values, nulls);
 		oid = simple_heap_insert(consumers, tup);
@@ -928,6 +942,7 @@ kafka_consume_begin_tr(PG_FUNCTION_ARGS)
 	text *delimiter = PG_GETARG_TEXT_P(3);
 	int batchsize = PG_GETARG_INT32(4);
 	int parallelism = PG_GETARG_INT32(5);
+	text *quote = PG_GETARG_TEXT_P(6);
 
 	if (PG_ARGISNULL(0))
 		elog(ERROR, "topic cannot be null");
@@ -953,7 +968,7 @@ kafka_consume_begin_tr(PG_FUNCTION_ARGS)
 	heap_close(rel, NoLock);
 
 	consumers = open_pipeline_kafka_consumers();
-	id = create_consumer(consumers, qualified, topic, format, delimiter, batchsize, parallelism);
+	id = create_consumer(consumers, qualified, topic, format, delimiter, quote, batchsize, parallelism);
 
 	result = launch_consumer_group(consumers, id);
 	heap_close(consumers, NoLock);
