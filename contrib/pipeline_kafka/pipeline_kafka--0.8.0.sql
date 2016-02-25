@@ -10,7 +10,8 @@ CREATE TABLE pipeline_kafka_consumers (
 	batchsize integer,
 	parallelism integer,
 	format text,
-	delimiter text
+	delimiter text,
+	quote text
 ) WITH OIDS;
 
 CREATE TABLE pipeline_kafka_offsets (
@@ -24,7 +25,9 @@ CREATE TABLE pipeline_kafka_brokers (
 ) WITH OIDS;
 
 
-CREATE FUNCTION kafka_consume_begin(topic text, relation text, format text DEFAULT 'text', delimiter text DEFAULT '\t', batchsize integer DEFAULT 1000, parallelism integer DEFAULT 1)
+CREATE FUNCTION kafka_consume_begin(topic text, relation text,
+	format text DEFAULT 'text', delimiter text DEFAULT '\t', batchsize integer DEFAULT 1000, parallelism integer DEFAULT 1,	quote text DEFAULT '"')
+
 RETURNS text
 AS 'MODULE_PATHNAME', 'kafka_consume_begin_tr'
 LANGUAGE C IMMUTABLE;
