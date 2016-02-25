@@ -2878,7 +2878,12 @@ make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
 	args = make_combine_args(pstate, combineinfn, (Node *) var);
 
 	if (IsA(result, Aggref))
-		transformAggregateCall(pstate, (Aggref *) result, args, order, false);
+	{
+		Aggref *agg = (Aggref *) result;
+		agg->orig_directargs = agg->aggdirectargs;
+		agg->orig_order = agg->aggorder;
+		transformAggregateCall(pstate, agg, args, order, false);
+	}
 	else
 	{
 		((WindowFunc *) result)->args = args;
@@ -3223,6 +3228,8 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 			agg->aggstar = false;
 			agg->aggfilter = filter;
 			agg->aggkind = AGGKIND_COMBINE;
+			agg->orig_directargs = agg->aggdirectargs;
+			agg->orig_order = agg->aggorder;
 
 			transformAggregateCall(pstate, agg, args, order, false);
 
