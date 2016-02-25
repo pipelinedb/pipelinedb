@@ -273,6 +273,8 @@ typedef struct Aggref
 	int			location;		/* token location, or -1 if unknown */
 
 	Oid aggfinaltype; /* if this is a CV's aggregate, this is the final type */
+	List *orig_directargs; /* original direct args for this Aggref before being transformed into a combine agg */
+	List *orig_order; /* original order clause for this Aggref before being transformed into a combine agg */
 
 } Aggref;
 
