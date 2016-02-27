@@ -2387,7 +2387,7 @@ compare_values(FirstValuesQueryState *qstate, Datum d1, bool isnull1, Datum d2, 
 	tup1->t_data = DatumGetHeapTupleHeader(d1);
 	tup1->t_len = HeapTupleHeaderGetDatumLength(tup1->t_data);
 	tup2 = palloc0(sizeof(HeapTupleData));
-	tup2->t_data = DatumGetHeapTupleHeader(d1);
+	tup2->t_data = DatumGetHeapTupleHeader(d2);
 	tup2->t_len = HeapTupleHeaderGetDatumLength(tup1->t_data);
 
 	ExecClearTuple(qstate->tup_slot1);
