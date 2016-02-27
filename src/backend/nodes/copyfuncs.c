@@ -1241,6 +1241,7 @@ _copyAggref(const Aggref *from)
 	COPY_SCALAR_FIELD(agglevelsup);
 	COPY_LOCATION_FIELD(location);
 	COPY_SCALAR_FIELD(aggfinaltype);
+	COPY_NODE_FIELD(orig_args);
 	COPY_NODE_FIELD(orig_directargs);
 	COPY_NODE_FIELD(orig_order);
 
