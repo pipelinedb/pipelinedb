@@ -1573,7 +1573,7 @@ arrayaggstaterecv(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	old = MemoryContextSwitchTo(CacheMemoryContext);
+	old = MemoryContextSwitchTo(context);
 	vals = (ArrayType *) PG_GETARG_ARRAYTYPE_P_COPY(0);
 
 	result = (ArrayBuildState *) palloc0(sizeof(ArrayBuildState));
