@@ -2088,7 +2088,7 @@ first_values_send(PG_FUNCTION_ARGS)
 	bytea *result;
 	int nbytes;
 	char *pos;
-	ArrayType *array = NULL;
+	bytea *array = NULL;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = fcinfo->flinfo->fn_mcxt;
@@ -2096,11 +2096,11 @@ first_values_send(PG_FUNCTION_ARGS)
 	old = MemoryContextSwitchTo(context);
 
 	if (state->array)
-		array = (ArrayType *) DirectFunctionCall1(arrayaggstatesend, PointerGetDatum(state->array));
+		array = DatumGetByteaP(DirectFunctionCall1(arrayaggstatesend, PointerGetDatum(state->array)));
 
 	nbytes = sizeof(FirstValuesPerGroupState) + (sizeof(Oid) * state->num_sort);
 	if (array)
-		nbytes += VARSIZE(array) + VARHDRSZ;
+		nbytes += VARSIZE(array);
 
 	result = (bytea *) palloc0(nbytes + VARHDRSZ);
 	SET_VARSIZE(result, nbytes + VARHDRSZ);
@@ -2113,7 +2113,7 @@ first_values_send(PG_FUNCTION_ARGS)
 	pos += sizeof(Oid) * state->num_sort;
 
 	if (array)
-		memcpy(pos, array, VARSIZE(array) + VARHDRSZ);
+		memcpy(pos, array, VARSIZE(array));
 
 	MemoryContextSwitchTo(old);
 
@@ -2290,6 +2290,7 @@ init_first_values_query_state(PG_FUNCTION_ARGS)
 		sortkey->ssup_collation = exprCollation((Node *) tle->expr);
 		sortkey->ssup_nulls_first = sortcl->nulls_first;
 		sortkey->ssup_attno = tle->resno;
+
 		PrepareSortSupportFromOrderingOp(sortcl->sortop, sortkey);
 		qstate->sortkey = sortkey;
 		qstate->sortop = palloc0(sizeof(Oid));
@@ -2352,6 +2353,7 @@ first_values_startup(PG_FUNCTION_ARGS)
 	{
 		qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
 		fvstate->types = extract_types(qstate);
+		fvstate->num_sort = qstate->num_sort;
 
 		MemoryContextSwitchTo(old);
 		return fvstate;
@@ -2386,6 +2388,7 @@ compare_values(FirstValuesQueryState *qstate, Datum d1, bool isnull1, Datum d2, 
 	tup1 = palloc0(sizeof(HeapTupleData));
 	tup1->t_data = DatumGetHeapTupleHeader(d1);
 	tup1->t_len = HeapTupleHeaderGetDatumLength(tup1->t_data);
+
 	tup2 = palloc0(sizeof(HeapTupleData));
 	tup2->t_data = DatumGetHeapTupleHeader(d2);
 	tup2->t_len = HeapTupleHeaderGetDatumLength(tup1->t_data);
@@ -2513,13 +2516,14 @@ first_values_trans(PG_FUNCTION_ARGS)
 
 Datum
 first_values_combine(PG_FUNCTION_ARGS)
+
 {
 	MemoryContext old;
 	MemoryContext context;
 	FirstValuesPerGroupState *fvstate = PG_ARGISNULL(0) ? NULL : (FirstValuesPerGroupState *) PG_GETARG_POINTER(0);
 	FirstValuesPerGroupState *incoming = PG_ARGISNULL(1) ? NULL : (FirstValuesPerGroupState *) PG_GETARG_POINTER(1);
-	ArrayBuildState *astate1;
-	ArrayBuildState *astate2;
+	ArrayBuildState *astate;
+	ArrayBuildState *incoming_astate;
 	ArrayBuildState *merged = NULL;
 	FirstValuesQueryState *qstate;
 	int i;
@@ -2531,40 +2535,40 @@ first_values_combine(PG_FUNCTION_ARGS)
 	if (fcinfo->flinfo->fn_extra == NULL)
 		fcinfo->flinfo->fn_extra = init_first_values_query_state(fcinfo);
 
-	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
-	old = MemoryContextSwitchTo(context);
-
 	if (fvstate == NULL || fvstate->array == NULL)
 		PG_RETURN_POINTER(incoming);
 
 	if (incoming == NULL || incoming->array == NULL)
 		PG_RETURN_POINTER(fvstate);
 
-	/* This is basically a merge routine */
-	astate1 = fvstate->array;
-	astate2 = incoming->array;
+	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
+	old = MemoryContextSwitchTo(context);
 
-	for (i = 0, j = 0; i < astate1->nelems || j < astate2->nelems; )
+	/* This is basically a merge routine */
+	astate = fvstate->array;
+	incoming_astate = incoming->array;
+
+	for (i = 0, j = 0; i < astate->nelems || j < incoming_astate->nelems; )
 	{
-		if ((merged && merged->nelems == qstate->num_values) || (i == astate1->nelems && j == astate2->nelems))
+		if ((merged && merged->nelems == qstate->num_values) || (i == astate->nelems && j == incoming_astate->nelems))
 			break;
 
-		if (i == astate1->nelems)
+		if (i == astate->nelems)
 		{
-			merged = accumArrayResult(merged, astate2->dvalues[j], astate2->dnulls[j], qstate->type, context);
+			merged = accumArrayResult(merged, incoming_astate->dvalues[j], incoming_astate->dnulls[j], qstate->type, context);
 			j++;
 		}
-		else if (j == astate2->nelems)
+		else if (j == incoming_astate->nelems)
 		{
-			merged = accumArrayResult(merged, astate1->dvalues[i], astate1->dnulls[i], qstate->type, context);
+			merged = accumArrayResult(merged, astate->dvalues[i], astate->dnulls[i], qstate->type, context);
 			i++;
 		}
 		else
 		{
-			Datum d1 = astate1->dvalues[i];
-			bool n1 = astate1->dnulls[i];
-			Datum d2 = astate2->dvalues[j];
-			bool n2 = astate2->dnulls[j];
+			Datum d1 = astate->dvalues[i];
+			bool n1 = astate->dnulls[i];
+			Datum d2 = incoming_astate->dvalues[j];
+			bool n2 = incoming_astate->dnulls[j];
 
 			if (compare_values(qstate, d1, n1, d2, n2) < 0)
 			{

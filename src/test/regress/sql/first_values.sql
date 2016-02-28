@@ -18,3 +18,27 @@ SELECT x, first_values(2) WITHIN GROUP (ORDER BY y) FROM first_values_t GROUP BY
 SELECT * FROM first_values_v;
 
 SELECT x, first_values(2) WITHIN GROUP (ORDER BY y, z) FROM first_values_t GROUP BY x;
+
+DROP CONTINUOUS VIEW first_values_v;
+DROP TABLE first_values_t;
+
+CREATE CONTINUOUS VIEW first_values_v_order0 AS SELECT x::int % 10 AS g, first_values(2) WITHIN GROUP (ORDER BY x::int, y::int) FROM first_values_s GROUP BY g;
+
+INSERT INTO first_values_s (x, y) SELECT x, x FROM generate_series(500, 1000) AS x;
+INSERT INTO first_values_s (x, y) SELECT x, x FROM generate_series(250, 1000) AS x;
+INSERT INTO first_values_s (x, y) SELECT x, x FROM generate_series(1, 1000) AS x;
+
+SELECT * FROM first_values_v_order0 ORDER BY g;
+
+DROP CONTINUOUS VIEW first_values_v_order0;
+
+CREATE CONTINUOUS VIEW first_values_v_order1 AS
+	SELECT first_values(3) WITHIN GROUP (ORDER BY t0::int, t1::int, t2::int) FROM first_values_s;
+
+INSERT INTO first_values_s (t0, t1, t2) SELECT x, x, x FROM generate_series(500, 1000) AS x;
+INSERT INTO first_values_s (t0, t1, t2) SELECT x, x, x FROM generate_series(250, 1000) AS x;
+INSERT INTO first_values_s (t0, t1, t2) SELECT x, x, x FROM generate_series(1, 1000) AS x;
+
+SELECT * FROM first_values_v_order1;
+
+DROP CONTINUOUS VIEW first_values_v_order1;
