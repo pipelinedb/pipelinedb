@@ -2075,9 +2075,7 @@ typedef struct FirstValuesQueryState
 typedef struct FirstValuesPerGroupState
 {
 	int num_sort;
-	int num_values;
-	SortSupport sortkey;
-	Oid *sortop;
+	Oid *types;
 	ArrayBuildState *array;
 } FirstValuesPerGroupState;
 
@@ -2085,15 +2083,22 @@ Datum
 first_values_send(PG_FUNCTION_ARGS)
 {
 	FirstValuesPerGroupState *state = (FirstValuesPerGroupState *) PG_GETARG_POINTER(0);
+	MemoryContext old;
+	MemoryContext context;
 	bytea *result;
 	int nbytes;
 	char *pos;
 	bytea *array = NULL;
 
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	old = MemoryContextSwitchTo(context);
+
 	if (state->array)
 		array = DatumGetByteaP(DirectFunctionCall1(arrayaggstatesend, PointerGetDatum(state->array)));
 
-	nbytes = sizeof(FirstValuesPerGroupState) + (sizeof(SortSupportData) * state->num_sort) + (sizeof(Oid) * state->num_sort);
+	nbytes = sizeof(FirstValuesPerGroupState) + (sizeof(Oid) * state->num_sort);
 	if (array)
 		nbytes += VARSIZE(array);
 
@@ -2104,14 +2109,13 @@ first_values_send(PG_FUNCTION_ARGS)
 	memcpy(pos, state, sizeof(FirstValuesPerGroupState));
 	pos += sizeof(FirstValuesPerGroupState);
 
-	memcpy(pos, state->sortkey, sizeof(SortSupportData) * state->num_sort);
-	pos += sizeof(SortSupportData) * state->num_sort;
-
-	memcpy(pos, state->sortop, sizeof(Oid) * state->num_sort);
+	memcpy(pos, state->types, sizeof(Oid) * state->num_sort);
 	pos += sizeof(Oid) * state->num_sort;
 
 	if (array)
 		memcpy(pos, array, VARSIZE(array));
+
+	MemoryContextSwitchTo(old);
 
 	PG_RETURN_BYTEA_P(result);
 }
@@ -2119,8 +2123,8 @@ first_values_send(PG_FUNCTION_ARGS)
 Datum
 first_values_recv(PG_FUNCTION_ARGS)
 {
-	bytea *bytes = (bytea *) PG_GETARG_BYTEA_P(0);
-	char *pos = VARDATA(bytes);
+	bytea *bytes;
+	char *pos;
 	FirstValuesPerGroupState *state;
 	MemoryContext old;
 	MemoryContext context;
@@ -2130,17 +2134,15 @@ first_values_recv(PG_FUNCTION_ARGS)
 
 	old = MemoryContextSwitchTo(context);
 
+	bytes = (bytea *) PG_GETARG_BYTEA_P(0);
+	pos = VARDATA(bytes);
+
 	state = (FirstValuesPerGroupState *) palloc(sizeof(FirstValuesPerGroupState));
-
 	memcpy(state, pos, sizeof(FirstValuesPerGroupState));
-	pos += sizeof(CQOSAAggState);
+	pos += sizeof(FirstValuesPerGroupState);
 
-	state->sortkey = palloc(sizeof(SortSupportData) * state->num_sort);
-	memcpy(state->sortkey, pos, sizeof(SortSupportData) * state->num_sort);
-	pos += sizeof(SortSupportData) * state->num_sort;
-
-	state->sortop = palloc(sizeof(Oid) * state->num_sort);
-	memcpy(state->sortop, pos, sizeof(Oid) * state->num_sort);
+	state->types = palloc(sizeof(Oid) * state->num_sort);
+	memcpy(state->types, pos, sizeof(Oid) * state->num_sort);
 	pos += sizeof(Oid) * state->num_sort;
 
 	if (state->array != NULL)
@@ -2158,28 +2160,44 @@ first_values_recv(PG_FUNCTION_ARGS)
 Datum
 first_values_final(PG_FUNCTION_ARGS)
 {
-	FirstValuesPerGroupState *state;
+	FirstValuesPerGroupState *fvstate;
+	FirstValuesQueryState *qstate;
 	ArrayBuildState *array;
 
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	state = (FirstValuesPerGroupState *) PG_GETARG_POINTER(0);
-	array = state->array;
+	fvstate = (FirstValuesPerGroupState *) PG_GETARG_POINTER(0);
+	array = fvstate->array;
 
 	if (array == NULL)
 		PG_RETURN_NULL();
 
-	if (array->nelems && array->element_type == RECORDOID)
+	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
+	if (array->nelems && array->element_type == RECORDOID && qstate == NULL)
 	{
-		/* TODO(usmanm): ERROR:  record type has not been registered */
+		MemoryContext old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+		int i;
+
+		qstate = palloc0(sizeof(FirstValuesQueryState));
+		qstate->tup_desc = CreateTemplateTupleDesc(fvstate->num_sort, false);
+
+		for (i = 0; i < fvstate->num_sort; i++)
+		{
+			TupleDescInitEntry(qstate->tup_desc, i + 1, NULL, fvstate->types[i], -1, 0);
+		}
+
+		BlessTupleDesc(qstate->tup_desc);
+		fcinfo->flinfo->fn_extra = (void *) qstate;
+
+		MemoryContextSwitchTo(old);
 	}
 
-	return DirectFunctionCall2(array_agg_finalfn, PointerGetDatum(state->array), PointerGetDatum(NULL));
+	return DirectFunctionCall2(array_agg_finalfn, PointerGetDatum(fvstate->array), PointerGetDatum(NULL));
 }
 
-static FirstValuesPerGroupState *
-first_values_startup(PG_FUNCTION_ARGS)
+static FirstValuesQueryState *
+init_first_values_query_state(PG_FUNCTION_ARGS)
 {
 	FirstValuesQueryState *qstate;
 	Aggref *aggref;
@@ -2188,47 +2206,36 @@ first_values_startup(PG_FUNCTION_ARGS)
 	ExprContext *econtext;
 	ExprState *expr;
 	MemoryContext old;
-	FirstValuesPerGroupState *fvstate;
-
-	fvstate = (FirstValuesPerGroupState *) palloc0(sizeof(FirstValuesPerGroupState));
-
-	/* Is per-query state already initialized? */
-	if (fcinfo->flinfo->fn_extra)
-	{
-		qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
-
-		fvstate->num_sort = list_length(qstate->aggref->aggorder);
-		fvstate->num_values = qstate->num_values;
-		fvstate->sortkey = qstate->sortkey;
-		fvstate->sortop = qstate->sortop;
-
-		return fvstate;
-	}
-
-	/* Create in long term per query context */
-	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+	List *order;
+	List *direct;
+	List *args;
 
 	/* Get the Aggref so we can examine aggregate's arguments */
 	aggref = AggGetAggref(fcinfo);
 	if (!aggref)
 		elog(ERROR, "ordered-set aggregate called in non-aggregate context");
-	if (!AGGKIND_IS_ORDERED_SET(aggref->aggkind))
+	if (!AGGKIND_IS_ORDERED_SET(aggref->aggkind) && !AGGKIND_IS_COMBINE(aggref->aggkind))
 		elog(ERROR, "ordered-set aggregate support function called for non-ordered-set aggregate");
 
+	/* Create in long term per query context */
+	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
 	qstate = (FirstValuesQueryState *) palloc0(sizeof(FirstValuesQueryState));
 	qstate->aggref = aggref;
 
-	num_sort = list_length(aggref->aggorder);
+	order = aggref->orig_order ? aggref->orig_order : aggref->aggorder;
+	direct = aggref->orig_directargs ? aggref->orig_directargs : aggref->aggdirectargs;
+	args = aggref->orig_args ? aggref->orig_args : aggref->args;
+
+	num_sort = list_length(order);
 	Assert(num_sort);
 
-	qstate->num_sort = num_sort;
-	fvstate->num_sort = num_sort;
-
 	econtext = CreateStandaloneExprContext();
-	expr = (ExprState *) linitial((List *) ExecInitExpr((Expr *) aggref->aggdirectargs, NULL));
+	expr = (ExprState *) linitial((List *) ExecInitExpr((Expr *) direct, NULL));
+
+	qstate->num_sort = num_sort;
 	qstate->num_values = DatumGetInt32(ExecEvalExpr(expr, econtext, &isnull, NULL));
+
 	Assert(!isnull);
-	fvstate->num_values = qstate->num_values;
 
 	if (num_sort > 1)
 	{
@@ -2241,16 +2248,17 @@ first_values_startup(PG_FUNCTION_ARGS)
 		qstate->sortop = palloc0(sizeof(Oid) * num_sort);
 
 		i = 0;
-		foreach(lc, aggref->aggorder)
+		foreach(lc, order)
 		{
 			SortGroupClause *sortcl = (SortGroupClause *) lfirst(lc);
-			TargetEntry *tle = get_sortgroupclause_tle(sortcl, aggref->args);
+			TargetEntry *tle = get_sortgroupclause_tle(sortcl, args);
 			SortSupport sortkey = &qstate->sortkey[i];
+			Oid type = exprType((Node *) tle->expr);
 
 			/* the parser should have made sure of this */
 			Assert(OidIsValid(sortcl->sortop));
 
-			TupleDescInitEntry(qstate->tup_desc, i + 1, NULL, exprType((Node *) tle->expr), -1, 0);
+			TupleDescInitEntry(qstate->tup_desc, i + 1, NULL, type, -1, 0);
 
 			sortkey->ssup_cxt = CurrentMemoryContext;
 			sortkey->ssup_collation = exprCollation((Node *) tle->expr);
@@ -2259,7 +2267,6 @@ first_values_startup(PG_FUNCTION_ARGS)
 			PrepareSortSupportFromOrderingOp(sortcl->sortop, sortkey);
 
 			qstate->sortop[i] = sortcl->sortop;
-
 			i++;
 		}
 
@@ -2267,14 +2274,11 @@ first_values_startup(PG_FUNCTION_ARGS)
 
 		qstate->tup_slot1 = MakeSingleTupleTableSlot(qstate->tup_desc);
 		qstate->tup_slot2 = MakeSingleTupleTableSlot(qstate->tup_desc);
-
-		fvstate->sortkey = qstate->sortkey;
-		fvstate->sortop = qstate->sortop;
 	}
 	else
 	{
-		SortGroupClause *sortcl = (SortGroupClause *) linitial(aggref->aggorder);
-		TargetEntry *tle = get_sortgroupclause_tle(sortcl, aggref->args);
+		SortGroupClause *sortcl = (SortGroupClause *) linitial(order);
+		TargetEntry *tle = get_sortgroupclause_tle(sortcl, args);
 		SortSupport sortkey;
 
 		/* the parser should have made sure of this */
@@ -2286,19 +2290,80 @@ first_values_startup(PG_FUNCTION_ARGS)
 		sortkey->ssup_collation = exprCollation((Node *) tle->expr);
 		sortkey->ssup_nulls_first = sortcl->nulls_first;
 		sortkey->ssup_attno = tle->resno;
+
 		PrepareSortSupportFromOrderingOp(sortcl->sortop, sortkey);
 		qstate->sortkey = sortkey;
 		qstate->sortop = palloc0(sizeof(Oid));
 		*qstate->sortop = sortcl->sortop;
 
-		fvstate->sortkey = sortkey;
-		fvstate->sortop = qstate->sortop;
-
 		/* Save datatype info */
 		qstate->type = exprType((Node *) tle->expr);
 	}
 
+	MemoryContextSwitchTo(old);
+
+	return qstate;
+}
+
+static Oid *
+extract_types(FirstValuesQueryState *qstate)
+{
+	int i;
+	int n = qstate->tup_desc ? qstate->tup_desc->natts : 1;
+	Oid *result = palloc0(sizeof(Oid) * n);
+
+	if (n == 1)
+	{
+		result[0] = qstate->type;
+		return result;
+	}
+
+	Assert(qstate->tup_desc);
+
+	for (i=0; i<qstate->tup_desc->natts; i++)
+	{
+		result[i] = qstate->tup_desc->attrs[i]->atttypid;
+	}
+
+	return result;
+}
+
+static FirstValuesPerGroupState *
+first_values_startup(PG_FUNCTION_ARGS)
+{
+	FirstValuesQueryState *qstate;
+	Aggref *aggref;
+	MemoryContext old;
+	FirstValuesPerGroupState *fvstate;
+
+	fvstate = (FirstValuesPerGroupState *) palloc0(sizeof(FirstValuesPerGroupState));
+
+	/* Get the Aggref so we can examine aggregate's arguments */
+	aggref = AggGetAggref(fcinfo);
+	if (!aggref)
+		elog(ERROR, "ordered-set aggregate called in non-aggregate context");
+	if (!AGGKIND_IS_ORDERED_SET(aggref->aggkind))
+		elog(ERROR, "ordered-set aggregate support function called for non-ordered-set aggregate");
+
+	/* Create in long term per query context */
+	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+
+	/* Is per-query state already initialized? */
+	if (fcinfo->flinfo->fn_extra)
+	{
+		qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
+		fvstate->types = extract_types(qstate);
+		fvstate->num_sort = qstate->num_sort;
+
+		MemoryContextSwitchTo(old);
+		return fvstate;
+	}
+
+	qstate = init_first_values_query_state(fcinfo);
 	fcinfo->flinfo->fn_extra = (void *) qstate;
+
+	fvstate->types = extract_types(qstate);
+	fvstate->num_sort = qstate->num_sort;
 
 	MemoryContextSwitchTo(old);
 
@@ -2323,8 +2388,9 @@ compare_values(FirstValuesQueryState *qstate, Datum d1, bool isnull1, Datum d2, 
 	tup1 = palloc0(sizeof(HeapTupleData));
 	tup1->t_data = DatumGetHeapTupleHeader(d1);
 	tup1->t_len = HeapTupleHeaderGetDatumLength(tup1->t_data);
+
 	tup2 = palloc0(sizeof(HeapTupleData));
-	tup2->t_data = DatumGetHeapTupleHeader(d1);
+	tup2->t_data = DatumGetHeapTupleHeader(d2);
 	tup2->t_len = HeapTupleHeaderGetDatumLength(tup1->t_data);
 
 	ExecClearTuple(qstate->tup_slot1);
@@ -2450,13 +2516,14 @@ first_values_trans(PG_FUNCTION_ARGS)
 
 Datum
 first_values_combine(PG_FUNCTION_ARGS)
+
 {
 	MemoryContext old;
 	MemoryContext context;
 	FirstValuesPerGroupState *fvstate = PG_ARGISNULL(0) ? NULL : (FirstValuesPerGroupState *) PG_GETARG_POINTER(0);
 	FirstValuesPerGroupState *incoming = PG_ARGISNULL(1) ? NULL : (FirstValuesPerGroupState *) PG_GETARG_POINTER(1);
-	ArrayBuildState *astate1;
-	ArrayBuildState *astate2;
+	ArrayBuildState *astate;
+	ArrayBuildState *incoming_astate;
 	ArrayBuildState *merged = NULL;
 	FirstValuesQueryState *qstate;
 	int i;
@@ -2465,61 +2532,43 @@ first_values_combine(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &context))
 			elog(ERROR, "aggregate function called in non-aggregate context");
 
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = init_first_values_query_state(fcinfo);
+
 	if (fvstate == NULL || fvstate->array == NULL)
 		PG_RETURN_POINTER(incoming);
 
 	if (incoming == NULL || incoming->array == NULL)
 		PG_RETURN_POINTER(fvstate);
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-	{
-		int i;
-
-		old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
-
-		qstate = (FirstValuesQueryState *) palloc0(sizeof(FirstValuesQueryState));
-		qstate->type = fvstate->array->element_type;
-		qstate->num_sort = fvstate->num_sort;
-		qstate->num_values = fvstate->num_values;
-		qstate->sortkey = palloc0(sizeof(SortSupportData) * qstate->num_sort);
-		memcpy(qstate->sortkey, fvstate->sortkey, sizeof(SortSupportData) * qstate->num_sort);
-
-		for (i = 0; i < qstate->num_sort; i++)
-		{
-			qstate->sortkey[i].comparator = NULL;
-			PrepareSortSupportFromOrderingOp(fvstate->sortop[i], &qstate->sortkey[i]);
-		}
-
-		MemoryContextSwitchTo(old);
-	}
-
+	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
 	old = MemoryContextSwitchTo(context);
 
 	/* This is basically a merge routine */
-	astate1 = fvstate->array;
-	astate2 = incoming->array;
+	astate = fvstate->array;
+	incoming_astate = incoming->array;
 
-	for (i = 0, j = 0; i < astate1->nelems || j < astate2->nelems; )
+	for (i = 0, j = 0; i < astate->nelems || j < incoming_astate->nelems; )
 	{
-		if ((merged && merged->nelems == qstate->num_values) || (i == astate1->nelems && j == astate2->nelems))
+		if ((merged && merged->nelems == qstate->num_values) || (i == astate->nelems && j == incoming_astate->nelems))
 			break;
 
-		if (i == astate1->nelems)
+		if (i == astate->nelems)
 		{
-			merged = accumArrayResult(merged, astate2->dvalues[j], astate2->dnulls[j], qstate->type, context);
+			merged = accumArrayResult(merged, incoming_astate->dvalues[j], incoming_astate->dnulls[j], qstate->type, context);
 			j++;
 		}
-		else if (j == astate2->nelems)
+		else if (j == incoming_astate->nelems)
 		{
-			merged = accumArrayResult(merged, astate1->dvalues[i], astate1->dnulls[i], qstate->type, context);
+			merged = accumArrayResult(merged, astate->dvalues[i], astate->dnulls[i], qstate->type, context);
 			i++;
 		}
 		else
 		{
-			Datum d1 = astate1->dvalues[i];
-			bool n1 = astate1->dnulls[i];
-			Datum d2 = astate2->dvalues[j];
-			bool n2 = astate2->dnulls[j];
+			Datum d1 = astate->dvalues[i];
+			bool n1 = astate->dnulls[i];
+			Datum d2 = incoming_astate->dvalues[j];
+			bool n2 = incoming_astate->dnulls[j];
 
 			if (compare_values(qstate, d1, n1, d2, n2) < 0)
 			{
