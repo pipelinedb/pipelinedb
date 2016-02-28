@@ -2147,7 +2147,7 @@ first_values_recv(PG_FUNCTION_ARGS)
 
 	if (state->array != NULL)
 	{
-		fcinfo->arg[0] = (Datum) DatumGetArrayTypeP(pos);
+		fcinfo->arg[0] = PointerGetDatum(pos);
 		state->array = (ArrayBuildState *) DatumGetPointer(arrayaggstaterecv(fcinfo));
 		fcinfo->arg[0] = PointerGetDatum(bytes);
 	}
