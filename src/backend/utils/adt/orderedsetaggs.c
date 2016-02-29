@@ -2174,21 +2174,34 @@ first_values_final(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 
 	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
-	if (array->nelems && array->element_type == RECORDOID && qstate == NULL)
+	if (array->nelems && array->element_type == RECORDOID)
 	{
 		MemoryContext old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
 		int i;
 
-		qstate = palloc0(sizeof(FirstValuesQueryState));
-		qstate->tup_desc = CreateTemplateTupleDesc(fvstate->num_sort, false);
-
-		for (i = 0; i < fvstate->num_sort; i++)
+		if (qstate == NULL)
 		{
-			TupleDescInitEntry(qstate->tup_desc, i + 1, NULL, fvstate->types[i], -1, 0);
+			qstate = palloc0(sizeof(FirstValuesQueryState));
+			qstate->tup_desc = CreateTemplateTupleDesc(fvstate->num_sort, false);
+
+			for (i = 0; i < fvstate->num_sort; i++)
+			{
+				TupleDescInitEntry(qstate->tup_desc, i + 1, NULL, fvstate->types[i], -1, 0);
+			}
+
+			BlessTupleDesc(qstate->tup_desc);
+			fcinfo->flinfo->fn_extra = (void *) qstate;
 		}
 
-		BlessTupleDesc(qstate->tup_desc);
-		fcinfo->flinfo->fn_extra = (void *) qstate;
+		/*
+		 * The typmod assigned to each tuple will eventually be used to look up
+		 * the TupleDesc we just created
+		 */
+		for (i = 0; i < array->nelems; i++)
+		{
+			HeapTupleHeader td = DatumGetHeapTupleHeader(array->dvalues[i]);
+			HeapTupleHeaderSetTypMod(td, qstate->tup_desc->tdtypmod);
+		}
 
 		MemoryContextSwitchTo(old);
 	}
