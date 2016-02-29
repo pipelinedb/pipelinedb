@@ -743,7 +743,7 @@ json_object_int_sum_transout(PG_FUNCTION_ARGS)
 	StringInfoData buf;
 	bool first = true;
 
-	if (!IsContQueryProcess())
+	if (!IsContQueryProcess() && !AggCheckCallContext(fcinfo, NULL))
 		PG_RETURN_TEXT_P(PG_GETARG_TEXT_P(0));
 
 	state = (JsonObjectIntSumState *) PG_GETARG_POINTER(0);
