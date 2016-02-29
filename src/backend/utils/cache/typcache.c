@@ -1828,9 +1828,28 @@ void
 reset_record_type_cache(void)
 {
 	if (RecordCacheHash)
+	{
+		HASH_SEQ_STATUS seq;
+		RecordCacheEntry *entry;
+
+		hash_seq_init(&seq, RecordCacheHash);
+		while ((entry = (RecordCacheEntry *) hash_seq_search(&seq)) != NULL)
+		{
+			list_free(entry->tupdescs);
+		}
 		hash_destroy(RecordCacheHash);
+	}
 	if (RecordCacheArray)
+	{
+		int i;
+		for (i = 0; i < NextRecordTypmod; i++)
+		{
+			Assert(RecordCacheArray[i]->tdrefcount == 1);
+			RecordCacheArray[i]->tdrefcount = 0;
+			FreeTupleDesc(RecordCacheArray[i]);
+		}
 		pfree(RecordCacheArray);
+	}
 
 	RecordCacheHash = NULL;
 	RecordCacheArray = NULL;
