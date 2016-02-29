@@ -1,5 +1,5 @@
 PACKAGE = pipelinedb
-PREFIX = /usr/lib/$(PACKAGE)
+PREFIX = /usr/local/lib/$(PACKAGE)
 
 TOP_BUILDDIR = ../../
 DESTDIR = $(CURDIR)/build
@@ -25,10 +25,10 @@ pipeline:
 	(cd $(TOP_BUILDDIR) && ./configure PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) CFLAGS="$(PIPELINE_CFLAGS)")
 	(cd $(TOP_BUILDDIR) && $(MAKE))
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
-	(cd $(TOP_BUILDDIR)/contrib/pipeline_kafka && ./configure && make && make install)
+	(cd $(TOP_BUILDDIR)/contrib/pipeline_kafka && ./configure && make LIB_RDKAFKA_STATIC=/usr/local/lib/librdkafka.a && make install)
 
 clean-libs:
 	find $(LIBDIR) -name "*.la" -exec rm {} \;
 
 clean:
-	rm -rf $(GEOS)* $(GDAL)* $(PROJ)* $(DESTDIR) $(SCRIPTS)
+	rm -rf $(DESTDIR) $(SCRIPTS)

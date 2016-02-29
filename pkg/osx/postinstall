@@ -1,15 +1,15 @@
 #! /bin/bash
 
-INSTALL_PREFIX=/usr/lib/pipelinedb
+INSTALL_PREFIX=/usr/local/lib/pipelinedb
 
-ln -s $INSTALL_PREFIX/bin/pipeline-server /usr/bin/pipeline-server
-ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pipeline-ctl
-ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pg_ctl
-ln -s $INSTALL_PREFIX/bin/pipeline-init /usr/bin/pipeline-init
-ln -s $INSTALL_PREFIX/bin/psql /usr/bin/psql
-ln -s $INSTALL_PREFIX/bin/psql /usr/bin/pipeline
-ln -s $INSTALL_PREFIX/bin/pipeline-config /usr/bin/pg_config
-ln -s $INSTALL_PREFIX/bin/padhoc /usr/bin/padhoc
+ln -s $INSTALL_PREFIX/bin/pipeline-server /usr/local/bin/pipeline-server
+ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/local/bin/pipeline-ctl
+ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/local/bin/pg_ctl
+ln -s $INSTALL_PREFIX/bin/pipeline-init /usr/local/bin/pipeline-init
+ln -s $INSTALL_PREFIX/bin/psql /usr/local/bin/psql
+ln -s $INSTALL_PREFIX/bin/psql /usr/local/bin/pipeline
+ln -s $INSTALL_PREFIX/bin/pipeline-config /usr/local/bin/pg_config
+ln -s $INSTALL_PREFIX/bin/padhoc /usr/local/bin/padhoc
 
 rm $INSTALL_PREFIX/postinst
 
