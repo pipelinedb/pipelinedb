@@ -767,6 +767,7 @@ permissionsList(const char *pattern)
 					  " WHEN 'f' THEN '%s'"
 						" WHEN 'C' THEN '%s'"
 						" WHEN '$' THEN '%s'"
+						" WHEN 'X' THEN '%s'"
 					  " END as \"%s\",\n"
 					  "  ",
 					  gettext_noop("Schema"),
@@ -778,6 +779,7 @@ permissionsList(const char *pattern)
 					  gettext_noop("foreign table"),
 					  gettext_noop("continuous view"),
 					  gettext_noop("stream"),
+					  gettext_noop("continuous view"),
 					  gettext_noop("Type"));
 
 	printACLColumn(&buf, "c.relacl");
@@ -824,7 +826,7 @@ permissionsList(const char *pattern)
 
 	appendPQExpBufferStr(&buf, "\nFROM pg_catalog.pg_class c\n"
 	   "     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n"
-			 "WHERE c.relkind IN ('r', 'v', 'm', 'S', 'f', 'C', '$')\n");
+			 "WHERE c.relkind IN ('r', 'v', 'm', 'S', 'f', 'C', '$', 'X')\n");
 
 	/*
 	 * Unless a schema pattern is specified, we suppress system and temp
@@ -1543,6 +1545,11 @@ describeOneTableDetails(const char *schemaname,
 
 		case '$':
 			printfPQExpBuffer(&title, _("Stream \"%s.%s\""),
+							  schemaname, relationname);
+			break;
+
+		case 'X':
+			printfPQExpBuffer(&title, _("Continuous transform \"%s.%s\""),
 							  schemaname, relationname);
 			break;
 
@@ -2919,6 +2926,7 @@ listTables(const char *tabtypes, const char *pattern, bool verbose, bool showSys
 	bool		showForeign = strchr(tabtypes, 'E') != NULL;
 	bool		showStreams = strchr(tabtypes, '$') != NULL;
 	bool		showContViews = strchr(tabtypes, 'C') != NULL;
+	bool		showContTransforms = strchr(tabtypes, 'X') != NULL;
 
 	PQExpBufferData buf;
 	PGresult   *res;
@@ -2926,8 +2934,8 @@ listTables(const char *tabtypes, const char *pattern, bool verbose, bool showSys
 	static const bool translate_columns[] = {false, false, true, false, false, false, false};
 
 	if (!(showTables || showIndexes || showViews || showMatViews || showSeq || showForeign ||
-			showStreams || showContViews))
-		showTables = showViews = showMatViews = showSeq = showForeign = showContViews = showStreams = true;
+			showStreams || showContViews || showContTransforms))
+		showTables = showViews = showMatViews = showSeq = showForeign = showContViews = showStreams = showContTransforms = true;
 
 	initPQExpBuffer(&buf);
 
@@ -2948,6 +2956,7 @@ listTables(const char *tabtypes, const char *pattern, bool verbose, bool showSys
 					  " WHEN 'f' THEN '%s'"
 						" WHEN 'C' THEN '%s'"
 						" WHEN '$' THEN '%s'"
+						" WHEN 'X' THEN '%s'"
 					  " END as \"%s\",\n"
 					  "  pg_catalog.pg_get_userbyid(c.relowner) as \"%s\"",
 					  gettext_noop("Schema"),
@@ -2961,6 +2970,7 @@ listTables(const char *tabtypes, const char *pattern, bool verbose, bool showSys
 					  gettext_noop("foreign table"),
 					  gettext_noop("continuous view"),
 					  gettext_noop("stream"),
+					  gettext_noop("continuous transform"),
 					  gettext_noop("Type"),
 					  gettext_noop("Owner"));
 
@@ -3018,6 +3028,8 @@ listTables(const char *tabtypes, const char *pattern, bool verbose, bool showSys
 		appendPQExpBufferStr(&buf, "'C',");
 	if (showStreams)
 		appendPQExpBufferStr(&buf, "'$',");
+	if (showContTransforms)
+		appendPQExpBufferStr(&buf, "'X',");
 
 	appendPQExpBufferStr(&buf, "''");	/* dummy */
 	appendPQExpBufferStr(&buf, ")\n");

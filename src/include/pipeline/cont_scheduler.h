@@ -31,10 +31,10 @@
 
 typedef enum
 {
-	Combiner,
-	Worker,
-	Adhoc,
-	Scheduler /* unused */
+	COMBINER,
+	WORKER,
+	ADHOC,
+	SCHEDULER /* unused */
 } ContQueryProcType;
 
 typedef struct ContQueryDatabaseMetadata ContQueryDatabaseMetadata;

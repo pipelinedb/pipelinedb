@@ -472,7 +472,8 @@ typedef enum NodeTag
 
 	T_CreateContViewStmt,
 	T_CreateStreamStmt,
-	T_ExplainContViewStmt,
+	T_CreateContTransformStmt,
+	T_ExplainContQueryStmt,
 	T_TruncateContViewStmt,
 	T_ActivateStmt,
 	T_DeactivateStmt

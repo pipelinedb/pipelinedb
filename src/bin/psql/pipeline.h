@@ -7,6 +7,7 @@
 #define PIPELINE_H
 
 
-extern bool listPipelineQuery(void);
+extern bool listContinuousViews(void);
+extern bool listContinuousTransforms(void);
 
 #endif   /* PIPELINE_H */

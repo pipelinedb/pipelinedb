@@ -468,6 +468,11 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
 	Relids		required_outer;
 
+	if (rte->relkind == RELKIND_CONTTRANSFORM)
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("\"%s\" is a continuous transform", get_rel_name(rte->relid)),
+				 errhint("Continuous transforms don't support SELECTs.")));
 	/*
 	 * We don't support pushing join clauses into the quals of a seqscan, but
 	 * it could still have required parameterization due to LATERAL refs in

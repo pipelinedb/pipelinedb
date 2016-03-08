@@ -20,7 +20,7 @@ def test_create_views(pipeline, clean_db):
     assert 'maximum number of continuous views exceeded' in e.message
 
   ids = [r['id'] for r in
-         pipeline.execute('SELECT id FROM pipeline_queries()')]
+         pipeline.execute('SELECT id FROM pipeline_views()')]
 
   assert len(set(ids)) == len(ids)
   assert set(ids) == set(xrange(1, MAX_CQS))

@@ -506,6 +506,21 @@ static const SchemaQuery Query_for_list_of_streams = {
 	NULL
 };
 
+static const SchemaQuery Query_for_list_of_continuous_transforms = {
+	/* catname */
+	"pg_catalog.pg_class c",
+	/* selcondition */
+	"c.relkind IN ('x')",
+	/* viscondition */
+	"pg_catalog.pg_table_is_visible(c.oid)",
+	/* namespace */
+	"c.relnamespace",
+	/* result */
+	"pg_catalog.quote_ident(c.relname)",
+	/* qualresult */
+	NULL
+};
+
 /*
  * Queries to get lists of names of various kinds of things, possibly
  * restricted to names matching a partially entered name.  In these queries,
@@ -816,6 +831,7 @@ static const pgsql_thing_t words_after_create[] = {
 	 */
 	{"CONFIGURATION", Query_for_list_of_ts_configurations, NULL, THING_NO_SHOW},
 	{"CONTINUOUS VIEW", NULL, &Query_for_list_of_continuous_views},
+	{"CONTINUOUS TRANSFORM", NULL, &Query_for_list_of_continuous_transforms},
 	{"CONVERSION", "SELECT pg_catalog.quote_ident(conname) FROM pg_catalog.pg_conversion WHERE substring(pg_catalog.quote_ident(conname),1,%d)='%s'"},
 	{"DATABASE", Query_for_list_of_databases},
 	{"DICTIONARY", Query_for_list_of_ts_dictionaries, NULL, THING_NO_SHOW},
@@ -2921,17 +2937,26 @@ psql_completion(const char *text, int start, int end)
 		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_matviews, NULL);
 	}
 
-	/* DROP CONTINUOUS VIEW */
+	/* DROP CONTINUOUS VIEW/TRANSFORM */
 	else if (pg_strcasecmp(prev2_wd, "DROP") == 0 &&
 			pg_strcasecmp(prev_wd, "CONTINUOUS") == 0)
 	{
-		COMPLETE_WITH_CONST("VIEW");
+		static const char *const list_CONTINUOUS[] =
+		{"VIEW", "TRANSFORM", NULL};
+
+		COMPLETE_WITH_LIST(list_CONTINUOUS);
 	}
 	else if (pg_strcasecmp(prev3_wd, "DROP") == 0 &&
 			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
 			 pg_strcasecmp(prev_wd, "VIEW") == 0)
 	{
 		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_views, NULL);
+	}
+	else if (pg_strcasecmp(prev3_wd, "DROP") == 0 &&
+			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
+			 pg_strcasecmp(prev_wd, "TRANSFORM") == 0)
+	{
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_transforms, NULL);
 	}
 
 	/* DROP STREAM  */
@@ -3058,7 +3083,7 @@ psql_completion(const char *text, int start, int end)
 	else if (pg_strcasecmp(prev_wd, "EXPLAIN") == 0)
 	{
 		static const char *const list_EXPLAIN[] =
-		{"SELECT", "INSERT", "DELETE", "UPDATE", "DECLARE", "ANALYZE", "VERBOSE", "CONTINUOUS VIEW", NULL};
+		{"SELECT", "INSERT", "DELETE", "UPDATE", "DECLARE", "ANALYZE", "VERBOSE", "CONTINUOUS VIEW", "CONTINUOUS TRANSFORM", NULL};
 
 		COMPLETE_WITH_LIST(list_EXPLAIN);
 	}
@@ -3082,11 +3107,13 @@ psql_completion(const char *text, int start, int end)
 		COMPLETE_WITH_LIST(list_EXPLAIN);
 	}
 
-	/* EXPLAIN CONTINUOUS VIEW */
+	/* EXPLAIN CONTINUOUS VIEW/TRANSFORM */
 	else if (pg_strcasecmp(prev2_wd, "EXPLAIN") == 0 &&
 			 pg_strcasecmp(prev_wd, "CONTINUOUS") == 0)
 	{
-		COMPLETE_WITH_CONST("VIEW");
+		static const char *const list_CONTINUOUS[] =
+		{"VIEW", "TRANSFORM", NULL};
+		COMPLETE_WITH_LIST(list_CONTINUOUS);
 	}
 
 	else if (pg_strcasecmp(prev3_wd, "EXPLAIN") == 0 &&
@@ -3094,6 +3121,13 @@ psql_completion(const char *text, int start, int end)
 			 pg_strcasecmp(prev_wd, "VIEW") == 0)
 	{
 		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_views, NULL);
+	}
+
+	else if (pg_strcasecmp(prev3_wd, "EXPLAIN") == 0 &&
+			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
+			 pg_strcasecmp(prev_wd, "TRANSFORM") == 0)
+	{
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_transforms, NULL);
 	}
 
 /* FETCH && MOVE */

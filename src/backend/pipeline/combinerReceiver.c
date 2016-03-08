@@ -34,8 +34,8 @@ CombinerReceiveFunc CombinerReceiveHook = NULL;
 typedef struct
 {
 	DestReceiver pub;
-	ContExecutor *cont_executor;
-	Bitmapset *queries;
+	ContQuery *cont_query;
+	ContExecutor *cont_exec;
 	FunctionCallInfo hash_fcinfo;
 	FuncExpr *hash;
 	int64 query_hash;
@@ -89,6 +89,11 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	int nacks = 0;
 	int idx;
 
+	if (c->cont_query == NULL)
+		c->cont_query = c->cont_exec->current_query->query;
+
+	Assert(c->cont_query->type == CONT_VIEW);
+
 	if (synchronous_stream_insert)
 	{
 		List *acks_list = NIL;
@@ -96,14 +101,14 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 		int i = 0;
 
 		/* Generate acks list from yielded tuples */
-		foreach(lc, c->cont_executor->yielded)
+		foreach(lc, c->cont_exec->yielded)
 		{
 			StreamTupleState *sts = lfirst(lc);
 			InsertBatchAck *ack = sts->ack;
 			ListCell *lc2;
 			bool found = false;
 
-			if (!ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
+			if (ack == NULL || !ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
 				continue;
 
 			foreach(lc2, acks_list)
@@ -142,7 +147,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	}
 
 	pts->tup = ExecCopySlotTuple(slot);
-	pts->query_id = c->cont_executor->current_query_id;
+	pts->query_id = c->cont_query->id;
 	pts->nacks = nacks;
 	pts->acks = acks;
 
@@ -150,7 +155,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	if (c->hash_fcinfo)
 		pts->hash = hash_group(slot, c);
 	else
-		pts->hash = MurmurHash3_64(&c->cont_executor->current_query->view->name, sizeof(NameData), MURMUR_SEED);
+		pts->hash = MurmurHash3_64(&c->cont_query->name, sizeof(NameData), MURMUR_SEED);
 
 	idx = pts->hash % continuous_query_num_combiners;
 	c->partials[idx] = lappend(c->partials[idx], pts);
@@ -158,7 +163,8 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	MemoryContextSwitchTo(old);
 }
 
-static void combiner_destroy(DestReceiver *self)
+static void
+combiner_destroy(DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
 	if (c->hash_fcinfo)
@@ -189,10 +195,11 @@ CreateCombinerDestReceiver(void)
  * Set parameters for a CombinerDestReceiver
  */
 void
-SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *exec)
+SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery *query)
 {
 	CombinerState *c = (CombinerState *) self;
-	c->cont_executor = exec;
+	c->cont_exec = exec;
+	c->cont_query = query;
 }
 
 /*
@@ -207,7 +214,7 @@ SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash)
 	FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
 
 	fcinfo->flinfo = palloc0(sizeof(FmgrInfo));
-	fcinfo->flinfo->fn_mcxt = c->cont_executor->exec_cxt;
+	fcinfo->flinfo->fn_mcxt = c->cont_exec->exec_cxt;
 
 	fmgr_info(hash->funcid, fcinfo->flinfo);
 	fmgr_info_set_expr((Node *) hash, fcinfo->flinfo);

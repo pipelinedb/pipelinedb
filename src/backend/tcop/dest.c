@@ -42,6 +42,7 @@
 #include "libpq/pqformat.h"
 #include "pipeline/adhocReceiver.h"
 #include "pipeline/combinerReceiver.h"
+#include "pipeline/transformReceiver.h"
 #include "utils/portal.h"
 
 
@@ -143,6 +144,9 @@ CreateDestReceiver(CommandDest dest)
 
 		case DestAdhoc:
 			return CreateAdhocDestReceiver();
+
+		case DestTransform:
+			return CreateTransformDestReceiver();
 	}
 
 	/* should never get here */
@@ -179,6 +183,7 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestTupleTable:
 		case DestCombiner:
 		case DestAdhoc:
+		case DestTransform:
 			break;
 	}
 }
@@ -224,6 +229,7 @@ NullCommand(CommandDest dest)
 		case DestTransientRel:
 		case DestCombiner:
 		case DestAdhoc:
+		case DestTransform:
 			break;
 	}
 }
@@ -271,6 +277,7 @@ ReadyForQuery(CommandDest dest)
 		case DestTupleTable:
 		case DestCombiner:
 		case DestAdhoc:
+		case DestTransform:
 			break;
 	}
 }

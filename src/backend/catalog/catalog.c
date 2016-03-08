@@ -256,8 +256,6 @@ IsSharedRelation(Oid relationId)
 		relationId == PgShdescriptionToastIndex ||
 		relationId == PgDbRoleSettingToastTable ||
 		relationId == PgDbRoleSettingToastIndex ||
-		relationId == PipelineDatabaseToastTable ||
-		relationId == PipelineDatabaseToastIndex ||
 		relationId == PgShseclabelToastTable ||
 		relationId == PgShseclabelToastIndex)
 		return true;

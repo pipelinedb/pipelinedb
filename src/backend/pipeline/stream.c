@@ -147,3 +147,9 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	bms_free(adhoc);
 	bms_free(targets);
 }
+
+extern
+Datum pipeline_stream_insert(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "pipeline_stream_insert can only be used by continuous transforms");
+}

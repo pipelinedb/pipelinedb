@@ -378,7 +378,7 @@ exec_command(const char *cmd,
 					success = describeTableDetails(pattern, show_verbose, show_system);
 				else
 					/* standard listing of interesting things */
-					success = listTables("tvmsEC$", NULL, show_verbose, show_system);
+					success = listTables("tvmsEC$X", NULL, show_verbose, show_system);
 				break;
 			case 'a':
 				success = describeAggregates(pattern, show_verbose, show_system);
@@ -450,6 +450,7 @@ exec_command(const char *cmd,
 			case 's':
 			case 'E':
 			case '$':
+			case 'X':
 				success = listTables(&cmd[1], pattern, show_verbose, show_system);
 				break;
 			case 'r':
@@ -1535,9 +1536,12 @@ exec_command(const char *cmd,
 			slashUsage(pset.popt.topt.pager);
 	}
 
-	/* \zq -- PipelineDB */
+	/* \zq -- continuous views */
 	else if (strcmp(cmd, "|") == 0)
-		success = listPipelineQuery();
+		success = listContinuousViews();
+	/* \X -- continuous transforms */
+	else if (strcmp(cmd, "X") == 0)
+		success = listContinuousTransforms();
 
 #if 0
 

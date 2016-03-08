@@ -107,7 +107,7 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	 * see anything after the first batch was consumed.
 	 *
 	 */
-	Relation rel = heap_openrv(state->base.view->matrel, AccessShareLock);
+	Relation rel = heap_openrv(state->base.query->matrel, AccessShareLock);
 
 	plan->isContinuous = false;
 
@@ -282,7 +282,7 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 	cref->fields = list_make1(star);
 	res->val = (Node *) cref;
 	sel->targetList = list_make1(res);
-	sel->fromClause = list_make1(state->base.view->matrel);
+	sel->fromClause = list_make1(state->base.query->matrel);
 	sel->forCombineLookup = true;
 
 	/* populate the ParseState's p_varnamespace member */
@@ -290,7 +290,7 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 	ps->p_no_locking = true;
 	transformFromClause(ps, sel->fromClause);
 
-	qlist = pg_analyze_and_rewrite((Node *) sel, state->base.view->matrel->relname, NULL, 0);
+	qlist = pg_analyze_and_rewrite((Node *) sel, state->base.query->matrel->relname, NULL, 0);
 	query = (Query *) linitial(qlist);
 
 	if (state->ngroupatts > 0 && list_length(values))
@@ -392,7 +392,7 @@ select_existing_groups(ContQueryCombinerState *state)
 			return;
 	}
 
-	matrel = heap_openrv(state->base.view->matrel, RowShareLock);
+	matrel = heap_openrv(state->base.query->matrel, RowShareLock);
 
 	plan = get_cached_groups_plan(state, values);
 
@@ -405,7 +405,7 @@ select_existing_groups(ContQueryCombinerState *state)
 
 	PortalDefineQuery(portal,
 			NULL,
-			state->base.view->matrel->relname,
+			state->base.query->matrel->relname,
 			"SELECT",
 			list_make1(plan),
 			NULL);
@@ -519,7 +519,7 @@ sync_combine(ContQueryCombinerState *state)
 	Relation matrel;
 	ResultRelInfo *ri;
 
-	matrel = heap_openrv_extended(state->base.view->matrel, RowExclusiveLock, true);
+	matrel = heap_openrv_extended(state->base.query->matrel, RowExclusiveLock, true);
 	if (matrel == NULL)
 		return;
 
@@ -595,7 +595,7 @@ sync_combine(ContQueryCombinerState *state)
 		{
 			/* No existing tuple found, so it's an INSERT. Also generate a primary key for it if necessary. */
 			if (state->seq_pk)
-				slot->tts_values[state->pk - 1] = nextval_internal(state->base.view->seqrel);
+				slot->tts_values[state->pk - 1] = nextval_internal(state->base.query->seqrel);
 			slot->tts_isnull[state->pk - 1] = false;
 			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
@@ -682,7 +682,7 @@ combine(ContQueryCombinerState *state)
 
 	PortalDefineQuery(portal,
 					  NULL,
-					  state->base.view->matrel->relname,
+					  state->base.query->matrel->relname,
 					  "SELECT",
 					  list_make1(state->combine_plan),
 					  NULL);
@@ -712,6 +712,12 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	List *indices = NIL;
 	ListCell *lc;
 
+	if (base->query->type != CONT_VIEW)
+	{
+		base->query = NULL;
+		return base;
+	}
+
 	state = (ContQueryCombinerState *) palloc0(sizeof(ContQueryCombinerState));
 	memcpy(&state->base, base, sizeof(ContQueryState));
 	pfree(base);
@@ -727,7 +733,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	pstmt = GetContPlan(base->view, Combiner);
+	pstmt = GetContPlan(base->query, COMBINER);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	state->combined = tuplestore_begin_heap(false, false, continuous_query_combiner_work_mem);
@@ -742,10 +748,10 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	state->group_hashes_len = continuous_query_batch_size;
 	state->group_hashes = palloc0(state->group_hashes_len * sizeof(int64));
 
-	matrel = heap_openrv_extended(base->view->matrel, AccessShareLock, true);
+	matrel = heap_openrv_extended(base->query->matrel, AccessShareLock, true);
 	if (matrel == NULL)
 	{
-		base->view = NULL;
+		base->query = NULL;
 		return base;
 	}
 
@@ -794,8 +800,8 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 
 	heap_close(matrel, AccessShareLock);
 
-	Assert(state->pk != InvalidAttrNumber);
-	state->seq_pk = base->view->seqrel != InvalidOid;
+	Assert(AttributeNumberIsValid(state->pk));
+	state->seq_pk = OidIsValid(base->query->seqrel);
 
 	return base;
 }
@@ -878,7 +884,7 @@ need_sync(ContExecutor *cont_exec, TimestampTz last_sync)
 void
 ContinuousQueryCombinerMain(void)
 {
-	ContExecutor *cont_exec = ContExecutorNew(Combiner, &init_query_state);
+	ContExecutor *cont_exec = ContExecutorNew(COMBINER, &init_query_state);
 	Oid query_id;
 	TimestampTz first_seen = GetCurrentTimestamp();
 	bool do_commit = false;
@@ -978,7 +984,7 @@ next:
  * GetCombinerLookupPlan
  */
 PlannedStmt *
-GetCombinerLookupPlan(ContinuousView *view)
+GetCombinerLookupPlan(ContQuery *view)
 {
 	ContQueryCombinerState *state;
 	ContQueryState *base;
@@ -992,8 +998,8 @@ GetCombinerLookupPlan(ContinuousView *view)
 
 	base = palloc0(sizeof(ContQueryState));
 
-	base->view_id = view->id;
-	base->view = view;
+	base->query_id = view->id;
+	base->query = view;
 	base->state_cxt = CurrentMemoryContext;
 	base->tmp_cxt = CurrentMemoryContext;
 
@@ -1118,7 +1124,7 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	RangeVar *cv_rv = makeRangeVarFromNameList(textToQualifiedNameList(cv_name));
 	text *relname = PG_GETARG_TEXT_P(1);
 	RangeVar *rel_rv = makeRangeVarFromNameList(textToQualifiedNameList(relname));
-	ContinuousView *cv = GetContinuousView(GetContViewId(cv_rv));
+	ContQuery *cv = GetContQueryForViewId(GetContViewId(cv_rv));
 	Relation matrel;
 	Relation srcrel;
 	ContExecutor exec;
@@ -1144,8 +1150,8 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 
 	base = palloc0(sizeof(ContQueryState));
 
-	base->view_id = cv->id;
-	base->view = cv;
+	base->query_id = cv->id;
+	base->query = cv;
 	base->state_cxt = CurrentMemoryContext;
 	base->tmp_cxt = AllocSetContextCreate(CurrentMemoryContext, "pipeline_combine_table temp cxt",
 			ALLOCSET_DEFAULT_MINSIZE,

@@ -199,16 +199,16 @@ GetContQueryProcName(ContQueryProc *proc)
 
 	switch (proc->type)
 	{
-		case Combiner:
+		case COMBINER:
 			sprintf(buf, "combiner%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
 			break;
-		case Worker:
+		case WORKER:
 			sprintf(buf, "worker%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
 			break;
-		case Adhoc:
+		case ADHOC:
 			sprintf(buf, "adhoc [%s]", NameStr(proc->db_meta->db_name));
 			break;
-		case Scheduler:
+		case SCHEDULER:
 			return pstrdup("scheduler");
 			break;
 	}
@@ -462,7 +462,7 @@ purge_adhoc_queries(void)
 
 	while ((id = bms_first_member(view_ids)) >= 0)
 	{
-		ContinuousView *cv = GetContinuousView(id);
+		ContQuery *cv = GetContQueryForViewId(id);
 		CleanupAdhocContinuousView(cv);
 	}
 
@@ -491,15 +491,15 @@ cont_bgworker_main(Datum arg)
 
 	switch (proc->type)
 	{
-		case Combiner:
+		case COMBINER:
 			am_cont_combiner = true;
 			run = &ContinuousQueryCombinerMain;
 			break;
-		case Worker:
+		case WORKER:
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
 			break;
-		case Adhoc:
+		case ADHOC:
 			/* Clean up and die. */
 			purge_adhoc_queries();
 			proc->group_id = 0;
@@ -543,13 +543,13 @@ dsm_cqueue_setup(ContQueryProc *proc)
 	LWLock *lock;
 	int lock_idx;
 
-	if (proc->type == Combiner)
+	if (proc->type == COMBINER)
 	{
 		peek_fn = &PartialTupleStatePeekFn;
 		pop_fn = &PartialTupleStatePopFn;
 		cpy_fn = &PartialTupleStateCopyFn;
 	}
-	else if (proc->type == Worker)
+	else if (proc->type == WORKER)
 	{
 		peek_fn = &StreamTupleStatePeekFn;
 		pop_fn = &StreamTupleStatePopFn;
@@ -728,7 +728,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 		proc = &db_meta->db_procs[slot_idx];
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		proc->type = Worker;
+		proc->type = WORKER;
 		proc->id = slot_idx;
 		proc->group_id = group_id;
 		proc->db_meta = db_meta;
@@ -742,7 +742,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 		proc = &db_meta->db_procs[slot_idx];
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		proc->type = Combiner;
+		proc->type = COMBINER;
 		proc->id = slot_idx;
 		proc->group_id = group_id;
 		proc->db_meta = db_meta;
@@ -754,7 +754,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	proc = db_meta->adhoc_procs;
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
-	proc->type = Adhoc;
+	proc->type = ADHOC;
 	proc->group_id = 1;
 	proc->db_meta = db_meta;
 
@@ -1125,7 +1125,7 @@ AdhocContQueryProcGet(void)
 	{
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		proc->type = Adhoc;
+		proc->type = ADHOC;
 		proc->id = rand();
 		proc->latch = MyLatch;
 		proc->db_meta = db_meta;
@@ -1145,7 +1145,7 @@ AdhocContQueryProcRelease(ContQueryProc *proc)
 	bool found;
 	ContQueryDatabaseMetadata *db_meta;
 
-	Assert(proc->type == Adhoc);
+	Assert(proc->type == ADHOC);
 	Assert(proc->group_id > 0);
 
 	db_meta = (ContQueryDatabaseMetadata *) hash_search(

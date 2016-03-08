@@ -235,6 +235,12 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 				 errmsg("\"%s\" is a stream",
 						RelationGetRelationName(rel)),
 		  errdetail("Streams don't support triggers.")));
+	else if (rel->rd_rel->relkind == RELKIND_CONTTRANSFORM)
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("\"%s\" is a continuous transform",
+						RelationGetRelationName(rel)),
+		  errdetail("Continuous transforms don't support triggers.")));
 	else if (rel->rd_rel->relkind != RELKIND_CONTVIEW)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),

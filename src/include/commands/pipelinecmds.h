@@ -28,11 +28,13 @@ extern bool use_ls_hash_group_index;
 extern void ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring);
 extern void ExecTruncateContViewStmt(TruncateStmt *stmt);
 
-extern TupleDesc ExplainContViewResultDesc(ExplainContViewStmt *stmt);
-extern void ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
+extern TupleDesc ExplainContViewResultDesc(ExplainContQueryStmt *stmt);
+extern void ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
 			 ParamListInfo params, DestReceiver *dest);
 
 extern void ExecActivateStmt(ActivateStmt *stmt, ProcessUtilityContext context);
 extern void ExecDeactivateStmt(DeactivateStmt *stmt, ProcessUtilityContext context);
+
+extern void ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring);
 
 #endif   /* PIPELINECMDS_H */

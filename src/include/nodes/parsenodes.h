@@ -1431,8 +1431,9 @@ typedef enum ObjectType
 	OBJECT_TYPE,
 	OBJECT_USER_MAPPING,
 	OBJECT_VIEW,
-	OBJECT_CONTINUOUS_VIEW,
-	OBJECT_STREAM
+	OBJECT_CONTVIEW,
+	OBJECT_STREAM,
+	OBJECT_CONTTRANSFORM
 } ObjectType;
 
 /* ----------------------
@@ -3073,24 +3074,33 @@ typedef struct AlterTSConfigurationStmt
 
 typedef struct CreateContViewStmt
 {
-	NodeTag			type;
-	IntoClause 		*into;
-	Node 			*query;
-
+	NodeTag		type;
+	IntoClause 	*into;
+	Node 		*query;
 } CreateContViewStmt;
 
-typedef struct ExplainContViewStmt
+typedef struct ExplainContQueryStmt
 {
 	NodeTag		type;
 	RangeVar 	*view;
+	ObjectType  objType;
 	List 		*options;
-} ExplainContViewStmt;
+} ExplainContQueryStmt;
 
 typedef struct CreateStreamStmt
 {
 	CreateForeignTableStmt ft;
 	bool 		is_inferred;
 } CreateStreamStmt;
+
+typedef struct CreateContTransformStmt
+{
+	NodeTag		type;
+	IntoClause 	*into;
+	Node 		*query;
+	List	    *funcname;
+	List	    *args;
+} CreateContTransformStmt;
 
 typedef struct DeactivateStmt
 {

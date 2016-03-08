@@ -181,7 +181,7 @@ streams_to_meta(Relation pipeline_query)
 		parsetree = (Node *) lfirst(parsetree_list->head);
 		sel = (SelectStmt *) parsetree;
 
-		context = MakeContAnalyzeContext(make_parsestate(NULL), sel, Worker);
+		context = MakeContAnalyzeContext(make_parsestate(NULL), sel, WORKER);
 		collect_rels_and_streams((Node *) sel->fromClause, context);
 		collect_types_and_cols((Node *) sel, context);
 
@@ -923,13 +923,13 @@ inferred_stream_open(ParseState *pstate, Relation rel)
 	else if (pstate->p_ins_cols)
 		desc = GetInferredStreamTupleDesc(rel->rd_id, pstate->p_ins_cols);
 	else
-		elog(ERROR, "inferred_stream_open called in an invalid context");
+		desc = CreateTupleDesc(0, false, NULL);
 
 	/* Create a dummy Relation for the inferred stream */
 	stream_rel = (Relation) palloc0(sizeof(RelationData));
 	stream_rel->rd_att = desc;
 	stream_rel->rd_rel = palloc0(sizeof(FormData_pg_class));
-	stream_rel->rd_rel->relnatts = stream_rel->rd_att->natts;
+	stream_rel->rd_rel->relnatts = desc->natts;
 	namestrcpy(&stream_rel->rd_rel->relname, NameStr(rel->rd_rel->relname));
 	stream_rel->rd_rel->relkind = RELKIND_STREAM;
 	stream_rel->rd_id = rel->rd_id;

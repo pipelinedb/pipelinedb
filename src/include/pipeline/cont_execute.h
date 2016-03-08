@@ -88,7 +88,7 @@ typedef struct PartialTupleState
 	uint64 hash;
 	Oid query_id;
 
-	/* For pipeline_cluster */
+	/* For pipelinedb_enterprise */
 	NameData cv;
 	NameData namespace;
 } PartialTupleState;
@@ -102,8 +102,8 @@ extern dsm_cqueue *GetCombinerQueue(PartialTupleState *pts);
 
 typedef struct ContQueryState
 {
-	Oid view_id;
-	ContinuousView *view;
+	Oid query_id;
+	ContQuery *query;
 	MemoryContext state_cxt;
 	MemoryContext tmp_cxt;
 	CQStatEntry stats;

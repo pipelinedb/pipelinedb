@@ -25,9 +25,6 @@ CATALOG(pipeline_database,4467) BKI_SHARED_RELATION BKI_ROWTYPE_OID(4468) BKI_SC
 {
 	Oid	 dbid;
 	bool cq_enabled;
-#ifdef CATALOG_VARLEN
-	jsonb meta;
-#endif
 } FormData_pipeline_database;
 
 /* ----------------
@@ -41,9 +38,8 @@ typedef FormData_pipeline_database *Form_pipeline_database;
  *		compiler constants for pipeline_database
  * ----------------
  */
-#define Natts_pipeline_database				3
+#define Natts_pipeline_database				2
 #define Anum_pipeline_database_dbid			1
 #define Anum_pipeline_database_cq_enabled	2
-#define Anum_pipeline_database_meta			3
 
 #endif   /* PIPELINE_DATABASE_H */

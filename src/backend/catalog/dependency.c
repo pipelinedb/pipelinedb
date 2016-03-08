@@ -1412,8 +1412,8 @@ doDeletion(const ObjectAddress *object, int flags)
 			DropTransformById(object->objectId);
 			break;
 
-		case OCLASS_CONTINUOUS_VIEW:
-			RemoveContinuousViewById(object->objectId);
+		case OCLASS_CONTINUOUS_QUERY:
+			RemovePipelineQueryById(object->objectId);
 			break;
 
 		case OCLASS_STREAM:
@@ -2572,7 +2572,7 @@ getObjectClass(const ObjectAddress *object)
 			return OCLASS_TRANSFORM;
 
 		case PipelineQueryRelationId:
-			return OCLASS_CONTINUOUS_VIEW;
+			return OCLASS_CONTINUOUS_QUERY;
 
 		case PipelineStreamRelationId:
 			return OCLASS_STREAM;

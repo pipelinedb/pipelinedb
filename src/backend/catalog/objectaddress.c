@@ -744,11 +744,12 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 			case OBJECT_INDEX:
 			case OBJECT_SEQUENCE:
 			case OBJECT_TABLE:
-			case OBJECT_CONTINUOUS_VIEW:
 			case OBJECT_VIEW:
 			case OBJECT_MATVIEW:
 			case OBJECT_FOREIGN_TABLE:
+			case OBJECT_CONTVIEW:
 			case OBJECT_STREAM:
+			case OBJECT_CONTTRANSFORM:
 				address =
 					get_relation_by_qualified_name(objtype, objname,
 												   &relation, lockmode,
@@ -1163,7 +1164,7 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 						 errmsg("\"%s\" is not a table",
 								RelationGetRelationName(relation))));
 			break;
-		case OBJECT_CONTINUOUS_VIEW:
+		case OBJECT_CONTVIEW:
 			if (relation->rd_rel->relkind != RELKIND_CONTVIEW)
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -1196,6 +1197,13 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a stream",
+								RelationGetRelationName(relation))));
+			break;
+		case OBJECT_CONTTRANSFORM:
+			if (relation->rd_rel->relkind != RELKIND_CONTTRANSFORM)
+				ereport(ERROR,
+						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+						 errmsg("\"%s\" is not a continuous transform",
 								RelationGetRelationName(relation))));
 			break;
 		default:
@@ -3147,16 +3155,16 @@ getObjectDescription(const ObjectAddress *object)
 				break;
 			}
 
-		case OCLASS_CONTINUOUS_VIEW:
+		case OCLASS_CONTINUOUS_QUERY:
 			{
 				HeapTuple	tup;
 
 				tup = SearchSysCache1(PIPELINEQUERYOID,
 									  ObjectIdGetDatum(object->objectId));
 				if (!HeapTupleIsValid(tup))
-					elog(ERROR, "cache lookup failed for continuous view %u",
+					elog(ERROR, "cache lookup failed for continuous query %u",
 						 object->objectId);
-				appendStringInfo(&buffer, _("continuous view %s"),
+				appendStringInfo(&buffer, _("continuous query %s"),
 				 NameStr(((Form_pipeline_query) GETSTRUCT(tup))->name));
 				ReleaseSysCache(tup);
 				break;
@@ -3253,6 +3261,10 @@ getRelationDescription(StringInfo buffer, Oid relid)
 			break;
 		case RELKIND_STREAM:
 			appendStringInfo(buffer, _("stream %s"),
+							 relname);
+			break;
+		case RELKIND_CONTTRANSFORM:
+			appendStringInfo(buffer, _("continuous transform %s"),
 							 relname);
 			break;
 		default:
@@ -3652,8 +3664,12 @@ getObjectTypeDescription(const ObjectAddress *object)
 			appendStringInfoString(&buffer, "transform");
 			break;
 
-		case OCLASS_CONTINUOUS_VIEW:
-			appendStringInfoString(&buffer, "continuous view");
+		case OCLASS_CONTINUOUS_QUERY:
+			appendStringInfoString(&buffer, "continuous query");
+			break;
+
+		case OCLASS_STREAM:
+			appendStringInfoString(&buffer, "stream");
 			break;
 
 		default:
@@ -3710,6 +3726,9 @@ getRelationTypeDescription(StringInfo buffer, Oid relid, int32 objectSubId)
 			break;
 		case RELKIND_STREAM:
 			appendStringInfoString(buffer, "stream");
+			break;
+		case RELKIND_CONTTRANSFORM:
+			appendStringInfoString(buffer, "continuous transform");
 			break;
 		default:
 			/* shouldn't get here */

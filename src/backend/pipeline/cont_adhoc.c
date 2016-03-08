@@ -77,7 +77,7 @@ struct AdhocExecutor
 typedef struct
 {
 	Oid view_id;
-	ContinuousView *view;
+	ContQuery *view;
 	DestReceiver *dest;
 	QueryDesc *query_desc;
 	TimestampTz last_processed;
@@ -230,7 +230,7 @@ get_unique_adhoc_view_name()
 typedef struct
 {
 	Oid view_id;
-	ContinuousView *view;
+	ContQuery *view;
 } ContinuousViewData;
 
 /*
@@ -258,7 +258,7 @@ init_cont_view(ContinuousViewData *view_data, SelectStmt *stmt,
 	MemSet(view_data, 0, sizeof(ContinuousViewData));
 
 	view_data->view_id = get_cont_view_id(view_name);
-	view_data->view = GetContinuousView(view_data->view_id);
+	view_data->view = GetContQueryForViewId(view_data->view_id);
 
 	MyContQueryProc->group_id = view_data->view_id;
 }
@@ -282,7 +282,7 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver, dsm_segment *
 	state->dest = receiver;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
-	pstmt = GetContPlan(state->view, Worker);
+	pstmt = GetContPlan(state->view, WORKER);
 	PopActiveSnapshot();
 
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
@@ -347,7 +347,7 @@ init_adhoc_combiner(ContinuousViewData data,
 	PlannedStmt *pstmt = 0;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
-	pstmt = GetContPlan(data.view, Combiner);
+	pstmt = GetContPlan(data.view, COMBINER);
 	PopActiveSnapshot();
 
 	state->tup_desc = prepare_plan_for_reading(data.view->matrel, pstmt, batch);
@@ -637,7 +637,7 @@ exec_adhoc_view(AdhocViewState *state)
 
 /* Execute a drop view statement to cleanup the adhoc view */
 void
-CleanupAdhocContinuousView(ContinuousView *view)
+CleanupAdhocContinuousView(ContQuery *view)
 {
 	DestReceiver *receiver = 0;
 	DropStmt *stmt = makeNode(DropStmt);
@@ -646,7 +646,7 @@ CleanupAdhocContinuousView(ContinuousView *view)
 	Portal portal;
 
 	stmt->objects = list_make1(list_make1(makeString(NameStr(view->name))));
-	stmt->removeType = OBJECT_CONTINUOUS_VIEW;
+	stmt->removeType = OBJECT_CONTVIEW;
 
 	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",
 			NULL, 0);

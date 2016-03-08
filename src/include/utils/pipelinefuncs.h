@@ -26,8 +26,11 @@ extern Datum cq_stat_get(PG_FUNCTION_ARGS);
 /* stream stats */
 extern Datum stream_stat_get(PG_FUNCTION_ARGS);
 
-/* pipeline queries */
-extern Datum pipeline_queries(PG_FUNCTION_ARGS);
+/* pipeline views */
+extern Datum pipeline_views(PG_FUNCTION_ARGS);
+
+/* pipeline transforms */
+extern Datum pipeline_transforms(PG_FUNCTION_ARGS);
 
 /* pipeline streams */
 extern Datum pipeline_streams(PG_FUNCTION_ARGS);

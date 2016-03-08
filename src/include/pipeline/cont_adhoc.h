@@ -26,7 +26,7 @@ extern void ExecAdhocQuery(Node *select);
 /* returns true iff this parsetree is an adhoc query */
 extern bool IsAdhocQuery(Node *node);
 
-extern void CleanupAdhocContinuousView(ContinuousView *view);
+extern void CleanupAdhocContinuousView(ContQuery *view);
 
 /* placeholder so noone creates this function */
 extern Datum pipeline_exec_adhoc_query(PG_FUNCTION_ARGS);

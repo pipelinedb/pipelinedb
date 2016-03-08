@@ -710,7 +710,7 @@ pg_get_viewdef_worker(Oid viewoid, int prettyFlags, int wrapColumn)
 			 * When a user is describing a continuous view, we show them the continuous
 			 * view's definition rather than the overlay view because it's more intuitive.
 			 */
-			Query *q = GetContQuery(rv);
+			Query *q = GetContViewQuery(rv);
 
 			get_query_def(q, &buf, NIL, NULL, prettyFlags, wrapColumn, 0);
 			appendStringInfoChar(&buf, ';');

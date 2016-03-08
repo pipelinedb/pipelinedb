@@ -33,14 +33,14 @@ extern ProcessUtility_hook_type SaveUtilityHook;
 		(((ForeignScanState *) (node))->ss.ss_currentRelation->rd_rel->relkind == RELKIND_STREAM)) || \
 		IsA((node), StreamTableJoinState))
 
-extern PlannedStmt *GetContPlan(ContinuousView *view, ContQueryProcType type);
+extern PlannedStmt *GetContPlan(ContQuery *view, ContQueryProcType type);
 extern TuplestoreScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
 extern FuncExpr *GetGroupHashIndexExpr(ResultRelInfo *ri);
-extern PlannedStmt *GetCombinerLookupPlan(ContinuousView *view);
-extern PlannedStmt *GetContinuousViewOverlayPlan(ContinuousView *view);
+extern PlannedStmt *GetCombinerLookupPlan(ContQuery *view);
+extern PlannedStmt *GetContinuousViewOverlayPlan(ContQuery *view);
 
 typedef void (*ViewModFunction)(SelectStmt *sel);
-extern PlannedStmt *GetContinuousViewOverlayPlanMod(ContinuousView *view,
+extern PlannedStmt *GetContinuousViewOverlayPlanMod(ContQuery *view,
 										 	        ViewModFunction fn);
 
 extern EState *CreateEState(QueryDesc *query_desc);
