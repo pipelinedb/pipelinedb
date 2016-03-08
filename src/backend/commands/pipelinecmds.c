@@ -22,6 +22,7 @@
 #include "commands/pipelinecmds.h"
 #include "commands/sequence.h"
 #include "commands/tablecmds.h"
+#include "commands/typecmds.h"
 #include "commands/view.h"
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
@@ -44,6 +45,7 @@
 #include "optimizer/tlist.h"
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
+#include "parser/parse_func.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_plan.h"
@@ -243,7 +245,7 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 }
 
 static void
-record_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
+record_cv_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
 		Oid indexoid, Oid pkey_idxoid, SelectStmt *stmt, Query *query)
 {
 	ObjectAddress referenced;
@@ -270,7 +272,7 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
 	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
 	/* Record dependency between sequence relation and view */
-	if (seqreloid != InvalidOid)
+	if (OidIsValid(seqreloid))
 	{
 		dependent.classId = RelationRelationId;
 		dependent.objectId = seqreloid;
@@ -364,7 +366,76 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
 		}
 	}
 
-	recordDependencyOnExpr(&dependent, (Node *) query, NIL, DEPENDENCY_NORMAL);
+	referenced.classId = RelationRelationId;
+	referenced.objectId = viewoid;
+	referenced.objectSubId = 0;
+	recordDependencyOnExpr(&referenced, (Node *) query, NIL, DEPENDENCY_NORMAL);
+}
+
+static ColumnDef *
+make_coldef(char *name, Oid type, Oid typemod)
+{
+	ColumnDef *result;
+	TypeName *typename;
+
+	typename = makeNode(TypeName);
+	typename->typeOid = type;
+	typename->typemod = typemod;
+
+	result = makeNode(ColumnDef);
+	result->colname = name;
+	result->inhcount = 0;
+	result->is_local = true;
+	result->is_not_null = false;
+	result->raw_default = NULL;
+	result->cooked_default = NULL;
+	result->constraints = NIL;
+	result->typeName = typename;
+
+	return result;
+}
+
+static List *
+create_coldefs_from_tlist(Query *query)
+{
+	ListCell *lc;
+	List *defs = NIL;
+
+	foreach(lc, query->targetList)
+	{
+		TargetEntry *tle = (TargetEntry *) lfirst(lc);
+		char *colname;
+		Oid type;
+		ColumnDef *coldef;
+
+		/* Ignore junk columns from the targetlist */
+		if (tle->resjunk)
+			continue;
+
+		colname = pstrdup(tle->resname);
+
+		type = exprType((Node *) tle->expr);
+
+		/* Replace void type with a bool type. We need this because of the use of pg_sleep in some CQ tests */
+		if (type == VOIDOID)
+			type = BOOLOID;
+
+		coldef = make_coldef(colname, type, exprTypmod((Node *) tle->expr));
+		defs = lappend(defs, coldef);
+	}
+
+	return defs;
+}
+
+static void
+check_relation_already_exists(RangeVar *rv)
+{
+	Oid namespace = RangeVarGetCreationNamespace(rv);
+
+	if (OidIsValid(get_relname_relid(rv->relname, namespace)))
+		ereport(ERROR,
+				(errcode(ERRCODE_DUPLICATE_TABLE),
+				 errmsg("relation \"%s\" already exists", rv->relname)));
 }
 
 /*
@@ -384,8 +455,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	RangeVar *seqrel;
 	RangeVar *view;
 	List *tableElts = NIL;
-	List *tlist;
-	ListCell *col;
+	ListCell *lc;
 	Oid matreloid;
 	Oid seqreloid;
 	Oid viewoid;
@@ -402,9 +472,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	bool saveAllowSystemTableMods;
 	Relation pipeline_query;
 	ContAnalyzeContext *context;
-	ContinuousView *cv;
+	ContQuery *cv;
 	Oid cvid;
-	ColumnDef *coldef;
 	Constraint *pkey;
 	DefElem *pk;
 	ColumnDef *pk_coldef = NULL;
@@ -414,13 +483,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	view = stmt->into->rel;
 
-	/*
-	 * Check if CV already exists?
-	 */
-	if (IsAContinuousView(view))
-		ereport(ERROR,
-				(errcode(ERRCODE_DUPLICATE_CONTINUOUS_VIEW),
-				errmsg("continuous view \"%s\" already exists", view->relname)));
+	check_relation_already_exists(view);
 
 	matrel = makeRangeVar(view->schemaname, CVNameToMatRelName(view->relname), -1);
 	seqrel = makeRangeVar(view->schemaname, CVNameToSeqRelName(view->relname), -1);
@@ -448,21 +511,20 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	cont_select_sql = deparse_query_def(cont_query);
 	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
 	cont_select->swStepFactor = ((SelectStmt *) stmt->query)->swStepFactor;
-	context = MakeContAnalyzeContext(NULL, cont_select, Worker);
+	context = MakeContAnalyzeContext(NULL, cont_select, WORKER);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying matrel.
 	 */
-	workerselect = TransformSelectStmtForContProcess(matrel, cont_select, &viewselect, Worker);
+	workerselect = TransformSelectStmtForContProcess(matrel, cont_select, &viewselect, WORKER);
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
-	tlist = query->targetList;
 
-	foreach(col, query->groupClause)
+	foreach(lc, query->groupClause)
 	{
-		SortGroupClause *g = (SortGroupClause *) lfirst(col);
+		SortGroupClause *g = (SortGroupClause *) lfirst(lc);
 
 		if (!OidIsValid(g->eqop) || !g->hashable)
 		{
@@ -473,6 +535,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		}
 	}
 
+	tableElts = create_coldefs_from_tlist(query);
+
 	pk = GetContinuousViewOption(stmt->into->options, OPTION_PK);
 	if (pk)
 	{
@@ -480,53 +544,31 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 			stmt->into->options = list_delete(stmt->into->options, pk);
 		else
 			elog(ERROR, "continuous view primary keys must be specified with a valid column name");
+
+		foreach(lc, tableElts)
+		{
+			ColumnDef *cdef = (ColumnDef *) lfirst(lc);
+
+			if (pg_strcasecmp(strVal(pk->arg), cdef->colname) == 0)
+			{
+				pk_coldef = cdef;
+				break;
+			}
+		}
+
+		if (!pk_coldef)
+			elog(ERROR, "primary key column \"%s\" not found", strVal(pk->arg));
 	}
-
-	/*
-	 * Build a list of columns from the SELECT statement that we
-	 * can use to create a table with
-	 */
-	foreach(col, tlist)
-	{
-		TargetEntry *tle = (TargetEntry *) lfirst(col);
-		char		*colname;
-		Oid type;
-
-		/* Ignore junk columns from the targetlist */
-		if (tle->resjunk)
-			continue;
-
-		colname = pstrdup(tle->resname);
-
-		/*
-		 * Set typeOid and typemod. The name of the type is derived while
-		 * generating query
-		 */
-		type = exprType((Node *) tle->expr);
-		/* Replace void type with a bool type. We need this because of the use of pg_sleep in some CQ tests */
-		if (type == VOIDOID)
-			type = BOOLOID;
-		coldef = MakeMatRelColumnDef(colname, type, exprTypmod((Node *) tle->expr));
-		tableElts = lappend(tableElts, coldef);
-
-		if (pk && pg_strcasecmp(strVal(pk->arg), colname) == 0)
-			pk_coldef = coldef;
-	}
-
-	if (pk && !pk_coldef)
-		elog(ERROR, "primary key column \"%s\" not found", strVal(pk->arg));
-
-	pkey = makeNode(Constraint);
-	pkey->contype = CONSTR_PRIMARY;
-
-	if (!pk)
+	else
 	{
 		/* Add primary key column */
-		pk_coldef = MakeMatRelColumnDef(CQ_MATREL_PKEY, INT8OID, InvalidOid);
+		pk_coldef = make_coldef(CQ_MATREL_PKEY, INT8OID, InvalidOid);
 		pk_coldef->is_not_null = true;
 		tableElts = lappend(tableElts, pk_coldef);
 	}
 
+	pkey = makeNode(Constraint);
+	pkey->contype = CONSTR_PRIMARY;
 	pk_coldef->constraints = list_make1(pkey);
 
 	if (!GetContinuousViewOption(stmt->into->options, OPTION_FILLFACTOR))
@@ -592,17 +634,17 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/* Create group look up index and record dependencies */
 	indexoid = create_lookup_index(view, matreloid, matrel, query, context->is_sw);
 	pkey_idxoid = create_pkey_index(view, matreloid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
-	record_dependencies(pqoid, matreloid, seqreloid, viewoid, indexoid, pkey_idxoid, workerselect, query);
+	record_cv_dependencies(pqoid, matreloid, seqreloid, viewoid, indexoid, pkey_idxoid, workerselect, query);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	/*
 	 * Run the combiner and worker queries through the planner, so that if something goes wrong
-	 * we know now rather than at activate time.
+	 * we know now rather than at execution time.
 	 */
-	cv = GetContinuousView(cvid);
-	GetContPlan(cv, Combiner);
-	GetContPlan(cv, Worker);
+	cv = GetContQueryForViewId(cvid);
+	GetContPlan(cv, COMBINER);
+	GetContPlan(cv, WORKER);
 	GetCombinerLookupPlan(cv);
 
 	heap_close(pipeline_query, NoLock);
@@ -641,10 +683,13 @@ ExecTruncateContViewStmt(TruncateContViewStmt *stmt)
 		ReleaseSysCache(tuple);
 
 		views = lappend_oid(views, row->id);
-		matrel = GetMatRelationName(rv);
+		matrel = GetMatRelName(rv);
 
 		trunc->relations = lappend(trunc->relations, matrel);
 	}
+
+	trunc->restart_seqs = stmt->restart_seqs;
+	trunc->behavior = stmt->behavior;
 
 	/* Reset all CQ level transition state */
 	foreach(lc, views)
@@ -696,7 +741,7 @@ explain_cont_plan(char *name, PlannedStmt *plan, ExplainState *base_es, TupleDes
  * ExplainContViewResultDesc
  */
 TupleDesc
-ExplainContViewResultDesc(ExplainContViewStmt *stmt)
+ExplainContViewResultDesc(ExplainContQueryStmt *stmt)
 {
 	ExplainStmt *explain = makeNode(ExplainStmt);
 	TupleDesc desc;
@@ -715,13 +760,13 @@ ExplainContViewResultDesc(ExplainContViewStmt *stmt)
  * ExecExplainContViewStmt
  */
 void
-ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
+ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
 			 ParamListInfo params, DestReceiver *dest)
 {
 	ExplainState *es = NewExplainState();
 	ListCell *lc;
 	TupleDesc desc;
-	ContinuousView *view;
+	ContQuery *cq;
 	HeapTuple tuple = GetPipelineQueryTuple(stmt->view);
 	Oid cq_id;
 	Form_pipeline_query row;
@@ -729,15 +774,29 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 	Tuplestorestate *tupstore;
 	TuplestoreScan *scan;
 	Relation rel;
+	char *objname;
+
+	Assert(stmt->objType == OBJECT_CONTVIEW || stmt->objType == OBJECT_CONTTRANSFORM);
+	objname = stmt->objType == OBJECT_CONTVIEW ? "continuous view" : "continuous transform";
 
 	if (!HeapTupleIsValid(tuple))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
-				errmsg("continuous view \"%s\" does not exist", stmt->view->relname)));
+				errmsg("%s \"%s\" does not exist", objname, stmt->view->relname)));
 
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
 	cq_id = row->id;
 	ReleaseSysCache(tuple);
+
+	if (stmt->objType == OBJECT_CONTVIEW && row->type != PIPELINE_QUERY_VIEW)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("\"%s\" is not a continuous view", stmt->view->relname)));
+
+	if (stmt->objType == OBJECT_CONTTRANSFORM && row->type != PIPELINE_QUERY_TRANSFORM)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("\"%s\" is not a continuous transform", stmt->view->relname)));
 
 	/* Initialize ExplainState. */
 	es->format = EXPLAIN_FORMAT_TEXT;
@@ -771,20 +830,23 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 
 	desc = ExplainContViewResultDesc(stmt);
 
-	view = GetContinuousView(cq_id);
+	cq = GetContQueryForId(cq_id);
 
-	explain_cont_plan("Worker Plan", GetContPlan(view, Worker), es, desc, dest);
+	explain_cont_plan("Worker Plan", GetContPlan(cq, WORKER), es, desc, dest);
 
-	plan = GetContPlan(view, Combiner);
-	tupstore = tuplestore_begin_heap(false, false, work_mem);
-	scan = SetCombinerPlanTuplestorestate(plan, tupstore);
-	rel = relation_openrv(view->matrel, NoLock);
-	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
-	relation_close(rel, NoLock);
-	explain_cont_plan("Combiner Plan", plan, es, desc, dest);
-	tuplestore_end(tupstore);
+	if (stmt->objType == OBJECT_CONTVIEW)
+	{
+		plan = GetContPlan(cq, COMBINER);
+		tupstore = tuplestore_begin_heap(false, false, work_mem);
+		scan = SetCombinerPlanTuplestorestate(plan, tupstore);
+		rel = relation_openrv(cq->matrel, NoLock);
+		scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
+		relation_close(rel, NoLock);
+		explain_cont_plan("Combiner Plan", plan, es, desc, dest);
+		tuplestore_end(tupstore);
 
-	explain_cont_plan("Combiner Lookup Plan", GetCombinerLookupPlan(view), es, desc, dest);
+		explain_cont_plan("Combiner Lookup Plan", GetCombinerLookupPlan(cq), es, desc, dest);
+	}
 }
 
 static void
@@ -848,4 +910,175 @@ void
 ExecDeactivateStmt(DeactivateStmt *stmt, ProcessUtilityContext context)
 {
 	set_cq_enabled(false, context);
+}
+
+static void
+record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query *query, List *args)
+{
+	ObjectAddress referenced;
+	ObjectAddress dependent;
+	ListCell *lc;
+	ContAnalyzeContext cxt;
+
+	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
+
+	referenced.classId = ProcedureRelationId;
+	referenced.objectId = fnoid;
+	referenced.objectSubId = 0;
+
+	dependent.classId = RelationRelationId;
+	dependent.objectId = relid;
+	dependent.objectSubId = 0;
+
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
+
+	/*
+	 * Record a dependency between the type its pipeline_query entry so that when
+	 * the view is dropped the pipeline_query meta data cleanup hook is invoked.
+	 */
+	referenced.classId = RelationRelationId;
+	referenced.objectId = relid;
+	referenced.objectSubId = 0;
+
+	dependent.classId = PipelineQueryRelationId;
+	dependent.objectId = pqoid;
+	dependent.objectSubId = 0;
+
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
+
+	collect_rels_and_streams((Node *) stmt->fromClause, &cxt);
+
+	/*
+	 * Record a dependency between any strongly typed streams and a pipeline_query object,
+	 * so that it is not possible to drop a stream that is being read by a CV.
+	 */
+	foreach(lc, cxt.streams)
+	{
+		RangeVar *rv;
+		Oid relid;
+
+		if (!IsA(lfirst(lc), RangeVar))
+			continue;
+
+		rv = (RangeVar *) lfirst(lc);
+		relid = RangeVarGetRelid(rv, NoLock, false);
+
+		if (IsInferredStream(relid))
+		{
+			referenced.classId = RelationRelationId;
+			referenced.objectId = relid;
+			referenced.objectSubId = 0;
+
+			dependent.classId = RelationRelationId;
+			dependent.objectId = relid;
+			dependent.objectSubId = 0;
+
+			recordDependencyOn(&dependent, &referenced, DEPENDENCY_STREAM);
+		}
+		else
+		{
+			referenced.classId = RelationRelationId;
+			referenced.objectId = relid;
+			referenced.objectSubId = 0;
+
+			dependent.classId = RelationRelationId;
+			dependent.objectId = relid;
+			dependent.objectSubId = 0;
+
+			recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
+		}
+	}
+
+	referenced.classId = RelationRelationId;
+	referenced.objectId = relid;
+	referenced.objectSubId = 0;
+	recordDependencyOnExpr(&referenced, (Node *) query, NIL, DEPENDENCY_NORMAL);
+
+	if (fnoid == PIPELINE_STREAM_INSERT_OID)
+	{
+		ListCell *lc;
+		Oid relid;
+
+		foreach(lc, args)
+		{
+			Value *v = (Value *) lfirst(lc);
+			RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(strVal(v)));
+
+			if (!RangeVarIsForStream(rv, NULL))
+				ereport(ERROR,
+						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+						errmsg("\"%s\" is not a stream", strVal(v)),
+						errhint("Arguments to pipeline_stream_insert must be streams.")));
+
+			relid = RangeVarGetRelid(rv, NoLock, false);
+
+			referenced.classId = RelationRelationId;
+			referenced.objectId = relid;
+			referenced.objectSubId = 0;
+
+			dependent.classId = RelationRelationId;
+			dependent.objectId = relid;
+			dependent.objectSubId = 0;
+
+			recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
+		}
+	}
+}
+
+void
+ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring)
+{
+	RangeVar *transform;
+	Relation pipeline_query;
+	Query *query;
+	Oid pqoid;
+	ObjectAddress relobj;
+	Oid relid;
+	Oid fargtypes[1];	/* dummy */
+	Oid tgfnid;
+	Oid funcrettype;
+	CreateStmt *create;
+
+	Assert(((SelectStmt *) stmt->query)->forContinuousView);
+
+	transform = stmt->into->rel;
+	check_relation_already_exists(transform);
+
+	/* Find and validate the transform output function. */
+	tgfnid = LookupFuncName(stmt->funcname, 0, fargtypes, false);
+	funcrettype = get_func_rettype(tgfnid);
+	if (funcrettype != TRIGGEROID)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				errmsg("function %s must return type \"trigger\"",
+				NameListToString(stmt->funcname))));
+
+	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+
+	CreateInferredStreams((SelectStmt *) stmt->query);
+	MakeSelectsContinuous((SelectStmt *) stmt->query);
+
+	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
+	ValidateSubselect(stmt->query, "continuous transforms");
+
+	query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
+
+	create = makeNode(CreateStmt);
+	create->relation = stmt->into->rel;
+	create->tableElts = create_coldefs_from_tlist(query);
+	create->tablespacename = stmt->into->tableSpaceName;
+	create->oncommit = stmt->into->onCommit;
+	create->options = stmt->into->options;
+
+	relobj = DefineRelation(create, RELKIND_CONTTRANSFORM, InvalidOid, NULL);
+	relid = relobj.objectId;
+	CommandCounterIncrement();
+
+	pqoid = DefineContinuousTransform(transform, query, relid, tgfnid, stmt->args);
+	CommandCounterIncrement();
+
+	record_ct_dependencies(pqoid, relid, tgfnid, (SelectStmt *) stmt->query, query, stmt->args);
+	CommandCounterIncrement();
+
+	heap_close(pipeline_query, NoLock);
 }

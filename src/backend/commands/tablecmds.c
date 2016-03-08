@@ -265,6 +265,12 @@ static const struct dropmsgstrings dropmsgstringarray[] = {
 		gettext_noop("stream \"%s\" does not exist, skipping"),
 		gettext_noop("\"%s\" is not a stream"),
 	gettext_noop("Use DROP STREAM to remove a stream.")},
+	{RELKIND_CONTTRANSFORM,
+		ERRCODE_UNDEFINED_OBJECT,
+		gettext_noop("continuous transform \"%s\" does not exist"),
+		gettext_noop("continuous transform \"%s\" does not exist, skipping"),
+		gettext_noop("\"%s\" is not a continuous transform"),
+	gettext_noop("Use DROP CONTINUOUS TRANSFORM to remove a continuous transform.")},
 	{'\0', 0, NULL, NULL, NULL, NULL}
 };
 
@@ -507,6 +513,10 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("constraints are not supported on streams")));
+	if (stmt->constraints != NIL && relkind == RELKIND_CONTTRANSFORM)
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("constraints are not supported on continuous transforms")));
 
 	/*
 	 * Look up the namespace in which we are supposed to create the relation,
@@ -874,12 +884,16 @@ RemoveRelations(DropStmt *drop)
 			relkind = RELKIND_FOREIGN_TABLE;
 			break;
 
-		case OBJECT_CONTINUOUS_VIEW:
+		case OBJECT_CONTVIEW:
 			relkind = RELKIND_CONTVIEW;
 			break;
 
 		case OBJECT_STREAM:
 			relkind = RELKIND_STREAM;
+			break;
+
+		case OBJECT_CONTTRANSFORM:
+			relkind = RELKIND_CONTTRANSFORM;
 			break;
 
 		default:
@@ -913,7 +927,7 @@ RemoveRelations(DropStmt *drop)
 		AcceptInvalidationMessages();
 
 		save = relkind;
-		if (drop->removeType == OBJECT_CONTINUOUS_VIEW)
+		if (drop->removeType == OBJECT_CONTVIEW)
 			relkind = RELKIND_CONTVIEW;
 
 		/* Look up the appropriate relation using namespace search. */
@@ -2202,7 +2216,8 @@ renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 		relkind != RELKIND_INDEX &&
 		relkind != RELKIND_FOREIGN_TABLE &&
 		relkind != RELKIND_CONTVIEW &&
-		relkind != RELKIND_STREAM)
+		relkind != RELKIND_STREAM &&
+		relkind != RELKIND_CONTTRANSFORM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, view, materialized view, composite type, index, or foreign table",
@@ -2593,7 +2608,7 @@ RenameRelation(RenameStmt *stmt)
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("cannot rename materialization table \"%s\" for continuous view \"%s\"",
 						stmt->relation->relname, cv->relname)));
-	else if (stmt->renameType == OBJECT_CONTINUOUS_VIEW)
+	else if (stmt->renameType == OBJECT_CONTVIEW)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("cannot rename continuous view \"%s\"",
@@ -4386,9 +4401,6 @@ ATSimplePermissions(Relation rel, int allowed_targets)
 		case RELKIND_FOREIGN_TABLE:
 			actual_target = ATT_FOREIGN_TABLE;
 			break;
-		case RELKIND_CONTVIEW:
-			actual_target = ATT_VIEW;
-			break;
 		case RELKIND_STREAM:
 			actual_target = ATT_FOREIGN_TABLE;
 			break;
@@ -5014,7 +5026,8 @@ ATExecAddColumn(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	 */
 	if (relkind != RELKIND_VIEW && relkind != RELKIND_COMPOSITE_TYPE
 		&& relkind != RELKIND_FOREIGN_TABLE && relkind != RELKIND_CONTVIEW
-		&& relkind != RELKIND_STREAM && attribute.attnum > 0)
+		&& relkind != RELKIND_STREAM && relkind != RELKIND_CONTTRANSFORM &&
+		attribute.attnum > 0)
 	{
 		defval = (Expr *) build_column_default(rel, attribute.attnum);
 
@@ -5484,7 +5497,8 @@ ATPrepSetStatistics(Relation rel, const char *colName, Node *newValue, LOCKMODE 
 		rel->rd_rel->relkind != RELKIND_INDEX &&
 		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
 		rel->rd_rel->relkind != RELKIND_CONTVIEW &&
-		rel->rd_rel->relkind != RELKIND_STREAM)
+		rel->rd_rel->relkind != RELKIND_STREAM &&
+		rel->rd_rel->relkind != RELKIND_CONTTRANSFORM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, materialized view, index, or foreign table",
@@ -8044,7 +8058,8 @@ ATPrepAlterColumnType(List **wqueue,
 
 	if (tab->relkind == RELKIND_COMPOSITE_TYPE ||
 		tab->relkind == RELKIND_FOREIGN_TABLE ||
-		tab->relkind == RELKIND_STREAM)
+		tab->relkind == RELKIND_STREAM ||
+		tab->relkind == RELKIND_CONTTRANSFORM)
 	{
 		/*
 		 * For composite types, do this check now.  Tables will check it later
@@ -8392,7 +8407,7 @@ ATExecAlterColumnType(AlteredTableInfo *tab, Relation rel,
 			case OCLASS_USER_MAPPING:
 			case OCLASS_DEFACL:
 			case OCLASS_EXTENSION:
-			case OCLASS_CONTINUOUS_VIEW:
+			case OCLASS_CONTINUOUS_QUERY:
 
 				/*
 				 * We don't expect any of these sorts of objects to depend on
@@ -9005,6 +9020,7 @@ ATExecChangeOwner(Oid relationOid, Oid newOwnerId, bool recursing, LOCKMODE lock
 		case RELKIND_FOREIGN_TABLE:
 		case RELKIND_CONTVIEW:
 		case RELKIND_STREAM:
+		case RELKIND_CONTTRANSFORM:
 			/* ok to change owner */
 			break;
 		case RELKIND_INDEX:
@@ -12095,6 +12111,11 @@ RangeVarCallbackForAlterRelation(const RangeVar *rv, Oid relid, Oid oldrelid,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						errmsg("\"%s\" is a continuous view and cannot be renamed", rv->relname)));
 
+	if (relkind == RELKIND_CONTTRANSFORM)
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+						errmsg("\"%s\" is a continuous transform and cannot be renamed", rv->relname)));
+
 	/*
 	 * Don't allow ALTER TABLE on composite types. We want people to use ALTER
 	 * TYPE for that.
@@ -12116,7 +12137,8 @@ RangeVarCallbackForAlterRelation(const RangeVar *rv, Oid relid, Oid oldrelid,
 		relkind != RELKIND_SEQUENCE &&
 		relkind != RELKIND_FOREIGN_TABLE &&
 		relkind != RELKIND_CONTVIEW &&
-		relkind != RELKIND_STREAM)
+		relkind != RELKIND_STREAM &&
+		relkind != RELKIND_CONTTRANSFORM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, view, materialized view, sequence, or foreign table",

@@ -58,6 +58,7 @@ extern bool collect_types_and_cols(Node *node, ContAnalyzeContext *context);
 extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType type);
 extern void CreateInferredStreams(SelectStmt *stmt);
 extern void MakeSelectsContinuous(SelectStmt *stmt);
+extern void ValidateSubselect(Node *subquery, char *objdesc);
 extern void ValidateContQuery(RangeVar *name, Node *node, const char *sql);
 
 extern void transformContSelectStmt(ParseState *pstate, SelectStmt *select);
@@ -72,7 +73,7 @@ extern Node *ParseCombineFuncCall(ParseState *pstate, List *args, List *order, E
 extern Node *ParseFinalizeFuncCall(ParseState *pstate, List *args, int location);
 extern Query *RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex);
 
-extern Query *GetContQuery(RangeVar *rv);
+extern Query *GetContViewQuery(RangeVar *rv);
 extern Query *GetContWorkerQuery(RangeVar *rv);
 extern Query *GetContCombinerQuery(RangeVar *rv);
 
@@ -89,7 +90,5 @@ extern void ApplyStorageOptions(CreateContViewStmt *stmt);
 /* Deparsing */
 extern char *deparse_query_def(Query *query);
 extern char *get_inv_streaming_agg(char *name, bool *is_distinct);
-
-ColumnDef *MakeMatRelColumnDef(char *name, Oid type, Oid typemod);
 
 #endif

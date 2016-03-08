@@ -71,9 +71,5 @@ DECLARE_TOAST(pg_shseclabel, 4060, 4061);
 DECLARE_TOAST(pipeline_query, 7000, 7001);
 DECLARE_TOAST(pipeline_stream, 7002, 7003);
 DECLARE_TOAST(pipeline_tstate, 7004, 7005);
-DECLARE_TOAST(pipeline_database, 7006, 7007);
-#define PipelineDatabaseToastTable 7006
-#define PipelineDatabaseToastIndex 7007
-
 
 #endif   /* TOASTING_H */

@@ -532,6 +532,10 @@ standard_ProcessUtility(Node *parsetree,
 			ExecCreateContViewStmt((CreateContViewStmt *) parsetree, queryString);
 			break;
 
+		case T_CreateContTransformStmt:
+			ExecCreateContTransformStmt((CreateContTransformStmt *) parsetree, queryString);
+			break;
+
 		case T_DropTableSpaceStmt:
 			/* no event triggers for global objects */
 			PreventTransactionChain(isTopLevel, "DROP TABLESPACE");
@@ -675,8 +679,8 @@ standard_ProcessUtility(Node *parsetree,
 			ExplainQuery((ExplainStmt *) parsetree, queryString, params, dest);
 			break;
 
-		case T_ExplainContViewStmt:
-			ExecExplainContViewStmt((ExplainContViewStmt *) parsetree, queryString, params, dest);
+		case T_ExplainContQueryStmt:
+			ExecExplainContQueryStmt((ExplainContQueryStmt *) parsetree, queryString, params, dest);
 			break;
 
 		case T_AlterSystemStmt:
@@ -1637,7 +1641,7 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_VIEW:
 		case OBJECT_MATVIEW:
 		case OBJECT_FOREIGN_TABLE:
-		case OBJECT_CONTINUOUS_VIEW:
+		case OBJECT_CONTVIEW:
 		case OBJECT_STREAM:
 			RemoveRelations(stmt);
 			break;
@@ -1688,7 +1692,7 @@ UtilityReturnsTuples(Node *parsetree)
 			}
 
 		case T_ExplainStmt:
-		case T_ExplainContViewStmt:
+		case T_ExplainContQueryStmt:
 			return true;
 
 		case T_VariableShowStmt:
@@ -1739,8 +1743,8 @@ UtilityTupleDescriptor(Node *parsetree)
 		case T_ExplainStmt:
 			return ExplainResultDesc((ExplainStmt *) parsetree);
 
-		case T_ExplainContViewStmt:
-			return ExplainContViewResultDesc((ExplainContViewStmt *) parsetree);
+		case T_ExplainContQueryStmt:
+			return ExplainContViewResultDesc((ExplainContQueryStmt *) parsetree);
 
 		case T_VariableShowStmt:
 			{
@@ -2158,7 +2162,7 @@ CreateCommandTag(Node *parsetree)
 				case OBJECT_VIEW:
 					tag = "DROP VIEW";
 					break;
-				case OBJECT_CONTINUOUS_VIEW:
+				case OBJECT_CONTVIEW:
 					tag = "DROP CONTINUOUS VIEW";
 					break;
 				case OBJECT_MATVIEW:
@@ -2244,6 +2248,9 @@ CreateCommandTag(Node *parsetree)
 					break;
 				case OBJECT_TRANSFORM:
 					tag = "DROP TRANSFORM";
+					break;
+				case OBJECT_CONTTRANSFORM:
+					tag = "DROP CONTINUOUS TRANSFORM";
 					break;
 				default:
 					tag = "???";
@@ -2441,8 +2448,18 @@ CreateCommandTag(Node *parsetree)
 			tag = "EXPLAIN";
 			break;
 
-		case T_ExplainContViewStmt:
-			tag = "EXPLAIN CONTINUOUS VIEW";
+		case T_ExplainContQueryStmt:
+			switch (((ExplainContQueryStmt *) parsetree)->objType)
+			{
+				case OBJECT_CONTVIEW:
+					tag = "EXPLAIN CONTINUOUS VIEW";
+					break;
+				case OBJECT_CONTTRANSFORM:
+					tag = "EXPLAIN CONTINUOUS TRANSFORM";
+					break;
+				default:
+					tag = "???";
+			}
 			break;
 
 		case T_CreateContViewStmt:
@@ -2637,6 +2654,10 @@ CreateCommandTag(Node *parsetree)
 
 		case T_DeactivateStmt:
 			tag = "DEACTIVATE";
+			break;
+
+		case T_CreateContTransformStmt:
+			tag = "CREATE CONTINUOUS TRANSFORM";
 			break;
 
 			/* already-planned queries */
@@ -3244,7 +3265,7 @@ GetCommandLogLevel(Node *parsetree)
 				lev = LOGSTMT_MOD;
 				break;
 
-			case T_ExplainContViewStmt:
+			case T_ExplainContQueryStmt:
 			case T_ActivateStmt:
 			case T_DeactivateStmt:
 				lev = LOGSTMT_ALL;

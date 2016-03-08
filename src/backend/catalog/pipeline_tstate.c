@@ -58,7 +58,10 @@ RemoveTStateEntry(Oid id)
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for continuous view %u transition state", id);
+	{
+		heap_close(pipeline_tstate, NoLock);
+		return;
+	}
 
 	simple_heap_delete(pipeline_tstate, &tuple->t_self);
 	ReleaseSysCache(tuple);

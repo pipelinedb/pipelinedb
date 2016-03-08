@@ -370,6 +370,16 @@ GetWorkerQueue(void)
 
 	for (;;)
 	{
+		/*
+		 * If we have multiple workers and we're trying to write from a continuous transform, never write to our
+		 * own queue to avoid deadlocks.
+		 */
+		if (IsContQueryWorkerProcess() && continuous_query_num_workers > 1 && idx == MyContQueryProc->id)
+		{
+			idx = (idx + 1) % continuous_query_num_workers;
+			continue;
+		}
+
 		cq = GetWorkerCQueue(segment, idx);
 
 		/*
@@ -476,7 +486,13 @@ ContExecutorStartBatch(ContExecutor *exec)
 
 		StartTransactionCommand();
 		MemoryContextSwitchTo(exec->cxt);
-		exec->queries = GetAllContinuousViewIds();
+
+		/* Combiners only execute queries for continuous views */
+		if (IsContQueryCombinerProcess())
+			exec->queries = GetContinuousViewIds();
+		else
+			exec->queries = GetContinuousQueryIds();
+
 		CommitTransactionCommand();
 
 		MemoryContextSwitchTo(old);
@@ -505,18 +521,18 @@ init_query_state(ContExecutor *exec, ContQueryState *state)
 
 	old_cxt = MemoryContextSwitchTo(state_cxt);
 
-	state->view_id = exec->current_query_id;
+	state->query_id = exec->current_query_id;
 	state->state_cxt = state_cxt;
-	state->view = GetContinuousView(exec->current_query_id);
+	state->query = GetContQueryForId(exec->current_query_id);
 	state->tmp_cxt = AllocSetContextCreate(state_cxt, "QueryStateTmpCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	if (state->view == NULL)
+	if (state->query == NULL)
 		return state;
 
-	cq_stat_init(&state->stats, state->view->id, 0);
+	cq_stat_init(&state->stats, state->query->id, 0);
 	state = exec->initfn(exec, state);
 
 	MemoryContextSwitchTo(old_cxt);
@@ -554,7 +570,7 @@ get_query_state(ContExecutor *exec)
 	if (state != NULL)
 	{
 		/* Was the continuous view modified? In our case this means remove the old view and add a new one. */
-		if (HeapTupleGetOid(tup) != state->view->oid)
+		if (HeapTupleGetOid(tup) != state->query->oid)
 		{
 			MemoryContextDelete(state->state_cxt);
 			exec->states[exec->current_query_id] = NULL;
@@ -572,7 +588,7 @@ get_query_state(ContExecutor *exec)
 		exec->states[exec->current_query_id] = state;
 		MemoryContextSwitchTo(old_cxt);
 
-		if (state->view == NULL)
+		if (state->query == NULL)
 		{
 			PopActiveSnapshot();
 			ContExecutorPurgeQuery(exec);
@@ -624,7 +640,7 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 			MemoryContextSwitchTo(old);
 		}
 		else
-			debug_query_string = NameStr(exec->current_query->view->name);
+			debug_query_string = NameStr(exec->current_query->query->name);
 	}
 
 	return exec->current_query_id;
@@ -652,7 +668,7 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 static inline bool
 should_yield_item(ContExecutor *exec, void *ptr)
 {
-	if (exec->ptype == Worker)
+	if (exec->ptype == WORKER)
 	{
 		StreamTupleState *sts = (StreamTupleState *) ptr;
 		bool succ = bms_is_member(exec->current_query_id, sts->queries);
@@ -737,7 +753,7 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 
 			old = MemoryContextSwitchTo(exec->exec_cxt);
 
-			if (exec->ptype == Worker)
+			if (exec->ptype == WORKER)
 			{
 				StreamTupleState *sts = (StreamTupleState *) ptr;
 				exec->queries_seen = bms_add_members(exec->queries_seen, sts->queries);
@@ -790,7 +806,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 	if (exec->current_query)
 		cq_stat_report(false);
 	else
-		cq_stat_send_purge(exec->current_query_id, 0, exec->ptype == Worker ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+		cq_stat_send_purge(exec->current_query_id, 0, exec->ptype == WORKER ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
 
 	debug_query_string = NULL;
 }

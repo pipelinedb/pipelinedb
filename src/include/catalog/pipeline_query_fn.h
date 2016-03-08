@@ -20,35 +20,60 @@
 #include "storage/lock.h"
 #include "utils/relcache.h"
 
-typedef struct ContinuousView
+typedef enum ContQueryType
+{
+	CONT_VIEW,
+	CONT_TRANSFORM
+} ContQueryType;
+
+typedef struct ContQuery
 {
 	Oid id;
+	Oid oid; /* OID in pipeline_query table */
+	ContQueryType type;
+
+	/* meta */
 	Oid namespace;
 	NameData name;
+	char *sql;
+	Oid matrelid;
+
+	/* for view */
 	RangeVar *matrel;
 	Oid seqrel;
-	char *query;
 	int sw_step_factor;
-	Oid oid; /* OID in pipeline_query table */
-} ContinuousView;
+
+	/* for transform */
+	Oid tgfn;
+	int tgnargs;
+	char **tgargs;
+} ContQuery;
+
+extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
+extern void RemovePipelineQueryById(Oid oid);
 
 extern Oid DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
-extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
-extern SelectStmt *GetContSelectStmt(RangeVar *rv);
 extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);
 extern bool IsAContinuousView(RangeVar *name);
 extern bool ContainsSlidingWindowContinuousView(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
-extern bool RelIdIsAMatRel(Oid relid, RangeVar **cvname);
+extern bool RelIdIsForMatRel(Oid relid, RangeVar **cvname);
 extern bool GetGCFlag(RangeVar *name);
-extern RangeVar *GetMatRelationName(RangeVar *cv);
+extern RangeVar *GetMatRelName(RangeVar *cv);
 extern RangeVar *GetCVNameFromMatRelName(RangeVar *matrel);
-extern void RemoveContinuousViewById(Oid oid);
+
+extern Bitmapset *GetContinuousQueryIds(void);
+extern Bitmapset *GetContinuousViewIds(void);
+extern Bitmapset *GetAdhocContinuousViewIds(void);
+extern Bitmapset *GetContinuousTransformIds(void);
 
 extern Oid GetContViewId(RangeVar *name);
-extern ContinuousView *GetContinuousView(Oid id);
-extern ContinuousView *RangeVarGetContinuousView(RangeVar *cv_name);
-extern Bitmapset *GetAllContinuousViewIds(void);
-extern Bitmapset *GetAdhocContinuousViewIds(void);
+extern ContQuery *GetContQueryForViewId(Oid id);
+extern ContQuery *GetContQueryForView(RangeVar *cv_name);
+
+extern Oid DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, List *args);
+extern ContQuery *GetContQueryForTransformId(Oid id);
+
+extern ContQuery *GetContQueryForId(Oid id);
 
 #endif

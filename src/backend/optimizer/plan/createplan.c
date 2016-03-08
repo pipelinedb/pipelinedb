@@ -305,7 +305,7 @@ create_tuplestorescan_plan(PlannerInfo *root, Path *best_path)
 	TuplestoreScan *scan = makeNode(TuplestoreScan);
 	List	   *tlist = NIL;
 	Plan	   *plan = &scan->scan.plan;
-	ContinuousView *cv = GetContinuousView(root->parse->cqId);
+	ContQuery *cv = GetContQueryForViewId(root->parse->cqId);
 	Relation matrel = heap_openrv(cv->matrel, NoLock);
 	TupleDesc desc = RelationGetDescr(matrel);
 	AttrNumber attrno;

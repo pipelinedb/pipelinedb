@@ -20,6 +20,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_combine_fn.h"
+#include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "commands/pipelinecmds.h"
@@ -912,8 +913,8 @@ MakeSelectsContinuous(SelectStmt *stmt)
  *
  * Check if the given query is a valid subquery for a continuous view
  */
-static bool
-is_allowed_subquery(Node *subquery)
+void
+ValidateSubselect(Node *subquery, char *objdesc)
 {
 	SelectStmt *stmt;
 	Query *q;
@@ -922,7 +923,7 @@ is_allowed_subquery(Node *subquery)
 	if (!IsA(subquery, SelectStmt))
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views must be SELECT statements")));
+				errmsg("%s must be SELECT statements", objdesc)));
 
 	stmt = (SelectStmt *) copyObject(subquery);
 
@@ -931,49 +932,47 @@ is_allowed_subquery(Node *subquery)
 	if (q->hasAggs)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views cannot contain aggregates")));
+				errmsg("%s cannot contain aggregates", objdesc)));
 
 	if (q->hasWindowFuncs)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views cannot contain window functions")));
+				errmsg("%s cannot contain window functions", objdesc)));
 
 	if (q->groupClause)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views cannot contain GROUP BY clauses")));
+				errmsg("%s cannot contain GROUP BY clauses", objdesc)));
 
 	if (q->havingQual)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views cannot contain HAVING clauses")));
+				errmsg("%s cannot contain HAVING clauses", objdesc)));
 
 	if (q->sortClause)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views cannot contain ORDER BY clauses")));
+				errmsg("%s cannot contain ORDER BY clauses", objdesc)));
 
 	if (q->distinctClause)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views cannot contain DISTINCT clauses")));
+				errmsg("%s cannot contain DISTINCT clauses", objdesc)));
 
 	if (q->limitOffset || q->limitCount)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views cannot contain LIMIT clauses")));
+				errmsg("%s cannot contain LIMIT clauses", objdesc)));
 
 	if (q->hasForUpdate)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views cannot contain FOR UPDATE clauses")));
+				errmsg("%s cannot contain FOR UPDATE clauses", objdesc)));
 
 	if (q->cteList)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("subqueries in continuous views cannot contain CTEs")));
-
-	return true;
+				errmsg("%s cannot contain CTEs", objdesc)));
 }
 
 /*
@@ -1025,7 +1024,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 	select = (SelectStmt *) copyObject(node);
 	validate_target_list(select);
 
-	context = MakeContAnalyzeContext(make_parsestate(NULL), select, Worker);
+	context = MakeContAnalyzeContext(make_parsestate(NULL), select, WORKER);
 	context->pstate->p_sourcetext = sql;
 
 	/* No support for CTEs */
@@ -1048,8 +1047,8 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 	{
 		RangeSubselect *sub = (RangeSubselect *) linitial(select->fromClause);
 
-		if (is_allowed_subquery(sub->subquery))
-			ValidateContQuery(name, sub->subquery, sql);
+		ValidateSubselect(sub->subquery, "subqueries in continuous views");
+		ValidateContQuery(name, sub->subquery, sql);
 		return;
 	}
 
@@ -1458,7 +1457,7 @@ parserGetStreamDescr(Oid relid, ContAnalyzeContext *context)
 void
 transformContSelectStmt(ParseState *pstate, SelectStmt *select)
 {
-	ContQueryProcType ptype = IsContQueryCombinerProcess() ? Combiner : Worker;
+	ContQueryProcType ptype = IsContQueryCombinerProcess() ? COMBINER : WORKER;
 	ContAnalyzeContext *context = MakeContAnalyzeContext(pstate, select, ptype);
 
 	collect_rels_and_streams((Node *) select->fromClause, context);
@@ -2231,7 +2230,7 @@ hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContex
 
 	if (!found)
 	{
-		if (context->proc_type == Combiner)
+		if (context->proc_type == COMBINER)
 			proc->groupClause = lappend(proc->groupClause, cref);
 		else
 			proc->groupClause = lappend(proc->groupClause, time);
@@ -2276,7 +2275,7 @@ proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContex
 
 			if (!found)
 			{
-				if (context->proc_type == Combiner)
+				if (context->proc_type == COMBINER)
 					proc->groupClause = lappend(proc->groupClause, cref);
 				else
 					proc->groupClause = lappend(proc->groupClause, node);
@@ -2387,7 +2386,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	ListCell *lc;
 	int i;
 
-	Assert(proc_type == Worker || proc_type == Combiner);
+	Assert(proc_type == WORKER || proc_type == COMBINER);
 
 	proc = (SelectStmt *) copyObject(stmt);
 	view = makeNode(SelectStmt);
@@ -2457,7 +2456,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 				view->groupClause = lappend(view->groupClause, cref);
 
 			/* The entire grouping set will be added to the worker's group clause later */
-			if (IsA(group_node, GroupingSet) && proc_type == Worker)
+			if (IsA(group_node, GroupingSet) && proc_type == WORKER)
 				continue;
 
 			/*
@@ -2465,13 +2464,13 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 			 * there is an id column in t for the query below:
 			 *   CREATE CONTINUOUS VIEW v AS SELECT s.id, t.str, sum(s.val + t.val) FROM s JOIN t ON s.id = t.id GROUP BY s.id;
 			 */
-			if (proc_type == Combiner)
+			if (proc_type == COMBINER)
 				tmp_list = lappend(tmp_list, cref);
 			else
 				tmp_list = lappend(tmp_list, node);
 		}
 
-		if (IsA(group_node, GroupingSet) && proc_type == Worker)
+		if (IsA(group_node, GroupingSet) && proc_type == WORKER)
 			tmp_list = lappend(tmp_list, group_node);
 	}
 
@@ -2633,10 +2632,9 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 		view->targetList = lappend(view->targetList, create_res_target_for_node(res_val, name));
 	}
 
-	Assert(mat_relation != NULL);
-
-	if (proc_type == Combiner)
+	if (proc_type == COMBINER)
 	{
+		Assert(mat_relation != NULL);
 		tmp_list = select_from_matrel(tmp_list);
 		proc->fromClause = list_make1(mat_relation);
 	}
@@ -2664,7 +2662,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	/* Overlay view reads from matrel */
 	view->fromClause = list_make1(mat_relation);
 
-	if (proc_type == Combiner)
+	if (proc_type == COMBINER)
 	{
 		/*
 		 * Combiner shouldn't have to re-do the filtering work of the WHERE clause.
@@ -2684,19 +2682,48 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	return proc;
 }
 
+static SelectStmt *
+get_cont_query_select_stmt(RangeVar *rv)
+{
+	HeapTuple tup;
+	bool isnull;
+	Datum tmp;
+	char *sql;
+	Query *query;
+	SelectStmt *select;
+
+	tup = GetPipelineQueryTuple(rv);
+
+	if (!HeapTupleIsValid(tup))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", rv->relname)));
+
+	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+	query = (Query *) stringToNode(TextDatumGetCString(tmp));
+
+	sql = deparse_query_def(query);
+	select = (SelectStmt *) linitial(pg_parse_query(sql));
+	select->swStepFactor = query->swStepFactor;
+
+	ReleaseSysCache(tup);
+
+	return select;
+}
+
 /*
- * GetContQuery
+ * GetContViewQuery
  *
  * Returns an analyzed continuous query
  */
 Query *
-GetContQuery(RangeVar *rv)
+GetContViewQuery(RangeVar *rv)
 {
 	SelectStmt *sel;
 	ContAnalyzeContext *context;
 
-	sel = GetContSelectStmt(rv);
-	context = MakeContAnalyzeContext(NULL, sel, Worker);
+	sel = get_cont_query_select_stmt(rv);
+	context = MakeContAnalyzeContext(NULL, sel, WORKER);
 	rewrite_streaming_aggs(sel, context);
 
 	MakeSelectsContinuous(sel);
@@ -2713,9 +2740,9 @@ GetContWorkerQuery(RangeVar *rv)
 	SelectStmt *sel;
 	RangeVar *matrel;
 
-	matrel = GetMatRelationName(rv);
-	sel = GetContSelectStmt(rv);
-	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Worker);
+	matrel = GetMatRelName(rv);
+	sel = get_cont_query_select_stmt(rv);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, WORKER);
 
 	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
@@ -2729,9 +2756,9 @@ GetContCombinerQuery(RangeVar *rv)
 	SelectStmt *sel;
 	RangeVar *matrel;
 
-	matrel = GetMatRelationName(rv);
-	sel = GetContSelectStmt(rv);
-	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Combiner);
+	matrel = GetMatRelName(rv);
+	sel = get_cont_query_select_stmt(rv);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, COMBINER);
 	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
@@ -3166,7 +3193,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	}
 
 	/* Ok, it's a user combine query against an existing continuous view */
-	cont_qry = GetContQuery(rv);
+	cont_qry = GetContViewQuery(rv);
 
 	rte = (RangeTblEntry *) list_nth(pstate->p_rtable, var->varno - 1);
 	cvatt = var->varattno;
@@ -3547,8 +3574,8 @@ GetSWExpr(RangeVar *cv)
 	SelectStmt *view;
 	SelectStmt *sel;
 
-	sel = GetContSelectStmt(cv);
-	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
+	sel = get_cont_query_select_stmt(cv);
+	TransformSelectStmtForContProcess(cv, sel, &view, WORKER);
 
 	return view->whereClause;
 }
@@ -3618,8 +3645,8 @@ GetWindowTimeColumn(RangeVar *cv)
 	SelectStmt *sel;
 	ContAnalyzeContext context;
 
-	sel = GetContSelectStmt(cv);
-	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
+	sel = get_cont_query_select_stmt(cv);
+	TransformSelectStmtForContProcess(cv, sel, &view, WORKER);
 
 	if (view->whereClause)
 	{
@@ -3864,27 +3891,4 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 		/* This is a hack to specify the step factor, but at the same time indicate that it wasn't explicitly specified */
 		select->swStepFactor = 100 + sliding_window_step_factor;
 	}
-}
-
-ColumnDef *
-MakeMatRelColumnDef(char *name, Oid type, Oid typemod)
-{
-	ColumnDef *result;
-	TypeName *typename;
-
-	typename = makeNode(TypeName);
-	typename->typeOid = type;
-	typename->typemod = typemod;
-
-	result = makeNode(ColumnDef);
-	result->colname = name;
-	result->inhcount = 0;
-	result->is_local = true;
-	result->is_not_null = false;
-	result->raw_default = NULL;
-	result->cooked_default = NULL;
-	result->constraints = NIL;
-	result->typeName = typename;
-
-	return result;
 }

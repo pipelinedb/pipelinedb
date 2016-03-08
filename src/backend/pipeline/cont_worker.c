@@ -26,6 +26,7 @@
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream_fdw.h"
+#include "pipeline/transformReceiver.h"
 #include "tcop/dest.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"
@@ -85,11 +86,18 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 	pfree(base);
 	base = (ContQueryState *) state;
 
-	state->dest = CreateDestReceiver(DestCombiner);
+	if (base->query->type == CONT_VIEW)
+	{
+		state->dest = CreateDestReceiver(DestCombiner);
+		SetCombinerDestReceiverParams(state->dest, exec, base->query);
+	}
+	else
+	{
+		state->dest = CreateDestReceiver(DestTransform);
+		SetTransformDestReceiverParams(state->dest, exec, base->query);
+	}
 
-	SetCombinerDestReceiverParams(state->dest, exec);
-
-	pstmt = GetContPlan(base->view, Worker);
+	pstmt = GetContPlan(base->query, WORKER);
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot, InvalidSnapshot, state->dest, NULL, 0);
 	state->query_desc->snapshot = GetTransactionSnapshot();
 	state->query_desc->snapshot->copied = true;
@@ -111,11 +119,11 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 
 		state->groupatts = agg->grpColIdx;
 
-		matrel = heap_openrv_extended(base->view->matrel, NoLock, true);
+		matrel = heap_openrv_extended(base->query->matrel, NoLock, true);
 
 		if (matrel == NULL)
 		{
-			base->view = NULL;
+			base->query = NULL;
 			return base;
 		}
 
@@ -127,7 +135,7 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 			if (hash == NULL)
 			{
 				/* matrel has been dropped */
-				base->view = NULL;
+				base->query = NULL;
 				CQMatRelClose(ri);
 				heap_close(matrel, NoLock);
 				return base;
@@ -156,10 +164,22 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 	return base;
 }
 
+static void
+flush_tuples(ContQueryWorkerState *state)
+{
+	if (state->dest->mydest == DestCombiner)
+		CombinerDestReceiverFlush(state->dest);
+	else
+	{
+		Assert(state->dest->mydest == DestTransform);
+		TransformDestReceiverFlush(state->dest);
+	}
+}
+
 void
 ContinuousQueryWorkerMain(void)
 {
-	ContExecutor *cont_exec = ContExecutorNew(Worker, &init_query_state);
+	ContExecutor *cont_exec = ContExecutorNew(WORKER, &init_query_state);
 	Oid query_id;
 
 	WorkerResOwner = ResourceOwnerCreate(NULL, "WorkerResOwner");
@@ -205,8 +225,8 @@ ContinuousQueryWorkerMain(void)
 				ExecEndNode(state->query_desc->planstate);
 				state->query_desc->planstate = NULL;
 
-				/* Flush all resulting tuples to combiners */
-				CombinerDestReceiverFlush(state->query_desc->dest);
+				/* flush tuples to combiners or transform out functions */
+				flush_tuples(state);
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
 				MemoryContextSwitchTo(state->base.state_cxt);

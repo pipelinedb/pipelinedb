@@ -41,7 +41,6 @@ CreatePipelineDatabaseCatalogEntry(Oid dbid)
 
 	values[Anum_pipeline_database_dbid - 1] = ObjectIdGetDatum(dbid);
 	values[Anum_pipeline_database_cq_enabled - 1] = BoolGetDatum(continuous_queries_enabled);
-	nulls[Anum_pipeline_database_meta - 1] = true;
 
 	tup = heap_form_tuple(pipeline_database->rd_att, values, nulls);
 	simple_heap_insert(pipeline_database, tup);

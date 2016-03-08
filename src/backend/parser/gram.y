@@ -266,8 +266,8 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
     DropOwnedStmt ReassignOwnedStmt
     AlterTSConfigurationStmt AlterTSDictionaryStmt
     CreateMatViewStmt RefreshMatViewStmt
-    CreateContViewStmt ExplainContViewStmt CreateStreamStmt
-    TruncateContViewStmt
+    CreateContViewStmt ExplainContQueryStmt CreateStreamStmt
+    TruncateContViewStmt CreateContTransformStmt
 
 %type <node>  select_no_parens select_with_parens select_clause
         simple_select values_clause
@@ -383,7 +383,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <defelt>  fdw_option
 
 %type <range> OptTempTableName
-%type <into>  into_clause create_as_target create_cv_target create_mv_target
+%type <into>  into_clause create_as_target create_mv_target create_cv_target create_ct_target
 
 %type <defelt>  createfunc_opt_item common_func_opt_item dostmt_opt_item
 %type <fun_param> func_arg func_arg_with_default table_func_column aggr_arg
@@ -417,7 +417,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <boolean> copy_from opt_program
 
 %type <ival>  opt_column event cursor_options opt_hold opt_set_data
-%type <objtype> drop_type comment_type security_label_type
+%type <objtype> drop_type comment_type security_label_type explain_type
 
 %type <node>  fetch_args limit_clause select_limit_value
         offset_clause select_offset_value
@@ -796,6 +796,7 @@ stmt :
       | CreateAsStmt
       | CreateAssertStmt
       | CreateCastStmt
+      | CreateContTransformStmt
       | CreateContViewStmt
       | CreateConversionStmt
       | CreateDomainStmt
@@ -851,7 +852,7 @@ stmt :
       | DropdbStmt
       | ExecuteStmt
       | ExplainStmt
-      | ExplainContViewStmt
+      | ExplainContQueryStmt
       | FetchStmt
       | GrantStmt
       | GrantRoleStmt
@@ -2830,30 +2831,36 @@ create_cv_target:
 /*****************************************************************************
  *
  *    QUERY:
- *        EXPLAIN CONTINUOUS VIEW [VERBOSE] qualified_name
- *        EXPLAIN CONTINUOUS VIEW ( options ) qualified_name
+ *        EXPLAIN CONTINUOUS [VIEW | TRANSFORM] [VERBOSE] qualified_name
+ *        EXPLAIN CONTINUOUS [VIEW | TRANSFORM] ( options ) qualified_name
  *
  *****************************************************************************/
 
-ExplainContViewStmt:
-    EXPLAIN CONTINUOUS VIEW opt_verbose qualified_name
+ExplainContQueryStmt:
+    EXPLAIN explain_type opt_verbose qualified_name
         {
-          ExplainContViewStmt *n = makeNode(ExplainContViewStmt);
-          n->view = $5;
+          ExplainContQueryStmt *n = makeNode(ExplainContQueryStmt);
+          n->view = $4;
+          n->objType = $2;
           n->options = NIL;
-          if ($4)
+          if ($3)
             n->options = lappend(n->options,
                        makeDefElem("verbose", NULL));
           $$ = (Node *) n;
         }
-    | EXPLAIN CONTINUOUS VIEW '(' explain_option_list ')' qualified_name
+    | EXPLAIN explain_type '(' explain_option_list ')' qualified_name
         {
-          ExplainContViewStmt *n = makeNode(ExplainContViewStmt);
-          n->view = $7;
-          n->options = $5;
+          ExplainContQueryStmt *n = makeNode(ExplainContQueryStmt);
+          n->view = $6;
+          n->objType = $2;
+          n->options = $4;
           $$ = (Node *) n;
         }
     ;
+
+explain_type:  CONTINUOUS TRANSFORM { $$ = OBJECT_CONTTRANSFORM; }
+      | CONTINUOUS VIEW           { $$ = OBJECT_CONTVIEW; }
+	;
 
 /*****************************************************************************
  *
@@ -2883,7 +2890,37 @@ CreateStreamStmt: CREATE STREAM qualified_name '(' OptTableElementList ')'
           $$ = (Node *)n;
         }
     ;
-    
+
+/*****************************************************************************
+ *
+ *    QUERY :
+ *        CREATE CONTINUOUS TRANSFORM qualified_name AS SelectStmt
+ *
+ *****************************************************************************/
+
+CreateContTransformStmt:
+		CREATE CONTINUOUS TRANSFORM create_ct_target AS SelectStmt
+		THEN EXECUTE PROCEDURE func_name '(' TriggerFuncArgs ')'
+        {
+          CreateContTransformStmt *n = makeNode(CreateContTransformStmt);
+          n->into = $4;
+          n->query = $6;
+          ((SelectStmt *) n->query)->forContinuousView = true;
+          n->funcname = $10;
+          n->args = $12;
+          $$ = (Node *) n;
+        }
+    ;
+
+create_ct_target:
+    qualified_name opt_reloptions
+        {
+          $$ = makeNode(IntoClause);
+          $$->rel = $1;
+          $$->options = $2;
+        }
+    ;
+
 /*****************************************************************************
  *
  *    QUERY :
@@ -5717,8 +5754,9 @@ DropStmt: DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 
 
 drop_type:  TABLE                 { $$ = OBJECT_TABLE; }
-      | CONTINUOUS VIEW           { $$ = OBJECT_CONTINUOUS_VIEW; }
-      | STREAM                          { $$ = OBJECT_STREAM; }
+      | CONTINUOUS VIEW           { $$ = OBJECT_CONTVIEW; }
+      | STREAM                    { $$ = OBJECT_STREAM; }
+      | CONTINUOUS TRANSFORM      { $$ = OBJECT_CONTTRANSFORM; }
       | SEQUENCE                { $$ = OBJECT_SEQUENCE; }
       | VIEW                  { $$ = OBJECT_VIEW; }
       | MATERIALIZED VIEW           { $$ = OBJECT_MATVIEW; }

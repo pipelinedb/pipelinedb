@@ -30,13 +30,22 @@
 CATALOG(pipeline_query,4242)
 {
 	int32		id;
+	char 		type;
 	Oid			namespace;
 	NameData	name;
+
+	/* valid for views only */
 	Oid			matrel;
 	Oid         seqrel;
 	bool		gc;
 	bool 		adhoc;
+
+	/* valid for transforms only */
+	Oid			tgfn;
+	int16		tgnargs;
+
 #ifdef CATALOG_VARLEN
+	bytea       tgargs;
 	text		query;
 #endif
 } FormData_pipeline_query;
@@ -52,14 +61,21 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query			8
+#define Natts_pipeline_query			12
 #define Anum_pipeline_query_id			1
-#define Anum_pipeline_query_namespace	2
-#define Anum_pipeline_query_name		3
-#define Anum_pipeline_query_matrel		4
-#define Anum_pipeline_query_seqrel		5
-#define Anum_pipeline_query_gc			6
-#define Anum_pipeline_query_adhoc		7
-#define Anum_pipeline_query_query 		8
+#define Anum_pipeline_query_type		2
+#define Anum_pipeline_query_namespace	3
+#define Anum_pipeline_query_name		4
+#define Anum_pipeline_query_matrel		5
+#define Anum_pipeline_query_seqrel		6
+#define Anum_pipeline_query_gc			7
+#define Anum_pipeline_query_adhoc		8
+#define Anum_pipeline_query_tgfn		9
+#define Anum_pipeline_query_tgnargs		10
+#define Anum_pipeline_query_tgargs		11
+#define Anum_pipeline_query_query 		12
+
+#define PIPELINE_QUERY_VIEW 		'v'
+#define PIPELINE_QUERY_TRANSFORM 	't'
 
 #endif   /* PIPELINE_QUERIES_H */

@@ -359,7 +359,7 @@ dumpContinuousView(Archive *fout, TableInfo *ti, PQExpBuffer delq)
 	char *last;
 	bool called;
 
-	appendPQExpBuffer(pq, "SELECT query FROM pipeline_queries() WHERE schema = '%s' AND name = '%s'",
+	appendPQExpBuffer(pq, "SELECT query FROM pipeline_views() WHERE schema = '%s' AND name = '%s'",
 			ti->dobj.namespace->dobj.name, ti->dobj.name);
 	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
 	qdef = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "query")));

@@ -769,7 +769,8 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 		relation->rd_rel->relkind != RELKIND_COMPOSITE_TYPE &&
 		relation->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
 		relation->rd_rel->relkind != RELKIND_CONTVIEW &&
-		relation->rd_rel->relkind != RELKIND_STREAM)
+		relation->rd_rel->relkind != RELKIND_STREAM &&
+		relation->rd_rel->relkind != RELKIND_CONTTRANSFORM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, view, materialized view, composite type, or foreign table",

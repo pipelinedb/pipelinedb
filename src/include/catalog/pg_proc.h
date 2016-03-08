@@ -5667,10 +5667,10 @@ DESCR("hash one or more values into a 64-bit integer using locality sensitive ha
 DATA(insert OID = 4375 ( stream_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20}" "{o,o,o,o,o}" "{schema,name,input_rows,input_batches,input_bytes}" _null_ _null_ stream_stat_get _null_ _null_ _null_ ));
 DESCR("get stream stats");
 
-DATA(insert OID = 4378 ( pipeline_queries PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{26,25,25,25}" "{o,o,o,o}" "{id,schema,name,query}" _null_ _null_ pipeline_queries _null_ _null_ _null_ ));
-DESCR("get continuous queries");
+DATA(insert OID = 4378 ( pipeline_views PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{26,25,25,25}" "{o,o,o,o}" "{id,schema,name,query}" _null_ _null_ pipeline_views _null_ _null_ _null_ ));
+DESCR("get continuous views");
 
-DATA(insert OID = 4379 ( pipeline_streams PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,16,1028,17}" "{o,o,o,o,o}" "{schema,name,inferred,queries,desc}" _null_ _null_ pipeline_streams _null_ _null_ _null_ ));
+DATA(insert OID = 4379 ( pipeline_streams PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,16,1009,17}" "{o,o,o,o,o}" "{schema,name,inferred,queries,tup_desc}" _null_ _null_ pipeline_streams _null_ _null_ _null_ ));
 DESCR("get streams");
 
 /* t-digest add n */
@@ -5895,6 +5895,13 @@ DATA(insert OID = 4477 (  json_object_int_sum_transfn	 PGNSP PGUID 12 1 0 0 0 f 
 DESCR("json_object_sum transition function");
 DATA(insert OID = 4478 (  json_object_int_sum_transout PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 114 "2281" _null_ _null_ _null_ _null_ _null_ json_object_int_sum_transout _null_ _null_ _null_ ));
 DESCR("json_object_sum transition out function");
+
+/* continuous transforms */
+DATA(insert OID = 4479 ( pipeline_transforms PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{26,25,25,25,1009,25}" "{o,o,o,o,o,o}" "{id,schema,name,tgfn,tgargs,query}" _null_ _null_ pipeline_transforms _null_ _null_ _null_ ));
+DESCR("get continuous transforms");
+DATA(insert OID = 4480 ( pipeline_stream_insert	PGNSP PGUID 12 1 0 0 0 f f f f t f v 0 0 2279 "" _null_ _null_ _null_ _null_ _null_ pipeline_stream_insert _null_ _null_ _null_ ));
+DESCR("trigger to insert into streams");
+#define PIPELINE_STREAM_INSERT_OID 4480
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

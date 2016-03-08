@@ -15,10 +15,12 @@
 #include "funcapi.h"
 
 #include "access/htup_details.h"
+#include "catalog/namespace.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "fmgr.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/dsm_cqueue.h"
 #include "miscadmin.h"
@@ -207,7 +209,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		HeapTuple tup;
 		Datum result;
 		Oid viewid = GetCQStatView(entry->key);
-		ContinuousView *cv;
+		ContQuery *cv;
 		char *viewname;
 
 		/* keep scanning if it's a proc-level stats entry */
@@ -215,7 +217,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 			continue;
 
 		/* just ignore stale stats entries */
-		cv = GetContinuousView(viewid);
+		cv = GetContQueryForViewId(viewid);
 		if (!cv)
 			continue;
 
@@ -403,10 +405,10 @@ typedef struct
 } RelationScanData;
 
 /*
- * pipeline_queries
+ * pipeline_views
  */
 Datum
-pipeline_queries(PG_FUNCTION_ARGS)
+pipeline_views(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 	HeapTuple tup;
@@ -462,6 +464,9 @@ pipeline_queries(PG_FUNCTION_ARGS)
 		Datum tmp;
 		bool isnull;
 
+		if (row->type != PIPELINE_QUERY_VIEW || row->adhoc)
+			continue;
+
 		MemSet(nulls, 0, sizeof(nulls));
 
 		values[0] = ObjectIdGetDatum(row->id);
@@ -483,6 +488,14 @@ pipeline_queries(PG_FUNCTION_ARGS)
 	heap_close(data->rel, AccessShareLock);
 
 	SRF_RETURN_DONE(funcctx);
+}
+
+static int
+cstring_cmp(const void *a, const void *b)
+{
+	const char **ia = (const char **)a;
+	const char **ib = (const char **)b;
+	return strcmp(*ia, *ib);
 }
 
 /*
@@ -511,8 +524,8 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "schema", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "name", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "inferred", BOOLOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "queries", OIDARRAYOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "desc", BYTEAOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "queries", TEXTARRAYOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "tup_desc", BYTEAOID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -544,16 +557,6 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		Datum result;
 		Datum tmp;
 		bool isnull;
-		bytea *bytes;
-		int nbytes;
-		int nwords;
-		Bitmapset *bms;
-		int dims[1];
-		int lbs[] = { 1 };
-		Datum *queries;
-		bool *qnulls;
-		int x;
-		int i;
 		char *relname = get_rel_name(row->relid);
 		char *namespace;
 
@@ -576,6 +579,16 @@ pipeline_streams(PG_FUNCTION_ARGS)
 			nulls[3] = true;
 		else
 		{
+			int nqueries;
+			char **queries;
+			Datum *qdatums;
+			bytea *bytes;
+			int nbytes;
+			int nwords;
+			Bitmapset *bms;
+			int i;
+			int j;
+
 			bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(tmp));
 			nbytes = VARSIZE(bytes) - VARHDRSZ;
 			nwords = nbytes / sizeof(bitmapword);
@@ -585,20 +598,38 @@ pipeline_streams(PG_FUNCTION_ARGS)
 
 			memcpy(bms->words, VARDATA(bytes), nbytes);
 
-			dims[0] = bms_num_members(bms);
-			queries = palloc0(sizeof(Datum) * dims[0]);
-			qnulls = palloc0(sizeof(bool) * dims[0]);
+			nqueries = bms_num_members(bms);
+			queries = palloc0(sizeof(char *) * nqueries);
 
-			MemSet(qnulls, 0, dims[0]);
 			i = 0;
-
-			while ((x = bms_first_member(bms)) >= 0)
+			while ((j = bms_first_member(bms)) >= 0)
 			{
-				queries[i] = ObjectIdGetDatum(x);
+				ContQuery *view = GetContQueryForId(j);
+				char *cq_name;
+				bool visible = NULL;
+
+				if (view->type == CONT_VIEW)
+					visible = RelationIsVisible(view->matrelid);
+				else
+					visible = TypeIsVisible(view->matrelid);
+
+				if (!visible)
+					cq_name = quote_qualified_identifier(get_namespace_name(view->namespace), NameStr(view->name));
+				else
+					cq_name = quote_qualified_identifier(NULL, NameStr(view->name));
+
+				queries[i] = cq_name;
 				i++;
 			}
 
-			values[3] = PointerGetDatum(construct_md_array(queries, qnulls, 1, dims, lbs, OIDOID, 4, true, 'i'));
+			qsort(queries, nqueries, sizeof(char *), cstring_cmp);
+
+			qdatums = palloc0(sizeof(Datum) * nqueries);
+
+			for (i = 0; i < nqueries; i++)
+				qdatums[i] = CStringGetTextDatum(queries[i]);
+
+			values[3] = PointerGetDatum(construct_array(qdatums, nqueries, TEXTOID, -1, false, 'i'));
 		}
 
 		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_desc, &isnull);
@@ -763,4 +794,121 @@ json_object_int_sum_transout(PG_FUNCTION_ARGS)
 	appendStringInfoString(&buf, " }");
 
 	PG_RETURN_TEXT_P(cstring_to_text_with_len(buf.data, buf.len));
+}
+
+/*
+ * pipeline_transforms
+ */
+Datum
+pipeline_transforms(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	HeapTuple tup;
+	MemoryContext old;
+	RelationScanData *data;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+
+		TupleDesc	tupdesc;
+		MemoryContext oldcontext;
+
+		/* create a function context for cross-call persistence */
+		funcctx = SRF_FIRSTCALL_INIT();
+
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		/* build tupdesc for result tuples */
+		tupdesc = CreateTemplateTupleDesc(6, false);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "id", OIDOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "schema", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "name", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "tgfunc", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "tgargs", TEXTARRAYOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 6, "query", TEXTOID, -1, 0);
+
+		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
+
+	if (funcctx->user_fctx == NULL)
+	{
+		old = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		data = palloc(sizeof(RelationScanData));
+		data->rel = heap_open(PipelineQueryRelationId, AccessShareLock);
+		data->scan = heap_beginscan_catalog(data->rel, 0, NULL);
+		funcctx->user_fctx = data;
+
+		MemoryContextSwitchTo(old);
+	}
+	else
+		data = (RelationScanData *) funcctx->user_fctx;
+
+	while ((tup = heap_getnext(data->scan, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+		Datum values[6];
+		bool nulls[6];
+		HeapTuple rtup;
+		Datum result;
+		Datum tmp;
+		bool isnull;
+		char *fn;
+
+		if (row->type != PIPELINE_QUERY_TRANSFORM)
+			continue;
+
+		MemSet(nulls, 0, sizeof(nulls));
+
+		values[0] = ObjectIdGetDatum(row->id);
+		values[1] = CStringGetTextDatum(get_namespace_name(row->namespace));
+		values[2] = CStringGetTextDatum(NameStr(row->name));
+
+		if (!FunctionIsVisible(row->tgfn))
+			fn = quote_qualified_identifier(get_namespace_name(get_func_namespace(row->tgfn)), get_func_name(row->tgfn));
+		else
+			fn = quote_qualified_identifier(NULL, get_func_name(row->tgfn));
+
+		values[3] = CStringGetTextDatum(fn);
+
+		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+		Assert(!isnull);
+		values[5] = CStringGetTextDatum(deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp))));
+
+		if (row->tgnargs > 0)
+		{
+			Datum *elems = palloc0(sizeof(Datum) * row->tgnargs);
+			bytea *val;
+			char *p;
+			int i;
+
+			val = DatumGetByteaP(SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_tgargs, &isnull));
+			Assert(!isnull);
+
+			p = (char *) VARDATA(val);
+
+			for (i = 0; i < row->tgnargs; i++)
+			{
+				elems[i] = CStringGetTextDatum(pstrdup(p));
+				p += strlen(p) + 1;
+			}
+
+			values[4] = PointerGetDatum(construct_array(elems, row->tgnargs, TEXTOID, -1, false, 'i'));
+		}
+		else
+			nulls[4] = true;
+
+		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
+		result = HeapTupleGetDatum(rtup);
+		SRF_RETURN_NEXT(funcctx, result);
+	}
+
+	heap_endscan(data->scan);
+	heap_close(data->rel, AccessShareLock);
+
+	SRF_RETURN_DONE(funcctx);
 }

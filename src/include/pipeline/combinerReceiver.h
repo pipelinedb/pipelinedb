@@ -20,7 +20,7 @@ typedef void (*CombinerReceiveFunc) (PartialTupleState *pts, int len);
 extern CombinerReceiveFunc CombinerReceiveHook;
 
 extern DestReceiver *CreateCombinerDestReceiver(void);
-extern void SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *cont_exec);
+extern void SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *cont_exec, ContQuery *query);
 extern void SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash);
 extern void CombinerDestReceiverFlush(DestReceiver *self);
 

@@ -107,27 +107,27 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 }
 
 static SelectStmt *
-get_worker_select_stmt(ContinuousView* view, SelectStmt** viewptr)
+get_worker_select_stmt(ContQuery* view, SelectStmt** viewptr)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
 
-	parsetree_list = pg_parse_query(view->query);
+	parsetree_list = pg_parse_query(view->sql);
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt->swStepFactor = view->sw_step_factor;
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt,
-												   viewptr, Worker);
+												   viewptr, WORKER);
 
 	return selectstmt;
 }
 
 static PlannedStmt *
-get_worker_plan(ContinuousView *view)
+get_worker_plan(ContQuery *view)
 {
 	SelectStmt* stmt = get_worker_select_stmt(view, NULL);
-	return get_plan_from_stmt(view->id, (Node *) stmt, view->query, false);
+	return get_plan_from_stmt(view->id, (Node *) stmt, view->sql, false);
 }
 
 static PlannedStmt *
@@ -158,7 +158,7 @@ get_plan_with_hook(Oid id, Node *node, const char* sql, bool is_combine)
 }
 
 PlannedStmt *
-GetContinuousViewOverlayPlan(ContinuousView *view)
+GetContinuousViewOverlayPlan(ContQuery *view)
 {
 	SelectStmt	*selectstmt;
 	SelectStmt	*viewstmt;
@@ -167,11 +167,11 @@ GetContinuousViewOverlayPlan(ContinuousView *view)
 	selectstmt = viewstmt;
 
 	return get_plan_with_hook(view->id, (Node*) selectstmt,
-							  view->query, false);
+							  view->sql, false);
 }
 
 PlannedStmt *
-GetContinuousViewOverlayPlanMod(ContinuousView *view, ViewModFunction mod_fn)
+GetContinuousViewOverlayPlanMod(ContQuery *view, ViewModFunction mod_fn)
 {
 	SelectStmt	*selectstmt;
 	SelectStmt	*viewstmt;
@@ -182,36 +182,36 @@ GetContinuousViewOverlayPlanMod(ContinuousView *view, ViewModFunction mod_fn)
 	mod_fn(selectstmt);
 
 	return get_plan_with_hook(view->id, (Node*) selectstmt,
-							  view->query, false);
+							  view->sql, false);
 }
 
 static PlannedStmt *
-get_combiner_plan(ContinuousView *view)
+get_combiner_plan(ContQuery *view)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
 
-	parsetree_list = pg_parse_query(view->query);
+	parsetree_list = pg_parse_query(view->sql);
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt->swStepFactor = view->sw_step_factor;
-	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Combiner);
+	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, COMBINER);
 	join_search_hook = get_combiner_join_rel;
 
-	return get_plan_with_hook(view->id, (Node*) selectstmt, view->query, true);
+	return get_plan_with_hook(view->id, (Node*) selectstmt, view->sql, true);
 }
 
 PlannedStmt *
-GetContPlan(ContinuousView *view, ContQueryProcType type)
+GetContPlan(ContQuery *view, ContQueryProcType type)
 {
 	PlannedStmt *plan = NULL;
 
-	Assert(type == Worker || type == Combiner);
+	Assert(type == WORKER || type == COMBINER);
 
-	if (type == Worker)
+	if (type == WORKER)
 		plan = get_worker_plan(view);
-	else if (type == Combiner)
+	else if (type == COMBINER)
 		plan = get_combiner_plan(view);
 
 	return plan;
@@ -356,15 +356,15 @@ get_res_target(char *name, List *tlist)
 static void
 create_index_on_matrel(IndexStmt *stmt)
 {
-	ContinuousView *cv;
+	ContQuery *cv;
 	RangeVar *cv_name = stmt->relation;
 	SelectStmt	*viewstmt;
 	List *tlist;
 	ListCell *lc;
 	bool is_sw = GetGCFlag(cv_name);
 
-	stmt->relation = GetMatRelationName(cv_name);
-	cv = RangeVarGetContinuousView(cv_name);
+	stmt->relation = GetMatRelName(cv_name);
+	cv = GetContQueryForView(cv_name);
 	get_worker_select_stmt(cv, &viewstmt);
 
 	Assert(viewstmt);
@@ -417,7 +417,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 		 * the name of the target relation if we need to.
 		 */
 		if (vstmt->relation && IsAContinuousView(vstmt->relation))
-			vstmt->relation = GetMatRelationName(vstmt->relation);
+			vstmt->relation = GetMatRelName(vstmt->relation);
 	}
 
 	if (SaveUtilityHook != NULL)
