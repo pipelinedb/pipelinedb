@@ -48,7 +48,7 @@ def test_dump(pipeline, clean_db):
   _verify()
   _dump(pipeline, 'test_dump.sql')
 
-  pipeline.drop_all_views()
+  pipeline.drop_all_queries()
   _restore(pipeline, 'test_dump.sql')
   _verify()
 
@@ -74,7 +74,7 @@ def test_sliding_windows(pipeline, clean_db):
 
   _dump(pipeline, 'test_sw.sql')
 
-  pipeline.drop_all_views()
+  pipeline.drop_all_queries()
   _restore(pipeline, 'test_sw.sql')
 
   result = pipeline.execute('SELECT count FROM sw_v').first()
@@ -105,7 +105,7 @@ def test_single_continuous_view(pipeline, clean_db):
 
   _dump(pipeline, 'test_single.sql', cv_name='test_single0')
 
-  pipeline.drop_all_views()
+  pipeline.drop_all_queries()
   _restore(pipeline, 'test_single.sql')
 
   result = pipeline.execute('SELECT count FROM test_single0').first()
@@ -127,7 +127,7 @@ def test_dump_data_only(pipeline, clean_db):
 
   _dump(pipeline, 'test_data.sql', data_only=True)
 
-  pipeline.drop_all_views()
+  pipeline.drop_all_queries()
 
   pipeline.create_cv('test_data', 'SELECT COUNT(*) FROM stream')
   _restore(pipeline, 'test_data.sql')
@@ -147,7 +147,7 @@ def test_schema_only(pipeline, clean_db):
 
   _dump(pipeline, 'test_schema.sql', schema_only=True)
 
-  pipeline.drop_all_views()
+  pipeline.drop_all_queries()
   _restore(pipeline, 'test_schema.sql')
 
   # No data loaded
@@ -172,4 +172,3 @@ def test_static_streams(pipeline, clean_db):
   result = pipeline.execute('SELECT x, y FROM static_cv').first()
   assert result['x'] == 0
   assert result['y'] == 1
-
