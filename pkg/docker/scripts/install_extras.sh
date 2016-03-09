@@ -1,8 +1,8 @@
 #!/bin/bash
 # install cstore_fdw, pgsql_fdw, and other common tools
 
-CSTOREVER=1.2.0
-PGVER=9.4.4
+CSTOREVER=1.4.0
+PGVER=9.5.0
 
 # install some build tools, we'll remove these later
 apt-get install -y unzip gcc make g++
