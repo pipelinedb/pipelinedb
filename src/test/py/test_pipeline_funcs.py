@@ -9,7 +9,7 @@ def test_combine_table(pipeline, clean_db):
   pipeline.create_cv('combine_table',
                      'SELECT x::int, COUNT(*) FROM stream GROUP BY x')
 
-  values = [(i, ) for i in xrange(1000)]
+  values = [(i, ) for i in xrange(5000)]
   pipeline.insert('stream', ('x', ), values)
 
   pipeline.execute('SELECT * INTO tmprel FROM combine_table_mrel')
@@ -26,7 +26,7 @@ def test_combine_table(pipeline, clean_db):
   t = threading.Thread(target=insert)
   t.start()
 
-  time.sleep(2)
+  time.sleep(3)
 
   conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' %
                           (getpass.getuser(), pipeline.port))
@@ -41,7 +41,7 @@ def test_combine_table(pipeline, clean_db):
   assert ninserts[0] > 0
 
   rows = list(pipeline.execute('SELECT count FROM combine_table'))
-  assert len(rows) == 1000
+  assert len(rows) == 5000
   for row in rows:
     assert row[0] == ninserts[0] + 2
 

@@ -120,6 +120,40 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	heap_close(rel, AccessShareLock);
 }
 
+static int
+int64_cmp(const void *a, const void *b)
+{
+	const int64 *ia = (const int64 *) a;
+	const int64 *ib = (const int64 *) b;
+	return *ia  - *ib;
+}
+
+static void
+sort_const_ints(List *values)
+{
+	ListCell *lc;
+	int64 *ints = palloc0(sizeof(int64) * list_length(values));
+	int i;
+
+	i = 0;
+	foreach(lc, values)
+	{
+		Const *c = (Const *) lfirst(lc);
+		ints[i] = DatumGetInt64(c->constvalue);
+		i++;
+	}
+
+	qsort(ints, list_length(values), sizeof(int64), int64_cmp);
+
+	i = 0;
+	foreach(lc, values)
+	{
+		Const *c = (Const *) lfirst(lc);
+		c->constvalue = Int64GetDatum(ints[i]);
+		i++;
+	}
+}
+
 /*
  * get_values
  *
@@ -175,6 +209,9 @@ get_values(ContQueryCombinerState *state)
 
 		values = lappend(values, list_make1(hash));
 	}
+
+	/* Sort values so we lock tuples in ascending order, otherwise it can cause deadlocks */
+	sort_const_ints(values);
 
 	assign_expr_collations(NULL, (Node *) values);
 
@@ -384,6 +421,8 @@ select_existing_groups(ContQueryCombinerState *state)
 	}
 	else if (state->isagg && state->ngroupatts == 0)
 	{
+		Assert(hash_get_num_entries(state->existing->hashtab) <= 1);
+
 		/*
 		 * If we're not grouping on any columns, then there's only one row to look up
 		 * so we don't need to do a VALUES-matrel join. If it's already in existing, we're done
@@ -1137,7 +1176,7 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	if (cv == NULL)
 		elog(ERROR, "continuous view \"%s\" does not exist", text_to_cstring(cv_name));
 
-	matrel = heap_openrv(cv->matrel, ExclusiveLock);
+	matrel = heap_openrv(cv->matrel, RowExclusiveLock);
 	srcrel = heap_openrv(rel_rv, RowExclusiveLock);
 
 	if (!equal_tupdesc(RelationGetDescr(matrel), RelationGetDescr(srcrel)))
