@@ -4,7 +4,7 @@ MODULE_big = pipeline_kafka
 OBJS = pipeline_kafka.o
 
 EXTENSION = pipeline_kafka
-DATA = pipeline_kafka--0.8.0.sql
+DATA = pipeline_kafka--0.9.0.sql
 
 REGRESS = pipeline_kafka
 
