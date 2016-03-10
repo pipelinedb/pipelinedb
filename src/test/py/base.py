@@ -172,7 +172,8 @@ class PipelineDB(object):
         """
         Drop all continuous queries
         """
-        queries = self.execute('SELECT name, type FROM pipeline_query')
+        queries = self.execute('SELECT name, type FROM pipeline_query '
+                               'ORDER BY type')
         for query in queries:
           _t = 'VIEW' if query['type'] == 'v' else 'TRANSFORM'
           self.execute('DROP CONTINUOUS %s %s' % (_t, query['name']))
