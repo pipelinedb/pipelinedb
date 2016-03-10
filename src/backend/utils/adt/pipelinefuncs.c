@@ -606,7 +606,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 			{
 				ContQuery *view = GetContQueryForId(j);
 				char *cq_name;
-				bool visible = NULL;
+				bool visible = false;
 
 				if (view->type == CONT_VIEW)
 					visible = RelationIsVisible(view->matrelid);
