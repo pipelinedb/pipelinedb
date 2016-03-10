@@ -34,7 +34,7 @@ CREATE FUNCTION kafka_consume_begin (
   escape       text    DEFAULT NULL,
   batchsize    integer DEFAULT 1000,
   parallelism  integer DEFAULT 1,
-  start_offset bigint  DEFAULT -1
+  start_offset bigint  DEFAULT NULL
 )
 RETURNS text
 AS 'MODULE_PATHNAME', 'kafka_consume_begin_tr'
