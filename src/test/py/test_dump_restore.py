@@ -172,3 +172,46 @@ def test_static_streams(pipeline, clean_db):
   result = pipeline.execute('SELECT x, y FROM static_cv').first()
   assert result['x'] == 0
   assert result['y'] == 1
+
+def test_cont_transforms(pipeline, clean_db):
+  pipeline.create_stream('cv_stream', x='int', y='text')
+  pipeline.create_cv('test_cv', 'SELECT count(*) FROM cv_stream')
+  pipeline.create_ct('test_ct1', 'SELECT x::int, y::text FROM ct_stream WHERE mod(x, 2) = 0',
+                     "pipeline_stream_insert('cv_stream', 'cv_stream')")
+  pipeline.create_table('test_t', x='int', y='text')
+  pipeline.execute('''
+  CREATE OR REPLACE FUNCTION test_tg()
+  RETURNS trigger AS
+  $$
+  BEGIN
+   INSERT INTO test_t (x, y) VALUES (NEW.x, NEW.y);
+   RETURN NEW;
+  END;
+  $$
+  LANGUAGE plpgsql;
+  ''')
+  pipeline.create_ct('test_ct2', 'SELECT x::int, y::text FROM ct_stream',
+                     'test_tg()')
+
+  pipeline.insert('ct_stream', ('x', 'y'), [(1, 'hello'), (2, 'world')])
+  time.sleep(1)
+
+  _dump(pipeline, 'test_cont_transform.sql')
+
+  pipeline.drop_all_queries()
+  pipeline.drop_stream('cv_stream')
+  pipeline.drop_table('test_t')
+  pipeline.execute('DROP FUNCTION test_tg()')
+
+  _restore(pipeline, 'test_cont_transform.sql')
+
+  pipeline.insert('ct_stream', ('x', 'y'), [(1, 'hello'), (2, 'world')])
+  time.sleep(1)
+
+  assert pipeline.execute('SELECT count FROM test_cv').first()['count'] == 4
+  ntups = 0
+  for row in pipeline.execute('SELECT x, count(*) FROM test_t GROUP BY x'):
+    assert row['count'] == 2
+    assert row['x'] in (1, 2)
+    ntups += 1
+  assert ntups == 2

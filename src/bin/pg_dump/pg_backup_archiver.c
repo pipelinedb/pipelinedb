@@ -3111,7 +3111,8 @@ _getObjectDescription(PQExpBuffer buf, TocEntry *te, ArchiveHandle *AH)
 		strcmp(type, "USER MAPPING") == 0 ||
 		strcmp(type, "USER MAPPING") == 0 ||
 		strcmp(type, "STREAM") == 0 ||
-		strcmp(type, "CONTINUOUS VIEW") == 0)
+		strcmp(type, "CONTINUOUS VIEW") == 0 ||
+		strcmp(type, "CONTINUOUS TRANSFORM") == 0)
 	{
 		/* We already know that search_path was set properly */
 		appendPQExpBuffer(buf, "%s %s", type, fmtId(te->tag));
@@ -3335,7 +3336,8 @@ _printTocEntry(ArchiveHandle *AH, TocEntry *te, RestoreOptions *ropt, bool isDat
 				 strcmp(te->desc, "USER MAPPING") == 0 ||
 				 strcmp(te->desc, "USER MAPPING") == 0 ||
 				 strcmp(te->desc, "STREAM") == 0 ||
-				 strcmp(te->desc, "CONTINUOUS VIEW") == 0)
+				 strcmp(te->desc, "CONTINUOUS VIEW") == 0 ||
+				 strcmp(te->desc, "CONTINUOUS TRANSFORM") == 0)
 		{
 			/* these object types don't have separate owners */
 		}

@@ -997,7 +997,7 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query 
 	if (fnoid == PIPELINE_STREAM_INSERT_OID)
 	{
 		ListCell *lc;
-		Oid relid;
+		Oid stream_relid;
 
 		foreach(lc, args)
 		{
@@ -1010,10 +1010,10 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query 
 						errmsg("\"%s\" is not a stream", strVal(v)),
 						errhint("Arguments to pipeline_stream_insert must be streams.")));
 
-			relid = RangeVarGetRelid(rv, NoLock, false);
+			stream_relid = RangeVarGetRelid(rv, NoLock, false);
 
 			referenced.classId = RelationRelationId;
-			referenced.objectId = relid;
+			referenced.objectId = stream_relid;
 			referenced.objectSubId = 0;
 
 			dependent.classId = RelationRelationId;

@@ -404,6 +404,61 @@ dumpContinuousView(Archive *fout, TableInfo *ti, PQExpBuffer delq)
 	destroyPQExpBuffer(pq);
 }
 
+/*
+ * dumpContinuousTransform
+ *
+ * Dump a CREATE CONTINUOUS TRANSFORM statement
+ */
+static void
+dumpContinuousTransform(Archive *fout, TableInfo *ti, PQExpBuffer delq)
+{
+	PQExpBuffer q = createPQExpBuffer();
+	PQExpBuffer pq = createPQExpBuffer();
+	PGresult *res;
+	int i;
+	char *qdef;
+	char *tgfn;
+	char *tgargs;
+
+	appendPQExpBuffer(pq, "SELECT tgfn, query FROM pipeline_transforms() WHERE schema = '%s' AND name = '%s'",
+			ti->dobj.namespace->dobj.name, ti->dobj.name);
+	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
+	qdef = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "query")));
+	tgfn = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "tgfn")));
+
+	resetPQExpBuffer(pq);
+	appendPQExpBuffer(pq, "SELECT unnest(tgargs) FROM pipeline_transforms() WHERE schema = '%s' AND name = '%s'",
+			ti->dobj.namespace->dobj.name, ti->dobj.name);
+	res = ExecuteSqlQuery(fout, pq->data, PGRES_TUPLES_OK);
+	resetPQExpBuffer(pq);
+	for (i = 0; i < PQntuples(res); i++)
+	{
+		if (i == 0)
+			appendPQExpBuffer(pq, "'%s'", PQgetvalue(res, i, PQfnumber(res, "unnest")));
+		else
+			appendPQExpBuffer(pq, ", '%s'", PQgetvalue(res, i, PQfnumber(res, "unnest")));
+	}
+	tgargs = pstrdup(pq->data);
+
+	appendPQExpBuffer(q, "CREATE CONTINUOUS TRANSFORM %s.%s AS %s THEN EXECUTE PROCEDURE %s(%s);\n\n",
+			ti->dobj.namespace->dobj.name, ti->dobj.name, qdef, tgfn, tgargs);
+
+	ArchiveEntry(fout, ti->dobj.catId, ti->dobj.dumpId,
+			ti->dobj.name,
+			ti->dobj.namespace->dobj.name,
+			ti->reltablespace,
+			ti->rolname,
+			   false,
+				 "CONTINUOUS TRANSFORM",
+				 SECTION_PRE_DATA,
+				 q->data, delq->data, NULL,
+				 NULL, 0,
+				 NULL, NULL);
+
+	destroyPQExpBuffer(q);
+	destroyPQExpBuffer(pq);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -1356,9 +1411,10 @@ expand_table_name_patterns(Archive *fout,
 						  "SELECT c.oid"
 						  "\nFROM pg_catalog.pg_class c"
 		"\n     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace"
-					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c')\n",
+					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c')\n",
 						  RELKIND_RELATION, RELKIND_SEQUENCE, RELKIND_VIEW,
-						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE, RELKIND_CONTVIEW);
+						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
+						  RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM);
 		processSQLNamePattern(GetConnection(fout), query, cell->val, true,
 							  false, "n.nspname", "c.relname", NULL,
 							  "pg_catalog.pg_table_is_visible(c.oid)");
@@ -2058,6 +2114,8 @@ makeTableDataInfo(DumpOptions *dopt, TableInfo *tbinfo, bool oids)
 	if (tbinfo->relkind == RELKIND_FOREIGN_TABLE)
 		return;
 	if (tbinfo->relkind == RELKIND_CONTVIEW)
+		return;
+	if (tbinfo->relkind == RELKIND_CONTTRANSFORM)
 		return;
 
 	/* Don't dump data in unlogged tables, if so requested */
@@ -4753,13 +4811,15 @@ getTables(Archive *fout, DumpOptions *dopt, int *numTables)
 						  "d.refclassid = c.tableoid AND d.deptype = 'a') "
 					   "LEFT JOIN pg_class tc ON (c.reltoastrelid = tc.oid) "
 				 "LEFT JOIN pipeline_stream ps ON c.oid = ps.relid WHERE inferred = false OR inferred IS NULL "
-				 "AND c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
+				 "AND c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
 								  " ORDER BY c.oid",
 								  username_subquery,
 								  RELKIND_SEQUENCE,
 								  RELKIND_RELATION, RELKIND_SEQUENCE,
 								  RELKIND_VIEW, RELKIND_COMPOSITE_TYPE,
-								  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE, RELKIND_CONTVIEW, RELKIND_STREAM);
+								  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
+								  RELKIND_CONTVIEW, RELKIND_STREAM,
+								  RELKIND_CONTTRANSFORM);
 	}
 	else if (fout->remoteVersion >= 90400)
 	{
@@ -6043,7 +6103,7 @@ getRules(Archive *fout, int *numRules)
 	{
 		appendPQExpBufferStr(query, "SELECT c.relkind, r.tableoid, r.oid, r.rulename, "
 				"r.ev_class AS ruletable, r.ev_type, r.is_instead, r.ev_enabled FROM pg_rewrite r "
-				"JOIN pg_class c on r.ev_class = c.oid WHERE c.relkind != 'C'");
+				"JOIN pg_class c on r.ev_class = c.oid WHERE c.relkind NOT IN ('C', 'X')");
 	}
 	else if (fout->remoteVersion >= 70100)
 	{
@@ -14039,8 +14099,13 @@ dumpTableSchema(Archive *fout, DumpOptions *dopt, TableInfo *tbinfo)
 				srvname = NULL;
 				ftoptions = NULL;
 				break;
-			case RELKIND_STREAM:
+			case (RELKIND_STREAM):
 				reltypename = "STREAM";
+				srvname = NULL;
+				ftoptions = NULL;
+				break;
+			case (RELKIND_CONTTRANSFORM):
+				reltypename = "CONTINUOUS TRANSFORM";
 				srvname = NULL;
 				ftoptions = NULL;
 				break;
@@ -14050,7 +14115,7 @@ dumpTableSchema(Archive *fout, DumpOptions *dopt, TableInfo *tbinfo)
 				ftoptions = NULL;
 		}
 
-		/* These relations are implicitly created by CREATE CONTINUOUS VIEW */
+		/* These relations are implicitly created by CREATE CONTINUOUS VIEW/TRANSFORM */
 		if (is_matrel(fout, tbinfo, 0) || is_inferred_stream(fout, tbinfo))
 			return;
 
@@ -14072,6 +14137,12 @@ dumpTableSchema(Archive *fout, DumpOptions *dopt, TableInfo *tbinfo)
 		if (tbinfo->relkind == RELKIND_CONTVIEW)
 		{
 			dumpContinuousView(fout, tbinfo, delq);
+			return;
+		}
+
+		if (tbinfo->relkind == RELKIND_CONTTRANSFORM)
+		{
+			dumpContinuousTransform(fout, tbinfo, delq);
 			return;
 		}
 
