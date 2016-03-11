@@ -88,3 +88,7 @@ All existing consumers can be started or stopped at once by not passing any argu
  success
 (1 row)
 ```
+
+# Documentation
+
+You find the documentation for `pipeline_kafka` [here](http://docs.pipelinedb.com/integrations.html#kafka).
