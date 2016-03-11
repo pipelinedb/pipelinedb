@@ -2,7 +2,7 @@
 
 PipelineDB extension for Kafka support
 
-# Building
+## Building
 
 You'll need to have [librdkafka](https://github.com/edenhill/librdkafka) installed on your system to build the extension. Then,
 
@@ -20,7 +20,7 @@ Then you'll be able load the extension into a database:
 CREATE EXTENSION
 ```
 
-# Usage
+## Usage
 
 `pipeline_kafka` needs to know about any Kafka brokers it can connect to. Brokers can be added with `kafka_add_broker`:
 
@@ -89,6 +89,6 @@ All existing consumers can be started or stopped at once by not passing any argu
 (1 row)
 ```
 
-# Documentation
+## Documentation
 
 You find the documentation for `pipeline_kafka` [here](http://docs.pipelinedb.com/integrations.html#kafka).
