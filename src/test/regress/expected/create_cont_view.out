@@ -36,7 +36,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate0');
  pipeline_get_overlay_viewdef 
 ------------------------------
   SELECT cqcreate0_mrel.key  +
-    FROM cqcreate0_mrel;
+    FROM ONLY cqcreate0_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url::text, 1, 2) FROM create_cont_stream1;
@@ -69,7 +69,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate1');
     pipeline_get_overlay_viewdef    
 ------------------------------------
   SELECT cqcreate1_mrel."substring"+
-    FROM cqcreate1_mrel;
+    FROM ONLY cqcreate1_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cqcreate2 AS SELECT key::integer, substring(value::text, 1, 2) AS s FROM create_cont_stream1;
@@ -106,7 +106,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate2');
 ------------------------------
   SELECT cqcreate2_mrel.key, +
      cqcreate2_mrel.s        +
-    FROM cqcreate2_mrel;
+    FROM ONLY cqcreate2_mrel;
 (1 row)
 
 -- Group by projections
@@ -150,7 +150,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate3');
   SELECT cqcreate3_mrel.key,                                   +
      cqcreate3_mrel.count,                                     +
      numeric_poly_sum(naggstaterecv(cqcreate3_mrel.sum)) AS sum+
-    FROM cqcreate3_mrel;
+    FROM ONLY cqcreate3_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM cont_create_stream2 GROUP BY key::text;
@@ -190,7 +190,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate4');
 ----------------------------------------------------------------
   SELECT cqcreate4_mrel.count,                                 +
      numeric_poly_sum(naggstaterecv(cqcreate4_mrel.sum)) AS sum+
-    FROM cqcreate4_mrel;
+    FROM ONLY cqcreate4_mrel;
 (1 row)
 
 -- Sliding window queries
@@ -233,7 +233,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate5');
                                pipeline_get_overlay_viewdef                               
 ------------------------------------------------------------------------------------------
   SELECT cqcreate5_mrel.key                                                              +
-    FROM cqcreate5_mrel                                                                  +
+    FROM ONLY cqcreate5_mrel                                                             +
    WHERE (cqcreate5_mrel.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval));
 (1 row)
 
@@ -278,7 +278,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate6');
                               pipeline_get_overlay_viewdef                               
 -----------------------------------------------------------------------------------------
   SELECT combine(cqcreate6_mrel.count) AS count                                         +
-    FROM cqcreate6_mrel                                                                 +
+    FROM ONLY cqcreate6_mrel                                                            +
    WHERE (cqcreate6_mrel.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval))+
    GROUP BY cqcreate6_mrel._0;
 (1 row)
@@ -322,7 +322,7 @@ SELECT pipeline_get_overlay_viewdef('cvavg');
      float8_avg(cvavg_mrel.float_avg) AS float_avg,       +
      int8_avg(cvavg_mrel.int_avg) AS int_avg,             +
      interval_avg(cvavg_mrel.internal_avg) AS internal_avg+
-    FROM cvavg_mrel;
+    FROM ONLY cvavg_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM create_cont_stream1;
@@ -349,7 +349,7 @@ SELECT pipeline_get_overlay_viewdef('cvjson');
                           pipeline_get_overlay_viewdef                           
 ---------------------------------------------------------------------------------
   SELECT json_agg_finalfn(byteatostringinfo(cvjson_mrel.count_col)) AS count_col+
-    FROM cvjson_mrel;
+    FROM ONLY cvjson_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM cont_create_stream2;
@@ -376,7 +376,7 @@ SELECT pipeline_get_overlay_viewdef('cvjsonobj');
                                      pipeline_get_overlay_viewdef                                      
 -------------------------------------------------------------------------------------------------------
   SELECT json_object_agg_finalfn(byteatostringinfo(cvjsonobj_mrel.json_object_agg)) AS json_object_agg+
-    FROM cvjsonobj_mrel;
+    FROM ONLY cvjsonobj_mrel;
 (1 row)
 
 -- But these aggregates don't
@@ -404,7 +404,7 @@ SELECT pipeline_get_overlay_viewdef('cvcount');
  pipeline_get_overlay_viewdef 
 ------------------------------
   SELECT cvcount_mrel.sum_col+
-    FROM cvcount_mrel;
+    FROM ONLY cvcount_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream1;
@@ -431,7 +431,7 @@ SELECT pipeline_get_overlay_viewdef('cvarray');
   pipeline_get_overlay_viewdef  
 --------------------------------
   SELECT cvarray_mrel.count_col+
-    FROM cvarray_mrel;
+    FROM ONLY cvarray_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM cont_create_stream2 GROUP BY key;
@@ -464,7 +464,7 @@ SELECT pipeline_get_overlay_viewdef('cvtext');
 ----------------------------------------------------------------------------------
   SELECT cvtext_mrel.key,                                                        +
      string_agg_finalfn(stringaggstaterecv(cvtext_mrel.string_agg)) AS string_agg+
-    FROM cvtext_mrel;
+    FROM ONLY cvtext_mrel;
 (1 row)
 
 -- Check for expressions containing aggregates
@@ -493,7 +493,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
            pipeline_get_overlay_viewdef            
 ---------------------------------------------------
   SELECT (cqaggexpr1_mrel._0 + cqaggexpr1_mrel._1)+
-    FROM cqaggexpr1_mrel;
+    FROM ONLY cqaggexpr1_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::integer) AS value FROM cont_create_stream2 GROUP BY key;
@@ -527,7 +527,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
 ----------------------------------------------------------------------------------------
   SELECT cqaggexpr2_mrel.key,                                                          +
      (float8_avg(cqaggexpr2_mrel._0) + (cqaggexpr2_mrel._1)::double precision) AS value+
-    FROM cqaggexpr2_mrel;
+    FROM ONLY cqaggexpr2_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key;
@@ -562,7 +562,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
 ------------------------------------------------------------------------------------------
   SELECT cqaggexpr3_mrel.key,                                                            +
      combine(cqaggexpr3_mrel.value) AS value                                             +
-    FROM cqaggexpr3_mrel                                                                 +
+    FROM ONLY cqaggexpr3_mrel                                                            +
    WHERE (cqaggexpr3_mrel.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval))+
    GROUP BY cqaggexpr3_mrel.key;
 (1 row)
@@ -597,7 +597,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
 ----------------------------------------------------
   SELECT cqaggexpr4_mrel.key,                      +
      floor(float8_avg(cqaggexpr4_mrel._0)) AS value+
-    FROM cqaggexpr4_mrel;
+    FROM ONLY cqaggexpr4_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM create_cont_stream1 GROUP BY k0, k1;
@@ -634,7 +634,7 @@ SELECT pipeline_get_overlay_viewdef('cqgroupby');
   SELECT cqgroupby_mrel.k0,  +
      cqgroupby_mrel.k1,      +
      cqgroupby_mrel.count    +
-    FROM cqgroupby_mrel;
+    FROM ONLY cqgroupby_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM create_cont_stream1
@@ -676,15 +676,15 @@ Indexes:
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('multigroupindex');
-  pipeline_get_overlay_viewdef   
----------------------------------
-  SELECT multigroupindex_mrel.a,+
-     multigroupindex_mrel.b,    +
-     multigroupindex_mrel.c,    +
-     multigroupindex_mrel.d,    +
-     multigroupindex_mrel.e,    +
-     multigroupindex_mrel.count +
-    FROM multigroupindex_mrel;
+    pipeline_get_overlay_viewdef    
+------------------------------------
+  SELECT multigroupindex_mrel.a,   +
+     multigroupindex_mrel.b,       +
+     multigroupindex_mrel.c,       +
+     multigroupindex_mrel.d,       +
+     multigroupindex_mrel.e,       +
+     multigroupindex_mrel.count    +
+    FROM ONLY multigroupindex_mrel;
 (1 row)
 
 -- A user-specified fillfactor should override the default

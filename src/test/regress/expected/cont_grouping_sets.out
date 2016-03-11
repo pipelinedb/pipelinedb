@@ -26,7 +26,7 @@ SELECT pipeline_get_overlay_viewdef('test_gs0');
   SELECT test_gs0_mrel.x,    +
      test_gs0_mrel.y,        +
      test_gs0_mrel.count     +
-    FROM test_gs0_mrel;
+    FROM ONLY test_gs0_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW test_gs1 AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
@@ -60,7 +60,7 @@ SELECT pipeline_get_overlay_viewdef('test_gs1');
      test_gs1_mrel.y,        +
      test_gs1_mrel.z,        +
      test_gs1_mrel.count     +
-    FROM test_gs1_mrel;
+    FROM ONLY test_gs1_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW test_gs2 AS SELECT x::integer, y::integer, COUNT(*) FROM test_gs_stream
@@ -91,7 +91,7 @@ SELECT pipeline_get_overlay_viewdef('test_gs2');
   SELECT test_gs2_mrel.x,    +
      test_gs2_mrel.y,        +
      test_gs2_mrel.count     +
-    FROM test_gs2_mrel;
+    FROM ONLY test_gs2_mrel;
 (1 row)
 
 CREATE CONTINUOUS VIEW test_gs3 WITH (max_age = '5 seconds') AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
@@ -128,7 +128,7 @@ SELECT pipeline_get_overlay_viewdef('test_gs3');
      test_gs3_mrel.y,                                                                  +
      test_gs3_mrel.z,                                                                  +
      combine(test_gs3_mrel.count) AS count                                             +
-    FROM test_gs3_mrel                                                                 +
+    FROM ONLY test_gs3_mrel                                                            +
    WHERE (test_gs3_mrel.arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval))+
    GROUP BY test_gs3_mrel.x, test_gs3_mrel.y, test_gs3_mrel.z;
 (1 row)
