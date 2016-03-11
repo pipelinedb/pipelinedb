@@ -929,6 +929,7 @@ launch_consumer_group(Relation consumers, KafkaConsumer *consumer, int64 offset)
 				break;
 			}
 		}
+		hash_seq_term(&iter);
 
 		/* if there are already procs running, it's a noop */
 		if (running)
