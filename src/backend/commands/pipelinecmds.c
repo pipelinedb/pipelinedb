@@ -486,6 +486,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	check_relation_already_exists(view);
 
 	matrel = makeRangeVar(view->schemaname, CVNameToMatRelName(view->relname), -1);
+	matrel->inhOpt = INH_NO;
 	seqrel = makeRangeVar(view->schemaname, CVNameToSeqRelName(view->relname), -1);
 
 	/*
