@@ -8,7 +8,7 @@ You'll need to have [librdkafka](https://github.com/edenhill/librdkafka) install
 
 
 ```
-./configure
+./configure --prefix=/usr
 make
 make install
 ```
