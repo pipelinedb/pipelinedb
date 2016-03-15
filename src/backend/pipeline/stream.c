@@ -122,7 +122,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 		if (cq)
 		{
-			dsm_cqueue_push_nolock(cq, sts, len);
+			dsm_cqueue_push_nolock(cq, sts, len, true);
 			size += len;
 		}
 	}

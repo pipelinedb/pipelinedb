@@ -239,7 +239,7 @@ CombinerDestReceiverFlush(DestReceiver *self)
 					cq = GetCombinerQueue(pts);
 
 				Assert(cq);
-				dsm_cqueue_push_nolock(cq, pts, len);
+				dsm_cqueue_push_nolock(cq, pts, len, true);
 
 				IncrementCQWrite(1, len);
 			}
