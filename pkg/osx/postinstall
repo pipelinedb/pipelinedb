@@ -3,6 +3,7 @@
 INSTALL_PREFIX=/usr/local/lib/pipelinedb
 
 ln -s $INSTALL_PREFIX/bin/pipeline-server /usr/local/bin/pipeline-server
+ln -s $INSTALL_PREFIX/bin/pipeline-server-debug /usr/local/bin/pipeline-server-debug
 ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/local/bin/pipeline-ctl
 ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/local/bin/pg_ctl
 ln -s $INSTALL_PREFIX/bin/pipeline-init /usr/local/bin/pipeline-init

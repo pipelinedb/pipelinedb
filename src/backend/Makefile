@@ -18,6 +18,8 @@ subdir = src/backend
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 
+PIPELINE_SERVER_BINARY = pipeline-server
+
 SUBDIRS = access bootstrap catalog parser commands executor foreign lib libpq \
 	main nodes optimizer pipeline port postmaster regex replication rewrite \
 	storage tcop tsearch utils $(top_builddir)/src/timezone
@@ -48,13 +50,13 @@ LIBS := $(filter-out -lz -lreadline -ledit -ltermcap -lncurses -lcurses, $(LIBS)
 
 ##########################################################################
 
-all: submake-libpgport submake-schemapg pipeline-server $(POSTGRES_IMP)
+all: submake-libpgport submake-schemapg $(PIPELINE_SERVER_BINARY) $(POSTGRES_IMP)
 
 ifneq ($(PORTNAME), cygwin)
 ifneq ($(PORTNAME), win32)
 ifneq ($(PORTNAME), aix)
 
-pipeline-server: $(OBJS)
+$(PIPELINE_SERVER_BINARY): $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) $(call expand_subsys,$^) $(LIBS) -o $@
 
 endif
@@ -63,7 +65,7 @@ endif
 
 ifeq ($(PORTNAME), cygwin)
 
-pipeline-server: $(OBJS)
+$(PIPELINE_SERVER_BINARY): $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) -Wl,--stack,$(WIN32_STACK_RLIMIT) -Wl,--export-all-symbols -Wl,--out-implib=libpostgres.a $(call expand_subsys,$^) $(LIBS) -o $@
 
 # There is no correct way to write a rule that generates two files.
@@ -72,23 +74,23 @@ pipeline-server: $(OBJS)
 # make, we must chain the dependencies like this.  The semicolon is
 # important, otherwise make will choose some built-in rule.
 
-libpostgres.a: pipeline-server ;
+libpostgres.a: $(PIPELINE_SERVER_BINARY) ;
 
 endif # cygwin
 
 ifeq ($(PORTNAME), win32)
 LIBS += -lsecur32
 
-pipeline-server: $(OBJS) $(WIN32RES)
+$(PIPELINE_SERVER_BINARY): $(OBJS) $(WIN32RES)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) -Wl,--stack=$(WIN32_STACK_RLIMIT) -Wl,--export-all-symbols -Wl,--out-implib=libpostgres.a $(call expand_subsys,$(OBJS)) $(WIN32RES) $(LIBS) -o $@$(X)
 
-libpostgres.a: pipeline-server ;
+libpostgres.a: $(PIPELINE_SERVER_BINARY) ;
 
 endif # win32
 
 ifeq ($(PORTNAME), aix)
 
-pipeline-server: $(POSTGRES_IMP)
+$(PIPELINE_SERVER_BINARY): $(POSTGRES_IMP)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(call expand_subsys,$(OBJS)) -Wl,-bE:$(top_builddir)/src/backend/$(POSTGRES_IMP) $(LIBS) -Wl,-brtllib -o $@
 
 $(POSTGRES_IMP): $(OBJS)
@@ -218,20 +220,23 @@ endif
 	$(INSTALL_DATA) $(srcdir)/utils/misc/pipelinedb.conf.sample '$(DESTDIR)$(datadir)/pipelinedb.conf.sample'
 	$(INSTALL_DATA) $(srcdir)/access/transam/recovery.conf.sample '$(DESTDIR)$(datadir)/recovery.conf.sample'
 
-install-bin: pipeline-server $(POSTGRES_IMP) installdirs
-	$(INSTALL_PROGRAM) pipeline-server$(X) '$(DESTDIR)$(bindir)/pipeline-server$(X)'
+install-bin: $(PIPELINE_SERVER_BINARY) $(POSTGRES_IMP) installdirs
+	$(INSTALL_PROGRAM) $(PIPELINE_SERVER_BINARY)$(X) '$(DESTDIR)$(bindir)/$(PIPELINE_SERVER_BINARY)$(X)'
 ifneq ($(PORTNAME), win32)
 	@rm -f '$(DESTDIR)$(bindir)/postmaster$(X)'
 	ln -s pipeline-server$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
 else
-	$(INSTALL_PROGRAM) pipeline-server$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
+	$(INSTALL_PROGRAM) $(PIPELINE_SERVER_BINARY)$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
 endif
 ifeq ($(MAKE_EXPORTS), true)
 	$(INSTALL_DATA) $(POSTGRES_IMP) '$(DESTDIR)$(pkglibdir)/$(POSTGRES_IMP)'
 	$(INSTALL_PROGRAM) $(MKLDEXPORT) '$(DESTDIR)$(pgxsdir)/$(MKLDEXPORT_DIR)/mkldexport.sh'
 endif
 
-.PHONY: install-bin
+install-server-bin: $(PIPELINE_SERVER_BINARY)
+	$(INSTALL_PROGRAM) $(PIPELINE_SERVER_BINARY)$(X) '$(DESTDIR)$(bindir)/$(PIPELINE_SERVER_BINARY)$(X)'
+
+.PHONY: install-bin install-server-bin
 
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)' '$(DESTDIR)$(datadir)'
@@ -254,7 +259,7 @@ endif
 ##########################################################################
 
 uninstall:
-	rm -f '$(DESTDIR)$(bindir)/pipeline-server$(X)' '$(DESTDIR)$(bindir)/postmaster'
+	rm -f '$(DESTDIR)$(bindir)/$(PIPELINE_SERVER_BINARY)$(X)' '$(DESTDIR)$(bindir)/postmaster'
 ifeq ($(MAKE_EXPORTS), true)
 	rm -f '$(DESTDIR)$(pkglibdir)/$(POSTGRES_IMP)'
 	rm -f '$(DESTDIR)$(pgxsdir)/$(MKLDEXPORT_DIR)/mkldexport.sh'
@@ -280,7 +285,7 @@ endif
 ##########################################################################
 
 clean:
-	rm -f $(LOCALOBJS) pipeline-server$(X) $(POSTGRES_IMP) \
+	rm -f $(LOCALOBJS) $(PIPELINE_SERVER_BINARY)$(X) $(POSTGRES_IMP) \
 		$(top_builddir)/src/include/parser/gram.h \
 		$(top_builddir)/src/include/catalog/schemapg.h \
 		$(top_builddir)/src/include/utils/fmgroids.h \
@@ -323,4 +328,4 @@ maintainer-clean: distclean
 # are up to date.  It saves the time of doing all the submakes.
 .PHONY: quick
 quick: $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) $(call expand_subsys,$^) $(LIBS) -o pipeline-server
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) $(call expand_subsys,$^) $(LIBS) -o $(PIPELINE_SERVER_BINARY)

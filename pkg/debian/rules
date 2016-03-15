@@ -26,6 +26,12 @@ pipeline:
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
 	(cd $(TOP_BUILDDIR)/contrib/pipeline_kafka && ./configure && make && make install)
 
+pipeline-debug:
+	(cd $(TOP_BUILDDIR) && make clean)
+	(cd $(TOP_BUILDDIR) && ./configure CFLAGS="-g -O0" PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo --enable-cassert --disable-rpath)
+	(cd $(TOP_BUILDDIR) && $(MAKE) PIPELINE_SERVER_BINARY=pipeline-server-debug)
+	(cd $(TOP_BUILDDIR)/src/backend && $(MAKE) PIPELINE_SERVER_BINARY=pipeline-server-debug install-server-bin )
+
 clean-libs:
 	find $(LIBDIR) -name "*.la" -exec rm {} \;
 
@@ -33,7 +39,7 @@ move-installation:
 	mkdir $(DESTDIR)
 	cp -r --parents $(PREFIX) $(DESTDIR)
 
-binary-arch: conf pipeline clean-libs move-installation
+binary-arch: conf pipeline pipeline-debug clean-libs move-installation
 	dh_installdocs -a
 	dh_installchangelogs -a
 	dh_strip

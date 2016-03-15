@@ -25,6 +25,7 @@ echo "$RPM_INSTALL_PREFIX/lib" > /etc/ld.so.conf.d/pipelinedb.conf
 /sbin/ldconfig
 
 ln -s $RPM_INSTALL_PREFIX/bin/pipeline-server /usr/bin/pipeline-server
+ln -s $RPM_INSTALL_PREFIX/bin/pipeline-server-debug /usr/bin/pipeline-server-debug
 ln -s $RPM_INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pipeline-ctl
 ln -s $RPM_INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pg_ctl
 ln -s $RPM_INSTALL_PREFIX/bin/pipeline-init /usr/bin/pipeline-init
@@ -59,6 +60,7 @@ rm /etc/ld.so.conf.d/pipelinedb.conf
 /sbin/ldconfig
 
 rm -f /usr/bin/pipeline-server
+rm -f /usr/bin/pipeline-server-debug
 rm -f /usr/bin/pipeline-ctl
 rm -f /usr/bin/pg_ctl
 rm -f /usr/bin/pipeline-init

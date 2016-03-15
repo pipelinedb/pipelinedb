@@ -98,6 +98,7 @@ static char *register_password = NULL;
 static char *argv0 = NULL;
 static bool allow_core_files = false;
 static time_t start_time;
+static bool debug = false;
 
 static char postopts_file[MAXPGPATH];
 static char version_file[MAXPGPATH];
@@ -891,7 +892,7 @@ do_start(void)
 		pgdata_opt = "";
 
 	if (exec_path == NULL)
-		exec_path = find_other_exec_or_die(argv0, "pipeline-server", PG_BACKEND_VERSIONSTR);
+		exec_path = find_other_exec_or_die(argv0, debug ? "pipeline-server-debug" : "pipeline-server", PG_BACKEND_VERSIONSTR);
 
 #if defined(HAVE_GETRLIMIT) && defined(RLIMIT_CORE)
 	if (allow_core_files)
@@ -2152,6 +2153,7 @@ main(int argc, char **argv)
 		{"silent", no_argument, NULL, 's'},
 		{"timeout", required_argument, NULL, 't'},
 		{"core-files", no_argument, NULL, 'c'},
+		{"debug", no_argument, NULL, 'd'},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -2300,6 +2302,9 @@ main(int argc, char **argv)
 					break;
 				case 'c':
 					allow_core_files = true;
+					break;
+				case 'd':
+					debug = true;
 					break;
 				default:
 					/* getopt_long already issued a suitable error message */
