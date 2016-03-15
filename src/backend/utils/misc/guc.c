@@ -2754,7 +2754,7 @@ static struct config_int ConfigureNamesInt[] =
 		{"continuous_query_combiner_work_mem", PGC_BACKEND, RESOURCES_MEM,
 		 gettext_noop("Sets the maximum memory to be used for combining partial results for continuous queries."),
 		 gettext_noop("This much memory can be used by each combiner processes's internal "
-					   "sort operation and hash table before switching to "
+					  "sort operation and hash table before switching to "
 					  "temporary disk files."),
 		 GUC_UNIT_KB
 		},

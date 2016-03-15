@@ -536,7 +536,7 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 			sis->worker_queue = GetWorkerQueue();
 		}
 
-		dsm_cqueue_push_nolock(sis->worker_queue, sts, len);
+		dsm_cqueue_push_nolock(sis->worker_queue, sts, len, true);
 	}
 
 	if (sis->adhoc_state)

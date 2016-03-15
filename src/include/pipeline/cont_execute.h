@@ -80,6 +80,8 @@ extern void StreamTupleStatePeekFn(void *ptr, int len);
 extern void StreamTupleStateCopyFn(void *dest, void *src, int len);
 extern StreamTupleState *StreamTupleStateCreate(HeapTuple tup, TupleDesc desc, bytea *packed_desc,
 		Bitmapset *queries, InsertBatchAck *acks, int nacks, int *len);
+extern void StreamTupleStateBuffer(StreamTupleState *sts, int len);
+
 
 typedef struct PartialTupleState
 {

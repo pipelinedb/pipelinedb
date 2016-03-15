@@ -168,6 +168,7 @@ void
 TransformDestReceiverFlush(DestReceiver *self)
 {
 	TransformState *t = (TransformState *) self;
+	bool wait = continuous_query_num_workers > 1;
 
 	/* Optimized path for stream insertions */
 	if (t->cont_query->tgfn == PIPELINE_STREAM_INSERT_OID)
@@ -185,12 +186,15 @@ TransformDestReceiverFlush(DestReceiver *self)
 			RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(t->cont_query->tgargs[i]));
 			Relation rel = heap_openrv(rv, AccessShareLock);
 			Oid relid = RelationGetRelid(rel);
-			Bitmapset *targets = bms_difference(GetStreamReaders(relid), GetAdhocContinuousViewIds());
+			Bitmapset *targets;
 			bytea *packed_desc;
 			Size size = 0;
 			dsm_cqueue *cq;
 			int batch = 0;
 			int nbatches = 1;
+			List *sts_to_unbuffer = NIL;
+
+			targets = bms_difference(GetStreamReaders(relid), GetAdhocContinuousViewIds());
 
 			if (bms_num_members(targets) == 0)
 				continue;
@@ -224,9 +228,13 @@ TransformDestReceiverFlush(DestReceiver *self)
 					nbatches++;
 				}
 
-				dsm_cqueue_push_nolock(cq, sts, len);
-				batch++;
-				size += len;
+				if (dsm_cqueue_push_nolock(cq, sts, len, wait))
+				{
+					batch++;
+					size += len;
+				}
+				else
+					StreamTupleStateBuffer(sts, len);
 			}
 
 			pfree(packed_desc);

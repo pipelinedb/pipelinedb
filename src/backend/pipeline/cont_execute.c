@@ -34,6 +34,14 @@
 
 dsm_cqueue_peek_fn PartialTupleStatePeekFnHook = NULL;
 
+typedef struct BufferedStreamTupleState
+{
+	int len;
+	StreamTupleState sts;
+} BufferedStreamTupleState;
+
+static List *MyBufferedSTS = NIL;
+
 void
 PartialTupleStateCopyFn(void *dest, void *src, int len)
 {
@@ -454,12 +462,12 @@ GetWorkerQueue(void)
 	{
 		/*
 		 * If we have multiple workers and we're trying to write from a continuous transform, never write to our
-		 * own queue to avoid deadlocks.
+		 * own queue so we never have to buffer tuples that don't fit in the queue in process local memory.
 		 */
 		if (IsContQueryWorkerProcess() && continuous_query_num_workers > 1 && idx == MyContQueryProc->id)
 		{
+			ntries++;
 			idx = (idx + 1) % continuous_query_num_workers;
-			continue;
 		}
 
 		cq = GetWorkerCQueue(segment, idx);
@@ -915,6 +923,37 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	dsm_cqueue_pop_peeked(exec->cqueue);
 
+	if (MyBufferedSTS)
+	{
+		ListCell *lc;
+		List *to_remove = NIL;
+		dsm_cqueue *cq;
+
+		Assert(IsContQueryWorkerProcess());
+		Assert(continuous_query_num_workers == 1);
+
+		cq = GetWorkerQueue();
+
+		foreach(lc, MyBufferedSTS)
+		{
+			BufferedStreamTupleState *bsts = (BufferedStreamTupleState *) lfirst(lc);
+
+			if (dsm_cqueue_push_nolock(cq, &bsts->sts, bsts->len, false))
+				to_remove = lappend(to_remove, bsts);
+			else
+				break;
+		}
+
+		dsm_cqueue_unlock(cq);
+
+		foreach(lc, to_remove)
+		{
+			BufferedStreamTupleState *bsts = (BufferedStreamTupleState *) lfirst(lc);
+			MyBufferedSTS = list_delete(MyBufferedSTS, bsts);
+			pfree(bsts);
+		}
+	}
+
 	exec->cursor = NULL;
 	exec->nitems = 0;
 	exec->started = false;
@@ -922,4 +961,19 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	exec->depleted = false;
 	exec->queries_seen = NULL;
 	exec->exec_queries = NULL;
+}
+
+void
+StreamTupleStateBuffer(StreamTupleState *sts, int len)
+{
+	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+	BufferedStreamTupleState *bsts = (BufferedStreamTupleState *) palloc0(sizeof(BufferedStreamTupleState) + len);
+
+	bsts->len = len;
+	StreamTupleStateCopyFn(&bsts->sts, sts, len);
+	StreamTupleStatePeekFn(&bsts->sts, len);
+
+	MyBufferedSTS = lappend(MyBufferedSTS, bsts);
+
+	MemoryContextSwitchTo(old);
 }

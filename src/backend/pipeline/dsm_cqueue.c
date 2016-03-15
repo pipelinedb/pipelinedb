@@ -92,12 +92,12 @@ void
 dsm_cqueue_push(dsm_cqueue *cq, void *ptr, int len)
 {
 	dsm_cqueue_lock(cq);
-	dsm_cqueue_push_nolock(cq, ptr, len);
+	dsm_cqueue_push_nolock(cq, ptr, len, true);
 	dsm_cqueue_unlock(cq);
 }
 
-void
-dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
+bool
+dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len, bool wait)
 {
 	uint64_t head;
 	uint64_t tail;
@@ -149,6 +149,11 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 		/* Is there enough space in the buffer? */
 		if (cq->size - space_used >= len_needed)
 			break;
+		else if (!wait)
+		{
+			pg_atomic_write_u64(&cq->producer_latch, (uint64) NULL);
+			return false;
+		}
 
 		WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
 		CHECK_FOR_INTERRUPTS();
@@ -186,6 +191,8 @@ dsm_cqueue_push_nolock(dsm_cqueue *cq, void *ptr, int len)
 	consumer_latch = (Latch *) pg_atomic_read_u64(&cq->consumer_latch);
 	if (consumer_latch)
 		SetLatch(consumer_latch);
+
+	return true;
 }
 
 void *
