@@ -1059,17 +1059,19 @@ void
 AdhocInsertStateSend(AdhocInsertState *astate, StreamTupleState *sts, int len)
 {
 	int i;
-	InsertBatchAck *ack = sts->acks;
+	InsertBatchAck *acks = sts->acks;
+	int nacks = sts->nacks;
 	Bitmapset *queries = sts->queries;
 
 	if (astate == NULL)
 		return;
 
-	/* Adhoc queries don't care about ack and queries */
-	if (ack)
+	/* Adhoc queries don't care about acks and queries */
+	if (nacks > 0)
 	{
 		sts->acks = NULL;
-		len -= sizeof(InsertBatchAck);
+		sts->nacks = 0;
+		len -= sizeof(InsertBatchAck) * nacks;
 	}
 
 	if (queries)
@@ -1090,7 +1092,8 @@ AdhocInsertStateSend(AdhocInsertState *astate, StreamTupleState *sts, int len)
 		dsm_cqueue_push(qstate->cqueue, sts, len);
 	}
 
-	sts->acks = ack;
+	sts->acks = acks;
+	sts->nacks = nacks;
 	sts->queries = queries;
 }
 
