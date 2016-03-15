@@ -192,7 +192,6 @@ TransformDestReceiverFlush(DestReceiver *self)
 			dsm_cqueue *cq;
 			int batch = 0;
 			int nbatches = 1;
-			List *sts_to_unbuffer = NIL;
 
 			targets = bms_difference(GetStreamReaders(relid), GetAdhocContinuousViewIds());
 
