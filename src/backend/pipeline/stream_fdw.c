@@ -522,7 +522,7 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 	StreamTupleState *sts;
 	int len;
 
-	sts = StreamTupleStateCreate(tup, sis->desc, sis->packed_desc, sis->targets, sis->ack, &len);
+	sts = StreamTupleStateCreate(tup, sis->desc, sis->packed_desc, sis->targets, sis->ack, sis->ack ? 1 : 0, &len);
 
 	if (sis->worker_queue)
 	{

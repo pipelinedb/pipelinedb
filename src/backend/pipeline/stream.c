@@ -118,7 +118,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 		HeapTuple tup = tuples[i];
 		int len;
 
-		sts = StreamTupleStateCreate(tup, desc, packed_desc, targets, ack, &len);
+		sts = StreamTupleStateCreate(tup, desc, packed_desc, targets, ack, 1, &len);
 
 		if (cq)
 		{

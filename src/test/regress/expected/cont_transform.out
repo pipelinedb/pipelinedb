@@ -12,12 +12,6 @@ $$
 LANGUAGE plpgsql;
 CREATE CONTINUOUS TRANSFORM ct3 AS SELECT x::int FROM ct_stream1 WHERE x % 2 = 0 THEN EXECUTE PROCEDURE ct_tg();
 INSERT INTO ct_stream1 (x) SELECT generate_series(0, 100) AS x;
-SELECT pg_sleep(1);
- pg_sleep 
-----------
- 
-(1 row)
-
 SELECT * FROM ct0 ORDER BY x;
  x | count 
 ---+-------
@@ -99,12 +93,6 @@ CREATE CONTINUOUS TRANSFORM ct AS
 NOTICE:  consider creating an index on t.x for improved stream-table join performance
 INSERT INTO ct_s1 (x) VALUES (0), (1);
 INSERT INTO ct_s1 (x) VALUES (0), (2);
-SELECT pg_sleep(1);
- pg_sleep 
-----------
- 
-(1 row)
-
 SELECT * FROM ct_v ORDER BY x;
   x   
 ------

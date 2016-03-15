@@ -135,14 +135,14 @@ StreamTupleStateCopyFn(void *dest, void *src, int len)
 	memcpy(pos, sts->tup->t_data, sts->tup->t_len);
 	pos += sts->tup->t_len;
 
-	if (synchronous_stream_insert && sts->ack)
+	if (synchronous_stream_insert && sts->acks)
 	{
-		cpysts->ack = ptr_difference(dest, pos);
-		memcpy(pos, sts->ack, sizeof(InsertBatchAck));
-		pos += sizeof(InsertBatchAck);
+		cpysts->acks = ptr_difference(dest, pos);
+		memcpy(pos, sts->acks, sizeof(InsertBatchAck) * sts->nacks);
+		pos += sizeof(InsertBatchAck) * sts->nacks;
 	}
 	else
-		cpysts->ack = NULL;
+		cpysts->acks = NULL;
 
 	if (sts->num_record_descs)
 	{
@@ -178,10 +178,10 @@ void
 StreamTupleStatePeekFn(void *ptr, int len)
 {
 	StreamTupleState *sts = (StreamTupleState *) ptr;
-	if (sts->ack)
-		sts->ack = ptr_offset(sts, sts->ack);
+	if (sts->acks)
+		sts->acks = ptr_offset(sts, sts->acks);
 	else
-		sts->ack = NULL;
+		sts->acks = NULL;
 
 	if (sts->queries)
 		sts->queries = ptr_offset(sts, sts->queries);
@@ -198,29 +198,41 @@ void
 StreamTupleStatePopFn(void *ptr, int len)
 {
 	StreamTupleState *sts = (StreamTupleState *) ptr;
-	if (sts->ack)
-		InsertBatchAckTuple(sts->ack);
+	if (sts->acks)
+	{
+		int i;
+
+		for (i = 0; i < sts->nacks; i++)
+		{
+			InsertBatchAck *ack = &sts->acks[i];
+			InsertBatchAckTuple(ack);
+		}
+	}
 }
 
 StreamTupleState *
-StreamTupleStateCreate(HeapTuple tup, TupleDesc desc, bytea *packed_desc, Bitmapset *queries, InsertBatchAck *ack, int *len)
+StreamTupleStateCreate(HeapTuple tup, TupleDesc desc, bytea *packed_desc, Bitmapset *queries,
+		InsertBatchAck *acks, int nacks, int *len)
 {
 	StreamTupleState *tupstate = palloc0(sizeof(StreamTupleState));
 	int i;
 	int nrdescs = 0;
 	RecordTupleDesc *rdescs = NULL;
 
+	Assert(acks || nacks == 0);
+
 	*len =  sizeof(StreamTupleState);
 	*len += VARSIZE(packed_desc);
 	*len += HEAPTUPLESIZE + tup->t_len;
 
-	if (ack)
-		*len += sizeof(InsertBatchAck);
+	if (acks)
+		*len += sizeof(InsertBatchAck) * nacks;
 
 	if (queries)
 		*len += BITMAPSET_SIZE(queries->nwords);
 
-	tupstate->ack = ack;
+	tupstate->nacks = nacks;
+	tupstate->acks = acks;
 	tupstate->arrival_time = GetCurrentTimestamp();
 	tupstate->desc = packed_desc;
 
@@ -275,13 +287,14 @@ InsertBatchCreate(void)
 	pg_atomic_init_u32(&batch->num_cacks, 0);
 	pg_atomic_init_u32(&batch->num_ctups, 0);
 	pg_atomic_init_u32(&batch->num_wacks, 0);
+	pg_atomic_init_u32(&batch->num_wtups, 0);
 	return batch;
 }
 
 static inline bool
 InsertBatchAllAcked(InsertBatch *batch)
 {
-	return (pg_atomic_read_u32(&batch->num_wacks) >= batch->num_wtups &&
+	return (pg_atomic_read_u32(&batch->num_wacks) >= pg_atomic_read_u32(&batch->num_wtups) &&
 			pg_atomic_read_u32(&batch->num_cacks) >= pg_atomic_read_u32(&batch->num_ctups));
 }
 
@@ -290,7 +303,7 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 {
 	if (num_tuples)
 	{
-		batch->num_wtups = num_tuples;
+		pg_atomic_fetch_add_u32(&batch->num_wtups, num_tuples);
 		while (!InsertBatchAllAcked(batch))
 		{
 			pg_usleep(SLEEP_MS * 1000);
@@ -302,9 +315,15 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 }
 
 void
-InsertBatchIncrementNumCTuples(InsertBatch *batch)
+InsertBatchIncrementNumCTuples(InsertBatch *batch, int n)
 {
-	pg_atomic_fetch_add_u32(&batch->num_ctups, 1);
+	pg_atomic_fetch_add_u32(&batch->num_ctups, n);
+}
+
+void
+InsertBatchIncrementNumWTuples(InsertBatch *batch, int n)
+{
+	pg_atomic_fetch_add_u32(&batch->num_wtups, n);
 }
 
 void
@@ -317,6 +336,69 @@ InsertBatchAckTuple(InsertBatchAck *ack)
 		pg_atomic_fetch_add_u32(&ack->batch->num_wacks, 1);
 	else if (IsContQueryCombinerProcess())
 		pg_atomic_fetch_add_u32(&ack->batch->num_cacks, 1);
+}
+
+/*
+ * InsertBatchAckCreate
+ *
+ * Returns an array of InsertBatchAcks derived from the List of StreamTupleState structs passed to the function.
+ * nacksptr is a pointer to an integer which is set to the size of the array returned.
+ */
+InsertBatchAck *
+InsertBatchAckCreate(List *sts, int *nacksptr)
+{
+	List *acks_list = NIL;
+	ListCell *lc;
+	int i = 0;
+	InsertBatchAck *acks;
+	int nacks = 0;
+
+	Assert(synchronous_stream_insert);
+
+	foreach(lc, sts)
+	{
+		StreamTupleState *sts = lfirst(lc);
+		InsertBatchAck *ack = sts->acks;
+		ListCell *lc2;
+		bool found = false;
+
+		if (!ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
+			continue;
+
+		foreach(lc2, acks_list)
+		{
+			InsertBatchAck *ack2 = lfirst(lc2);
+
+			if (ack->batch_id == ack2->batch_id)
+			{
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+		{
+			InsertBatchAck *ack2 = (InsertBatchAck *) palloc(sizeof(InsertBatchAck));
+			memcpy(ack2, ack, sizeof(InsertBatchAck));
+			acks_list = lappend(acks_list, ack2);
+			nacks++;
+		}
+	}
+
+	acks = (InsertBatchAck *) palloc0(sizeof(InsertBatchAck) * nacks);
+
+	foreach(lc, acks_list)
+	{
+		InsertBatchAck *ack = lfirst(lc);
+		acks[i].batch_id = ack->batch_id;
+		acks[i].batch = ack->batch;
+		i++;
+	}
+
+	list_free_deep(acks_list);
+
+	*nacksptr = nacks;
+	return acks;
 }
 
 static dsm_segment *
