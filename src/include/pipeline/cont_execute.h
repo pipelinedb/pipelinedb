@@ -35,7 +35,7 @@ typedef struct InsertBatch
 	/* Number of acks from combiners */
 	pg_atomic_uint32 num_cacks;
 	/* Total number of tuples sent to workers */
-	int num_wtups;
+	pg_atomic_uint32 num_wtups;
 	/* Total number of tuples sent to combiners */
 	pg_atomic_uint32 num_ctups;
 } InsertBatch;
@@ -49,7 +49,8 @@ typedef struct InsertBatchAck
 
 extern InsertBatch *InsertBatchCreate(void);
 extern void InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples);
-extern void InsertBatchIncrementNumCTuples(InsertBatch *batch);
+extern void InsertBatchIncrementNumCTuples(InsertBatch *batch, int n);
+extern void InsertBatchIncrementNumWTuples(InsertBatch *batch, int n);
 extern void InsertBatchAckTuple(InsertBatchAck *ack);
 
 typedef struct RecordTupleDesc

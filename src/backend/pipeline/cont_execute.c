@@ -275,13 +275,14 @@ InsertBatchCreate(void)
 	pg_atomic_init_u32(&batch->num_cacks, 0);
 	pg_atomic_init_u32(&batch->num_ctups, 0);
 	pg_atomic_init_u32(&batch->num_wacks, 0);
+	pg_atomic_init_u32(&batch->num_wtups, 0);
 	return batch;
 }
 
 static inline bool
 InsertBatchAllAcked(InsertBatch *batch)
 {
-	return (pg_atomic_read_u32(&batch->num_wacks) >= batch->num_wtups &&
+	return (pg_atomic_read_u32(&batch->num_wacks) >= pg_atomic_read_u32(&batch->num_wtups) &&
 			pg_atomic_read_u32(&batch->num_cacks) >= pg_atomic_read_u32(&batch->num_ctups));
 }
 
@@ -290,7 +291,7 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 {
 	if (num_tuples)
 	{
-		batch->num_wtups = num_tuples;
+		pg_atomic_fetch_add_u32(&batch->num_wtups, num_tuples);
 		while (!InsertBatchAllAcked(batch))
 		{
 			pg_usleep(SLEEP_MS * 1000);
@@ -302,9 +303,15 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 }
 
 void
-InsertBatchIncrementNumCTuples(InsertBatch *batch)
+InsertBatchIncrementNumCTuples(InsertBatch *batch, int n)
 {
-	pg_atomic_fetch_add_u32(&batch->num_ctups, 1);
+	pg_atomic_fetch_add_u32(&batch->num_ctups, n);
+}
+
+void
+InsertBatchIncrementNumWTuples(InsertBatch *batch, int n)
+{
+	pg_atomic_fetch_add_u32(&batch->num_wtups, n);
 }
 
 void

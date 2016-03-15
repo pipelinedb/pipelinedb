@@ -40,6 +40,9 @@ typedef struct
 	FuncExpr *hash;
 	int64 query_hash;
 	List **partials;
+	int ntups;
+	int nacks;
+	InsertBatchAck *acks;
 } CombinerState;
 
 static void
@@ -96,54 +99,60 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 
 	if (synchronous_stream_insert)
 	{
-		List *acks_list = NIL;
-		ListCell *lc;
-		int i = 0;
-
-		/* Generate acks list from yielded tuples */
-		foreach(lc, c->cont_exec->yielded)
+		if (c->acks == NULL)
 		{
-			StreamTupleState *sts = lfirst(lc);
-			InsertBatchAck *ack = sts->ack;
-			ListCell *lc2;
-			bool found = false;
+			List *acks_list = NIL;
+			ListCell *lc;
+			int i = 0;
 
-			if (ack == NULL || !ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
-				continue;
-
-			foreach(lc2, acks_list)
+			/* Generate acks list from yielded tuples */
+			foreach(lc, c->cont_exec->yielded)
 			{
-				InsertBatchAck *ack2 = lfirst(lc2);
+				StreamTupleState *sts = lfirst(lc);
+				InsertBatchAck *ack = sts->ack;
+				ListCell *lc2;
+				bool found = false;
 
-				if (ack->batch_id == ack2->batch_id)
+				if (ack == NULL || !ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
+					continue;
+
+				foreach(lc2, acks_list)
 				{
-					found = true;
-					break;
+					InsertBatchAck *ack2 = lfirst(lc2);
+
+					if (ack->batch_id == ack2->batch_id)
+					{
+						found = true;
+						break;
+					}
+				}
+
+				if (!found)
+				{
+					InsertBatchAck *ack2 = (InsertBatchAck *) palloc(sizeof(InsertBatchAck));
+					memcpy(ack2, ack, sizeof(InsertBatchAck));
+					acks_list = lappend(acks_list, ack2);
+					nacks++;
 				}
 			}
 
-			if (!found)
+			c->acks = (InsertBatchAck *) palloc0(sizeof(InsertBatchAck) * nacks);
+			c->nacks = nacks;
+
+			foreach(lc, acks_list)
 			{
-				InsertBatchAck *ack2 = (InsertBatchAck *) palloc(sizeof(InsertBatchAck));
-				memcpy(ack2, ack, sizeof(InsertBatchAck));
-				acks_list = lappend(acks_list, ack2);
-				nacks++;
+				InsertBatchAck *ack = lfirst(lc);
+				c->acks[i].batch_id = ack->batch_id;
+				c->acks[i].batch = ack->batch;
+				i++;
 			}
+
+			list_free_deep(acks_list);
 		}
 
-		acks = (InsertBatchAck *) palloc(sizeof(InsertBatchAck) * nacks);
-		foreach(lc, acks_list)
-		{
-			InsertBatchAck *ack = lfirst(lc);
-
-			InsertBatchIncrementNumCTuples(ack->batch);
-
-			acks[i].batch_id = ack->batch_id;
-			acks[i].batch = ack->batch;
-			i++;
-		}
-
-		list_free_deep(acks_list);
+		c->ntups++;
+		acks = c->acks;
+		nacks = c->nacks;
 	}
 
 	pts->tup = ExecCopySlotTuple(slot);
@@ -255,39 +264,55 @@ CombinerDestReceiverFlush(DestReceiver *self)
 			list_free_deep(partials);
 			c->partials[i] = NIL;
 		}
-
-		return;
 	}
-
-	for (i = 0; i < continuous_query_num_combiners; i++)
+	else
 	{
-		List *partials = c->partials[i];
-		ListCell *lc;
-		dsm_cqueue *cq = NULL;
-
-		if (partials == NIL)
-			continue;
-
-		foreach(lc, partials)
+		for (i = 0; i < continuous_query_num_combiners; i++)
 		{
-			PartialTupleState *pts = (PartialTupleState *) lfirst(lc);
-			int len = (sizeof(PartialTupleState) +
-					HEAPTUPLESIZE + pts->tup->t_len +
-					(pts->nacks * sizeof(InsertBatchAck)));
+			List *partials = c->partials[i];
+			ListCell *lc;
+			dsm_cqueue *cq = NULL;
 
-			if (cq == NULL)
-				cq = GetCombinerQueue(pts);
+			if (partials == NIL)
+				continue;
+
+			foreach(lc, partials)
+			{
+				PartialTupleState *pts = (PartialTupleState *) lfirst(lc);
+				int len = (sizeof(PartialTupleState) +
+						HEAPTUPLESIZE + pts->tup->t_len +
+						(pts->nacks * sizeof(InsertBatchAck)));
+
+				if (cq == NULL)
+					cq = GetCombinerQueue(pts);
+
+				Assert(cq);
+				dsm_cqueue_push_nolock(cq, pts, len);
+
+				IncrementCQWrite(1, len);
+			}
 
 			Assert(cq);
-			dsm_cqueue_push_nolock(cq, pts, len);
+			dsm_cqueue_unlock(cq);
 
-			IncrementCQWrite(1, len);
+			list_free_deep(partials);
+			c->partials[i] = NIL;
+		}
+	}
+
+	if (c->acks)
+	{
+		int i;
+
+		for (i = 0; i < c->nacks; i++)
+		{
+			InsertBatchAck *ack = &c->acks[i];
+			InsertBatchIncrementNumCTuples(ack->batch, c->ntups);
 		}
 
-		Assert(cq);
-		dsm_cqueue_unlock(cq);
-
-		list_free_deep(partials);
-		c->partials[i] = NIL;
+		pfree(c->acks);
+		c->acks = NULL;
+		c->nacks = 0;
+		c->ntups = 0;
 	}
 }
