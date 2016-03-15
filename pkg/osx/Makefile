@@ -8,7 +8,7 @@ BINDIR = $(PREFIX)/bin
 LIBDIR = $(PREFIX)/lib
 SCRIPTS = $(CURDIR)/scripts
 
-all: conf pipeline
+all: conf pipeline pipeline-debug
 	find $(PREFIX) -type d -exec chmod 775 {} +
 	find $(PREFIX)/share/pipelinedb/timezone -type f -exec chmod 644 {} +
 	mkdir $(SCRIPTS)
@@ -26,6 +26,12 @@ pipeline:
 	(cd $(TOP_BUILDDIR) && $(MAKE))
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
 	(cd $(TOP_BUILDDIR)/contrib/pipeline_kafka && ./configure && make LIB_RDKAFKA_STATIC=/usr/local/lib/librdkafka.a && make install)
+
+pipeline-debug:
+	(cd $(TOP_BUILDDIR) && make clean)
+	(cd $(TOP_BUILDDIR) && ./configure CFLAGS="-g -O0" PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo --enable-cassert --disable-rpath)
+	(cd $(TOP_BUILDDIR) && $(MAKE) PIPELINE_SERVER_BINARY=pipeline-server-debug)
+	(cd $(TOP_BUILDDIR)/src/backend && $(MAKE) PIPELINE_SERVER_BINARY=pipeline-server-debug install-server-bin )
 
 clean-libs:
 	find $(LIBDIR) -name "*.la" -exec rm {} \;

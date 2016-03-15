@@ -6,7 +6,7 @@ BINDIR = $(PREFIX)/bin
 LIBDIR = $(PREFIX)/lib
 BUILDROOT = $(CURDIR)/build
 
-all: spec conf pipeline clean-libs set-perms
+all: spec conf pipeline pipeline-debug clean-libs set-perms
 	mkdir $(CURDIR)/build
 	cp -p -r --parents $(PREFIX) $(BUILDROOT)
 	rpmbuild -bb -vv \
@@ -30,6 +30,12 @@ pipeline:
 	(cd $(TOP_BUILDDIR) && $(MAKE))
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
 	(cd $(TOP_BUILDDIR)/contrib/pipeline_kafka && ./configure && make && make install)
+
+pipeline-debug:
+	(cd $(TOP_BUILDDIR) && make clean)
+	(cd $(TOP_BUILDDIR) && ./configure CFLAGS="-g -O0" PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo --enable-cassert --disable-rpath)
+	(cd $(TOP_BUILDDIR) && $(MAKE) PIPELINE_SERVER_BINARY=pipeline-server-debug)
+	(cd $(TOP_BUILDDIR)/src/backend && $(MAKE) PIPELINE_SERVER_BINARY=pipeline-server-debug install-server-bin )
 
 clean-libs:
 	find $(LIBDIR) -name "*.la" -exec rm {} \;

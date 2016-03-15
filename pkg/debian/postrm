@@ -7,6 +7,7 @@ rm /etc/ld.so.conf.d/pipelinedb.conf
 ldconfig
 
 rm -f /usr/bin/pipeline-server
+rm -f /usr/bin/pipeline-server-debug
 rm -f /usr/bin/pipeline-ctl
 rm -f /usr/bin/pg_ctl
 rm -f /usr/bin/pipeline-init
