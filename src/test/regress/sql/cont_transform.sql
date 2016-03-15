@@ -14,7 +14,6 @@ LANGUAGE plpgsql;
 CREATE CONTINUOUS TRANSFORM ct3 AS SELECT x::int FROM ct_stream1 WHERE x % 2 = 0 THEN EXECUTE PROCEDURE ct_tg();
 
 INSERT INTO ct_stream1 (x) SELECT generate_series(0, 100) AS x;
-SELECT pg_sleep(1);
 
 SELECT * FROM ct0 ORDER BY x;
 SELECT * FROM ct2 ORDER BY x;
@@ -36,6 +35,5 @@ CREATE CONTINUOUS TRANSFORM ct AS
 
 INSERT INTO ct_s1 (x) VALUES (0), (1);
 INSERT INTO ct_s1 (x) VALUES (0), (2);
-SELECT pg_sleep(1);
 
 SELECT * FROM ct_v ORDER BY x;

@@ -100,55 +100,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	if (synchronous_stream_insert)
 	{
 		if (c->acks == NULL)
-		{
-			List *acks_list = NIL;
-			ListCell *lc;
-			int i = 0;
-
-			/* Generate acks list from yielded tuples */
-			foreach(lc, c->cont_exec->yielded)
-			{
-				StreamTupleState *sts = lfirst(lc);
-				InsertBatchAck *ack = sts->ack;
-				ListCell *lc2;
-				bool found = false;
-
-				if (ack == NULL || !ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
-					continue;
-
-				foreach(lc2, acks_list)
-				{
-					InsertBatchAck *ack2 = lfirst(lc2);
-
-					if (ack->batch_id == ack2->batch_id)
-					{
-						found = true;
-						break;
-					}
-				}
-
-				if (!found)
-				{
-					InsertBatchAck *ack2 = (InsertBatchAck *) palloc(sizeof(InsertBatchAck));
-					memcpy(ack2, ack, sizeof(InsertBatchAck));
-					acks_list = lappend(acks_list, ack2);
-					nacks++;
-				}
-			}
-
-			c->acks = (InsertBatchAck *) palloc0(sizeof(InsertBatchAck) * nacks);
-			c->nacks = nacks;
-
-			foreach(lc, acks_list)
-			{
-				InsertBatchAck *ack = lfirst(lc);
-				c->acks[i].batch_id = ack->batch_id;
-				c->acks[i].batch = ack->batch;
-				i++;
-			}
-
-			list_free_deep(acks_list);
-		}
+			c->acks = InsertBatchAckCreate(c->cont_exec->yielded, &c->nacks);
 
 		c->ntups++;
 		acks = c->acks;

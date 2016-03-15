@@ -42,6 +42,8 @@ typedef struct TransformState
 
 	/* only used by the optimized code path for pipeline_stream_insert */
 	List *tups;
+	int nacks;
+	InsertBatchAck *acks;
 } TransformState;
 
 static void
@@ -81,7 +83,12 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 		cxt->tg_newtuple = NULL;
 	}
 	else
+	{
 		t->tups = lappend(t->tups, ExecCopySlotTuple(slot));
+
+		if (t->acks == NULL)
+			t->acks = InsertBatchAckCreate(t->cont_exec->yielded, &t->nacks);
+	}
 
 	MemoryContextSwitchTo(old);
 }
@@ -188,6 +195,17 @@ TransformDestReceiverFlush(DestReceiver *self)
 			if (bms_num_members(targets) == 0)
 				continue;
 
+			if (t->acks)
+			{
+				int i;
+
+				for (i = 0; i < t->nacks; i++)
+				{
+					InsertBatchAck *ack = &t->acks[i];
+					InsertBatchIncrementNumWTuples(ack->batch, list_length(t->tups));
+				}
+			}
+
 			packed_desc = PackTupleDesc(RelationGetDescr(t->tg_rel));
 			cq = GetWorkerQueue();
 
@@ -195,7 +213,8 @@ TransformDestReceiverFlush(DestReceiver *self)
 			{
 				HeapTuple tup = (HeapTuple) lfirst(lc);
 				int len;
-				StreamTupleState *sts = StreamTupleStateCreate(tup, RelationGetDescr(t->tg_rel), packed_desc, targets, NULL, &len);
+				StreamTupleState *sts = StreamTupleStateCreate(tup, RelationGetDescr(t->tg_rel), packed_desc, targets,
+						t->acks, t->nacks, &len);
 
 				if (batch == continuous_query_batch_size)
 				{
@@ -215,6 +234,13 @@ TransformDestReceiverFlush(DestReceiver *self)
 			heap_close(rel, NoLock);
 
 			stream_stat_increment(relid, list_length(t->tups), nbatches, size);
+		}
+
+		if (t->acks)
+		{
+			pfree(t->acks);
+			t->acks = NULL;
+			t->nacks = 0;
 		}
 
 		foreach(lc, t->tups)
