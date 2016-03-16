@@ -5912,7 +5912,6 @@ DESCR("deserializer for array aggregation transition states");
 DATA(insert OID = 4483 (arrayaggarraystatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ arrayaggarraystatesend _null_ _null_ _null_ ));
 DESCR("serializer for array aggregation transition states");
 
-
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

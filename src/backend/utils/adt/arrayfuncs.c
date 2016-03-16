@@ -1049,7 +1049,7 @@ array_out(PG_FUNCTION_ARGS)
 	 * conversion proc, only once per series of calls, assuming the element
 	 * type doesn't change underneath us.
 	 */
-	my_extra =  (ArrayMetaState *) fcinfo->flinfo->fn_extra;
+	my_extra = (ArrayMetaState *) fcinfo->flinfo->fn_extra;
 	if (my_extra == NULL)
 	{
 		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
