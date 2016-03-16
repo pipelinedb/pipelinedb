@@ -483,10 +483,14 @@ extern ArrayType *create_singleton_array(FunctionCallInfo fcinfo,
 
 extern Datum array_agg_transfn(PG_FUNCTION_ARGS);
 extern Datum array_agg_finalfn(PG_FUNCTION_ARGS);
-extern Datum array_agg_array_transfn(PG_FUNCTION_ARGS);
-extern Datum array_agg_array_finalfn(PG_FUNCTION_ARGS);
+extern Datum array_agg_combine(PG_FUNCTION_ARGS);
 extern Datum arrayaggstatesend(PG_FUNCTION_ARGS);
 extern Datum arrayaggstaterecv(PG_FUNCTION_ARGS);
+extern Datum array_agg_array_transfn(PG_FUNCTION_ARGS);
+extern Datum array_agg_array_finalfn(PG_FUNCTION_ARGS);
+extern Datum array_agg_array_combine(PG_FUNCTION_ARGS);
+extern Datum arrayaggarraystatesend(PG_FUNCTION_ARGS);
+extern Datum arrayaggarraystaterecv(PG_FUNCTION_ARGS);
 
 extern Datum array_position(PG_FUNCTION_ARGS);
 extern Datum array_position_start(PG_FUNCTION_ARGS);

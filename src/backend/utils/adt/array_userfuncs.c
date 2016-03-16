@@ -991,3 +991,34 @@ array_agg_combine(PG_FUNCTION_ARGS)
 
 	PG_RETURN_POINTER(result);
 }
+
+Datum
+array_agg_array_combine(PG_FUNCTION_ARGS)
+{
+	ArrayBuildStateArr *result = PG_ARGISNULL(0) ? NULL : (ArrayBuildStateArr *) PG_GETARG_POINTER(0);
+	ArrayBuildStateArr *toappend = PG_ARGISNULL(1) ? NULL : (ArrayBuildStateArr *) PG_GETARG_POINTER(1);
+	MemoryContext aggcontext;
+	ArrayType *arr;
+	ArrayIterator it;
+	Datum val;
+	bool isnull;
+
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
+	{
+		/* cannot be called directly because of internal-type argument */
+		elog(ERROR, "array_agg_array_combine called in non-aggregate context");
+	}
+
+	if (toappend == NULL)
+		PG_RETURN_POINTER(result);
+
+	arr = DatumGetArrayTypeP(makeArrayResultArr(toappend, aggcontext, false));
+	it = array_create_iterator(arr, 1, NULL);
+
+	while (array_iterate(it, &val, &isnull))
+		result = accumArrayResultArr(result, val, isnull, toappend->array_type, aggcontext);
+
+	array_free_iterator(it);
+
+	PG_RETURN_POINTER(result);
+}

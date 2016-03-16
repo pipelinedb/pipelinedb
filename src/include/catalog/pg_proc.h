@@ -929,16 +929,18 @@ DATA(insert OID = 3167 (  array_remove	   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2
 DESCR("remove any occurrences of an element from an array");
 DATA(insert OID = 3168 (  array_replace    PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 2277 "2277 2283 2283" _null_ _null_ _null_ _null_ _null_ array_replace _null_ _null_ _null_ ));
 DESCR("replace any occurrences of an element in an array");
-DATA(insert OID = 2333 (  array_agg_transfn   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2283" _null_ _null_ _null_ _null_ _null_ array_agg_transfn _null_ _null_ _null_ ));
+DATA(insert OID = 2333 (  array_agg_transfn   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2776" _null_ _null_ _null_ _null_ _null_ array_agg_transfn _null_ _null_ _null_ ));
 DESCR("aggregate transition function");
-DATA(insert OID = 2334 (  array_agg_finalfn   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2277 "2281 2283" _null_ _null_ _null_ _null_ _null_ array_agg_finalfn _null_ _null_ _null_ ));
+DATA(insert OID = 2334 (  array_agg_finalfn   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2277 "2281 2776" _null_ _null_ _null_ _null_ _null_ array_agg_finalfn _null_ _null_ _null_ ));
 DESCR("aggregate final function");
-DATA(insert OID = 2335 (  array_agg		   PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 2277 "2283" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 2335 (  array_agg		   PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 2277 "2776" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("concatenate aggregate input into an array");
 DATA(insert OID = 4051 (  array_agg_array_transfn	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2277" _null_ _null_ _null_ _null_ _null_ array_agg_array_transfn _null_ _null_ _null_ ));
 DESCR("aggregate transition function");
 DATA(insert OID = 4052 (  array_agg_array_finalfn	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2277 "2281 2277" _null_ _null_ _null_ _null_ _null_ array_agg_array_finalfn _null_ _null_ _null_ ));
 DESCR("aggregate final function");
+DATA(insert OID = 4053 (  array_agg		   PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 2277 "2277" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("concatenate aggregate input into an array");
 DATA(insert OID = 3218 ( width_bucket	   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 23 "2283 2277" _null_ _null_ _null_ _null_ _null_ width_bucket_array _null_ _null_ _null_ ));
 DESCR("bucket number of operand given a sorted array of bucket lower bounds");
 DATA(insert OID = 3816 (  array_typanalyze PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 16 "2281" _null_ _null_ _null_ _null_ _null_ array_typanalyze _null_ _null_ _null_ ));
@@ -5902,6 +5904,13 @@ DESCR("get continuous transforms");
 DATA(insert OID = 4480 ( pipeline_stream_insert	PGNSP PGUID 12 1 0 0 0 f f f f t f v 0 0 2279 "" _null_ _null_ _null_ _null_ _null_ pipeline_stream_insert _null_ _null_ _null_ ));
 DESCR("trigger to insert into streams");
 #define PIPELINE_STREAM_INSERT_OID 4480
+
+DATA(insert OID = 4481 (array_agg_array_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ array_agg_array_combine _null_ _null_ _null_ ));
+DESCR("array aggregation combination function");
+DATA(insert OID = 4482 (arrayaggarraystaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ arrayaggarraystaterecv _null_ _null_ _null_ ));
+DESCR("deserializer for array aggregation transition states");
+DATA(insert OID = 4483 (arrayaggarraystatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ arrayaggarraystatesend _null_ _null_ _null_ ));
+DESCR("serializer for array aggregation transition states");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result
