@@ -177,3 +177,14 @@ INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::tex
 SELECT * FROM jois ORDER BY x;
 
 DROP CONTINUOUS VIEW jois;
+
+CREATE CONTINUOUS VIEW test_array_agg_array AS SELECT array_agg(ARRAY[x::int, y::int]) FROM cqobjectagg_stream;
+
+INSERT INTO cqobjectagg_stream (x, y) VALUES (1, 11);
+INSERT INTO cqobjectagg_stream (x, y) VALUES (2, 12);
+SELECT pg_sleep(0.1);
+INSERT INTO cqobjectagg_stream (x, y) VALUES (3, 13);
+
+SELECT * FROM test_array_agg_array;
+
+DROP CONTINUOUS VIEW test_array_agg_array;

@@ -5905,6 +5905,14 @@ DATA(insert OID = 4480 ( pipeline_stream_insert	PGNSP PGUID 12 1 0 0 0 f f f f t
 DESCR("trigger to insert into streams");
 #define PIPELINE_STREAM_INSERT_OID 4480
 
+DATA(insert OID = 4481 (array_agg_array_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ array_agg_array_combine _null_ _null_ _null_ ));
+DESCR("array aggregation combination function");
+DATA(insert OID = 4482 (arrayaggarraystaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ arrayaggarraystaterecv _null_ _null_ _null_ ));
+DESCR("deserializer for array aggregation transition states");
+DATA(insert OID = 4483 (arrayaggarraystatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ arrayaggarraystatesend _null_ _null_ _null_ ));
+DESCR("serializer for array aggregation transition states");
+
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

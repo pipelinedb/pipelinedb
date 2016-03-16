@@ -1024,6 +1024,9 @@ DirectFunctionCall1Coll(PGFunction func, Oid collation, Datum arg1)
 	fcinfo.arg[0] = arg1;
 	fcinfo.argnull[0] = false;
 
+	fcinfo.flinfo = palloc0(sizeof(FmgrInfo));
+	fcinfo.flinfo->fn_mcxt = CurrentMemoryContext;
+
 	result = (*func) (&fcinfo);
 
 	/* Check for null result, since caller is clearly not expecting one */

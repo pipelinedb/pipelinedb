@@ -1664,28 +1664,52 @@ select array_agg(unique1) from tenk1 where unique1 < -15;
 -- array_agg(anyarray)
 select array_agg(ar)
   from (values ('{1,2}'::int[]), ('{3,4}'::int[])) v(ar);
-ERROR:  could not find array type for data type integer[]
+   array_agg   
+---------------
+ {{1,2},{3,4}}
+(1 row)
+
 select array_agg(distinct ar order by ar desc)
   from (select array[i / 2] from generate_series(1,10) a(i)) b(ar);
-ERROR:  could not find array type for data type integer[]
+         array_agg         
+---------------------------
+ {{5},{4},{3},{2},{1},{0}}
+(1 row)
+
 select array_agg(ar)
   from (select array_agg(array[i, i+1, i-1])
         from generate_series(1,2) a(i)) b(ar);
-ERROR:  could not find array type for data type integer[]
+      array_agg      
+---------------------
+ {{{1,2,0},{2,3,1}}}
+(1 row)
+
 select array_agg(array[i+1.2, i+1.3, i+1.4]) from generate_series(1,3) g(i);
-ERROR:  could not find array type for data type numeric[]
+                  array_agg                  
+---------------------------------------------
+ {{2.2,2.3,2.4},{3.2,3.3,3.4},{4.2,4.3,4.4}}
+(1 row)
+
 select array_agg(array['Hello', i::text]) from generate_series(9,11) g(i);
-ERROR:  could not find array type for data type text[]
+             array_agg             
+-----------------------------------
+ {{Hello,9},{Hello,10},{Hello,11}}
+(1 row)
+
 select array_agg(array[i, nullif(i, 3), i+1]) from generate_series(1,4) g(i);
-ERROR:  could not find array type for data type integer[]
+              array_agg               
+--------------------------------------
+ {{1,1,2},{2,2,3},{3,NULL,4},{4,4,5}}
+(1 row)
+
 -- errors
 select array_agg('{}'::int[]) from generate_series(1,2);
-ERROR:  could not find array type for data type integer[]
+ERROR:  cannot accumulate empty arrays
 select array_agg(null::int[]) from generate_series(1,2);
-ERROR:  could not find array type for data type integer[]
+ERROR:  cannot accumulate null arrays
 select array_agg(ar)
   from (values ('{1,2}'::int[]), ('{3}'::int[])) v(ar);
-ERROR:  could not find array type for data type integer[]
+ERROR:  cannot accumulate arrays of different dimensionality
 select unnest(array[1,2,3]);
  unnest 
 --------

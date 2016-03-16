@@ -1049,7 +1049,7 @@ array_out(PG_FUNCTION_ARGS)
 	 * conversion proc, only once per series of calls, assuming the element
 	 * type doesn't change underneath us.
 	 */
-	my_extra = (ArrayMetaState *) fcinfo->flinfo->fn_extra;
+	my_extra =  (ArrayMetaState *) fcinfo->flinfo->fn_extra;
 	if (my_extra == NULL)
 	{
 		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
@@ -1590,6 +1590,66 @@ arrayaggstaterecv(PG_FUNCTION_ARGS)
 			&result->dvalues, &result->dnulls, &result->nelems);
 
 	result->alen = result->nelems;
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(result);
+}
+
+Datum
+arrayaggarraystatesend(PG_FUNCTION_ARGS)
+{
+	ArrayBuildStateArr *state = (ArrayBuildStateArr *) PG_GETARG_POINTER(0);
+	bytea *result;
+	char *pos;
+	int nbytes;
+
+	if (PG_ARGISNULL(0) || PG_GETARG_POINTER(0) == NULL)
+		PG_RETURN_NULL();
+
+	nbytes = sizeof(ArrayBuildStateArr) + state->abytes + ((state->aitems + 7) / 8);
+	result = (bytea *) palloc0(nbytes + VARHDRSZ);
+	SET_VARSIZE(result, nbytes + VARHDRSZ);
+
+	pos = VARDATA(result);
+	memcpy(pos, state, sizeof(ArrayBuildStateArr));
+	pos += sizeof(ArrayBuildStateArr);
+	memcpy(pos, state->data, state->abytes);
+	pos += state->abytes;
+	if (state->aitems)
+		array_bitmap_copy((bits8 *) pos, 0, state->nullbitmap, 0, state->aitems);
+
+	PG_RETURN_BYTEA_P(result);
+}
+
+Datum
+arrayaggarraystaterecv(PG_FUNCTION_ARGS)
+{
+	ArrayBuildStateArr *result;
+	char *pos;
+	MemoryContext old;
+	MemoryContext context;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	old = MemoryContextSwitchTo(context);
+
+	pos = (char *) VARDATA(PG_GETARG_BYTEA_P_COPY(0));
+	result = (ArrayBuildStateArr *) pos;
+	result->mcontext = CurrentMemoryContext;
+
+	pos += sizeof(ArrayBuildStateArr);
+	result->data = pos;
+
+	pos += result->abytes;
+	if (result->aitems)
+		result->nullbitmap = (bits8 *) pos;
+	else
+		result->nullbitmap = NULL;
 
 	MemoryContextSwitchTo(old);
 
