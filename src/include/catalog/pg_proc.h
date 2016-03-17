@@ -5672,7 +5672,7 @@ DESCR("get stream stats");
 DATA(insert OID = 4378 ( pipeline_views PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{26,25,25,25}" "{o,o,o,o}" "{id,schema,name,query}" _null_ _null_ pipeline_views _null_ _null_ _null_ ));
 DESCR("get continuous views");
 
-DATA(insert OID = 4379 ( pipeline_streams PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,16,1009,17}" "{o,o,o,o,o}" "{schema,name,inferred,queries,tup_desc}" _null_ _null_ pipeline_streams _null_ _null_ _null_ ));
+DATA(insert OID = 4379 ( pipeline_streams PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,16,1009,1009}" "{o,o,o,o,o}" "{schema,name,inferred,queries,tup_desc}" _null_ _null_ pipeline_streams _null_ _null_ _null_ ));
 DESCR("get streams");
 
 /* t-digest add n */

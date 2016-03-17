@@ -525,7 +525,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "name", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "inferred", BOOLOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "queries", TEXTARRAYOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "tup_desc", BYTEAOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "tup_desc", TEXTARRAYOID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -557,13 +557,19 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		Datum result;
 		Datum tmp;
 		bool isnull;
-		char *relname = get_rel_name(row->relid);
+		Relation rel = heap_open(row->relid, NoLock);
+		char *relname = RelationGetRelationName(rel);
 		char *namespace;
+		TupleDesc desc;
+		bool needs_arrival_time;
+		int i;
+		StringInfoData buf;
+		Datum *cols;
 
 		if (!relname)
 			continue;
 
-		namespace = get_namespace_name(get_rel_namespace(row->relid));
+		namespace = get_namespace_name(RelationGetNamespace(rel));
 		if (!namespace)
 			continue;
 
@@ -635,9 +641,40 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_desc, &isnull);
 
 		if (isnull)
-			nulls[4] = true;
+		{
+			needs_arrival_time = false;
+			desc = RelationGetDescr(rel);
+		}
 		else
-			values[4] = tmp;
+		{
+			needs_arrival_time = true;
+			desc = UnpackTupleDesc(DatumGetByteaP(tmp));
+		}
+
+		initStringInfo(&buf);
+		cols = palloc0(sizeof(Datum) * desc->natts);
+
+		for (i = 0; i < desc->natts; i++)
+		{
+			Form_pg_attribute attr = desc->attrs[i];
+
+			resetStringInfo(&buf);
+			appendStringInfo(&buf, "%s::%s", NameStr(attr->attname),
+					format_type_with_typemod(attr->atttypid, attr->atttypmod));
+
+			cols[i] = CStringGetTextDatum(buf.data);
+		}
+
+		if (needs_arrival_time)
+		{
+			cols = repalloc(cols, sizeof(Datum) * (desc->natts + 1));
+			cols[desc->natts] = CStringGetTextDatum("arrival_timestamp::timestamp(0) with time zone");
+		}
+
+		values[4] = PointerGetDatum(construct_array(cols,
+				needs_arrival_time ? desc->natts + 1 : desc->natts, TEXTOID, -1, false, 'i'));
+
+		heap_close(rel, NoLock);
 
 		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(rtup);

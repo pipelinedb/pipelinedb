@@ -1,84 +1,84 @@
 CREATE CONTINUOUS VIEW ps0 AS SELECT id::integer FROM stream0;
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred | queries |                 tup_desc                 
---------+---------+----------+---------+------------------------------------------
- public | stream0 | t        | {ps0}   | \x00000001696400000006a4ffffffff00000000
+ schema |  name   | inferred | queries |                            tup_desc                            
+--------+---------+----------+---------+----------------------------------------------------------------
+ public | stream0 | t        | {ps0}   | {id::numeric,"arrival_timestamp::timestamp(0) with time zone"}
 (1 row)
 
 CREATE CONTINUOUS VIEW ps1 AS SELECT id::integer, val::text FROM stream0;
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
  schema |  name   | inferred |  queries  |                                 tup_desc                                 
 --------+---------+----------+-----------+--------------------------------------------------------------------------
- public | stream0 | t        | {ps0,ps1} | \x00000002696400000006a4ffffffff0000000076616c0000000019ffffffff00000000
+ public | stream0 | t        | {ps0,ps1} | {id::numeric,val::text,"arrival_timestamp::timestamp(0) with time zone"}
 (1 row)
 
 CREATE CONTINUOUS VIEW ps2 AS SELECT id::float FROM stream0;
 CREATE CONTINUOUS VIEW ps3 AS SELECT x::integer, y::timestamp FROM stream1;
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred |    queries    |                                 tup_desc                                 
---------+---------+----------+---------------+--------------------------------------------------------------------------
- public | stream0 | t        | {ps0,ps1,ps2} | \x00000002696400000002bdffffffff0000000076616c0000000019ffffffff00000000
- public | stream1 | t        | {ps3}         | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
+ schema |  name   | inferred |    queries    |                                            tup_desc                                            
+--------+---------+----------+---------------+------------------------------------------------------------------------------------------------
+ public | stream0 | t        | {ps0,ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
+ public | stream1 | t        | {ps3}         | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
 (2 rows)
 
 CREATE CONTINUOUS VIEW ps4 AS SELECT id::text FROM stream0;
 ERROR:  type conflict with stream "stream0": types double precision and text cannot be matched
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred |    queries    |                                 tup_desc                                 
---------+---------+----------+---------------+--------------------------------------------------------------------------
- public | stream0 | t        | {ps0,ps1,ps2} | \x00000002696400000002bdffffffff0000000076616c0000000019ffffffff00000000
- public | stream1 | t        | {ps3}         | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
+ schema |  name   | inferred |    queries    |                                            tup_desc                                            
+--------+---------+----------+---------------+------------------------------------------------------------------------------------------------
+ public | stream0 | t        | {ps0,ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
+ public | stream1 | t        | {ps3}         | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
 (2 rows)
 
 CREATE STREAM stream2 (x INT);
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred |    queries    |                                 tup_desc                                 
---------+---------+----------+---------------+--------------------------------------------------------------------------
- public | stream0 | t        | {ps0,ps1,ps2} | \x00000002696400000002bdffffffff0000000076616c0000000019ffffffff00000000
- public | stream1 | t        | {ps3}         | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
- public | stream2 | f        |               | 
+ schema |  name   | inferred |    queries    |                                            tup_desc                                            
+--------+---------+----------+---------------+------------------------------------------------------------------------------------------------
+ public | stream0 | t        | {ps0,ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
+ public | stream1 | t        | {ps3}         | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
+ public | stream2 | f        |               | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
 (3 rows)
 
 CREATE CONTINUOUS VIEW ps5 AS SELECT x FROM stream2;
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred |    queries    |                                 tup_desc                                 
---------+---------+----------+---------------+--------------------------------------------------------------------------
- public | stream0 | t        | {ps0,ps1,ps2} | \x00000002696400000002bdffffffff0000000076616c0000000019ffffffff00000000
- public | stream1 | t        | {ps3}         | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
- public | stream2 | f        | {ps5}         | 
+ schema |  name   | inferred |    queries    |                                            tup_desc                                            
+--------+---------+----------+---------------+------------------------------------------------------------------------------------------------
+ public | stream0 | t        | {ps0,ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
+ public | stream1 | t        | {ps3}         | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
+ public | stream2 | f        | {ps5}         | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
 (3 rows)
 
 DROP CONTINUOUS VIEW ps0;
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred |  queries  |                                 tup_desc                                 
---------+---------+----------+-----------+--------------------------------------------------------------------------
- public | stream0 | t        | {ps1,ps2} | \x00000002696400000002bdffffffff0000000076616c0000000019ffffffff00000000
- public | stream1 | t        | {ps3}     | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
- public | stream2 | f        | {ps5}     | 
+ schema |  name   | inferred |  queries  |                                            tup_desc                                            
+--------+---------+----------+-----------+------------------------------------------------------------------------------------------------
+ public | stream0 | t        | {ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
+ public | stream1 | t        | {ps3}     | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
+ public | stream2 | f        | {ps5}     | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
 (3 rows)
 
 DROP CONTINUOUS VIEW ps1;
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred | queries |                              tup_desc                              
---------+---------+----------+---------+--------------------------------------------------------------------
- public | stream0 | t        | {ps2}   | \x00000001696400000002bdffffffff00000000
- public | stream1 | t        | {ps3}   | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
- public | stream2 | f        | {ps5}   | 
+ schema |  name   | inferred | queries |                                            tup_desc                                            
+--------+---------+----------+---------+------------------------------------------------------------------------------------------------
+ public | stream0 | t        | {ps2}   | {"id::double precision","arrival_timestamp::timestamp(0) with time zone"}
+ public | stream1 | t        | {ps3}   | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
+ public | stream2 | f        | {ps5}   | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
 (3 rows)
 
 DROP CONTINUOUS VIEW ps2;
 DROP CONTINUOUS VIEW ps3;
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred | queries | tup_desc 
---------+---------+----------+---------+----------
- public | stream2 | f        | {ps5}   | 
+ schema |  name   | inferred | queries |                           tup_desc                            
+--------+---------+----------+---------+---------------------------------------------------------------
+ public | stream2 | f        | {ps5}   | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
 (1 row)
 
 DROP CONTINUOUS VIEW ps5;
 SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred | queries | tup_desc 
---------+---------+----------+---------+----------
- public | stream2 | f        |         | 
+ schema |  name   | inferred | queries |                           tup_desc                            
+--------+---------+----------+---------+---------------------------------------------------------------
+ public | stream2 | f        |         | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
 (1 row)
 
 DROP STREAM stream2;
