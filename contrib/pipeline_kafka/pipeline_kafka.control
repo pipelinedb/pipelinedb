@@ -1,5 +1,0 @@
-# PipelineDB extension for Kafka support
-comment = 'PipelineDB extension for Kafka support'
-default_version = '0.9.0'
-module_pathname = '$libdir/pipeline_kafka'
-relocatable = true

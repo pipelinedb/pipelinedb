@@ -25,7 +25,6 @@ pipeline:
 	(cd $(TOP_BUILDDIR) && ./configure PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) CFLAGS="$(PIPELINE_CFLAGS)")
 	(cd $(TOP_BUILDDIR) && $(MAKE))
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
-	(cd $(TOP_BUILDDIR)/contrib/pipeline_kafka && ./configure && make LIB_RDKAFKA_STATIC=/usr/local/lib/librdkafka.a && make install)
 
 pipeline-debug:
 	(cd $(TOP_BUILDDIR) && make clean)
