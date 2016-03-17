@@ -23,6 +23,7 @@
 #include "fmgr.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/dsm_cqueue.h"
+#include "pipeline/stream.h"
 #include "miscadmin.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
@@ -668,7 +669,9 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		if (needs_arrival_time)
 		{
 			cols = repalloc(cols, sizeof(Datum) * (desc->natts + 1));
-			cols[desc->natts] = CStringGetTextDatum("arrival_timestamp::timestamp(0) with time zone");
+			resetStringInfo(&buf);
+			appendStringInfo(&buf, "%s::%s", ARRIVAL_TIMESTAMP, format_type_with_typemod(TIMESTAMPTZOID, 0));
+			cols[desc->natts] = CStringGetTextDatum(buf.data);
 		}
 
 		values[4] = PointerGetDatum(construct_array(cols,
