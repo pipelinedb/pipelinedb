@@ -80,7 +80,7 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 		FunctionCallInvoke(t->trig_fcinfo);
 
 		heap_freetuple(cxt->tg_trigtuple);
-		cxt->tg_newtuple = NULL;
+		cxt->tg_trigtuple = NULL;
 	}
 	else
 	{
