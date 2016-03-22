@@ -26,23 +26,27 @@ def main(args):
     try:
         subprocess.call(['pipeline-init', '-D', data_dir])
     except OSError:
-        print 'Looks like you forgot to add your PATH? Run next line and `make bootstrap` again'
+        print 'Looks like you forgot to add your PATH? Run the next line and `make bootstrap` again'
         print '    export PATH=%s/bin:$PATH' % root
-        return
+        sys.exit(1)
 
-    procs = []
-    procs.append(subprocess.Popen(['pipeline-server', '-D', data_dir]))
+    proc = subprocess.Popen(['pipeline-server', '-D', data_dir])
     time.sleep(1)
 
     user = getpass.getuser()
-    subprocess.call(['pipeline', 'pipeline', '-c', 'CREATE DATABASE %s' % user])
+    try:
+      subprocess.check_call(['pipeline', 'pipeline', '-c',
+                             'CREATE DATABASE %s' % user])
+    except subprocess.CalledProcessError:
+      print 'It seems like PipelineDB failed to start up. Make sure nothing else is running on port 5432, maybe you have an instance of PostgreSQL or PipelineDB already running?'
+      sys.exit(1)
+
     subprocess.call(['pipeline', user, '-c', 'ACTIVATE'])
     time.sleep(0.1)
 
     # Cleanup daemons
-    for proc in procs:
-        os.kill(proc.pid, signal.SIGINT)
-        time.sleep(0.1)
+    os.kill(proc.pid, signal.SIGINT)
+    time.sleep(0.1)
 
     print """\nPipelineDB successfully bootstrapped.
 Run with `make run`.'"""
