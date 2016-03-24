@@ -460,16 +460,6 @@ GetWorkerQueue(void)
 
 	for (;;)
 	{
-		/*
-		 * If we have multiple workers and we're trying to write from a continuous transform, never write to our
-		 * own queue so we never have to buffer tuples that don't fit in the queue in process local memory.
-		 */
-		if (IsContQueryWorkerProcess() && continuous_query_num_workers > 1 && idx == MyContQueryProc->id)
-		{
-			ntries++;
-			idx = (idx + 1) % continuous_query_num_workers;
-		}
-
 		cq = GetWorkerCQueue(segment, idx);
 
 		/*
@@ -494,6 +484,61 @@ GetWorkerQueue(void)
 
 	Assert(cq);
 	Assert(LWLockHeldByMe(cq->lock));
+
+	return cq;
+}
+
+dsm_cqueue *
+GetWorkerQueueForWorker(void)
+{
+	static long idx = -1;
+	int ntries = 0;
+	dsm_cqueue *cq = NULL;
+	dsm_segment *segment;
+
+	Assert(IsContQueryWorkerProcess());
+
+	segment = attach_to_db_dsm_segment();
+
+	if (idx == -1)
+		idx = rand() % continuous_query_num_workers;
+
+	idx = (idx + 1) % continuous_query_num_workers;
+
+	for (;;)
+	{
+		/*
+		 * If we have multiple workers and we're trying to write from a continuous transform, never write to our
+		 * own queue so we never have to buffer tuples that don't fit in the queue in process local memory.
+		 */
+		if (continuous_query_num_workers > 1 && idx == MyContQueryProc->id)
+		{
+			ntries++;
+			idx = (idx + 1) % continuous_query_num_workers;
+		}
+
+		cq = GetWorkerCQueue(segment, idx);
+
+		/*
+		 * Try to lock dsm_cqueue of any worker that is not already locked in
+		 * a round robin fashion.
+		 */
+		if (ntries < continuous_query_num_workers)
+		{
+			if (dsm_cqueue_lock_nowait(cq))
+				break;
+		}
+		else
+		{
+			cq = NULL;
+			break;
+		}
+
+		ntries++;
+		idx = (idx + 1) % continuous_query_num_workers;
+	}
+
+	Assert(cq == NULL || LWLockHeldByMe(cq->lock));
 
 	return cq;
 }
@@ -927,10 +972,9 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	{
 		ListCell *lc;
 		List *to_remove = NIL;
-		dsm_cqueue *cq;
+		dsm_cqueue *cq = NULL;
 
 		Assert(IsContQueryWorkerProcess());
-		Assert(continuous_query_num_workers == 1);
 
 		cq = GetWorkerQueue();
 
