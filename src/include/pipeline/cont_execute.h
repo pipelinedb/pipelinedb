@@ -103,6 +103,7 @@ extern void PartialTupleStatePeekFn(void *ptr, int len);
 extern void PartialTupleStateCopyFn(void *dest, void *src, int len);
 
 extern dsm_cqueue *GetWorkerQueue(void);
+extern dsm_cqueue * GetWorkerQueueForWorker(void);
 extern dsm_cqueue *GetCombinerQueue(PartialTupleState *pts);
 
 typedef struct ContQueryState

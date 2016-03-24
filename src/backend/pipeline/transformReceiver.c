@@ -86,7 +86,7 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 	{
 		t->tups = lappend(t->tups, ExecCopySlotTuple(slot));
 
-		if (t->acks == NULL)
+		if (synchronous_stream_insert && t->acks == NULL)
 			t->acks = InsertBatchAckCreate(t->cont_exec->yielded, &t->nacks);
 	}
 
@@ -210,7 +210,7 @@ TransformDestReceiverFlush(DestReceiver *self)
 			}
 
 			packed_desc = PackTupleDesc(RelationGetDescr(t->tg_rel));
-			cq = GetWorkerQueue();
+			cq = GetWorkerQueueForWorker();
 
 			foreach(lc, t->tups)
 			{
@@ -221,13 +221,14 @@ TransformDestReceiverFlush(DestReceiver *self)
 
 				if (batch == continuous_query_batch_size)
 				{
-					dsm_cqueue_unlock(cq);
-					cq = GetWorkerQueue();
+					if (cq)
+						dsm_cqueue_unlock(cq);
+					cq = GetWorkerQueueForWorker();
 					batch = 0;
 					nbatches++;
 				}
 
-				if (dsm_cqueue_push_nolock(cq, sts, len, wait))
+				if (cq && dsm_cqueue_push_nolock(cq, sts, len, wait))
 				{
 					batch++;
 					size += len;
@@ -236,8 +237,10 @@ TransformDestReceiverFlush(DestReceiver *self)
 					StreamTupleStateBuffer(sts, len);
 			}
 
+			if (cq)
+				dsm_cqueue_unlock(cq);
+
 			pfree(packed_desc);
-			dsm_cqueue_unlock(cq);
 			heap_close(rel, NoLock);
 
 			stream_stat_increment(relid, list_length(t->tups), nbatches, size);
