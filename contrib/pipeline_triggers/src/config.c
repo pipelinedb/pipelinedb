@@ -19,14 +19,16 @@
 
 #define PIPELINEDB_TRIGGERS "pipelinedb_triggers"
 
-int alert_socket_mem;
-bool is_trigger_process;
-
 PG_MODULE_MAGIC;
 
 /* These must be available to pg_dlsym() */
 extern void _PG_init(void);
 extern void _PG_output_plugin_init(OutputPluginCallbacks *cb);
+
+/* guc */
+int alert_socket_mem;
+bool is_trigger_process;
+bool triggers_enabled;
 
 /*
  * Declare configuration parameters and install hooks. We can't do too much work here
@@ -57,8 +59,16 @@ _PG_init(void)
 		 PGC_POSTMASTER, 0,
 		 NULL, NULL, NULL);
 
-	EmitWarningsOnPlaceholders(PIPELINEDB_TRIGGERS);
+	DefineCustomBoolVariable("pipelinedb_triggers.continuous_triggers_enabled",
+		   gettext_noop("If true, any triggers on continuous views will be fired."),
+		   NULL,
+		   &triggers_enabled,
+		   true,
+		   PGC_POSTMASTER, 0,
+		   NULL, NULL, NULL);
 
+
+	EmitWarningsOnPlaceholders(PIPELINEDB_TRIGGERS);
 	RegisterTriggerProcess();
 }
 
