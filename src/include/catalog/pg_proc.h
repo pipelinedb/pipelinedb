@@ -5881,9 +5881,9 @@ DATA(insert OID = 4470 ( first_values_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i
 DESCR("first_values transition function");
 DATA(insert OID = 4471 ( first_values_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ first_values_combine _null_ _null_ _null_ ));
 DESCR("first_values combine function");
-DATA(insert OID = 4472 ( first_values_send	PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ first_values_send _null_ _null_ _null_ ));
+DATA(insert OID = 4472 ( first_values_send	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ first_values_send _null_ _null_ _null_ ));
 DESCR("first_values send");
-DATA(insert OID = 4473 ( first_values_recv	PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ first_values_recv _null_ _null_ _null_ ));
+DATA(insert OID = 4473 ( first_values_recv	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ first_values_recv _null_ _null_ _null_ ));
 DESCR("first_values recv");
 DATA(insert OID = 4474 ( first_values_final	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2277 "2281 23" _null_ _null_ _null_ _null_ _null_ first_values_final _null_ _null_ _null_ ));
 DESCR("first_values final");

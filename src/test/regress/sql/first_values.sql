@@ -40,5 +40,6 @@ INSERT INTO first_values_s (t0, t1, t2) SELECT x, x, x FROM generate_series(250,
 INSERT INTO first_values_s (t0, t1, t2) SELECT x, x, x FROM generate_series(1, 1000) AS x;
 
 SELECT * FROM first_values_v_order1;
+SELECT combine(first_values) FROM first_values_v_order1;
 
 DROP CONTINUOUS VIEW first_values_v_order1;

@@ -2522,6 +2522,10 @@ first_values_trans(PG_FUNCTION_ARGS)
 	MemoryContextSwitchTo(old);
 
 	Assert(fvstate);
+
+	if (array == NULL)
+		PG_RETURN_NULL();
+
 	fvstate->array = array;
 
 	PG_RETURN_POINTER(fvstate);
@@ -2529,7 +2533,6 @@ first_values_trans(PG_FUNCTION_ARGS)
 
 Datum
 first_values_combine(PG_FUNCTION_ARGS)
-
 {
 	MemoryContext old;
 	MemoryContext context;
@@ -2548,11 +2551,18 @@ first_values_combine(PG_FUNCTION_ARGS)
 	if (fcinfo->flinfo->fn_extra == NULL)
 		fcinfo->flinfo->fn_extra = init_first_values_query_state(fcinfo);
 
-	if (fvstate == NULL || fvstate->array == NULL)
-		PG_RETURN_POINTER(incoming);
+	if (fvstate == NULL)
+	{
+		if (incoming == NULL)
+			PG_RETURN_NULL();
 
-	if (incoming == NULL || incoming->array == NULL)
+		PG_RETURN_POINTER(incoming);
+	}
+
+	if (incoming == NULL)
 		PG_RETURN_POINTER(fvstate);
+
+	Assert(fvstate->array && incoming->array);
 
 	qstate = (FirstValuesQueryState *) fcinfo->flinfo->fn_extra;
 	old = MemoryContextSwitchTo(context);

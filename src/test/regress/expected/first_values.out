@@ -76,4 +76,10 @@ SELECT * FROM first_values_v_order1;
  {"(1,1,1)","(10,10,10)","(100,100,100)"}
 (1 row)
 
+SELECT combine(first_values) FROM first_values_v_order1;
+                 combine                  
+------------------------------------------
+ {"(1,1,1)","(10,10,10)","(100,100,100)"}
+(1 row)
+
 DROP CONTINUOUS VIEW first_values_v_order1;
