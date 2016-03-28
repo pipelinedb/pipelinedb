@@ -509,7 +509,7 @@ CheckAttributeType(const char *attname,
 		 * catalogs (this allows creating pg_statistic and cloning it during
 		 * VACUUM FULL)
 		 */
-		if (atttypid != ANYARRAYOID || !allow_system_table_mods)
+		if (!((atttypid == ANYARRAYOID || atttypid == RECORDARRAYOID) && allow_system_table_mods))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("column \"%s\" has pseudo-type %s",
