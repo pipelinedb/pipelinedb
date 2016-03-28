@@ -41,7 +41,6 @@ RegisterTriggerProcess(void)
 
 	snprintf(worker.bgw_name, BGW_MAXLEN, TRIGGER_PROC_NAME);
 
-//	launch_gdb();
 	RegisterBackgroundWorker(&worker);
 }
 
@@ -54,5 +53,4 @@ void trigger_plugin_decode_commit_txn(LogicalDecodingContext *ctx,
 		ReorderBufferTXN *txn, XLogRecPtr commit_lsn) {}
 void trigger_plugin_decode_change(LogicalDecodingContext *ctx,
 		ReorderBufferTXN *txn, Relation matrel, ReorderBufferChange *change) {}
-
 
