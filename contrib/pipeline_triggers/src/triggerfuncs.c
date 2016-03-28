@@ -31,7 +31,7 @@ static void check_file()
 {
 	if (fd == -1)
 	{
-		fd = open(log_file_name, O_RDWR | O_APPEND, 0600);
+		fd = open(log_file_name, O_RDWR | O_APPEND | O_CREAT, 0600);
 		Assert(fd != -1);
 	}
 }
