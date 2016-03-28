@@ -566,6 +566,26 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 											   rettype,
 											   false);
 
+	/*
+	 * XXX(usmanm): Currently the aforementioned function doesn't have the ability to
+	 * determine the return type of a polymorphic ordered-set aggregate because it can't
+	 * distinguish between directargs and the ORDER BY sort expression.
+	 */
+	if (funcid == FIRST_VALUES_OID)
+	{
+		Assert(fdresult == FUNCDETAIL_AGGREGATE);
+		Assert(rettype == ANYARRAYOID);
+		Assert(nargs >= 2);
+
+		if (nargs == 2)
+		{
+			Oid elem_typeid = actual_arg_types[1];
+			rettype = get_array_type(elem_typeid);
+		}
+		else
+			rettype = RECORDARRAYOID; /* still pseudo... */
+	}
+
 	/* perform the necessary typecasting of arguments */
 	make_fn_arguments(pstate, fargs, actual_arg_types, declared_arg_types);
 
