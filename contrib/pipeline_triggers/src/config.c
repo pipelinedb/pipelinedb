@@ -27,6 +27,7 @@ extern void _PG_output_plugin_init(OutputPluginCallbacks *cb);
 
 /* guc */
 int alert_socket_mem;
+int alert_socket_port;
 bool is_trigger_process;
 bool triggers_enabled;
 
@@ -56,6 +57,16 @@ _PG_init(void)
 		 NULL,
 		 &alert_socket_mem,
 		 1024, 1024, 8192,
+		 PGC_POSTMASTER, 0,
+		 NULL, NULL, NULL);
+
+	// XXX - loadzero
+
+	DefineCustomIntVariable("pipelinedb_triggers.alert_socket_port",
+		 gettext_noop("Alert socket port."),
+		 NULL,
+		 &alert_socket_port,
+		 7432, 7432, 7432,
 		 PGC_POSTMASTER, 0,
 		 NULL, NULL, NULL);
 
