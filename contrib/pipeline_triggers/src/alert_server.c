@@ -144,10 +144,7 @@ create_listen_socket()
 
 	Assert(rc == 0);
 
-	// Can I get the psql port some other way?
 	/* TODO - put port assignment somewhere nicer */
-	// alert_socket_mem
-	// alert_server_heartbeat
 
 	tcp_addr.sin_family = AF_INET;
 	tcp_addr.sin_port = htons(alert_socket_port);
