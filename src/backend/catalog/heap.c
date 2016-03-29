@@ -508,8 +508,11 @@ CheckAttributeType(const char *attname,
 		 * special hack for pg_statistic: allow ANYARRAY when modifying system
 		 * catalogs (this allows creating pg_statistic and cloning it during
 		 * VACUUM FULL)
+		 *
+		 * XXX(usmanm): We allow RECORDARRAYOID for aggregates like first_values since ANYARRAY
+		 * makes the column unusable.
 		 */
-		if (atttypid != ANYARRAYOID || !allow_system_table_mods)
+		if (!(atttypid == ANYARRAYOID || atttypid == RECORDARRAYOID) || !allow_system_table_mods)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("column \"%s\" has pseudo-type %s",

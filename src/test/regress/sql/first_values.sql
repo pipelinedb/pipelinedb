@@ -1,5 +1,6 @@
 CREATE TABLE first_values_t (x int, y int, z int);
 CREATE CONTINUOUS VIEW first_values_v AS SELECT x::int, first_values(2) WITHIN GROUP (ORDER BY y::int) FROM first_values_s GROUP BY x;
+\d first_values_v
 
 INSERT INTO first_values_t (x, y, z) VALUES (1, 1, 10), (1, 1, 4), (1, 1, 5);
 INSERT INTO first_values_t (x, y, z) VALUES (1, 1, -1), (1, 2, 10), (1, 2, 4);
@@ -23,6 +24,7 @@ DROP CONTINUOUS VIEW first_values_v;
 DROP TABLE first_values_t;
 
 CREATE CONTINUOUS VIEW first_values_v_order0 AS SELECT x::int % 10 AS g, first_values(2) WITHIN GROUP (ORDER BY x::int, y::int) FROM first_values_s GROUP BY g;
+\d first_values_v_order0
 
 INSERT INTO first_values_s (x, y) SELECT x, x FROM generate_series(500, 1000) AS x;
 INSERT INTO first_values_s (x, y) SELECT x, x FROM generate_series(250, 1000) AS x;
@@ -40,5 +42,6 @@ INSERT INTO first_values_s (t0, t1, t2) SELECT x, x, x FROM generate_series(250,
 INSERT INTO first_values_s (t0, t1, t2) SELECT x, x, x FROM generate_series(1, 1000) AS x;
 
 SELECT * FROM first_values_v_order1;
+SELECT combine(first_values) FROM first_values_v_order1;
 
 DROP CONTINUOUS VIEW first_values_v_order1;

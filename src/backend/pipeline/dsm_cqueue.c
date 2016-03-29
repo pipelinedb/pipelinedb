@@ -15,6 +15,7 @@
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
 #include "pipeline/dsm_cqueue.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/miscutils.h"
 #include "postmaster/bgworker.h"
 #include "utils/memutils.h"
@@ -341,7 +342,10 @@ void
 dsm_cqueue_lock(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
+
+	lw_lock_high_priority = IsContQueryWorkerProcess();
 	LWLockAcquire(cq->lock, LW_EXCLUSIVE);
+	lw_lock_high_priority = false;
 }
 
 void

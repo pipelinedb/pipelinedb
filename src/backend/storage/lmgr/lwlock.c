@@ -95,6 +95,7 @@
 #include "utils/hsearch.h"
 #endif
 
+bool lw_lock_high_priority = false;
 
 /* We use the ShmemLock spinlock to protect LWLockAssign */
 extern slock_t *ShmemLock;
@@ -780,7 +781,7 @@ LWLockQueueSelf(LWLock *lock, LWLockMode mode)
 	MyProc->lwWaitMode = mode;
 
 	/* LW_WAIT_UNTIL_FREE waiters are always at the front of the queue */
-	if (mode == LW_WAIT_UNTIL_FREE)
+	if (mode == LW_WAIT_UNTIL_FREE || lw_lock_high_priority)
 		dlist_push_head(&lock->waiters, &MyProc->lwWaitLink);
 	else
 		dlist_push_tail(&lock->waiters, &MyProc->lwWaitLink);

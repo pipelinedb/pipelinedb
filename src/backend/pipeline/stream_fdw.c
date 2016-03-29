@@ -49,6 +49,7 @@ typedef struct StreamInsertState
 
 	long count;
 	long bytes;
+	int num_batches;
 
 	InsertBatch *batch;
 	InsertBatchAck *ack;
@@ -504,6 +505,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	sis->batch = batch;
 	sis->count = 0;
 	sis->bytes = 0;
+	sis->num_batches = 1;
 	sis->desc = is_inferred_stream_relation(stream) ? ExecTypeFromTL(insert_tl, false) : RelationGetDescr(stream);
 	sis->packed_desc = PackTupleDesc(sis->desc);
 
@@ -534,9 +536,21 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 		{
 			dsm_cqueue_unlock(sis->worker_queue);
 			sis->worker_queue = GetWorkerQueue();
+			sis->num_batches++;
 		}
 
-		dsm_cqueue_push_nolock(sis->worker_queue, sts, len, true);
+		if (!dsm_cqueue_push_nolock(sis->worker_queue, sts, len, false))
+		{
+			sis->num_batches++;
+
+			do
+			{
+				dsm_cqueue_unlock(sis->worker_queue);
+				sis->worker_queue = GetWorkerQueue();
+			}
+			while (!dsm_cqueue_push_nolock(sis->worker_queue, sts, len, false));
+		}
+
 	}
 
 	if (sis->adhoc_state)
@@ -558,7 +572,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 {
 	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
 
-	stream_stat_increment(RelationGetRelid(result_info->ri_RelationDesc), sis->count, 1, sis->bytes);
+	stream_stat_increment(RelationGetRelid(result_info->ri_RelationDesc), sis->count, sis->num_batches, sis->bytes);
 
 	if (sis->worker_queue)
 	{

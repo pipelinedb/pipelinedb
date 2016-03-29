@@ -168,7 +168,6 @@ void
 TransformDestReceiverFlush(DestReceiver *self)
 {
 	TransformState *t = (TransformState *) self;
-	bool wait = continuous_query_num_workers > 1;
 
 	/* Optimized path for stream insertions */
 	if (t->cont_query->tgfn == PIPELINE_STREAM_INSERT_OID)
@@ -228,7 +227,7 @@ TransformDestReceiverFlush(DestReceiver *self)
 					nbatches++;
 				}
 
-				if (cq && dsm_cqueue_push_nolock(cq, sts, len, wait))
+				if (cq && dsm_cqueue_push_nolock(cq, sts, len, false))
 				{
 					batch++;
 					size += len;

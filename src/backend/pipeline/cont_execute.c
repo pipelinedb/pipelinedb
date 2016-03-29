@@ -597,7 +597,7 @@ ContExecutorDestroy(ContExecutor *exec)
 void
 ContExecutorStartBatch(ContExecutor *exec)
 {
-	if (dsm_cqueue_is_empty(exec->cqueue))
+	if (dsm_cqueue_is_empty(exec->cqueue) && list_length(MyBufferedSTS) == 0)
 	{
 		if (!IsTransactionState())
 		{
@@ -966,8 +966,6 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	Assert(exec->cursor == NULL || exec->cursor == ptr);
 
-	dsm_cqueue_pop_peeked(exec->cqueue);
-
 	if (MyBufferedSTS)
 	{
 		ListCell *lc;
@@ -977,6 +975,8 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 		Assert(IsContQueryWorkerProcess());
 
 		cq = GetWorkerQueue();
+
+		dsm_cqueue_pop_peeked(exec->cqueue);
 
 		foreach(lc, MyBufferedSTS)
 		{
@@ -997,6 +997,8 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 			pfree(bsts);
 		}
 	}
+	else
+		dsm_cqueue_pop_peeked(exec->cqueue);
 
 	exec->cursor = NULL;
 	exec->nitems = 0;

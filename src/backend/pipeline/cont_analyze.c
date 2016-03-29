@@ -3249,6 +3249,9 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		else
 		{
 			Aggref *agg = makeNode(Aggref);
+			Aggref *orig_agg = (Aggref *) target->expr;
+
+			Assert(IsA(orig_agg, Aggref));
 
 			agg->aggfnoid = fnoid;
 			agg->aggtype = aggtype;
@@ -3256,9 +3259,9 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 			agg->aggstar = false;
 			agg->aggfilter = filter;
 			agg->aggkind = AGGKIND_COMBINE;
-			agg->orig_args = agg->args;
-			agg->orig_directargs = agg->aggdirectargs;
-			agg->orig_order = agg->aggorder;
+			agg->orig_args = orig_agg->args;
+			agg->orig_directargs = orig_agg->aggdirectargs;
+			agg->orig_order = orig_agg->aggorder;
 
 			transformAggregateCall(pstate, agg, args, order, false);
 
