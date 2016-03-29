@@ -295,8 +295,6 @@ def test_create_drop_trigger(pipeline, clean_db):
   lines = pipeline.read_trigger_output()
   assert len(lines) == 4
 
-# broken in core due to commit timing
-
 def test_sw_external_vacuum(pipeline, clean_db):
   """
   Sets up a sliding window query, inserts data into it, and then
