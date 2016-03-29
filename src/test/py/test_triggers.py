@@ -1,6 +1,9 @@
 from base import pipeline, clean_db
 import time
 import json
+import psycopg2
+import psycopg2.extensions
+import getpass
 
 def test_group_no_filter(pipeline, clean_db):
   """
@@ -292,54 +295,60 @@ def test_create_drop_trigger(pipeline, clean_db):
   lines = pipeline.read_trigger_output()
   assert len(lines) == 4
 
-## broken in core due to commit timing
+# broken in core due to commit timing
 
-#def test_sw_external_vacuum(pipeline, clean_db):
-#  """
-#  Sets up a sliding window query, inserts data into it, and then
-#  vacuums. After vacuuming, it inserts more data.
-#
-#  Final tallies are verified to be insert amount minus vacuumed amt
-#  """
-#  pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'3 seconds\') group by x;', step_factor=10)
-#
-#  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
-#
-#  rows = [(n % 10,) for n in range(1000)]
-#  pipeline.insert('stream', ('x',), rows)
-#  time.sleep(1)
-#
-#  # During this sleep, the internal vacuumer in trigger.c will be expiring
-#  # tuples and firing triggers
-#  time.sleep(50)
-#
-#  # Note: the following external vacuum isn't expected to cause
-#  # any internal state to change, but we perform it to exercise that code path
-#
-## XXX - not working with sql alchemy
-##  pipeline.execute('vacuum cv0')
-#
-#  time.sleep(1)
-#  pipeline.insert('stream', ('x',), rows)
-#  time.sleep(1)
-#
-#  lines = pipeline.read_trigger_output()
-#  d = {}
-#
-#  for l in lines:
-#    assert(len(l) == 2)
-#
-#    k = int(l[0])
-#    v = int(l[1])
-#
-#    assert(k >= 0 and k <= 9)
-#    d[k] = v
-#
-#  assert(len(d) == 10)
-#
-#  for x in d:
-#    assert(d[x] == 100)
-#
+def test_sw_external_vacuum(pipeline, clean_db):
+  """
+  Sets up a sliding window query, inserts data into it, and then
+  vacuums. After vacuuming, it inserts more data.
+
+  Final tallies are verified to be insert amount minus vacuumed amt
+  """
+  pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'3 seconds\') group by x;', step_factor=10)
+
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
+
+  time.sleep(1)
+
+  rows = [(n % 10,) for n in range(1000)]
+  pipeline.insert('stream', ('x',), rows)
+  time.sleep(1)
+
+  # During this sleep, the internal vacuumer in trigger.c will be expiring
+  # tuples and firing triggers
+  time.sleep(5)
+
+  # Note: the following external vacuum isn't expected to cause
+  # any internal state to change, but we perform it to exercise that code path
+
+  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' %
+                          (getpass.getuser(), pipeline.port))
+  conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+  cur = conn.cursor()
+  cur.execute('VACUUM cv0')
+  conn.close()
+
+  time.sleep(1)
+  pipeline.insert('stream', ('x',), rows)
+  time.sleep(1)
+
+  lines = pipeline.read_trigger_output()
+  d = {}
+
+  for l in lines:
+    assert(len(l) == 2)
+
+    k = int(l[0])
+    v = int(l[1])
+
+    assert(k >= 0 and k <= 9)
+    d[k] = v
+
+  assert(len(d) == 10)
+
+  for x in d:
+    assert(d[x] == 100)
+
 def test_sw_trigger_sync(pipeline, clean_db):
   """
   Sets up a sliding window query, and inserts data into it before

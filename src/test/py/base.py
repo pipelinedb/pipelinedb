@@ -17,7 +17,7 @@ ROOT = '../../../'
 INSTALL_FORMAT = './.pdb-%d'
 SERVER = os.path.join(ROOT, 'src', 'backend', 'pipeline-server')
 CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/pipeline'
-TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_pipeline_test.log'
+TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_cluster_test.log'
 
 class PipelineDB(object):
     def __init__(self):
