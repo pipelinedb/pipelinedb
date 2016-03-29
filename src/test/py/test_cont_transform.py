@@ -1,4 +1,7 @@
 from base import pipeline, clean_db
+import os
+import tempfile
+import time
 
 
 def test_multiple_insert(pipeline, clean_db):
@@ -26,3 +29,46 @@ def test_nested_transforms(pipeline, clean_db):
   assert count == 250
   count = pipeline.execute('SELECT count FROM cv1').first()['count']
   assert count == 500
+
+def test_deadlock_regress(pipeline, clean_db):
+  nitems = 2000000
+  tmp_file = os.path.join(tempfile.gettempdir(), 'tmp.json')
+  query = 'SELECT generate_series(1, %d) AS n' % nitems
+  pipeline.execute("COPY (%s) TO '%s'" % (query, tmp_file))
+
+  pipeline.create_stream('s1', n='int')
+  pipeline.create_stream('s2', n='int')
+  pipeline.create_ct('ct', 'SELECT n FROM s1 WHERE n IS NOT NULL',
+                     "pipeline_stream_insert('s2')")
+  pipeline.create_cv('cv', 'SELECT count(*) FROM s2')
+
+  for copy in [True, False]:
+    for nworkers in [1, 4]:
+      for sync in ['on', 'off']:
+        pipeline.stop()
+        pipeline.run({
+          'continuous_query_num_workers': nworkers,
+          'synchronous_stream_insert': sync
+          })
+
+        pipeline.execute('TRUNCATE CONTINUOUS VIEW cv')
+        pipeline.execute('COMMIT')
+
+        if copy:
+          pipeline.execute("COPY s1 (n) FROM '%s'" % tmp_file)
+        else:
+          pipeline.execute('INSERT INTO s1 (n) %s' % query)
+
+        count = pipeline.execute('SELECT count FROM cv').first()
+        ntries = 5
+        while count is None or count['count'] != nitems:
+          assert sync == 'off'
+          time.sleep(1)
+          count = pipeline.execute('SELECT count FROM cv').first()
+          ntries -= 1
+        assert count and count['count'] == nitems
+
+  os.remove(tmp_file)
+
+  pipeline.stop()
+  pipeline.run()

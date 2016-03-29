@@ -93,6 +93,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	Bitmapset *targets = bms_difference(all_targets, adhoc);
 	dsm_cqueue *cq = NULL;
 	bytea *packed_desc;
+	int nbatches = 1;
 
 	if (snap)
 		PopActiveSnapshot();
@@ -110,29 +111,36 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 		}
 
 		cq = GetWorkerQueue();
-	}
 
-	for (i=0; i<ntuples; i++)
-	{
-		StreamTupleState *sts;
-		HeapTuple tup = tuples[i];
-		int len;
-
-		sts = StreamTupleStateCreate(tup, desc, packed_desc, targets, ack, synchronous_stream_insert ? 1 : 0, &len);
-
-		if (cq)
+		for (i=0; i<ntuples; i++)
 		{
-			dsm_cqueue_push_nolock(cq, sts, len, true);
+			StreamTupleState *sts;
+			HeapTuple tup = tuples[i];
+			int len;
+
+			sts = StreamTupleStateCreate(tup, desc, packed_desc, targets, ack, synchronous_stream_insert ? 1 : 0, &len);
+
+			if (!dsm_cqueue_push_nolock(cq, sts, len, false))
+			{
+				nbatches++;
+
+				do
+				{
+					dsm_cqueue_unlock(cq);
+					cq = GetWorkerQueue();
+				}
+				while (!dsm_cqueue_push_nolock(cq, sts, len, false));
+			}
+
 			size += len;
 		}
+
+		dsm_cqueue_unlock(cq);
 	}
 
 	pfree(packed_desc);
 
-	if (cq)
-		dsm_cqueue_unlock(cq);
-
-	stream_stat_increment(RelationGetRelid(stream), ntuples, 1, size);
+	stream_stat_increment(RelationGetRelid(stream), ntuples, nbatches, size);
 
 	if (batch)
 	{

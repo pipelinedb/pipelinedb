@@ -597,7 +597,7 @@ ContExecutorDestroy(ContExecutor *exec)
 void
 ContExecutorStartBatch(ContExecutor *exec)
 {
-	if (dsm_cqueue_is_empty(exec->cqueue))
+	if (dsm_cqueue_is_empty(exec->cqueue) && list_length(MyBufferedSTS) == 0)
 	{
 		if (!IsTransactionState())
 		{

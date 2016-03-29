@@ -19,6 +19,8 @@
 #include "storage/s_lock.h"
 #include "port/atomics.h"
 
+extern bool lw_lock_high_priority;
+
 struct PGPROC;
 
 /*
