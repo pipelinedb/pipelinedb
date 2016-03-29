@@ -5,10 +5,25 @@ CSTOREVER=1.4.0
 PGVER=9.5.0
 
 # install some build tools, we'll remove these later
-apt-get install -y unzip gcc make g++
+apt-get install -y unzip gcc make g++ git zlib1g-dev libssl-dev
 apt-get install -y protobuf-c-compiler libprotobuf-c0-dev
 
 cd /usr/local/src/
+
+# First get librdkafka and pipelinedb kafka
+git clone -b 0.8 https://github.com/edenhill/librdkafka.git
+git clone https://github.com/pipelinedb/pipeline_kafka.git
+cd librdkafka
+# Install it into /usr/lib/
+./configure --prefix=/usr
+make
+make install
+# Install kafka extension
+cd ../pipeline_kafka
+./configure
+make
+make install
+cd ..
 
 # get packages
 wget -q http://api.pgxn.org/dist/cstore_fdw/${CSTOREVER}/cstore_fdw-${CSTOREVER}.zip
