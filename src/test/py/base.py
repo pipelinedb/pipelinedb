@@ -221,11 +221,23 @@ class PipelineDB(object):
     def trigger_sync(self):
         self.execute('select trigger_testing_sync()')
 
-    def create_cv(self, name, stmt):
+#    def create_cv(self, name, stmt, options):
+#        """
+#        Create a continuous view
+#        """
+#        result = self.execute('CREATE CONTINUOUS VIEW %s AS %s' % (name, stmt))
+#        return result
+
+    def create_cv(self, name, stmt, **kw):
         """
         Create a continuous view
         """
-        result = self.execute('CREATE CONTINUOUS VIEW %s AS %s' % (name, stmt))
+        opts = ', '.join(['%s=%r' % (k, v) for k, v in kw.items()])
+
+        if kw:
+            result = self.execute('CREATE CONTINUOUS VIEW %s WITH (%s) AS %s' % (name, opts, stmt))
+        else:
+            result = self.execute('CREATE CONTINUOUS VIEW %s AS %s' % (name, stmt))
         return result
 
     def create_ct(self, name, stmt, trigfn):
@@ -328,7 +340,7 @@ def clean_db(request):
     """
     pdb = request.module.pipeline
     request.addfinalizer(pdb.drop_all_queries)
-
+    pdb.execute('select trigger_testing_setup()')
 
 @pytest.fixture(scope='module')
 def pipeline(request):
