@@ -13,13 +13,6 @@ PG_CPPFLAGS += -Iinclude
 REGRESS = pipeline_triggers
 SHLIB_LINK = $(libpq)
 
-#ifdef USE_PGXS
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
-#else
-#subdir = contrib/pipeline_triggers
-#top_builddir = ../..
-#include $(top_builddir)/src/Makefile.global
-#include $(top_srcdir)/contrib/contrib-global.mk
-#endif
