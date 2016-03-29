@@ -42,7 +42,8 @@ def main(args):
       sys.exit(1)
 
     subprocess.call(['pipeline', user, '-c', 'ACTIVATE'])
-    time.sleep(0.1)
+    subprocess.call(['pipeline', user, '-c', 'create extension pipeline_triggers;'])
+    time.sleep(5)
 
     # Cleanup daemons
     os.kill(proc.pid, signal.SIGINT)

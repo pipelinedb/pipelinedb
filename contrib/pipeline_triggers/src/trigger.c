@@ -172,9 +172,6 @@ check_syscache_dirty(TriggerProcessState *state)
 	}
 }
 
-#define PIPELINEDB_ENTERPRISE "pipelinedb_enterprise"
-#define PIPELINEDB_ENTERPRISE_DBNAME "pipeline"
-
 /*
  * trigger_main
  */
@@ -185,7 +182,7 @@ trigger_main(Datum main_arg)
 	WalStream *ws;
 
 	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnection(PIPELINEDB_ENTERPRISE_DBNAME, NULL);
+	BackgroundWorkerInitializeConnection("pipeline", NULL);
 
 	CHECK_FOR_INTERRUPTS();
 	elog(LOG, "%s process running with pid %d", TRIGGER_PROC_NAME, MyProcPid);

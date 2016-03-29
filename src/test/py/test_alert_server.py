@@ -33,8 +33,6 @@ def shared_func(pipeline, clean_db):
   client_env["PATH"] = client_env["PATH"] + ":" + pipeline.get_bin_dir()
 
   cmd = [pipeline.get_recv_alerts(), '-h', 'localhost', '-p', '5432', '-a', 'cv0.t0'];
-  print(json.dumps(cmd))
-  sys.stdout.flush()
 
   outfile = open(TRIGGER_OUTPUT_LOGFILE, 'w')
   client = subprocess.Popen(cmd, stdout=outfile, env=client_env)

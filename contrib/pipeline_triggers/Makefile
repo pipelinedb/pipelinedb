@@ -7,7 +7,7 @@ OBJS = $(patsubst %.c,%.o,$(SOURCES))
 
 EXTENSION = pipeline_triggers
 DATA = pipeline_triggers--0.9.1.sql
-PGFILEDESC = "pipeline_triggers - an extension for triggers on pipeline continuious views"
+PGFILEDESC = "pipeline_triggers - an extension for triggers on pipeline continuous views"
 
 PG_CPPFLAGS += -Iinclude 
 REGRESS = pipeline_triggers
