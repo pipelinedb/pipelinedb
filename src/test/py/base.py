@@ -17,7 +17,7 @@ ROOT = '../../../'
 INSTALL_FORMAT = './.pdb-%d'
 SERVER = os.path.join(ROOT, 'src', 'backend', 'pipeline-server')
 CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/pipeline'
-TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_cluster_test.log'
+TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_pipeline_test.log'
 
 class PipelineDB(object):
     def __init__(self):
@@ -61,6 +61,7 @@ class PipelineDB(object):
                 self.data_dir = os.path.join(root, 'data')
 
         self.bin_dir = install_bin_dir
+        self.recv_alerts = os.path.join(self.bin_dir, 'pipeline-recv-alerts')
         self.engine = None
 
     def load_private_function(self, cur, name, returns):
@@ -323,6 +324,19 @@ class PipelineDB(object):
         Commit a transaction
         """
         return self.execute('COMMIT')
+
+    def get_conn_string(self):
+        """
+        Get the connection string for this database
+        """
+        connstr = (CONNSTR_TEMPLATE % (getpass.getuser(), self.port))
+        return connstr
+
+    def get_bin_dir(self):
+        return self.bin_dir
+
+    def get_recv_alerts(self):
+        return self.recv_alerts
 
     def read_trigger_output(self):
         """
