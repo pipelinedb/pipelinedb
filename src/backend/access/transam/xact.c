@@ -64,7 +64,6 @@
 #include "utils/timestamp.h"
 #include "pg_trace.h"
 
-
 /*
  *	User-tweakable parameters
  */
@@ -3575,6 +3574,7 @@ EndTransactionBlock(void)
 			 * put us back into the default state.
 			 */
 		case TBLOCK_STARTED:
+
 			ereport(WARNING,
 					(errcode(ERRCODE_NO_ACTIVE_SQL_TRANSACTION),
 					 errmsg("there is no transaction in progress")));

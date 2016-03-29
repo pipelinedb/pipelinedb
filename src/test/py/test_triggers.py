@@ -17,7 +17,6 @@ def test_group_no_filter(pipeline, clean_db):
   rows = [(n % 3,) for n in range(1000)]
 
   pipeline.insert_batches('stream', ('x',), rows, 250)
-#  pipeline.insert('stream', ('x',), rows)
 
   time.sleep(1)
 
