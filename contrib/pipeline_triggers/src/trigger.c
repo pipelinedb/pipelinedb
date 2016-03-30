@@ -35,6 +35,8 @@
 #include "util.h"
 #include "storage/ipc.h"
 #include "executor/executor.h"
+#include "catalog/pg_database.h"
+#include "catalog/pipeline_database.h"
 
 #define TRIGGER_PROC_NAME "pipelinedb_enterprise trigger"
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
@@ -232,27 +234,118 @@ trigger_main(Datum main_arg)
 	proc_exit(0);
 }
 
+typedef struct
+{
+	Oid oid;
+	NameData name;
+	bool active;
+} DatabaseEntry;
+
+static List *
+get_database_list(void)
+{
+	List *dbs = NIL;
+	Relation pg_database;
+	Relation pipeline_database;
+	HeapScanDesc scan;
+	HeapTuple tup;
+	MemoryContext resultcxt;
+
+	/* This is the context that we will allocate our output data in */
+	resultcxt = CurrentMemoryContext;
+
+	/*
+	 * Start a transaction so we can access pg_database, and get a snapshot.
+	 * We don't have a use for the snapshot itself, but we're interested in
+	 * the secondary effect that it sets RecentGlobalXmin.  (This is critical
+	 * for anything that reads heap pages, because HOT may decide to prune
+	 * them even if the process doesn't attempt to modify any tuples.)
+	 */
+	StartTransactionCommand();
+	(void) GetTransactionSnapshot();
+
+	/* We take a AccessExclusiveLock so we don't conflict with any DATABASE commands */
+	pg_database = heap_open(DatabaseRelationId, AccessExclusiveLock);
+	scan = heap_beginscan_catalog(pg_database, 0, NULL);
+
+	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
+	{
+		MemoryContext oldcxt;
+		Form_pg_database row = (Form_pg_database) GETSTRUCT(tup);
+		DatabaseEntry *db_entry;
+
+		/* Ignore template databases or ones that don't allow connections. */
+		if (row->datistemplate || !row->datallowconn)
+			continue;
+
+		/*
+		 * Allocate our results in the caller's context, not the
+		 * transaction's. We do this inside the loop, and restore the original
+		 * context at the end, so that leaky things like heap_getnext() are
+		 * not called in a potentially long-lived context.
+		 */
+		oldcxt = MemoryContextSwitchTo(resultcxt);
+
+		db_entry = palloc0(sizeof(DatabaseEntry));
+		db_entry->oid = HeapTupleGetOid(tup);
+		StrNCpy(NameStr(db_entry->name), NameStr(row->datname), NAMEDATALEN);
+		dbs = lappend(dbs, db_entry);
+
+		MemoryContextSwitchTo(oldcxt);
+	}
+
+	heap_endscan(scan);
+
+	/* Get enabled flags */
+	pipeline_database = heap_open(PipelineDatabaseRelationId, AccessShareLock);
+	scan = heap_beginscan_catalog(pipeline_database, 0, NULL);
+
+	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
+	{
+		Form_pipeline_database row = (Form_pipeline_database) GETSTRUCT(tup);
+		ListCell *lc;
+
+		foreach(lc, dbs)
+		{
+			DatabaseEntry *db_entry = (DatabaseEntry *) lfirst(lc);
+
+			if (db_entry->oid == row->dbid)
+				db_entry->active = row->cq_enabled;
+		}
+	}
+
+	heap_endscan(scan);
+	heap_close(pipeline_database, AccessShareLock);
+
+	/* Unlock pg_database at the very end. */
+	heap_close(pg_database, AccessExclusiveLock);
+
+	CommitTransactionCommand();
+
+	return dbs;
+}
+
 /*
  * RegisterTriggerProcess
  */
 void
 RegisterTriggerProcess(void)
 {
-	BackgroundWorker worker;
-
-	if (!triggers_enabled)
-		return;
-
-	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
-	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-	worker.bgw_main = trigger_main;
-	worker.bgw_notify_pid = 0;
-	worker.bgw_restart_time = 1; /* recover in 1s */
-	worker.bgw_let_crash = false;
-	worker.bgw_main_arg = PointerGetDatum(0);
-
-	snprintf(worker.bgw_name, BGW_MAXLEN, TRIGGER_PROC_NAME);
-	RegisterBackgroundWorker(&worker);
+//	BackgroundWorker worker;
+//
+//	if (!triggers_enabled)
+//		return;
+//
+//	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
+//	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
+//	worker.bgw_main = trigger_main;
+//	worker.bgw_notify_pid = 0;
+//	worker.bgw_restart_time = 1; /* recover in 1s */
+//	worker.bgw_let_crash = false;
+//	worker.bgw_main_arg = PointerGetDatum(0);
+//
+//	snprintf(worker.bgw_name, BGW_MAXLEN, TRIGGER_PROC_NAME);
+//	RegisterBackgroundWorker(&worker);
 }
 
 static inline List *
@@ -776,6 +869,8 @@ trigger_plugin_decode_begin_txn(LogicalDecodingContext *ctx,
 	if (!state)
 		return;
 
+	elog(LOG, "begin.txn");
+
 	Assert(state->cur_wal_batch == NULL);
 	state->cur_wal_batch =
 		start_new_batch(state, "wal", txn->xid, txn->commit_time);
@@ -998,6 +1093,8 @@ do_decode_change(TriggerProcessState *state,
 
 	if (!entry->numtriggers)
 		return;
+
+	// TRIGGER
 
 	add_change(state, cl, action, old_tup, new_tup);
 }

@@ -34,6 +34,7 @@ typedef enum
 	COMBINER,
 	WORKER,
 	ADHOC,
+	TRIG,
 	SCHEDULER /* unused */
 } ContQueryProcType;
 
@@ -71,6 +72,7 @@ struct ContQueryDatabaseMetadata
 	int adhoc_counter;
 	/* Number of entries is equal to max_worker_processes. */
 	ContQueryProc *adhoc_procs;
+	ContQueryProc *trigger_proc;
 };
 
 typedef struct ContQueryRunParams

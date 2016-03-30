@@ -499,6 +499,11 @@ cont_bgworker_main(Datum arg)
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
 			break;
+		case TRIG:
+			is_trigger_process = true;
+			run = &trigger_main;
+			break;
+
 		case ADHOC:
 			/* Clean up and die. */
 			purge_adhoc_queries();
@@ -755,6 +760,15 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
 	proc->type = ADHOC;
+	proc->group_id = 1;
+	proc->db_meta = db_meta;
+
+	success &= run_cont_bgworker(proc);
+
+	proc = db_meta->trigger_proc;
+	MemSet(proc, 0, sizeof(ContQueryProc));
+
+	proc->type = TRIGGER;
 	proc->group_id = 1;
 	proc->db_meta = db_meta;
 
