@@ -28,13 +28,13 @@
 #include <errno.h>
 #include "lib/stringinfo.h"
 #include "lib/ilist.h"
-#include "tuple_formatter.h"
-#include "trigger.h"
-#include "alert_server.h"
+#include "pipeline/trigger/tuple_formatter.h"
+#include "pipeline/trigger/trigger.h"
+#include "pipeline/trigger/alert_server.h"
 
 #include "utils/memutils.h"
-#include "mirror_ringbuf.h"
-#include "config.h"
+#include "pipeline/trigger/mirror_ringbuf.h"
+#include "pipeline/trigger/config.h"
 
 #define TS_MSG_SUBSCRIBE "subscribe"
 #define TS_MSG_SUBSCRIBE_OK "subscribe_ok"

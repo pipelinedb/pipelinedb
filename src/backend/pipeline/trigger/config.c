@@ -13,7 +13,7 @@
 #include "utils/guc.h"
 #include "utils/builtins.h"
 #include "replication/logical.h"
-#include "trigger.h"
+#include "pipeline/trigger/trigger.h"
 #include "replication/output_plugin.h"
 #include "fmgr.h"
 
@@ -24,6 +24,8 @@ PG_MODULE_MAGIC;
 /* These must be available to pg_dlsym() */
 extern void _PG_init(void);
 extern void _PG_output_plugin_init(OutputPluginCallbacks *cb);
+
+//
 
 /* guc */
 int alert_socket_mem;

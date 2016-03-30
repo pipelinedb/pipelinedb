@@ -47,6 +47,8 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timeout.h"
+#include "pipeline/trigger/trigger.h"
+#include "pipeline/trigger/config.h"
 
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
 #define INIT_PROC_TABLE_SZ 4
@@ -207,6 +209,9 @@ GetContQueryProcName(ContQueryProc *proc)
 			break;
 		case ADHOC:
 			sprintf(buf, "adhoc [%s]", NameStr(proc->db_meta->db_name));
+			break;
+		case TRIG:
+			sprintf(buf, "trigger [%s]", NameStr(proc->db_meta->db_name));
 			break;
 		case SCHEDULER:
 			return pstrdup("scheduler");
@@ -503,7 +508,6 @@ cont_bgworker_main(Datum arg)
 			is_trigger_process = true;
 			run = &trigger_main;
 			break;
-
 		case ADHOC:
 			/* Clean up and die. */
 			purge_adhoc_queries();
@@ -768,7 +772,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	proc = db_meta->trigger_proc;
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
-	proc->type = TRIGGER;
+	proc->type = TRIG;
 	proc->group_id = 1;
 	proc->db_meta = db_meta;
 

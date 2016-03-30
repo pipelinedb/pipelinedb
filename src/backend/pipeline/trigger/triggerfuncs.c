@@ -7,15 +7,15 @@
  *
  *-------------------------------------------------------------------------
  */
-#include "triggerfuncs.h"
+#include "pipeline/trigger/triggerfuncs.h"
 #include "storage/shmem.h"
 #include "lib/stringinfo.h"
 #include "commands/trigger.h"
 #include "utils/rel.h"
 #include "nodes/print.h"
-#include "trigger.h"
-#include "tuple_formatter.h"
-#include "config.h"
+#include "pipeline/trigger/trigger.h"
+#include "pipeline/trigger/tuple_formatter.h"
+#include "pipeline/trigger/config.h"
 
 #include <fcntl.h>
 #include <stdio.h>

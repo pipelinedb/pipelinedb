@@ -182,4 +182,6 @@ extern void fire_triggers(TriggerCacheEntry *entry, Relation rel,
 		TriggerProcessChangeType action,
 		HeapTuple old_tup, HeapTuple new_tup);
 
+extern void trigger_main(Datum main_arg);
+
 #endif

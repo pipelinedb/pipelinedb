@@ -9,11 +9,11 @@
  */
 #include "postgres.h"
 #include "access/xact.h"
-#include "alert_server.h"
-#include "batching.h"
+#include "pipeline/trigger/alert_server.h"
+#include "pipeline/trigger/batching.h"
 #include "catalog/pipeline_query.h"
 #include "commands/trigger.h"
-#include "config.h"
+#include "pipeline/trigger/config.h"
 #include "executor/tstoreReceiver.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -22,17 +22,17 @@
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_plan.h"
 #include "rewrite/rewriteManip.h"
-#include "sliding_window.h"
-#include "trigger.h"
-#include "tuple_formatter.h"
+#include "pipeline/trigger/sliding_window.h"
+#include "pipeline/trigger/trigger.h"
+#include "pipeline/trigger/tuple_formatter.h"
 #include "utils/builtins.h"
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
-#include "wal.h"
-#include "util.h"
+#include "pipeline/trigger/wal.h"
+#include "pipeline/trigger/util.h"
 #include "storage/ipc.h"
 #include "executor/executor.h"
 #include "catalog/pg_database.h"
@@ -177,7 +177,7 @@ check_syscache_dirty(TriggerProcessState *state)
 /*
  * trigger_main
  */
-static void
+void
 trigger_main(Datum main_arg)
 {
 	TriggerProcessState *state;
@@ -232,97 +232,6 @@ trigger_main(Datum main_arg)
 	destroy_trigger_process_state(state);
 	destroy_wal_stream(ws);
 	proc_exit(0);
-}
-
-typedef struct
-{
-	Oid oid;
-	NameData name;
-	bool active;
-} DatabaseEntry;
-
-static List *
-get_database_list(void)
-{
-	List *dbs = NIL;
-	Relation pg_database;
-	Relation pipeline_database;
-	HeapScanDesc scan;
-	HeapTuple tup;
-	MemoryContext resultcxt;
-
-	/* This is the context that we will allocate our output data in */
-	resultcxt = CurrentMemoryContext;
-
-	/*
-	 * Start a transaction so we can access pg_database, and get a snapshot.
-	 * We don't have a use for the snapshot itself, but we're interested in
-	 * the secondary effect that it sets RecentGlobalXmin.  (This is critical
-	 * for anything that reads heap pages, because HOT may decide to prune
-	 * them even if the process doesn't attempt to modify any tuples.)
-	 */
-	StartTransactionCommand();
-	(void) GetTransactionSnapshot();
-
-	/* We take a AccessExclusiveLock so we don't conflict with any DATABASE commands */
-	pg_database = heap_open(DatabaseRelationId, AccessExclusiveLock);
-	scan = heap_beginscan_catalog(pg_database, 0, NULL);
-
-	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
-	{
-		MemoryContext oldcxt;
-		Form_pg_database row = (Form_pg_database) GETSTRUCT(tup);
-		DatabaseEntry *db_entry;
-
-		/* Ignore template databases or ones that don't allow connections. */
-		if (row->datistemplate || !row->datallowconn)
-			continue;
-
-		/*
-		 * Allocate our results in the caller's context, not the
-		 * transaction's. We do this inside the loop, and restore the original
-		 * context at the end, so that leaky things like heap_getnext() are
-		 * not called in a potentially long-lived context.
-		 */
-		oldcxt = MemoryContextSwitchTo(resultcxt);
-
-		db_entry = palloc0(sizeof(DatabaseEntry));
-		db_entry->oid = HeapTupleGetOid(tup);
-		StrNCpy(NameStr(db_entry->name), NameStr(row->datname), NAMEDATALEN);
-		dbs = lappend(dbs, db_entry);
-
-		MemoryContextSwitchTo(oldcxt);
-	}
-
-	heap_endscan(scan);
-
-	/* Get enabled flags */
-	pipeline_database = heap_open(PipelineDatabaseRelationId, AccessShareLock);
-	scan = heap_beginscan_catalog(pipeline_database, 0, NULL);
-
-	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
-	{
-		Form_pipeline_database row = (Form_pipeline_database) GETSTRUCT(tup);
-		ListCell *lc;
-
-		foreach(lc, dbs)
-		{
-			DatabaseEntry *db_entry = (DatabaseEntry *) lfirst(lc);
-
-			if (db_entry->oid == row->dbid)
-				db_entry->active = row->cq_enabled;
-		}
-	}
-
-	heap_endscan(scan);
-	heap_close(pipeline_database, AccessShareLock);
-
-	/* Unlock pg_database at the very end. */
-	heap_close(pg_database, AccessExclusiveLock);
-
-	CommitTransactionCommand();
-
-	return dbs;
 }
 
 /*

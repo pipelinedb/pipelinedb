@@ -8,7 +8,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "timestamp_set.h"
+#include "pipeline/trigger/timestamp_set.h"
 
 /*
  * This is a very simple set of routines for keeping an ordered set of

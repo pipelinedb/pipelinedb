@@ -1,7 +1,7 @@
 #include "postgres.h"
 #include "lib/stringinfo.h"
 #include "utils/lsyscache.h"
-#include "tuple_formatter.h"
+#include "pipeline/trigger/tuple_formatter.h"
 #include "lib/ilist.h"
 #include "utils/rel.h"
 

@@ -8,7 +8,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "util.h"
+#include "pipeline/trigger/util.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "utils/memutils.h"

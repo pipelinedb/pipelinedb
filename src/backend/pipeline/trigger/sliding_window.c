@@ -8,9 +8,9 @@
  *-------------------------------------------------------------------------
  */
 
-#include "sliding_window.h"
-#include "batching.h"
-#include "util.h"
+#include "pipeline/trigger/sliding_window.h"
+#include "pipeline/trigger/batching.h"
+#include "pipeline/trigger/util.h"
 #include "executor/executor.h"
 #include "pipeline/cont_plan.h"
 #include "executor/tstoreReceiver.h"
@@ -20,7 +20,7 @@
 #include "pipeline/cont_analyze.h"
 #include "utils/builtins.h"
 #include "commands/trigger.h"
-#include "tuple_formatter.h"
+#include "pipeline/trigger/tuple_formatter.h"
 
 #define TRIGGER_SW_VACUUM_INTERVAL 1 * 1000 /* 1s */
 

@@ -8,7 +8,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include "batching.h"
+#include "pipeline/trigger/batching.h"
 #include "access/heapam.h"
 #include "storage/lock.h"
 #include "access/xact.h"

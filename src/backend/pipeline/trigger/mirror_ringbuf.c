@@ -9,7 +9,7 @@
  */
 
 #include "postgres.h"
-#include "mirror_ringbuf.h"
+#include "pipeline/trigger/mirror_ringbuf.h"
 
 static unsigned
 floor_pow_two(unsigned x)
