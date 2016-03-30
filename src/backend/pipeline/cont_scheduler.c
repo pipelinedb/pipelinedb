@@ -955,6 +955,9 @@ ContQuerySchedulerMain(int argc, char *argv[])
 				pos += sizeof(ContQueryProc) * NUM_BG_WORKERS;
 				db_meta->adhoc_procs = (ContQueryProc *) pos;
 
+				pos += sizeof(ContQueryProc);
+				db_meta->trigger_proc = (ContQueryProc *) pos;
+
 				start_database_workers(db_meta);
 			}
 			else if (!db_entry->active && found)

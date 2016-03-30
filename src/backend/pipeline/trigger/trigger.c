@@ -178,20 +178,15 @@ check_syscache_dirty(TriggerProcessState *state)
  * trigger_main
  */
 void
-trigger_main(Datum main_arg)
+trigger_main()
 {
 	TriggerProcessState *state;
 	WalStream *ws;
 
-	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnection("pipeline", NULL);
-
 	CHECK_FOR_INTERRUPTS();
 	elog(LOG, "%s process running with pid %d", TRIGGER_PROC_NAME, MyProcPid);
 
-	pgstat_report_activity(STATE_RUNNING, TRIGGER_PROC_NAME);
 	XactReadOnly = true;
-
 	is_trigger_process = true;
 
 	pqsignal(SIGHUP, sighup_handle);
@@ -199,7 +194,6 @@ trigger_main(Datum main_arg)
 	wal_init();
 
 	state = create_trigger_process_state();
-
 	Assert(MyAlertServer == NULL);
 
 	MyAlertServer = state->server;

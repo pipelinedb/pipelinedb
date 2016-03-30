@@ -1,18 +1,10 @@
 # contrib/pgbench/Makefile
 
-MODULE_big = pipeline_triggers
+subdir = src/backend/pipeline/trigger
+top_builddir = ../../../..
+include $(top_builddir)/src/Makefile.global
 
-SOURCES += $(wildcard *.c)
-OBJS = $(patsubst %.c,%.o,$(SOURCES))
+SRCS = $(wildcard *.c)
+OBJS = $(patsubst %.c,%.o,$(SRCS))
 
-EXTENSION = pipeline_triggers
-DATA = pipeline_triggers--0.9.1.sql
-PGFILEDESC = "pipeline_triggers - an extension for triggers on pipeline continuous views"
-
-PG_CPPFLAGS += -I../../../include 
-REGRESS = pipeline_triggers
-SHLIB_LINK = $(libpq)
-
-PG_CONFIG = pg_config
-PGXS := $(shell $(PG_CONFIG) --pgxs)
-include $(PGXS)
+include $(top_srcdir)/src/backend/common.mk

@@ -19,71 +19,13 @@
 
 #define PIPELINEDB_TRIGGERS "pipelinedb_triggers"
 
-PG_MODULE_MAGIC;
-
 /* These must be available to pg_dlsym() */
-extern void _PG_init(void);
-extern void _PG_output_plugin_init(OutputPluginCallbacks *cb);
-
-//
 
 /* guc */
 int alert_socket_mem;
 int alert_socket_port;
 bool is_trigger_process;
-bool triggers_enabled;
-
-/*
- * Declare configuration parameters and install hooks. We can't do too much work here
- * because almost nothing is initialized yet.
- */
-void
-_PG_init(void)
-{
-	/*
-	 * In order to create our shared memory area, we have to be loaded via
-	 * shared_preload_libraries.  If not, fall out without hooking into any of
-	 * the main system. (We don't throw error here because it seems useful to
-	 * allow the pipelinedb_enterprise functions to be created even when the
-	 * module isn't active. The functions must protect themselves against
-	 * being called then, however.)
-	 */
-	if (!process_shared_preload_libraries_in_progress)
-	{
-		elog(WARNING, "pipelinedb_triggers must be loaded via shared_preload_libraries");
-		return;
-	}
-
-	DefineCustomIntVariable("pipelinedb_triggers.alert_socket_mem",
-		 gettext_noop("Amount of memory in KB to buffer alert server writes per socket."),
-		 NULL,
-		 &alert_socket_mem,
-		 1024, 1024, 8192,
-		 PGC_POSTMASTER, 0,
-		 NULL, NULL, NULL);
-
-	// XXX - loadzero
-
-	DefineCustomIntVariable("pipelinedb_triggers.alert_socket_port",
-		 gettext_noop("Alert socket port."),
-		 NULL,
-		 &alert_socket_port,
-		 7432, 7432, 7432,
-		 PGC_POSTMASTER, 0,
-		 NULL, NULL, NULL);
-
-	DefineCustomBoolVariable("pipelinedb_triggers.continuous_triggers_enabled",
-		   gettext_noop("If true, any triggers on continuous views will be fired."),
-		   NULL,
-		   &triggers_enabled,
-		   true,
-		   PGC_POSTMASTER, 0,
-		   NULL, NULL, NULL);
-
-
-	EmitWarningsOnPlaceholders(PIPELINEDB_TRIGGERS);
-	RegisterTriggerProcess();
-}
+bool continuous_triggers_enabled;
 
 static void
 output_plugin_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is_init)
@@ -121,7 +63,7 @@ output_plugin_decode_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 	trigger_plugin_decode_change(ctx, txn, rel, change);
 }
 
-void
+static void
 _PG_output_plugin_init(OutputPluginCallbacks *cb)
 {
 	AssertVariableIsOfType(&_PG_output_plugin_init, LogicalOutputPluginInit);

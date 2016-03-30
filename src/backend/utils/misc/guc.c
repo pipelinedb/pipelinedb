@@ -89,6 +89,7 @@
 #include "utils/snapmgr.h"
 #include "utils/tzparser.h"
 #include "utils/xml.h"
+#include "pipeline/trigger/config.h"
 
 #ifndef PG_KRB_SRVTAB
 #define PG_KRB_SRVTAB ""
@@ -1684,6 +1685,15 @@ static struct config_bool ConfigureNamesBool[] =
 		NULL, NULL, NULL
 	},
 
+	{
+		{"continuous_triggers_enabled", PGC_POSTMASTER, DEVELOPER_OPTIONS,
+		 gettext_noop("Enable execution of continuous triggers."),
+		 NULL,
+		},
+		&continuous_triggers_enabled,
+		false,
+		NULL, NULL, NULL
+	},
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, false, NULL, NULL, NULL
@@ -2835,13 +2845,21 @@ static struct config_int ConfigureNamesInt[] =
 		50, 0, 60000,
 		NULL, NULL, NULL
 	},
-
+	{
+		{"alert_socket_mem", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+			gettext_noop("Amount of memory to buffer alert server writes per socket."),
+			NULL,
+			GUC_UNIT_KB
+		},
+		&alert_socket_mem,
+		1024, 1024, 8192,
+		NULL, NULL, NULL
+	},
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0, 0, 0, NULL, NULL, NULL
 	}
 };
-
 
 static struct config_real ConfigureNamesReal[] =
 {

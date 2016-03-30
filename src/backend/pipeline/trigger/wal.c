@@ -54,7 +54,7 @@ acquire_my_replication_slot()
 		ReplicationSlotCreate(TRIGGER_REPLICATION_SLOT_NAME, true,
 				RS_EPHEMERAL);
 
-		cxt = CreateInitDecodingContext("pipeline_triggers", NIL,
+		cxt = CreateInitDecodingContext("", NIL,
 				logical_read_local_xlog_page, NULL, NULL);
 
 		/* Build initial snapshot, for the slot. Might take a while. */
