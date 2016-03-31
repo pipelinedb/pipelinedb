@@ -12,7 +12,6 @@
 #define TRIGGERS_CONFIG_H
 
 extern int alert_socket_mem;
-extern int alert_socket_port;
 extern bool is_trigger_process;
 extern bool continuous_triggers_enabled;
 

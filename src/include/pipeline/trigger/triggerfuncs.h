@@ -14,6 +14,7 @@
 #include "fmgr.h"
 
 extern Datum pipeline_send_alert_new_row(PG_FUNCTION_ARGS);
+extern Datum pipeline_get_alert_server_conn(PG_FUNCTION_ARGS);
 
 extern Datum test_alert_new_row(PG_FUNCTION_ARGS);
 extern Datum trigger_testing_setup(PG_FUNCTION_ARGS);

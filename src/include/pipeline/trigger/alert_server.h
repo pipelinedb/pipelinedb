@@ -26,4 +26,6 @@ void alert_server_push(AlertServer *server, Oid oid, StringInfo msg);
 
 void alert_server_flush(AlertServer *server);
 
+extern int alert_server_port;
+
 #endif

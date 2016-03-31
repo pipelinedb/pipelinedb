@@ -1094,6 +1094,16 @@ SignalContQuerySchedulerTerminate(Oid db_oid)
 	}
 }
 
+extern ContQueryDatabaseMetadata *
+GetContQueryDatabaseMetadata(Oid db_oid)
+{
+	ContQueryDatabaseMetadata *db_meta =
+		(ContQueryDatabaseMetadata *) hash_search(
+			ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, NULL);
+
+	return db_meta;
+}
+
 /*
  * SignalContQuerySchedulerRefresh
  */

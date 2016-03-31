@@ -37,6 +37,8 @@
 #include "executor/executor.h"
 #include "catalog/pg_database.h"
 #include "catalog/pipeline_database.h"
+#include "pipeline/cont_scheduler.h"
+#include "pipeline/trigger/triggerfuncs.h"
 
 #define TRIGGER_PROC_NAME "pipelinedb_enterprise trigger"
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
@@ -185,6 +187,7 @@ trigger_main()
 
 	CHECK_FOR_INTERRUPTS();
 	elog(LOG, "%s process running with pid %d", TRIGGER_PROC_NAME, MyProcPid);
+	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
 
 	XactReadOnly = true;
 	is_trigger_process = true;

@@ -18,7 +18,6 @@
 #include "replication/walsender.h"
 
 #define WAL_POLL_TIMEOUT 10 /* 10ms */
-#define TRIGGER_REPLICATION_SLOT_NAME "pipelinedb_enterprise_trigger"
 
 /*
  * acquire_my_replication_slot
@@ -31,6 +30,8 @@ acquire_my_replication_slot()
 {
 	int i;
 	bool found = false;
+	char slot_name[256];
+	sprintf(slot_name, "pipelinedb_trigger_%d", MyContQueryProc->db_meta->db_oid);
 
 	Assert(!MyReplicationSlot);
 
@@ -38,8 +39,7 @@ acquire_my_replication_slot()
 	for (i = 0; i < max_replication_slots; i++)
 	{
 		ReplicationSlot *s = &ReplicationSlotCtl->replication_slots[i];
-		if (s->in_use && pg_strcasecmp(TRIGGER_REPLICATION_SLOT_NAME,
-					NameStr(s->data.name)) == 0)
+		if (s->in_use && pg_strcasecmp(slot_name, NameStr(s->data.name)) == 0)
 		{
 			found = true;
 			break;
@@ -50,9 +50,7 @@ acquire_my_replication_slot()
 	if (!found)
 	{
 		LogicalDecodingContext *cxt;
-
-		ReplicationSlotCreate(TRIGGER_REPLICATION_SLOT_NAME, true,
-				RS_EPHEMERAL);
+		ReplicationSlotCreate(slot_name, true, RS_EPHEMERAL);
 
 		cxt = CreateInitDecodingContext("", NIL,
 				logical_read_local_xlog_page, NULL, NULL);
@@ -77,7 +75,7 @@ acquire_my_replication_slot()
 		ReplicationSlotRelease();
 	}
 
-	ReplicationSlotAcquire(TRIGGER_REPLICATION_SLOT_NAME);
+	ReplicationSlotAcquire(slot_name);
 	Assert(MyReplicationSlot);
 }
 

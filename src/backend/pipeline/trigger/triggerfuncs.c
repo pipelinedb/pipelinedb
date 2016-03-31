@@ -23,6 +23,8 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include "utils/builtins.h"
+#include "miscadmin.h"
 
 static int fd = -1;
 static const char *log_file_name = "/tmp/.pipelinedb_cluster_test.log";
@@ -57,7 +59,7 @@ write_to_file(StringInfo info)
  *
  * Converts the 'new' tuple to copy format, and sends to the alert server
  */
-PG_FUNCTION_INFO_V1(send_alert_new_row);
+PG_FUNCTION_INFO_V1(pipeline_send_alert_new_row);
 Datum
 pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 {
@@ -75,6 +77,23 @@ pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 		elog(ERROR, "send_alert_new_row: not called from pipelinedb trigger process");
 
 	PG_RETURN_NULL();
+}
+
+PG_FUNCTION_INFO_V1(pipeline_get_alert_server_conn);
+Datum
+pipeline_get_alert_server_conn(PG_FUNCTION_ARGS)
+{
+	StringInfo info = makeStringInfo();
+
+	ContQueryDatabaseMetadata *data =
+		GetContQueryDatabaseMetadata(MyDatabaseId);
+
+	// XXX: jasonm
+
+	if (data)
+		appendStringInfo(info, "tcp:localhost:%d", 7432 + data->lock_idx);
+
+	PG_RETURN_TEXT_P(CStringGetTextDatum(info->data));
 }
 
 /*

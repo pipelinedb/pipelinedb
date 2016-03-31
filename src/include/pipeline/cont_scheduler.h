@@ -134,6 +134,8 @@ extern void ContinuousQueryWorkerMain(void);
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
 
+extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
+
 /* Adhoc Process Management */
 extern void SetAmContQueryAdhoc(bool value);
 extern ContQueryProc *AdhocContQueryProcGet(void);

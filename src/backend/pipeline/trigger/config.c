@@ -23,7 +23,6 @@
 
 /* guc */
 int alert_socket_mem;
-int alert_socket_port;
 bool is_trigger_process;
 bool continuous_triggers_enabled;
 

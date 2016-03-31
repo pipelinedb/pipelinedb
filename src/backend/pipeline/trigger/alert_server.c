@@ -35,6 +35,7 @@
 #include "utils/memutils.h"
 #include "pipeline/trigger/mirror_ringbuf.h"
 #include "pipeline/trigger/config.h"
+#include "pipeline/trigger/triggerfuncs.h"
 
 #define TS_MSG_SUBSCRIBE "subscribe"
 #define TS_MSG_SUBSCRIBE_OK "subscribe_ok"
@@ -49,6 +50,8 @@
 
 #define TS_HEARTBEAT_TIMEOUT 5
 #define TS_READ_TIMEOUT 10
+
+int alert_server_port = 0;
 
 typedef enum
 {
@@ -147,7 +150,7 @@ create_listen_socket()
 	/* TODO - put port assignment somewhere nicer */
 
 	tcp_addr.sin_family = AF_INET;
-	tcp_addr.sin_port = htons(alert_socket_port);
+	tcp_addr.sin_port = htons(alert_server_port);
 	tcp_addr.sin_addr.s_addr = INADDR_ANY;
 
 	rc = bind(sock->fd, (struct sockaddr *) &tcp_addr, sizeof(tcp_addr));
