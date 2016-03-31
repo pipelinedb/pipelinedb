@@ -5768,6 +5768,11 @@ DESCR("filtered space saving weighted increment");
 DATA(insert OID = 4417 ( pipeline_exec_adhoc_query PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ _null_ pipeline_exec_adhoc_query _null_ _null_ _null_ ));
 DESCR("exec adhoc query");
 
+//DATA(insert OID = 230 (  dsqrt			   PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 701 "701" _null_ _null_ _null_ _null_ _null_	dsqrt _null_ _null_ _null_ ));
+// provolatile
+DATA(insert OID = 4418 ( pipeline_send_alert_new_row PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 2279 "" _null_ _null_ _null_ _null_ _null_ pipeline_send_alert_new_row _null_ _null_ _null_ ));
+DESCR("send alert new row");
+
 /* stream FDW handler */
 DATA(insert OID = 4419 ( stream_fdw_handler	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 3115 "" _null_ _null_ _null_ _null_ _null_ stream_fdw_handler _null_ _null_ _null_ ));
 DESCR("stream FDW handler");

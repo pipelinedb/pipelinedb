@@ -59,7 +59,7 @@ write_to_file(StringInfo info)
  */
 PG_FUNCTION_INFO_V1(send_alert_new_row);
 Datum
-send_alert_new_row(PG_FUNCTION_ARGS)
+pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 {
 	if (is_trigger_process)
 	{

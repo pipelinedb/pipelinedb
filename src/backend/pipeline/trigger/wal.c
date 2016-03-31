@@ -57,6 +57,14 @@ acquire_my_replication_slot()
 		cxt = CreateInitDecodingContext("", NIL,
 				logical_read_local_xlog_page, NULL, NULL);
 
+		// OutputPluginCallbacks
+
+		cxt->callbacks.startup_cb = trigger_plugin_decode_startup;
+		cxt->callbacks.begin_cb = trigger_plugin_decode_begin_txn;
+		cxt->callbacks.change_cb = trigger_plugin_decode_change;
+		cxt->callbacks.commit_cb = trigger_plugin_decode_commit_txn;
+		cxt->callbacks.shutdown_cb = trigger_plugin_decode_shutdown;
+
 		/* Build initial snapshot, for the slot. Might take a while. */
 		DecodingContextFindStartpoint(cxt);
 
@@ -79,6 +87,7 @@ acquire_my_replication_slot()
 WalStream *
 create_wal_stream(void *pdata)
 {
+	LogicalDecodingContext *cxt;
 	WalStream *wal_stream = palloc0(sizeof(WalStream));
 	XLogRecPtr start_lsn = GetFlushRecPtr();
 
@@ -90,6 +99,14 @@ create_wal_stream(void *pdata)
 				logical_read_local_xlog_page_non_block,
 				trigger_prepare_write,
 				trigger_write_data);
+
+	cxt = wal_stream->logical_decoding_ctx;
+
+	cxt->callbacks.startup_cb = trigger_plugin_decode_startup;
+	cxt->callbacks.begin_cb = trigger_plugin_decode_begin_txn;
+	cxt->callbacks.change_cb = trigger_plugin_decode_change;
+	cxt->callbacks.commit_cb = trigger_plugin_decode_commit_txn;
+	cxt->callbacks.shutdown_cb = trigger_plugin_decode_shutdown;
 
 	wal_stream->logical_decoding_ctx->output_plugin_private = pdata;
 	wal_stream->startptr = MyReplicationSlot->data.restart_lsn;
