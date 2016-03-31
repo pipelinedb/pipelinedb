@@ -32,6 +32,7 @@ def shared_func(pipeline, clean_db):
   client_env["PATH"] = client_env["PATH"] + ":" + pipeline.get_bin_dir()
 
   cmd = [pipeline.get_recv_alerts(), '-d', conn_str, '-a', 'cv0.t0'];
+  time.sleep(2)
 
   outfile = open(TRIGGER_OUTPUT_LOGFILE, 'w')
   client = subprocess.Popen(cmd, stdout=outfile, env=client_env)
@@ -74,10 +75,10 @@ def shared_func(pipeline, clean_db):
   for k in range(1000):
     assert(d[k] == 50)
 
-def test_t1(pipeline, clean_db):
+def test_alert_server_t1(pipeline, clean_db):
   shared_func(pipeline, clean_db)
 
-def test_t2(pipeline, clean_db):
+def test_alert_server_t2(pipeline, clean_db):
   """
   Repeat the first test to exercise the cleanup logic
   """

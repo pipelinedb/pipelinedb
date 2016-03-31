@@ -1,11 +1,21 @@
-PGFILEDESC = "pipeline-recv-alerts - streaming alerts from the alert server"
-PGAPPICON = win32
+PGFILEDESC = "pipeline-recv-alerts - client to receive streaming alerts from the alert server"
 
-PROGRAM = pipeline-recv-alerts
-OBJS	= recv_alerts.o
+subdir = src/bin/recv-alerts
+top_builddir = ../../..
+include $(top_builddir)/src/Makefile.global
 
-recv_alerts.o: options.h
+#override CPPFLAGS := -I. -I$(srcdir) -I$(libpq_srcdir) $(CPPFLAGS)
 
-PG_CONFIG = pg_config
-PGXS := $(shell $(PG_CONFIG) --pgxs)
-include $(PGXS)
+SRCS=$(wildcard *.c)
+OBJS=$(patsubst %.c,%.o,$(SRCS))
+
+all: pipeline-recv-alerts
+
+pipeline-recv-alerts: $(OBJS) | submake-libpq submake-libpgport
+	$(CC) $(CFLAGS) $(OBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
+
+install: all installdirs
+	$(INSTALL_PROGRAM) pipeline-recv-alerts$(X) '$(DESTDIR)$(bindir)/pipeline-recv-alerts$(X)'
+
+installdirs:
+	$(MKDIR_P) '$(DESTDIR)$(bindir)' '$(DESTDIR)$(datadir)'
