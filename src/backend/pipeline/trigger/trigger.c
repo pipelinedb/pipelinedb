@@ -775,8 +775,6 @@ trigger_plugin_decode_begin_txn(LogicalDecodingContext *ctx,
 	if (!state)
 		return;
 
-	elog(LOG, "begin.txn");
-
 	Assert(state->cur_wal_batch == NULL);
 	state->cur_wal_batch =
 		start_new_batch(state, "wal", txn->xid, txn->commit_time);

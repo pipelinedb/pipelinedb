@@ -79,41 +79,14 @@ pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-PG_FUNCTION_INFO_V1(pipeline_get_alert_server_conn);
+PG_FUNCTION_INFO_V1(pipeline_test_alert_new_row);
 Datum
-pipeline_get_alert_server_conn(PG_FUNCTION_ARGS)
-{
-	StringInfo info = makeStringInfo();
-
-	ContQueryDatabaseMetadata *data =
-		GetContQueryDatabaseMetadata(MyDatabaseId);
-
-	// XXX: jasonm
-
-	if (data)
-		appendStringInfo(info, "tcp:localhost:%d", 7432 + data->lock_idx);
-
-	PG_RETURN_TEXT_P(CStringGetTextDatum(info->data));
-}
-
-/*
- * test_alert_new_row
- *
- * Writes a tuple in copy format to /tmp/.pipelinedb_cluster_test.log, so
- * it can be picked up by test harnesses.
- *
- * We do this to get around WAL context limitations.
- */
-PG_FUNCTION_INFO_V1(test_alert_new_row);
-Datum
-test_alert_new_row(PG_FUNCTION_ARGS)
+pipeline_test_alert_new_row(PG_FUNCTION_ARGS)
 {
 	if (is_trigger_process)
 	{
 		TriggerData *data = (TriggerData *) (fcinfo->context);
-
-		TupleFormatter *f =
-			get_formatter(RelationGetRelid(data->tg_relation));
+		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
 
 		resetStringInfo(f->buf);
 		tf_write_tuple(f, f->slot, f->buf, data->tg_newtuple);
@@ -126,10 +99,24 @@ test_alert_new_row(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-PG_FUNCTION_INFO_V1( trigger_testing_setup );
 
-extern Datum
-trigger_testing_setup(PG_FUNCTION_ARGS)
+PG_FUNCTION_INFO_V1(pipeline_get_alert_server_conn);
+Datum
+pipeline_get_alert_server_conn(PG_FUNCTION_ARGS)
+{
+	StringInfo info = makeStringInfo();
+
+	ContQueryDatabaseMetadata *data =
+		GetContQueryDatabaseMetadata(MyDatabaseId);
+
+	if (data)
+		appendStringInfo(info, "tcp:localhost:%d", 7432 + data->lock_idx);
+
+	PG_RETURN_TEXT_P(CStringGetTextDatum(info->data));
+}
+
+static void
+trigger_testing_setup()
 {
 	/* test fixtures use the same db instance */
 
@@ -140,10 +127,7 @@ trigger_testing_setup(PG_FUNCTION_ARGS)
 	}
 
 	fd = open(log_file_name, O_RDWR | O_TRUNC | O_CREAT, 0600);
-	PG_RETURN_NULL();
 }
-
-PG_FUNCTION_INFO_V1( trigger_testing_sync );
 
 static void
 read_file(StringInfo out, const char* fname)
@@ -197,7 +181,7 @@ hup_trigger_procs()
 	   snprintf(fname, sizeof(fname), "/proc/%s/cmdline", e->d_name);
 	   read_file(cmdline, fname);
 
-	   if (strstr(cmdline->data, "pipelinedb_enterprise trigger"))
+	   if (strstr(cmdline->data, "bgworker: trigger"))
 	   {
 		   int pid = atoi(e->d_name);
 		   kill(pid, SIGHUP);
@@ -207,12 +191,23 @@ hup_trigger_procs()
    closedir(d);
 }
 
-/*
- * trigger_testing_sync
- */
-extern Datum
-trigger_testing_sync(PG_FUNCTION_ARGS)
+PG_FUNCTION_INFO_V1(pipeline_trigger_debug);
+Datum
+pipeline_trigger_debug(PG_FUNCTION_ARGS)
 {
-	hup_trigger_procs();
-	PG_RETURN_NULL();
+	StringInfo info = makeStringInfo();
+	text *cmd = PG_GETARG_TEXT_P(0);
+
+	const char* cstr = TextDatumGetCString(cmd);
+
+	if (strcmp(cstr, "setup") == 0)
+	{
+		trigger_testing_setup();
+	}
+	else if (strcmp(cstr, "sync") == 0)
+	{
+		hup_trigger_procs();
+	}
+
+	PG_RETURN_TEXT_P(CStringGetTextDatum(info->data));
 }

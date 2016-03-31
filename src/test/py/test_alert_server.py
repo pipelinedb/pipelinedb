@@ -24,15 +24,14 @@ def shared_func(pipeline, clean_db):
 
   conn_str = pipeline.get_conn_string()
 
-  pipeline.create_cv_trigger('t0', 'cv0', 'true',
-                            'pipeline_triggers.send_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_send_alert_new_row')
 
   # recv_alerts client needs pipeline on its path
 
   client_env = os.environ.copy()
   client_env["PATH"] = client_env["PATH"] + ":" + pipeline.get_bin_dir()
 
-  cmd = [pipeline.get_recv_alerts(), '-h', 'localhost', '-p', '5432', '-a', 'cv0.t0'];
+  cmd = [pipeline.get_recv_alerts(), '-d', conn_str, '-a', 'cv0.t0'];
 
   outfile = open(TRIGGER_OUTPUT_LOGFILE, 'w')
   client = subprocess.Popen(cmd, stdout=outfile, env=client_env)

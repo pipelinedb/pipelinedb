@@ -92,10 +92,7 @@ class PipelineDB(object):
           'anonymous_update_checks': 'off',
           'continuous_query_max_wait': 5,
           'continuous_queries_enabled': 'on',
-          'wal_level': 'logical',
-          'max_wal_senders': 4,
-          'max_replication_slots':4,
-          'shared_preload_libraries':'pipeline_triggers'
+          'wal_level': 'logical'
         }
 
         cmd = [SERVER, '-D', self.data_dir, '-p', str(self.port)]
@@ -141,16 +138,9 @@ class PipelineDB(object):
         # ACTVATE continuous queries
         conn.execute('COMMIT')
         conn.execute('ACTIVATE')
-        conn.execute('CREATE extension pipeline_triggers')
-
-        self.load_private_function(conn, 'test_alert_new_row', 'trigger')
-        self.load_private_function(conn, 'trigger_testing_setup', 'void')
-        self.load_private_function(conn, 'trigger_testing_sync', 'void')
 
         conn.close()
-
         self.conn = self.engine.connect()
-
 
     def stop(self):
       """
@@ -220,7 +210,7 @@ class PipelineDB(object):
         return result
 
     def trigger_sync(self):
-        self.execute('select trigger_testing_sync()')
+        self.execute("select pipeline_trigger_debug('sync')")
 
 #    def create_cv(self, name, stmt, options):
 #        """
@@ -354,7 +344,7 @@ def clean_db(request):
     """
     pdb = request.module.pipeline
     request.addfinalizer(pdb.drop_all_queries)
-    pdb.execute('select trigger_testing_setup()')
+    pdb.execute("select pipeline_trigger_debug('setup')")
 
 @pytest.fixture(scope='module')
 def pipeline(request):

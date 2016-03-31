@@ -11,13 +11,12 @@ def test_group_no_filter(pipeline, clean_db):
   Verify counts are correct
   """
   pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream group by x')
-  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
   time.sleep(1)
 
   rows = [(n % 3,) for n in range(1000)]
 
   pipeline.insert_batches('stream', ('x',), rows, 250)
-
   time.sleep(1)
 
   lines = pipeline.read_trigger_output();
@@ -49,7 +48,7 @@ def test_avg_no_filter(pipeline, clean_db):
   Verifies averages are correct
   """
   pipeline.create_cv('cv0', 'SELECT x::integer,avg(y::real) FROM stream group by x')
-  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
   time.sleep(1)
 
   rows = [(n % 3,n) for n in range(1000)]
@@ -84,7 +83,7 @@ def test_group_filter(pipeline, clean_db):
   """
 
   pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream group by x')
-  pipeline.create_cv_trigger('t0', 'cv0', 'new.x = 1', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'new.x = 1', 'pipeline_test_alert_new_row')
   time.sleep(1)
 
   rows = [(n % 3,) for n in range(1000)]
@@ -114,7 +113,7 @@ def test_single_no_filter(pipeline, clean_db):
   """
 
   pipeline.create_cv('cv0', 'SELECT count(*) FROM stream')
-  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
   time.sleep(1)
 
   rows = [(n % 3,) for n in range(1000)]
@@ -141,7 +140,7 @@ def test_single_with_threshold(pipeline, clean_db):
   """
 
   pipeline.create_cv('cv0', 'SELECT count(*) FROM stream')
-  pipeline.create_cv_trigger('t0', 'cv0', 'new.count > 100', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'new.count > 100', 'pipeline_test_alert_new_row')
   time.sleep(1)
 
   rows = [(n % 3,) for n in range(1000)]
@@ -170,7 +169,7 @@ def test_append_no_filter(pipeline, clean_db):
   """
 
   pipeline.create_cv('cv0', 'SELECT x::int FROM stream')
-  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
   time.sleep(1)
 
   rows = [(n % 3,) for n in range(1000)]
@@ -208,7 +207,7 @@ def test_sw_group_no_filter(pipeline, clean_db):
   """
 
   pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'10 seconds\') group by x')
-  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
   time.sleep(1)
 
   rows = [(n % 3,) for n in range(1000)]
@@ -242,7 +241,7 @@ def test_single_create_drop_trigger(pipeline, clean_db):
   Exercises the trigger diffing logic
   """
   pipeline.create_cv('cv0', 'SELECT count(*) FROM stream')
-  pipeline.create_cv_trigger('t0', 'cv0', 'new.count <= 2', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'new.count <= 2', 'pipeline_test_alert_new_row')
   time.sleep(0.1)
 
   pipeline.insert('stream', ('x',), [(0,)])
@@ -258,9 +257,9 @@ def test_create_drop_trigger(pipeline, clean_db):
   Verify that trigger cache entries are invalidated as triggers are created and dropped
   """
   pipeline.create_cv('cv0', 'SELECT count(*) FROM stream')
-  pipeline.create_cv_trigger('t0', 'cv0', 'new.count <= 2', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'new.count <= 2', 'pipeline_test_alert_new_row')
   time.sleep(0.1)
-  pipeline.create_cv_trigger('t1', 'cv0', 'new.count <= 2', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t1', 'cv0', 'new.count <= 2', 'pipeline_test_alert_new_row')
   time.sleep(0.1)
 
   pipeline.insert('stream', ('x',), [(0,)])
@@ -287,7 +286,7 @@ def test_create_drop_trigger(pipeline, clean_db):
   count = result[0]
 
   # Recreate t1 with a differnt WHEN clause and verify that it fires again
-  pipeline.create_cv_trigger('t1', 'cv0', 'new.count > 2', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t1', 'cv0', 'new.count > 2', 'pipeline_test_alert_new_row')
   pipeline.insert('stream', ('x',), [(0,)])
   time.sleep(1)
 
@@ -303,7 +302,7 @@ def test_sw_external_vacuum(pipeline, clean_db):
   """
   pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'3 seconds\') group by x;', step_factor=10)
 
-  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
 
   time.sleep(1)
 
@@ -363,7 +362,7 @@ def test_sw_trigger_sync(pipeline, clean_db):
 
   time.sleep(4)
 
-  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
   time.sleep(1)
 
   rows = [(n%10,) for n in range(10)]
@@ -395,7 +394,7 @@ def test_sw_internal_vacuum(pipeline, clean_db):
 
   pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'3 seconds\') group by x;', step_factor=10)
 
-  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
 
   rows = [(n % 10,) for n in range(1000)]
   pipeline.insert('stream', ('x',), rows)
