@@ -2817,7 +2817,7 @@ static struct config_int ConfigureNamesInt[] =
 
 	{
 		{"continuous_view_fillfactor", PGC_BACKEND, QUERY_TUNING_OTHER,
-		 gettext_noop("Sets the default fillfactor to use for continuous views. Defaults to 50."),
+		 gettext_noop("Sets the default fillfactor to use for continuous views."),
 		 NULL,
 		 GUC_UNIT_KB
 		},
