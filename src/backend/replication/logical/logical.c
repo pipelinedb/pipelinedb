@@ -138,6 +138,11 @@ StartupDecodingContext(List *output_plugin_options,
 	 * now.
 	 */
 
+	/*
+	 * XXX(jasonm): An empty string means this is not a dynamically
+	 * loaded plugin. We utilise this for continuous triggers.
+	 */
+
 	if (strlen(slot->data.plugin.data))
 		LoadOutputPlugin(&ctx->callbacks, NameStr(slot->data.plugin));
 

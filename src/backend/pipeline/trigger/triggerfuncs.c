@@ -59,11 +59,10 @@ write_to_file(StringInfo info)
  *
  * Converts the 'new' tuple to copy format, and sends to the alert server
  */
-PG_FUNCTION_INFO_V1(pipeline_send_alert_new_row);
 Datum
 pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 {
-	if (is_trigger_process)
+	if (am_cont_trigger)
 	{
 		TriggerData *data = (TriggerData *) (fcinfo->context);
 		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
@@ -79,11 +78,10 @@ pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-PG_FUNCTION_INFO_V1(pipeline_test_alert_new_row);
 Datum
 pipeline_test_alert_new_row(PG_FUNCTION_ARGS)
 {
-	if (is_trigger_process)
+	if (am_cont_trigger)
 	{
 		TriggerData *data = (TriggerData *) (fcinfo->context);
 		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
@@ -100,7 +98,6 @@ pipeline_test_alert_new_row(PG_FUNCTION_ARGS)
 }
 
 
-PG_FUNCTION_INFO_V1(pipeline_get_alert_server_conn);
 Datum
 pipeline_get_alert_server_conn(PG_FUNCTION_ARGS)
 {

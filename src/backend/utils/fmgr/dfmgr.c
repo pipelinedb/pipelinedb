@@ -164,6 +164,7 @@ lookup_external_function(void *filehandle, char *funcname)
 	return (PGFunction) pg_dlsym(filehandle, funcname);
 }
 
+
 /*
  * Load the specified dynamic-link library file, unless it already is
  * loaded.  Return the pg_dl* handle for the file.

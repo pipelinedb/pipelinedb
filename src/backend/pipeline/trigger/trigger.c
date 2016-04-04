@@ -43,7 +43,6 @@
 #define TRIGGER_PROC_NAME "pipelinedb_enterprise trigger"
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
 
-bool is_trigger_process = false;
 AlertServer *MyAlertServer = NULL;
 
 volatile int got_sighup = 0;
@@ -190,7 +189,6 @@ trigger_main()
 	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
 
 	XactReadOnly = true;
-	is_trigger_process = true;
 
 	pqsignal(SIGHUP, sighup_handle);
 	pqsignal(SIGTERM, sigterm_handle);
@@ -229,29 +227,6 @@ trigger_main()
 	destroy_trigger_process_state(state);
 	destroy_wal_stream(ws);
 	proc_exit(0);
-}
-
-/*
- * RegisterTriggerProcess
- */
-void
-RegisterTriggerProcess(void)
-{
-//	BackgroundWorker worker;
-//
-//	if (!triggers_enabled)
-//		return;
-//
-//	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
-//	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-//	worker.bgw_main = trigger_main;
-//	worker.bgw_notify_pid = 0;
-//	worker.bgw_restart_time = 1; /* recover in 1s */
-//	worker.bgw_let_crash = false;
-//	worker.bgw_main_arg = PointerGetDatum(0);
-//
-//	snprintf(worker.bgw_name, BGW_MAXLEN, TRIGGER_PROC_NAME);
-//	RegisterBackgroundWorker(&worker);
 }
 
 static inline List *
@@ -997,8 +972,6 @@ do_decode_change(TriggerProcessState *state,
 
 	if (!entry->numtriggers)
 		return;
-
-	// TRIGGER
 
 	add_change(state, cl, action, old_tup, new_tup);
 }

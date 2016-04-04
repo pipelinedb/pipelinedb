@@ -72,6 +72,7 @@ static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
 static bool am_cont_adhoc = false;
 
+bool am_cont_trigger = false;
 bool am_cont_combiner = false;
 
 /* guc parameters */
@@ -506,7 +507,7 @@ cont_bgworker_main(Datum arg)
 			run = &ContinuousQueryWorkerMain;
 			break;
 		case TRIG:
-			is_trigger_process = true;
+			am_cont_trigger = true;
 			run = &trigger_main;
 			break;
 		case ADHOC:
@@ -770,7 +771,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 	success &= run_cont_bgworker(proc);
 
-	proc = db_meta->trigger_proc;
+	proc = &db_meta->trigger_proc;
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
 	proc->type = TRIG;
@@ -955,9 +956,6 @@ ContQuerySchedulerMain(int argc, char *argv[])
 				db_meta->db_procs = (ContQueryProc *) pos;
 				pos += sizeof(ContQueryProc) * NUM_BG_WORKERS;
 				db_meta->adhoc_procs = (ContQueryProc *) pos;
-
-				pos += sizeof(ContQueryProc);
-				db_meta->trigger_proc = (ContQueryProc *) pos;
 
 				start_database_workers(db_meta);
 			}

@@ -72,7 +72,7 @@ struct ContQueryDatabaseMetadata
 	int adhoc_counter;
 	/* Number of entries is equal to max_worker_processes. */
 	ContQueryProc *adhoc_procs;
-	ContQueryProc *trigger_proc;
+	ContQueryProc trigger_proc;
 };
 
 typedef struct ContQueryRunParams
@@ -110,6 +110,7 @@ extern ContQueryRunParams *GetContQueryRunParams(void);
 extern int GetContSchedulerTrancheId(void);
 
 extern bool am_cont_combiner;
+extern bool am_cont_trigger;
 
 /* status inquiry functions */
 extern bool IsContQuerySchedulerProcess(void);

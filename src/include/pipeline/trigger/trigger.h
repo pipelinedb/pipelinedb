@@ -163,8 +163,6 @@ typedef struct TrigInfo
 
 } TrigInfo;
 
-extern void RegisterTriggerProcess(void);
-
 extern void trigger_plugin_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is_init);
 extern void trigger_plugin_decode_shutdown(LogicalDecodingContext *ctx);
 extern void trigger_plugin_decode_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn);

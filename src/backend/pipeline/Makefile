@@ -23,5 +23,3 @@ OBJS = combinerReceiver.o cont_plan.o update.o stream.o \
 SUBDIRS = trigger
 
 include $(top_srcdir)/src/backend/common.mk
-
-# trigger_main
