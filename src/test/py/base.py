@@ -17,7 +17,7 @@ ROOT = '../../../'
 INSTALL_FORMAT = './.pdb-%d'
 SERVER = os.path.join(ROOT, 'src', 'backend', 'pipeline-server')
 CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/pipeline'
-TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_cluster_test.log'
+TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_trigger_test.log'
 
 class PipelineDB(object):
     def __init__(self):
@@ -87,12 +87,15 @@ class PipelineDB(object):
         default_params = {
           'synchronous_stream_insert': 'on',
           'continuous_queries_adhoc_enabled': 'on',
+          'continuous_triggers_enabled': 'on',
           'continuous_query_num_combiners': 2,
           'continuous_query_num_workers': 2,
           'anonymous_update_checks': 'off',
           'continuous_query_max_wait': 5,
           'continuous_queries_enabled': 'on',
-          'wal_level': 'logical'
+          'wal_level': 'logical',
+          'max_wal_senders': 1,
+          'max_replication_slots': 1
         }
 
         cmd = [SERVER, '-D', self.data_dir, '-p', str(self.port)]
@@ -211,13 +214,6 @@ class PipelineDB(object):
 
     def trigger_sync(self):
         self.execute("select pipeline_trigger_debug('sync')")
-
-#    def create_cv(self, name, stmt, options):
-#        """
-#        Create a continuous view
-#        """
-#        result = self.execute('CREATE CONTINUOUS VIEW %s AS %s' % (name, stmt))
-#        return result
 
     def create_cv(self, name, stmt, **kw):
         """

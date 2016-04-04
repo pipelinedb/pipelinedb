@@ -27,7 +27,7 @@
 #include "miscadmin.h"
 
 static int fd = -1;
-static const char *log_file_name = "/tmp/.pipelinedb_cluster_test.log";
+static const char *log_file_name = "/tmp/.pipelinedb_trigger_test.log";
 
 static void check_file()
 {
@@ -96,7 +96,6 @@ pipeline_test_alert_new_row(PG_FUNCTION_ARGS)
 
 	PG_RETURN_NULL();
 }
-
 
 Datum
 pipeline_get_alert_server_conn(PG_FUNCTION_ARGS)
