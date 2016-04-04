@@ -19,9 +19,6 @@
 
 #define PIPELINEDB_TRIGGERS "pipelinedb_triggers"
 
-/* These must be available to pg_dlsym() */
-
 /* guc */
 int alert_socket_mem;
 bool continuous_triggers_enabled;
-
