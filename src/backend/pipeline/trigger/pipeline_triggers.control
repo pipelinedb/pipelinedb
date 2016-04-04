@@ -1,5 +1,0 @@
-# PipelineDB Enterprise extension
-comment = 'PipelineDB Triggers extension'
-default_version = '0.9.1'
-module_pathname = '$libdir/pipelinedb_triggers'
-relocatable = true
