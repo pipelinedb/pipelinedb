@@ -47,6 +47,9 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timeout.h"
+#include "pipeline/trigger/trigger.h"
+#include "pipeline/trigger/config.h"
+#include "pipeline/trigger/triggerfuncs.h"
 
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
 #define INIT_PROC_TABLE_SZ 4
@@ -69,6 +72,7 @@ static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
 static bool am_cont_adhoc = false;
 
+bool am_cont_trigger = false;
 bool am_cont_combiner = false;
 
 /* guc parameters */
@@ -207,6 +211,9 @@ GetContQueryProcName(ContQueryProc *proc)
 			break;
 		case ADHOC:
 			sprintf(buf, "adhoc [%s]", NameStr(proc->db_meta->db_name));
+			break;
+		case TRIG:
+			sprintf(buf, "trigger [%s]", NameStr(proc->db_meta->db_name));
 			break;
 		case SCHEDULER:
 			return pstrdup("scheduler");
@@ -499,6 +506,10 @@ cont_bgworker_main(Datum arg)
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
 			break;
+		case TRIG:
+			am_cont_trigger = true;
+			run = &trigger_main;
+			break;
 		case ADHOC:
 			/* Clean up and die. */
 			purge_adhoc_queries();
@@ -755,6 +766,15 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
 	proc->type = ADHOC;
+	proc->group_id = 1;
+	proc->db_meta = db_meta;
+
+	success &= run_cont_bgworker(proc);
+
+	proc = &db_meta->trigger_proc;
+	MemSet(proc, 0, sizeof(ContQueryProc));
+
+	proc->type = TRIG;
 	proc->group_id = 1;
 	proc->db_meta = db_meta;
 
@@ -1071,6 +1091,16 @@ SignalContQuerySchedulerTerminate(Oid db_oid)
 		db_meta->terminate = true;
 		signal_cont_query_scheduler(SIGUSR2);
 	}
+}
+
+extern ContQueryDatabaseMetadata *
+GetContQueryDatabaseMetadata(Oid db_oid)
+{
+	ContQueryDatabaseMetadata *db_meta =
+		(ContQueryDatabaseMetadata *) hash_search(
+			ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, NULL);
+
+	return db_meta;
 }
 
 /*

@@ -31,7 +31,8 @@ SUBDIRS = \
 	pgbench \
 	psql \
 	scripts \
-	pipeline
+	pipeline \
+	recv_alerts
 
 ifeq ($(PORTNAME), win32)
 SUBDIRS += pgevent

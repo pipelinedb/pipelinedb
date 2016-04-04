@@ -17,7 +17,7 @@ ROOT = '../../../'
 INSTALL_FORMAT = './.pdb-%d'
 SERVER = os.path.join(ROOT, 'src', 'backend', 'pipeline-server')
 CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/pipeline'
-
+TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_trigger_test.log'
 
 class PipelineDB(object):
     def __init__(self):
@@ -61,7 +61,14 @@ class PipelineDB(object):
                 self.data_dir = os.path.join(root, 'data')
 
         self.bin_dir = install_bin_dir
+        self.recv_alerts = os.path.join(self.bin_dir, 'pipeline-recv-alerts')
         self.engine = None
+
+    def load_private_function(self, cur, name, returns):
+        mod_path = '$libdir/pipeline_triggers'
+        s = ("CREATE function %s() RETURNS %s AS '%s' LANGUAGE C IMMUTABLE;"
+                % (name, returns, mod_path))
+        cur.execute(s)
 
     def run(self, params=None):
         """
@@ -80,11 +87,15 @@ class PipelineDB(object):
         default_params = {
           'synchronous_stream_insert': 'on',
           'continuous_queries_adhoc_enabled': 'on',
+          'continuous_triggers_enabled': 'on',
           'continuous_query_num_combiners': 2,
           'continuous_query_num_workers': 2,
           'anonymous_update_checks': 'off',
           'continuous_query_max_wait': 5,
-          'continuous_queries_enabled': 'on'
+          'continuous_queries_enabled': 'on',
+          'wal_level': 'logical',
+          'max_wal_senders': 1,
+          'max_replication_slots': 1
         }
 
         cmd = [SERVER, '-D', self.data_dir, '-p', str(self.port)]
@@ -130,8 +141,8 @@ class PipelineDB(object):
         # ACTVATE continuous queries
         conn.execute('COMMIT')
         conn.execute('ACTIVATE')
-        conn.close()
 
+        conn.close()
         self.conn = self.engine.connect()
 
     def stop(self):
@@ -151,6 +162,11 @@ class PipelineDB(object):
         """
         self.stop()
         shutil.rmtree(self.tmp_dir)
+
+        try:
+            os.remove(TRIGGER_OUTPUT_LOGFILE)
+        except OSError:
+            pass
 
     @property
     def tmp_dir(self):
@@ -178,11 +194,37 @@ class PipelineDB(object):
           _t = 'VIEW' if query['type'] == 'v' else 'TRANSFORM'
           self.execute('DROP CONTINUOUS %s %s' % (_t, query['name']))
 
-    def create_cv(self, name, stmt):
+    def create_cv_trigger(self, name, view, when, proc):
+        """
+        Create a trigger on a continuous view
+        """
+        result = self.execute('CREATE TRIGGER %s AFTER UPDATE OR INSERT ON %s FOR ROW WHEN (%s) EXECUTE PROCEDURE %s()' % (name, view, when, proc))
+        self.trigger_sync()
+
+        return result
+
+    def drop_cv_trigger(self, name, view):
+        """
+        Drop a trigger
+        """
+        result = self.execute('DROP TRIGGER %s ON %s' % (name, view))
+        self.trigger_sync()
+
+        return result
+
+    def trigger_sync(self):
+        self.execute("select pipeline_trigger_debug('sync')")
+
+    def create_cv(self, name, stmt, **kw):
         """
         Create a continuous view
         """
-        result = self.execute('CREATE CONTINUOUS VIEW %s AS %s' % (name, stmt))
+        opts = ', '.join(['%s=%r' % (k, v) for k, v in kw.items()])
+
+        if kw:
+            result = self.execute('CREATE CONTINUOUS VIEW %s WITH (%s) AS %s' % (name, opts, stmt))
+        else:
+            result = self.execute('CREATE CONTINUOUS VIEW %s AS %s' % (name, stmt))
         return result
 
     def create_ct(self, name, stmt, trigfn):
@@ -247,6 +289,16 @@ class PipelineDB(object):
         values = values.replace('None', 'null')
         return self.execute('INSERT INTO %s (%s) VALUES %s' % (target, header, values))
 
+    def insert_batches(self, target, desc, rows, batch_size):
+        """
+        Insert a batch of rows, spreading them across randomly selected nodes
+        """
+        batches = [rows[i:i + batch_size] for i in range(0, len(rows), batch_size)]
+
+        for i, batch in enumerate(batches):
+            self.insert(target, desc, batch)
+            time.sleep(0.5)
+
     def begin(self):
         """
         Begin a transaction
@@ -259,6 +311,27 @@ class PipelineDB(object):
         """
         return self.execute('COMMIT')
 
+    def get_conn_string(self):
+        """
+        Get the connection string for this database
+        """
+        connstr = (CONNSTR_TEMPLATE % (getpass.getuser(), self.port))
+        return connstr
+
+    def get_bin_dir(self):
+        return self.bin_dir
+
+    def get_recv_alerts(self):
+        return self.recv_alerts
+
+    def read_trigger_output(self):
+        """
+        Read the trigger output file and format its contents as a list of rows
+        """
+        with open(TRIGGER_OUTPUT_LOGFILE) as f:
+          lines = f.readlines()
+
+        return map(lambda x: x.rstrip('\n').split('\t'), lines)
 
 @pytest.fixture
 def clean_db(request):
@@ -267,7 +340,7 @@ def clean_db(request):
     """
     pdb = request.module.pipeline
     request.addfinalizer(pdb.drop_all_queries)
-
+    pdb.execute("select pipeline_trigger_debug('setup')")
 
 @pytest.fixture(scope='module')
 def pipeline(request):
