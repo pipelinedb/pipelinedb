@@ -213,7 +213,6 @@ def test_activate_deactivate(pipeline, clean_db):
   except:
     pass
 
-  sys.stdout.flush()
   cur = conn.cursor()
   cur.execute('ACTIVATE')
   cur.close()
