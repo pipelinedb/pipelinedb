@@ -47,7 +47,7 @@ def test_old_vals(pipeline, clean_db):
   Test grouping query with an old in the when clause.
   """
   pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream group by x')
-  pipeline.create_cv_trigger('t0', 'update', 'cv1', 'old.count < 100', 'pipeline_test_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'update', 'cv0', 'old.count < 100', 'pipeline_test_alert_new_row')
   time.sleep(1)
 
   rows = [(n % 3,) for n in range(1000)]
