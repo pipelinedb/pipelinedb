@@ -41,24 +41,23 @@
 #include "pipeline/trigger/triggerfuncs.h"
 #include "catalog/pg_trigger.h"
 
-#define TRIGGER_PROC_NAME "pipelinedb_enterprise trigger"
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
 
 AlertServer *MyAlertServer = NULL;
 
-volatile int got_sighup = 0;
-volatile int got_sigterm = 0;
+volatile bool got_sighup = false;
+volatile bool got_sigterm = false;
 
 static void
 sighup_handle(int action)
 {
-	got_sighup = 1;
+	got_sighup = true;
 }
 
 static void
 sigterm_handle(int action)
 {
-	got_sigterm = 1;
+	got_sigterm = true;
 }
 
 static void
@@ -186,7 +185,6 @@ trigger_main()
 	WalStream *ws;
 
 	CHECK_FOR_INTERRUPTS();
-	elog(LOG, "%s process running with pid %d", TRIGGER_PROC_NAME, MyProcPid);
 	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
 
 	XactReadOnly = true;
@@ -217,7 +215,7 @@ trigger_main()
 		{
 			synchronize(state);
 			state->dirty_syscache = true;
-			got_sighup = 0;
+			got_sighup = false;
 		}
 
 		trigger_do_periodic(state);

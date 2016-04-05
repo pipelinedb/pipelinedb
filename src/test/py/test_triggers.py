@@ -1,6 +1,5 @@
 from base import pipeline, clean_db
 import time
-import json
 import psycopg2
 import psycopg2.extensions
 import getpass
