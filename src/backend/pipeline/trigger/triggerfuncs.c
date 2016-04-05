@@ -64,12 +64,16 @@ pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 {
 	if (am_cont_trigger)
 	{
+		HeapTuple new_tup = NULL;
 		TriggerData *data = (TriggerData *) (fcinfo->context);
+
 		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
-
 		resetStringInfo(f->buf);
-		tf_write_tuple(f, f->slot, f->buf, data->tg_newtuple);
 
+		new_tup = TRIGGER_FIRED_BY_INSERT(data->tg_event) ?
+			data->tg_trigtuple : data->tg_newtuple;
+
+		tf_write_tuple(f, f->slot, f->buf, new_tup);
 		alert_server_push(MyAlertServer, data->tg_trigger->tgoid, f->buf);
 	}
 	else
@@ -83,12 +87,17 @@ pipeline_test_alert_new_row(PG_FUNCTION_ARGS)
 {
 	if (am_cont_trigger)
 	{
+		HeapTuple new_tup = NULL;
 		TriggerData *data = (TriggerData *) (fcinfo->context);
+
 		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
-
 		resetStringInfo(f->buf);
-		tf_write_tuple(f, f->slot, f->buf, data->tg_newtuple);
 
+		new_tup = TRIGGER_FIRED_BY_INSERT(data->tg_event) ?
+			data->tg_trigtuple : data->tg_newtuple;
+
+		tf_write_tuple(f, f->slot, f->buf, new_tup);
+		alert_server_push(MyAlertServer, data->tg_trigger->tgoid, f->buf);
 		write_to_file(f->buf);
 	}
 	else
