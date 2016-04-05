@@ -21,4 +21,6 @@
 
 /* guc */
 int alert_socket_mem;
+int alert_server_port;
+char *alert_server_address;
 bool continuous_triggers_enabled;

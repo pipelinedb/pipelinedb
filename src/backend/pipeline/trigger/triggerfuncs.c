@@ -105,8 +105,8 @@ pipeline_get_alert_server_conn(PG_FUNCTION_ARGS)
 	ContQueryDatabaseMetadata *data =
 		GetContQueryDatabaseMetadata(MyDatabaseId);
 
-	if (data)
-		appendStringInfo(info, "tcp:localhost:%d", 7432 + data->lock_idx);
+	if (data && data->alert_server_port)
+		appendStringInfo(info, "tcp:%s:%d", alert_server_address, data->alert_server_port);
 
 	PG_RETURN_TEXT_P(CStringGetTextDatum(info->data));
 }

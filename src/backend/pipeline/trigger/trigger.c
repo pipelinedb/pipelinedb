@@ -187,7 +187,6 @@ trigger_main()
 
 	CHECK_FOR_INTERRUPTS();
 	elog(LOG, "%s process running with pid %d", TRIGGER_PROC_NAME, MyProcPid);
-	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
 
 	XactReadOnly = true;
 
