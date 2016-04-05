@@ -48,19 +48,19 @@ bool continuous_triggers_enabled;
 
 AlertServer *MyAlertServer = NULL;
 
-volatile int got_sighup = 0;
-volatile int got_sigterm = 0;
+volatile sig_atomic_t got_SIGUP = false;
+volatile sig_atomic_t got_SIGTERM = false;
 
 static void
 sighup_handle(int action)
 {
-	got_sighup = 1;
+	got_SIGUP = true;
 }
 
 static void
 sigterm_handle(int action)
 {
-	got_sigterm = 1;
+	got_SIGTERM = true;
 }
 
 static void
@@ -206,7 +206,7 @@ trigger_main()
 	{
 		CHECK_FOR_INTERRUPTS();
 
-		if (got_sigterm)
+		if (got_SIGTERM)
 			break;
 
 		check_syscache_dirty(state);
@@ -214,11 +214,11 @@ trigger_main()
 
 		check_syscache_dirty(state);
 
-		if (got_sighup)
+		if (got_SIGUP)
 		{
 			synchronize(state);
 			state->dirty_syscache = true;
-			got_sighup = 0;
+			got_SIGUP = false;
 		}
 
 		trigger_do_periodic(state);
