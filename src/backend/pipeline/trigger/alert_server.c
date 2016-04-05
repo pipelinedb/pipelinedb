@@ -132,6 +132,7 @@ chomp(StringInfo info)
 static ListenSocket *
 create_listen_socket()
 {
+	ContQueryDatabaseMetadata *meta;
 	int rc;
 	int opt;
 	int i;
@@ -181,9 +182,7 @@ create_listen_socket()
 	if (rc != 0)
 		elog(ERROR, "failed to listen on alert server port %d %m", aport);
 
-	ContQueryDatabaseMetadata *meta =
-		GetContQueryDatabaseMetadata(MyDatabaseId);
-
+	meta = GetContQueryDatabaseMetadata(MyDatabaseId);
 	meta->alert_server_port = aport;
 
 	return sock;
