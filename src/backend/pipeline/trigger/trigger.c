@@ -45,19 +45,19 @@
 
 AlertServer *MyAlertServer = NULL;
 
-volatile bool got_sighup = false;
-volatile bool got_sigterm = false;
+volatile int got_sighup = 0;
+volatile int got_sigterm = 0;
 
 static void
 sighup_handle(int action)
 {
-	got_sighup = true;
+	got_sighup = 1;
 }
 
 static void
 sigterm_handle(int action)
 {
-	got_sigterm = true;
+	got_sigterm = 1;
 }
 
 static void
@@ -187,8 +187,6 @@ trigger_main()
 	CHECK_FOR_INTERRUPTS();
 	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
 
-	XactReadOnly = true;
-
 	pqsignal(SIGHUP, sighup_handle);
 	pqsignal(SIGTERM, sigterm_handle);
 	wal_init();
@@ -215,7 +213,7 @@ trigger_main()
 		{
 			synchronize(state);
 			state->dirty_syscache = true;
-			got_sighup = false;
+			got_sighup = 1;
 		}
 
 		trigger_do_periodic(state);
@@ -400,6 +398,20 @@ exec_trigger_proc(TriggerData *tcontext, FmgrInfo *finfo,
 
 	pgstat_init_function_usage(&fcinfo, &fcusage);
 
+
+//	oData(fcinfo, finfo, 0,
+//			InvalidOid, (Node *) trigdata, NULL);
+//
+//	pgstat_init_function_usage(&fcinfo, &fcusage);
+//
+//	MyTriggerDepth++;
+//	PG_TRY();
+//	{
+//		result = FunctionCallInvoke(&fcinfo);
+//	}
+//	PG_CATCH();
+
+
 	PG_TRY();
 	{
 		/* Consume return value */
@@ -463,11 +475,21 @@ fire_triggers(TriggerCacheEntry *entry, Relation rel,
 	}
 
 	context.type = T_TriggerData;
-	context.tg_event = trig_action;
+	context.tg_event = TRIGGER_EVENT_ROW | trig_action;
 	context.tg_relation = rel;
-	context.tg_trigtuple = old_tup;
-	context.tg_newtuple = new_tup;
 	context.tg_newtuplebuf = InvalidBuffer;
+	context.tg_trigtuplebuf = InvalidBuffer;
+
+	if (TRIGGER_FIRED_BY_INSERT(context.tg_event))
+	{
+		context.tg_trigtuple = new_tup;
+		context.tg_newtuple = old_tup;
+	}
+	else if (TRIGGER_FIRED_BY_UPDATE(context.tg_event))
+	{
+		context.tg_newtuple = new_tup;
+		context.tg_trigtuple = old_tup;
+	}
 
 	dlist_foreach(iter, &entry->triggers)
 	{

@@ -4054,6 +4054,7 @@ AfterTriggerEndQuery(EState *estate)
 	afterTriggers.query_depth--;
 }
 
+#include <execinfo.h>
 
 /* ----------
  * AfterTriggerFireDeferred()
@@ -4095,6 +4096,7 @@ AfterTriggerFireDeferred(void)
 	{
 		CommandId	firing_id = afterTriggers.firing_counter++;
 
+		elog(LOG, "fire defer");
 		if (afterTriggerInvokeEvents(events, firing_id, NULL, true))
 			break;				/* all fired */
 	}
