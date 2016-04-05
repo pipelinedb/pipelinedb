@@ -58,6 +58,7 @@
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream.h"
 #include "pipeline/update.h"
+#include "pipeline/trigger/trigger.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
 #include "postmaster/bgwriter.h"
@@ -89,7 +90,6 @@
 #include "utils/snapmgr.h"
 #include "utils/tzparser.h"
 #include "utils/xml.h"
-#include "pipeline/trigger/config.h"
 
 #ifndef PG_KRB_SRVTAB
 #define PG_KRB_SRVTAB ""

@@ -34,7 +34,6 @@
 
 #include "utils/memutils.h"
 #include "pipeline/trigger/mirror_ringbuf.h"
-#include "pipeline/trigger/config.h"
 #include "pipeline/trigger/triggerfuncs.h"
 
 #define TS_MSG_SUBSCRIBE "subscribe"

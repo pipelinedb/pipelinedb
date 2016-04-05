@@ -2326,6 +2326,8 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				 "-c \"anonymous_update_checks=off\" "
 				 "-c \"continuous_query_max_wait=5\" "
 				 "-c \"continuous_queries_enabled=on\" "
+				 "-c \"continuous_triggers_enabled=on\" "
+				 "-c \"wal_level=logical\" "
 				 "-k \"%s\" "
 				 "> \"%s/log/postmaster.log\" 2>&1",
 				 bindir ? bindir : "",

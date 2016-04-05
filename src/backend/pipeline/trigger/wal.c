@@ -11,7 +11,6 @@
 #include "pipeline/trigger/wal.h"
 #include "replication/slot.h"
 #include "replication/logicalfuncs.h"
-#include "pipeline/trigger/config.h"
 #include "pipeline/trigger/util.h"
 #include "miscadmin.h"
 #include "replication/walsender_private.h"

@@ -48,7 +48,6 @@
 #include "utils/syscache.h"
 #include "utils/timeout.h"
 #include "pipeline/trigger/trigger.h"
-#include "pipeline/trigger/config.h"
 #include "pipeline/trigger/triggerfuncs.h"
 
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */

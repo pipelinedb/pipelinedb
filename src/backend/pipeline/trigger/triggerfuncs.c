@@ -15,7 +15,6 @@
 #include "nodes/print.h"
 #include "pipeline/trigger/trigger.h"
 #include "pipeline/trigger/tuple_formatter.h"
-#include "pipeline/trigger/config.h"
 
 #include <fcntl.h>
 #include <stdio.h>
