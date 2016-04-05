@@ -39,6 +39,7 @@
 #include "catalog/pipeline_database.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/trigger/triggerfuncs.h"
+#include "catalog/pg_trigger.h"
 
 #define TRIGGER_PROC_NAME "pipelinedb_enterprise trigger"
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
@@ -259,6 +260,14 @@ should_fire_trigger(TriggerCacheEntry *entry, TrigInfo *info,
 	TupleTableSlot *newslot = NULL;
 	MemoryContext oldContext;
 
+	if (!TRIGGER_FOR_INSERT(info->trigger->tgtype) &&
+			event == TRIGGER_EVENT_INSERT)
+		return false;
+
+	if (!TRIGGER_FOR_UPDATE(info->trigger->tgtype) &&
+			event == TRIGGER_EVENT_UPDATE)
+		return false;
+
 	/* Check for WHEN clause */
 	if (!trigger->tgqual)
 		return true;
@@ -325,8 +334,8 @@ should_fire_trigger(TriggerCacheEntry *entry, TrigInfo *info,
 		if (oldslot->tts_tupleDescriptor != tupdesc)
 			ExecSetSlotDescriptor(oldslot, tupdesc);
 
-			ExecStoreTuple(oldtup, oldslot, InvalidBuffer, false);
-			econtext->ecxt_innertuple = oldslot;
+		ExecStoreTuple(oldtup, oldslot, InvalidBuffer, false);
+		econtext->ecxt_innertuple = oldslot;
 	}
 
 	if (HeapTupleIsValid(newtup))

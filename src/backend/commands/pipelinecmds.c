@@ -63,6 +63,7 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
+#include "storage/lmgr.h"
 
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
@@ -1082,4 +1083,49 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	CommandCounterIncrement();
 
 	heap_close(pipeline_query, NoLock);
+}
+
+static void
+set_replica_identity_full(Oid matrel_oid, RangeVar *matrel)
+{
+	AlterTableStmt *stmt = makeNode(AlterTableStmt);
+	AlterTableCmd *cmd = makeNode(AlterTableCmd);
+
+	ReplicaIdentityStmt *rep = makeNode(ReplicaIdentityStmt);
+	rep->identity_type = REPLICA_IDENTITY_FULL;
+
+	cmd->subtype = AT_ReplicaIdentity;
+	cmd->def = (Node*) rep;
+
+	stmt->relation = matrel;
+	stmt->cmds = list_make1(cmd);
+
+	LockRelationOid(matrel_oid, AccessExclusiveLock);
+	AlterTable(matrel_oid, AccessExclusiveLock, stmt);
+	UnlockRelationOid(matrel_oid, AccessExclusiveLock);
+}
+
+void
+SetReplicaIdentityFull(Relation rel)
+{
+	RangeVar *matrel_rv;
+	Oid namespace = RelationGetNamespace(rel);
+	char *name = RelationGetRelationName(rel);
+
+	RangeVar *cvname = makeRangeVar(get_namespace_name(namespace),
+			pstrdup(name), -1);
+
+	ContQuery *cq = GetContQueryForView(cvname);
+
+	if (!cq)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				 errmsg("continuous view \"%s\" does not exist", name)));
+	}
+
+	matrel_rv = makeRangeVar(get_namespace_name(namespace),
+			get_rel_name(cq->matrelid), -1);
+
+	set_replica_identity_full(cq->matrelid, matrel_rv);
 }
