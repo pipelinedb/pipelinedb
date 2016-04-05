@@ -526,6 +526,12 @@ cont_bgworker_main(Datum arg)
 		dsm_pin_mapping(proc->segment);
 		CommitTransactionCommand();
 	}
+	else
+	{
+		/* Continuous triggers cannot run under both these conditions */
+		if (!continuous_triggers_enabled || !XLogLogicalInfoActive())
+			return;
+	}
 
 	ereport(LOG, (errmsg("continuous query process \"%s\" running with pid %d",
 			GetContQueryProcName(proc), MyProcPid)));
