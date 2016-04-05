@@ -169,7 +169,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if ((ret = find_other_exec(argv[0], "pg_dump", PGDUMP_VERSIONSTR,
+	if ((ret = find_other_exec(argv[0], "pipeline-dump", PGDUMP_VERSIONSTR,
 							   pg_dump_bin)) < 0)
 	{
 		char		full_path[MAXPGPATH];
@@ -179,14 +179,14 @@ main(int argc, char *argv[])
 
 		if (ret == -1)
 			fprintf(stderr,
-					_("The program \"pg_dump\" is needed by %s "
+					_("The program \"pipeline-dump\" is needed by %s "
 					  "but was not found in the\n"
 					  "same directory as \"%s\".\n"
 					  "Check your installation.\n"),
 					progname, full_path);
 		else
 			fprintf(stderr,
-					_("The program \"pg_dump\" was found by \"%s\"\n"
+					_("The program \"pipeline-dump\" was found by \"%s\"\n"
 					  "but was not the same version as %s.\n"
 					  "Check your installation.\n"),
 					full_path, progname);
