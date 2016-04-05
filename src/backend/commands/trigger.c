@@ -59,7 +59,8 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 #include "utils/tuplestore.h"
-
+#include "commands/pipelinecmds.h"
+#include "access/xlog.h"
 
 /* GUC variables */
 int			SessionReplicationRole = SESSION_REPLICATION_ROLE_ORIGIN;
@@ -242,8 +243,21 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 				 errmsg("\"%s\" is a continuous transform",
 						RelationGetRelationName(rel)),
 		  errdetail("Continuous transforms don't support triggers.")));
+
 	else if (rel->rd_rel->relkind == RELKIND_CONTVIEW)
+	{
+		if (!XLogLogicalInfoActive())
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("WAL level not sufficient for using continuous triggers"),
+					 errhint("wal_level must be set to \"logical\" at server start")));
+		}
+
 		ValidateContTrigger(stmt);
+
+		SetReplicaIdentityFull(rel);
+	}
 	else
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),

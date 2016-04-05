@@ -18,6 +18,7 @@
 #include "nodes/parsenodes.h"
 #include "tcop/dest.h"
 #include "tcop/utility.h"
+#include "nodes/primnodes.h"
 
 /* guc parameter */
 extern int continuous_view_fillfactor;
@@ -36,5 +37,6 @@ extern void ExecActivateStmt(ActivateStmt *stmt, ProcessUtilityContext context);
 extern void ExecDeactivateStmt(DeactivateStmt *stmt, ProcessUtilityContext context);
 
 extern void ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring);
+extern void SetReplicaIdentityFull(Relation rel);
 
 #endif   /* PIPELINECMDS_H */
