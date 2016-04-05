@@ -70,6 +70,7 @@ struct ContQueryDatabaseMetadata
 	dsm_handle handle;
 
 	int adhoc_counter;
+	int alert_server_port;
 	/* Number of entries is equal to max_worker_processes. */
 	ContQueryProc *adhoc_procs;
 	ContQueryProc trigger_proc;

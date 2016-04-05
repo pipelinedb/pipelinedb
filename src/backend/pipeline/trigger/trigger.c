@@ -42,6 +42,7 @@
 
 /* guc */
 int alert_socket_mem;
+int alert_server_port;
 bool continuous_triggers_enabled;
 
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
@@ -188,8 +189,6 @@ trigger_main()
 	WalStream *ws;
 
 	CHECK_FOR_INTERRUPTS();
-	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
-
 	XactReadOnly = true;
 
 	pqsignal(SIGHUP, sighup_handle);
