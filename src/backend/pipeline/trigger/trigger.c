@@ -39,6 +39,7 @@
 #include "catalog/pipeline_database.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/trigger/triggerfuncs.h"
+#include <unistd.h>
 
 #define TRIGGER_PROC_NAME "pipelinedb_enterprise trigger"
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */

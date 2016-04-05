@@ -6,6 +6,7 @@ import random
 import signal
 import threading
 import time
+import sys
 
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from subprocess import check_output, CalledProcessError
@@ -195,7 +196,6 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
   result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
   assert result['count'] == expected_combiners
 
-
 def test_activate_deactivate(pipeline, clean_db):
   pipeline.create_cv('v', 'SELECT count(*) FROM stream')
   pipeline.insert('stream', ('x', ), [(1, )])
@@ -213,10 +213,13 @@ def test_activate_deactivate(pipeline, clean_db):
   except:
     pass
 
+  sys.stdout.flush()
   cur = conn.cursor()
   cur.execute('ACTIVATE')
   cur.close()
   conn.close()
+
+  time.sleep(2)
 
   pipeline.insert('stream', ('x', ), [(1, )])
   count = pipeline.execute('SELECT * FROM v').first()['count']

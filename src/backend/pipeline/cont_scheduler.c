@@ -519,10 +519,13 @@ cont_bgworker_main(Datum arg)
 			ereport(ERROR, (errmsg("continuous queries can only be run as worker or combiner processes")));
 	}
 
-	StartTransactionCommand();
-	proc->segment = dsm_attach(proc->db_meta->handle);
-	dsm_pin_mapping(proc->segment);
-	CommitTransactionCommand();
+	if (proc->type != TRIG)
+	{
+		StartTransactionCommand();
+		proc->segment = dsm_attach(proc->db_meta->handle);
+		dsm_pin_mapping(proc->segment);
+		CommitTransactionCommand();
+	}
 
 	ereport(LOG, (errmsg("continuous query process \"%s\" running with pid %d",
 			GetContQueryProcName(proc), MyProcPid)));
@@ -540,7 +543,8 @@ cont_bgworker_main(Datum arg)
 	/* Purge process level CQ stats. */
 	cq_stat_send_purge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
 
-	dsm_detach(proc->segment);
+	if (proc->type != TRIG)
+		dsm_detach(proc->segment);
 }
 
 static void
@@ -662,6 +666,23 @@ release_locks(ContQueryDatabaseMetadata *db_meta)
 }
 
 static void
+signal_database_worker(ContQueryProc *proc)
+{
+	/* Wake up processes, so they can see the terminate flag. */
+	SetLatch(proc->latch);
+
+	/* Let workers crash now as well in case we force terminate them. */
+	ChangeBackgroundWorkerRestartState(proc->bgw_handle, true, 0);
+}
+
+static void
+terminate_database_worker(ContQueryProc *proc)
+{
+	TerminateBackgroundWorker(proc->bgw_handle);
+	pfree(proc->bgw_handle);
+}
+
+static void
 terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 {
 	bool found;
@@ -672,25 +693,17 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	SpinLockAcquire(&db_meta->mutex);
 
 	for (i = 0; i < NUM_BG_WORKERS; i++)
-	{
-		ContQueryProc *proc = &db_meta->db_procs[i];
+		signal_database_worker(&db_meta->db_procs[i]);
 
-		/* Wake up processes, so they can see the terminate flag. */
-		SetLatch(proc->latch);
-
-		/* Let workers crash now as well in case we force terminate them. */
-		ChangeBackgroundWorkerRestartState(proc->bgw_handle, true, 0);
-	}
+	signal_database_worker(&db_meta->trigger_proc);
 
 	/* Wait for a bit and then force terminate any processes that are still alive. */
 	pg_usleep(Max(GetContQueryRunParams()->max_wait, MIN_WAIT_TERMINATE_MS) * 1000);
 
 	for (i = 0; i < NUM_BG_WORKERS; i++)
-	{
-		ContQueryProc *proc = &db_meta->db_procs[i];
-		TerminateBackgroundWorker(proc->bgw_handle);
-		pfree(proc->bgw_handle);
-	}
+		terminate_database_worker(&db_meta->db_procs[i]);
+
+	terminate_database_worker(&db_meta->trigger_proc);
 
 	/* XXX: Force delete segment? */
 	dsm_detach(db_meta->segment);
@@ -771,6 +784,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 	success &= run_cont_bgworker(proc);
 
+	/* Start a single trigger process */
 	proc = &db_meta->trigger_proc;
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
