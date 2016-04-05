@@ -34,7 +34,6 @@
 
 #include "utils/memutils.h"
 #include "pipeline/trigger/mirror_ringbuf.h"
-#include "pipeline/trigger/config.h"
 #include "pipeline/trigger/triggerfuncs.h"
 #include "access/xlog_internal.h"
 #include "miscadmin.h"

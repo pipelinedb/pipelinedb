@@ -194,7 +194,7 @@ class PipelineDB(object):
           _t = 'VIEW' if query['type'] == 'v' else 'TRANSFORM'
           self.execute('DROP CONTINUOUS %s %s' % (_t, query['name']))
 
-    def create_cv_trigger(self, name, ttype, view, when, proc):
+    def create_cv_trigger(self, name, view, when, proc, ttype='INSERT OR UPDATE'):
         """
         Create a trigger on a continuous view
         """

@@ -13,7 +13,6 @@
 #include "pipeline/trigger/batching.h"
 #include "catalog/pipeline_query.h"
 #include "commands/trigger.h"
-#include "pipeline/trigger/config.h"
 #include "executor/tstoreReceiver.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -41,7 +40,11 @@
 #include "pipeline/trigger/triggerfuncs.h"
 #include "catalog/pg_trigger.h"
 
-#define TRIGGER_PROC_NAME "pipelinedb_enterprise trigger"
+/* guc */
+int alert_socket_mem;
+int alert_server_port;
+bool continuous_triggers_enabled;
+
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
 
 AlertServer *MyAlertServer = NULL;
@@ -186,8 +189,6 @@ trigger_main()
 	WalStream *ws;
 
 	CHECK_FOR_INTERRUPTS();
-	elog(LOG, "%s process running with pid %d", TRIGGER_PROC_NAME, MyProcPid);
-
 	XactReadOnly = true;
 
 	pqsignal(SIGHUP, sighup_handle);
