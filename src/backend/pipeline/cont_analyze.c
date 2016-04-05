@@ -18,6 +18,7 @@
 #include "catalog/namespace.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_query.h"
@@ -3896,4 +3897,32 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 		/* This is a hack to specify the step factor, but at the same time indicate that it wasn't explicitly specified */
 		select->swStepFactor = 100 + sliding_window_step_factor;
 	}
+}
+
+void
+ValidateContTrigger(CreateTrigStmt *stmt)
+{
+	if (!stmt->row)
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("\"%s\" is a continuous view", stmt->relation->relname),
+				 errdetail("Continuous views can only have row-level AFTER triggers.")));
+
+	if (TRIGGER_FOR_TRUNCATE(stmt->events))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				errmsg("\"%s\" is a continuous view", stmt->relation->relname),
+				errdetail("Continuous views cannot have TRUNCATE triggers.")));
+
+	if (!TRIGGER_FOR_AFTER(stmt->timing))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				errmsg("\"%s\" is a continuous view", stmt->relation->relname),
+				errdetail("Continuous views can only have AFTER triggers.")));
+
+	if (TRIGGER_FOR_DELETE(stmt->events) && !GetGCFlag(stmt->relation))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				errmsg("\"%s\" is not a sliding window continuous view", stmt->relation->relname),
+				errdetail("Only sliding window continuous views can have DELETE triggers.")));
 }

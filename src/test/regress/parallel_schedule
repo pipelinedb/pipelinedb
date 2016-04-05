@@ -180,7 +180,7 @@ test: create_combinable_agg pipeline_regress cont_fss_agg cont_matrel cont_set_a
 # ----------
 # Another group of parallel tests
 # ----------
-test: cont_transform
+test: cont_transform cont_trigger
 
 # ----------
 # Another group of parallel tests

@@ -42,6 +42,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parsetree.h"
 #include "pgstat.h"
+#include "pipeline/cont_analyze.h"
 #include "rewrite/rewriteManip.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
@@ -241,7 +242,9 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 				 errmsg("\"%s\" is a continuous transform",
 						RelationGetRelationName(rel)),
 		  errdetail("Continuous transforms don't support triggers.")));
-	else if (rel->rd_rel->relkind != RELKIND_CONTVIEW)
+	else if (rel->rd_rel->relkind == RELKIND_CONTVIEW)
+		ValidateContTrigger(stmt);
+	else
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table or view",

@@ -1,0 +1,14 @@
+CREATE CONTINUOUS VIEW cont_trigger AS SELECT count(*) FROM stream;
+-- Invalid triggers
+CREATE TRIGGER cont_tg BEFORE INSERT ON cont_trigger FOR EACH ROW EXECUTE PROCEDURE pipeline_stream_insert();
+ERROR:  "cont_trigger" is a continuous view
+DETAIL:  Continuous views can only have AFTER triggers.
+CREATE TRIGGER cont_tg AFTER DELETE ON cont_trigger FOR EACH ROW EXECUTE PROCEDURE pipeline_stream_insert();
+ERROR:  "cont_trigger" is not a sliding window continuous view
+DETAIL:  Only sliding window continuous views can have DELETE triggers.
+CREATE TRIGGER cont_tg AFTER INSERT ON cont_trigger FOR EACH STATEMENT EXECUTE PROCEDURE pipeline_stream_insert();
+ERROR:  "cont_trigger" is a continuous view
+DETAIL:  Continuous views can only have row-level AFTER triggers.
+CREATE TRIGGER cont_tg AFTER TRUNCATE ON cont_trigger FOR EACH ROW EXECUTE PROCEDURE pipeline_stream_insert();
+ERROR:  "cont_trigger" is a continuous view
+DETAIL:  Continuous views cannot have TRUNCATE triggers.
