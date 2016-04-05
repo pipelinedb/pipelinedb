@@ -246,16 +246,7 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 
 	else if (rel->rd_rel->relkind == RELKIND_CONTVIEW)
 	{
-		if (!XLogLogicalInfoActive())
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-					 errmsg("WAL level not sufficient for using continuous triggers"),
-					 errhint("wal_level must be set to \"logical\" at server start")));
-		}
-
 		ValidateContTrigger(stmt);
-
 		SetReplicaIdentityFull(rel);
 	}
 	else

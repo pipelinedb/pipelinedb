@@ -15,6 +15,7 @@
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/sysattr.h"
+#include "access/xlog.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pg_proc.h"
@@ -49,6 +50,7 @@
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
+#include "pipeline/trigger/trigger.h"
 #include "rewrite/rewriteHandler.h"
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
@@ -3902,6 +3904,22 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 void
 ValidateContTrigger(CreateTrigStmt *stmt)
 {
+	if (!continuous_triggers_enabled)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("triggers on continuous views are not enabled"),
+				 errhint("Set continuous_triggers_enabled to \"on\" at server startup.")));
+	}
+
+	if (!XLogLogicalInfoActive())
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("WAL level not sufficient for using continuous triggers"),
+				 errhint("Continuous triggers require wal_level \"logical\".")));
+	}
+
 	if (!stmt->row)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),

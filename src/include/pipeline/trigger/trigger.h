@@ -20,6 +20,9 @@
 #include "executor/execdesc.h"
 #include "timestamp_set.h"
 
+extern int alert_socket_mem;
+extern bool continuous_triggers_enabled;
+
 typedef enum TriggerProcessChangeType
 {
 	TRIGGER_PROCESS_CHANGE_INSERT,

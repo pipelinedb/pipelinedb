@@ -13,7 +13,6 @@
 #include "pipeline/trigger/batching.h"
 #include "catalog/pipeline_query.h"
 #include "commands/trigger.h"
-#include "pipeline/trigger/config.h"
 #include "executor/tstoreReceiver.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -40,6 +39,10 @@
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/trigger/triggerfuncs.h"
 #include "catalog/pg_trigger.h"
+
+/* guc */
+int alert_socket_mem;
+bool continuous_triggers_enabled;
 
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
 
@@ -213,7 +216,7 @@ trigger_main()
 		{
 			synchronize(state);
 			state->dirty_syscache = true;
-			got_sighup = 1;
+			got_sighup = 0;
 		}
 
 		trigger_do_periodic(state);
@@ -397,20 +400,6 @@ exec_trigger_proc(TriggerData *tcontext, FmgrInfo *finfo,
 							 InvalidOid, (Node *) tcontext, NULL);
 
 	pgstat_init_function_usage(&fcinfo, &fcusage);
-
-
-//	oData(fcinfo, finfo, 0,
-//			InvalidOid, (Node *) trigdata, NULL);
-//
-//	pgstat_init_function_usage(&fcinfo, &fcusage);
-//
-//	MyTriggerDepth++;
-//	PG_TRY();
-//	{
-//		result = FunctionCallInvoke(&fcinfo);
-//	}
-//	PG_CATCH();
-
 
 	PG_TRY();
 	{
