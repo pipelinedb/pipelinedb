@@ -58,6 +58,7 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 #include "utils/tuplestore.h"
+#include "commands/pipelinecmds.h"
 
 
 /* GUC variables */
@@ -241,7 +242,12 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 				 errmsg("\"%s\" is a continuous transform",
 						RelationGetRelationName(rel)),
 		  errdetail("Continuous transforms don't support triggers.")));
-	else if (rel->rd_rel->relkind != RELKIND_CONTVIEW)
+
+	else if (rel->rd_rel->relkind == RELKIND_CONTVIEW)
+	{
+		SetReplicaIdentityFull(rel);
+	}
+	else
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table or view",
