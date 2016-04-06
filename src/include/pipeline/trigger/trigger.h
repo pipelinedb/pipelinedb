@@ -101,7 +101,7 @@ typedef void (*TrigFunc)(TriggerCacheEntry *entry, Relation rel,
 			HeapTuple old_tup,
 			HeapTuple new_tup);
 
-typedef struct TriggerCacheEntry
+struct TriggerCacheEntry
 {
 	Oid matrelid;
 	Oid cvrelid;
@@ -141,7 +141,7 @@ typedef struct TriggerCacheEntry
 
 	TrigFunc trig_func;
 
-} TriggerCacheEntry;
+};
 
 typedef struct ViewInfo
 {
