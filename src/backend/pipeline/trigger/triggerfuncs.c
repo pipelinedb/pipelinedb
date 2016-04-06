@@ -168,7 +168,7 @@ read_file(StringInfo out, const char* fname)
  * internal state of the trigger procs.
  */
 static void
-hup_trigger_procs()
+sig_trigger_proc(int sig)
 {
    StringInfo cmdline;
    DIR *d;
@@ -188,10 +188,9 @@ hup_trigger_procs()
 	   if (strstr(cmdline->data, "bgworker: trigger"))
 	   {
 		   int pid = atoi(e->d_name);
-		   kill(pid, SIGHUP);
+		   kill(pid, sig);
 	   }
    }
-
    closedir(d);
 }
 
@@ -210,7 +209,11 @@ pipeline_trigger_debug(PG_FUNCTION_ARGS)
 	}
 	else if (strcmp(cstr, "sync") == 0)
 	{
-		hup_trigger_procs();
+		sig_trigger_proc(SIGHUP);
+	}
+	else if (strcmp(cstr, "die") == 0)
+	{
+		sig_trigger_proc(SIGTERM);
 	}
 
 	PG_RETURN_TEXT_P(CStringGetTextDatum(info->data));
