@@ -67,12 +67,16 @@ pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 {
 	if (am_cont_trigger)
 	{
+		HeapTuple new_tup = NULL;
 		TriggerData *data = (TriggerData *) (fcinfo->context);
+
 		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
-
 		resetStringInfo(f->buf);
-		tf_write_tuple(f, f->slot, f->buf, data->tg_newtuple);
 
+		new_tup = TRIGGER_FIRED_BY_INSERT(data->tg_event) ?
+			data->tg_trigtuple : data->tg_newtuple;
+
+		tf_write_tuple(f, f->slot, f->buf, new_tup);
 		alert_server_push(MyAlertServer, data->tg_trigger->tgoid, f->buf);
 	}
 	else
@@ -86,12 +90,17 @@ pipeline_test_alert_new_row(PG_FUNCTION_ARGS)
 {
 	if (am_cont_trigger)
 	{
+		HeapTuple new_tup = NULL;
 		TriggerData *data = (TriggerData *) (fcinfo->context);
+
 		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
-
 		resetStringInfo(f->buf);
-		tf_write_tuple(f, f->slot, f->buf, data->tg_newtuple);
 
+		new_tup = TRIGGER_FIRED_BY_INSERT(data->tg_event) ?
+			data->tg_trigtuple : data->tg_newtuple;
+
+		tf_write_tuple(f, f->slot, f->buf, new_tup);
+		alert_server_push(MyAlertServer, data->tg_trigger->tgoid, f->buf);
 		write_to_file(f->buf);
 	}
 	else
@@ -163,7 +172,7 @@ read_file(StringInfo out, const char* fname)
  * internal state of the trigger procs.
  */
 static void
-hup_trigger_procs()
+sig_trigger_proc(int sig)
 {
    StringInfo cmdline;
    DIR *d;
@@ -183,10 +192,9 @@ hup_trigger_procs()
 	   if (strstr(cmdline->data, "bgworker: trigger"))
 	   {
 		   int pid = atoi(e->d_name);
-		   kill(pid, SIGHUP);
+		   kill(pid, sig);
 	   }
    }
-
    closedir(d);
 }
 
@@ -203,9 +211,9 @@ pipeline_trigger_debug(PG_FUNCTION_ARGS)
 	{
 		trigger_testing_setup();
 	}
-	else if (strcmp(cstr, "sync") == 0)
+	else if (strcmp(cstr, "die") == 0)
 	{
-		hup_trigger_procs();
+		sig_trigger_proc(SIGTERM);
 	}
 
 	PG_RETURN_TEXT_P(CStringGetTextDatum(info->data));

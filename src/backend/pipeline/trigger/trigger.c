@@ -49,19 +49,17 @@ bool continuous_triggers_enabled;
 
 AlertServer *MyAlertServer = NULL;
 
-volatile sig_atomic_t got_SIGUP = false;
 volatile sig_atomic_t got_SIGTERM = false;
-
-static void
-sighup_handle(int action)
-{
-	got_SIGUP = true;
-}
 
 static void
 sigterm_handle(int action)
 {
+	int save_errno = errno;
+
 	got_SIGTERM = true;
+	SetLatch(MyLatch);
+
+	errno = save_errno;
 }
 
 static void
@@ -187,11 +185,10 @@ trigger_main()
 {
 	TriggerProcessState *state;
 	WalStream *ws;
+	bool saw_catalog_changes = false;
 
 	CHECK_FOR_INTERRUPTS();
-	XactReadOnly = true;
 
-	pqsignal(SIGHUP, sighup_handle);
 	pqsignal(SIGTERM, sigterm_handle);
 	wal_init();
 
@@ -209,15 +206,16 @@ trigger_main()
 			break;
 
 		check_syscache_dirty(state);
-		wal_stream_read(ws, &state->dirty_syscache);
+		wal_stream_read(ws, &saw_catalog_changes);
 
 		check_syscache_dirty(state);
 
-		if (got_SIGUP)
+		if (saw_catalog_changes)
 		{
+			InvalidateSystemCaches();
 			synchronize(state);
 			state->dirty_syscache = true;
-			got_SIGUP = false;
+			saw_catalog_changes = false;
 		}
 
 		trigger_do_periodic(state);
@@ -465,11 +463,21 @@ fire_triggers(TriggerCacheEntry *entry, Relation rel,
 	}
 
 	context.type = T_TriggerData;
-	context.tg_event = trig_action;
+	context.tg_event = TRIGGER_EVENT_ROW | trig_action;
 	context.tg_relation = rel;
-	context.tg_trigtuple = old_tup;
-	context.tg_newtuple = new_tup;
 	context.tg_newtuplebuf = InvalidBuffer;
+	context.tg_trigtuplebuf = InvalidBuffer;
+
+	if (TRIGGER_FIRED_BY_INSERT(context.tg_event))
+	{
+		context.tg_trigtuple = new_tup;
+		context.tg_newtuple = old_tup;
+	}
+	else if (TRIGGER_FIRED_BY_UPDATE(context.tg_event))
+	{
+		context.tg_newtuple = new_tup;
+		context.tg_trigtuple = old_tup;
+	}
 
 	dlist_foreach(iter, &entry->triggers)
 	{
