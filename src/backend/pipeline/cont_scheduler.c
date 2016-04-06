@@ -551,7 +551,14 @@ cont_bgworker_main(Datum arg)
 	if (proc->type != TRIG)
 		dsm_detach(proc->segment);
 
-	ereport(LOG, (errmsg("continuous query process \"%s\" shutting down", GetContQueryProcName(proc))));
+	/* If this isn't a clean termination, exit with a non-zero status code */
+	if (!proc->db_meta->terminate)
+	{
+		ereport(LOG, (errmsg("continuous query process \"%s\" was killed", GetContQueryProcName(proc))));
+		proc_exit(1);
+	}
+	else
+		ereport(LOG, (errmsg("continuous query process \"%s\" shutting down", GetContQueryProcName(proc))));
 }
 
 static void
