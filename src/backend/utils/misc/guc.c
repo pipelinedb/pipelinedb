@@ -3606,15 +3606,6 @@ static struct config_string ConfigureNamesString[] =
 		NULL,
 		NULL, NULL, NULL,
 	},
-	{
-		{"alert_server_address", PGC_POSTMASTER, CUSTOM_OPTIONS,
-			gettext_noop("Sets the hostname returned to alert clients."),
-			NULL
-		},
-		&alert_server_address,
-		"localhost",
-		NULL, NULL, NULL
-	},
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, NULL, NULL, NULL, NULL
