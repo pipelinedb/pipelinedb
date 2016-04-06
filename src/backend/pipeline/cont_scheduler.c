@@ -550,6 +550,8 @@ cont_bgworker_main(Datum arg)
 
 	if (proc->type != TRIG)
 		dsm_detach(proc->segment);
+
+	ereport(LOG, (errmsg("continuous query process \"%s\" shutting down", GetContQueryProcName(proc))));
 }
 
 static void
@@ -604,7 +606,7 @@ run_cont_bgworker(ContQueryProc *proc)
 			BGWORKER_IS_CONT_QUERY_PROC);
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	worker.bgw_main = cont_bgworker_main;
-	worker.bgw_notify_pid = -1;
+	worker.bgw_notify_pid = 0;
 	worker.bgw_restart_time = 1; /* recover in 1s */
 	worker.bgw_let_crash = false;
 	worker.bgw_main_arg = PointerGetDatum(proc);
@@ -671,16 +673,6 @@ release_locks(ContQueryDatabaseMetadata *db_meta)
 }
 
 static void
-signal_database_worker(ContQueryProc *proc)
-{
-	/* Wake up processes, so they can see the terminate flag. */
-	SetLatch(proc->latch);
-
-	/* Let workers crash now as well in case we force terminate them. */
-	ChangeBackgroundWorkerRestartState(proc->bgw_handle, true, 0);
-}
-
-static void
 terminate_database_worker(ContQueryProc *proc)
 {
 	TerminateBackgroundWorker(proc->bgw_handle);
@@ -696,14 +688,6 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	elog(LOG, "terminating continuous query processes for database: \"%s\"", NameStr(db_meta->db_name));
 
 	SpinLockAcquire(&db_meta->mutex);
-
-	for (i = 0; i < NUM_BG_WORKERS; i++)
-		signal_database_worker(&db_meta->db_procs[i]);
-
-	signal_database_worker(&db_meta->trigger_proc);
-
-	/* Wait for a bit and then force terminate any processes that are still alive. */
-	pg_usleep(Max(GetContQueryRunParams()->max_wait, MIN_WAIT_TERMINATE_MS) * 1000);
 
 	for (i = 0; i < NUM_BG_WORKERS; i++)
 		terminate_database_worker(&db_meta->db_procs[i]);

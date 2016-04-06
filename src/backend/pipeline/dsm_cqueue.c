@@ -314,17 +314,14 @@ dsm_cqueue_wait_non_empty(dsm_cqueue *cq, int timeoutms)
 	if (timeoutms > 0)
 		flags |= WL_TIMEOUT;
 
-	for (;;)
-	{
-		head = pg_atomic_read_u64(&cq->head);
+	head = pg_atomic_read_u64(&cq->head);
 
-		if (head > tail)
-			break;
+	if (head > tail)
+		return;
 
-		WaitLatch(consumer_latch, flags, timeoutms);
-		CHECK_FOR_INTERRUPTS();
-		ResetLatch(consumer_latch);
-	}
+	WaitLatch(consumer_latch, flags, timeoutms);
+	CHECK_FOR_INTERRUPTS();
+	ResetLatch(consumer_latch);
 
 	pg_atomic_write_u64(&cq->consumer_latch, (uint64) NULL);
 }

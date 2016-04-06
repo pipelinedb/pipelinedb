@@ -61,6 +61,19 @@
  */
 #define EXISTING_ADDED 0x1
 
+static volatile sig_atomic_t got_SIGTERM = false;
+
+static void
+sigterm_handle(int action)
+{
+	int	save_errno = errno;
+
+	got_SIGTERM = true;
+	SetLatch(MyLatch);
+
+	errno = save_errno;
+}
+
 typedef struct
 {
 	ContQueryState base;
@@ -890,15 +903,19 @@ ContinuousQueryCombinerMain(void)
 	bool do_commit = false;
 	long total_pending = 0;
 
+	pqsignal(SIGTERM, sigterm_handle);
+
 	/* Set the commit level */
 	synchronous_commit = continuous_query_combiner_synchronous_commit;
 
 	for (;;)
 	{
-		ContExecutorStartBatch(cont_exec);
+		CHECK_FOR_INTERRUPTS();
 
-		if (ShouldTerminateContQueryProcess())
+		if (got_SIGTERM)
 			break;
+
+		ContExecutorStartBatch(cont_exec);
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec)) != InvalidOid)
 		{
@@ -909,8 +926,6 @@ ContinuousQueryCombinerMain(void)
 			{
 				if (state == NULL)
 					goto next;
-
-				CHECK_FOR_INTERRUPTS();
 
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 

@@ -34,6 +34,19 @@
 #include "utils/resowner.h"
 #include "utils/snapmgr.h"
 
+static volatile sig_atomic_t got_SIGTERM = false;
+
+static void
+sigterm_handle(int action)
+{
+	int	save_errno = errno;
+
+	got_SIGTERM = true;
+	SetLatch(MyLatch);
+
+	errno = save_errno;
+}
+
 static ResourceOwner WorkerResOwner = NULL;
 
 typedef struct {
@@ -182,6 +195,8 @@ ContinuousQueryWorkerMain(void)
 	ContExecutor *cont_exec = ContExecutorNew(WORKER, &init_query_state);
 	Oid query_id;
 
+	pqsignal(SIGTERM, sigterm_handle);
+
 	WorkerResOwner = ResourceOwnerCreate(NULL, "WorkerResOwner");
 
 	/* Workers never perform any writes, so only need read only transactions. */
@@ -189,10 +204,12 @@ ContinuousQueryWorkerMain(void)
 
 	for (;;)
 	{
-		ContExecutorStartBatch(cont_exec);
+		CHECK_FOR_INTERRUPTS();
 
-		if (ShouldTerminateContQueryProcess())
+		if (got_SIGTERM)
 			break;
+
+		ContExecutorStartBatch(cont_exec);
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec)) != InvalidOid)
 		{
@@ -204,8 +221,6 @@ ContinuousQueryWorkerMain(void)
 			{
 				if (state == NULL)
 					goto next;
-
-				CHECK_FOR_INTERRUPTS();
 
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 				state->query_desc->estate = estate = CreateEState(state->query_desc);
@@ -261,7 +276,8 @@ next:
 		ContExecutorEndBatch(cont_exec, true);
 	}
 
-	StartTransactionCommand();
+	if (!IsTransactionState())
+		StartTransactionCommand();
 
 	for (query_id = 0; query_id < MAX_CQS; query_id++)
 	{
