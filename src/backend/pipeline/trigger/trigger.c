@@ -196,6 +196,7 @@ trigger_main()
 	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
 
 	XactReadOnly = true;
+	wal_init();
 
 	pqsignal(SIGHUP, sighup_handle);
 	pqsignal(SIGTERM, sigterm_handle);
@@ -204,20 +205,7 @@ trigger_main()
 	Assert(MyAlertServer == NULL);
 
 	MyAlertServer = state->server;
-
-	PG_TRY();
-	{
-		wal_init();
-		ws = create_wal_stream(state);
-	}
-	PG_CATCH();
-	{
-		EmitErrorReport();
-		FlushErrorState();
-
-		proc_exit(0);
-	}
-	PG_END_TRY();
+	ws = create_wal_stream(state);
 
 	for (;;)
 	{
