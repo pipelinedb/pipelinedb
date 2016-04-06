@@ -340,7 +340,7 @@ def clean_db(request):
     """
     pdb = request.module.pipeline
     request.addfinalizer(pdb.drop_all_queries)
-    pdb.execute("select pipeline_trigger_debug('setup')")
+    pdb.execute("select pipeline_trigger_debug()")
 
 @pytest.fixture(scope='module')
 def pipeline(request):
