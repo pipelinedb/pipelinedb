@@ -88,11 +88,5 @@ select pipeline_trigger_debug('die'); select pg_sleep(2);
  
 (1 row)
 
-select pg_drop_replication_slot((select slot_name from pg_replication_slots order by slot_name desc limit 1));
- pg_drop_replication_slot 
---------------------------
- 
-(1 row)
-
 \c regression
 DROP DATABASE pipeline_stats_db;
