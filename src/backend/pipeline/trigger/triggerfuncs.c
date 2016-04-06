@@ -211,10 +211,6 @@ pipeline_trigger_debug(PG_FUNCTION_ARGS)
 	{
 		trigger_testing_setup();
 	}
-	else if (strcmp(cstr, "sync") == 0)
-	{
-		sig_trigger_proc(SIGHUP);
-	}
 	else if (strcmp(cstr, "die") == 0)
 	{
 		sig_trigger_proc(SIGTERM);

@@ -50,13 +50,17 @@ char *alert_server_address;
 
 AlertServer *MyAlertServer = NULL;
 
-volatile sig_atomic_t got_SIGHUP = false;
 volatile sig_atomic_t got_SIGTERM = false;
 
 static void
 sigterm_handle(int action)
 {
+	int save_errno = errno;
+
 	got_SIGTERM = true;
+	SetLatch(MyLatch);
+
+	errno = save_errno;
 }
 
 static void
@@ -186,7 +190,6 @@ trigger_main()
 
 	CHECK_FOR_INTERRUPTS();
 
-	pqsignal(SIGHUP, sighup_handle);
 	pqsignal(SIGTERM, sigterm_handle);
 	wal_init();
 
@@ -213,7 +216,7 @@ trigger_main()
 			InvalidateSystemCaches();
 			synchronize(state);
 			state->dirty_syscache = true;
-			got_SIGHUP = false;
+			saw_catalog_changes = false;
 		}
 
 		trigger_do_periodic(state);
