@@ -1950,6 +1950,7 @@ do_help(void)
 #endif
 
 	printf(_("\nCommon options:\n"));
+	printf(_("  -d, --debug            run the server in debug mode\n"));
 	printf(_("  -D, --pgdata=DATADIR   location of the database storage area\n"));
 #if defined(WIN32) || defined(__CYGWIN__)
 	printf(_("  -e SOURCE              event source for logging when running as a service\n"));
@@ -2218,7 +2219,7 @@ main(int argc, char **argv)
 	/* process command-line options */
 	while (optind < argc)
 	{
-		while ((c = getopt_long(argc, argv, "cD:e:l:m:N:o:p:P:sS:t:U:wW", long_options, &option_index)) != -1)
+		while ((c = getopt_long(argc, argv, "cdD:e:l:m:N:o:p:P:sS:t:U:wW", long_options, &option_index)) != -1)
 		{
 			switch (c)
 			{

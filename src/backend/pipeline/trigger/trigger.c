@@ -42,6 +42,7 @@
 
 /* guc */
 int alert_socket_mem;
+int alert_server_port;
 bool continuous_triggers_enabled;
 
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
@@ -193,8 +194,6 @@ trigger_main()
 	WalStream *ws;
 
 	CHECK_FOR_INTERRUPTS();
-	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
-
 	XactReadOnly = true;
 
 	pqsignal(SIGHUP, sighup_handle);
@@ -833,7 +832,7 @@ ResetTriggerCacheEntry(TriggerProcessState *state, TriggerCacheEntry *entry)
  * Get all relevant info about the CV from the system catalog
  */
 static void
-GetCVInfo(Relation matrel, TriggerCacheEntry *entry, MemoryContext cache_cxt)
+get_cv_Info(Relation matrel, TriggerCacheEntry *entry, MemoryContext cache_cxt)
 {
 	Relation rel;
 	MemoryContext old;
@@ -968,7 +967,7 @@ do_decode_change(TriggerProcessState *state,
 	{
 		memset(entry, 0, sizeof(TriggerCacheEntry));
 		entry->matrelid = relid;
-		GetCVInfo(rel, entry, state->cache_cxt);
+		get_cv_Info(rel, entry, state->cache_cxt);
 	}
 
 	if (entry->cvrelid == InvalidOid || entry->is_adhoc)
@@ -1021,9 +1020,6 @@ trigger_plugin_decode_change(LogicalDecodingContext *ctx,
 					 old_tup, new_tup);
 }
 
-static void
-ResetTriggerCacheEntry(TriggerProcessState *state, TriggerCacheEntry *entry);
-
 /*
  * trigger_do_periodic
  */
@@ -1033,9 +1029,6 @@ trigger_do_periodic(TriggerProcessState *state)
 	trigger_cache_cleanup(state);
 	sw_vacuum(state);
 }
-
-static void
-synchronize(TriggerProcessState *state);
 
 /*
  * The remaining functions are in support of trigger_check_catalog, which is
