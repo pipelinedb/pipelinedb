@@ -26,6 +26,9 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <errno.h>
+
+#include "access/xact.h"
+#include "commands/dbcommands.h"
 #include "lib/stringinfo.h"
 #include "lib/ilist.h"
 #include "pipeline/trigger/tuple_formatter.h"
@@ -165,8 +168,14 @@ create_listen_socket()
 
 		if (rc == 0)
 		{
-			elog(LOG, "alert server %d listening on port %d",
-					MyDatabaseId, aport);
+			MemoryContext old = CurrentMemoryContext;
+
+			StartTransactionCommand();
+			elog(LOG, "continuous query process \"alert server [%s]\" listening on port %d",
+					get_database_name(MyDatabaseId), aport);
+			CommitTransactionCommand();
+
+			MemoryContextSwitchTo(old);
 			break;
 		}
 
