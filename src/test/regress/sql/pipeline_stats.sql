@@ -7,7 +7,6 @@ SELECT pg_sleep(2);
 SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 'combiner';
 SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
 
-
 DROP CONTINUOUS VIEW test_pipeline_stats0;
 
 SELECT pg_sleep(2);
@@ -29,6 +28,8 @@ SELECT pg_sleep(2);
 SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 'combiner';
 SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
 
+DEACTIVATE;
+SELECT pg_sleep(2);
+
 \c regression
 DROP DATABASE pipeline_stats_db;
-
