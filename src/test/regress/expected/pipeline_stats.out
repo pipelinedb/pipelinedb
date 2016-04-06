@@ -77,5 +77,22 @@ SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker'
        2000 |      316000 |      0
 (1 row)
 
+select pipeline_trigger_debug('die'); select pg_sleep(2);
+ pipeline_trigger_debug 
+------------------------
+ 
+(1 row)
+
+ pg_sleep 
+----------
+ 
+(1 row)
+
+select pg_drop_replication_slot((select slot_name from pg_replication_slots order by slot_name desc limit 1));
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
 \c regression
 DROP DATABASE pipeline_stats_db;

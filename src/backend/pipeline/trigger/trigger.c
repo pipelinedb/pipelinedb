@@ -44,6 +44,7 @@
 int alert_socket_mem;
 int alert_server_port;
 bool continuous_triggers_enabled;
+char *alert_server_address;
 
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
 
@@ -190,7 +191,6 @@ trigger_main()
 	bool saw_catalog_changes = false;
 
 	CHECK_FOR_INTERRUPTS();
-	XactReadOnly = true;
 
 	pqsignal(SIGHUP, sighup_handle);
 	pqsignal(SIGTERM, sigterm_handle);
@@ -467,11 +467,21 @@ fire_triggers(TriggerCacheEntry *entry, Relation rel,
 	}
 
 	context.type = T_TriggerData;
-	context.tg_event = trig_action;
+	context.tg_event = TRIGGER_EVENT_ROW | trig_action;
 	context.tg_relation = rel;
-	context.tg_trigtuple = old_tup;
-	context.tg_newtuple = new_tup;
 	context.tg_newtuplebuf = InvalidBuffer;
+	context.tg_trigtuplebuf = InvalidBuffer;
+
+	if (TRIGGER_FIRED_BY_INSERT(context.tg_event))
+	{
+		context.tg_trigtuple = new_tup;
+		context.tg_newtuple = old_tup;
+	}
+	else if (TRIGGER_FIRED_BY_UPDATE(context.tg_event))
+	{
+		context.tg_newtuple = new_tup;
+		context.tg_trigtuple = old_tup;
+	}
 
 	dlist_foreach(iter, &entry->triggers)
 	{

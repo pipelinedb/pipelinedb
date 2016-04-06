@@ -1,14 +1,132 @@
-CREATE CONTINUOUS VIEW cont_trigger AS SELECT count(*) FROM stream;
+CREATE CONTINUOUS VIEW cont_tg_cv AS SELECT count(*) FROM cont_tg_stream;
+CREATE TABLE cont_tg_t (count int);
+CREATE OR REPLACE FUNCTION cont_tg_func()
+RETURNS trigger AS
+$$
+BEGIN
+ INSERT INTO cont_tg_t(count) VALUES (NEW.count);
+ RETURN NEW;
+END;
+$$
+LANGUAGE plpgsql;
+select pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
 -- Invalid triggers
-CREATE TRIGGER cont_tg BEFORE INSERT ON cont_trigger FOR EACH ROW EXECUTE PROCEDURE pipeline_stream_insert();
-ERROR:  "cont_trigger" is a continuous view
+CREATE TRIGGER cont_tg BEFORE INSERT ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
+ERROR:  "cont_tg_cv" is a continuous view
 DETAIL:  Continuous views can only have AFTER triggers.
-CREATE TRIGGER cont_tg AFTER DELETE ON cont_trigger FOR EACH ROW EXECUTE PROCEDURE pipeline_stream_insert();
-ERROR:  "cont_trigger" is not a sliding window continuous view
+CREATE TRIGGER cont_tg AFTER DELETE ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
+ERROR:  "cont_tg_cv" is not a sliding window continuous view
 DETAIL:  Only sliding window continuous views can have DELETE triggers.
-CREATE TRIGGER cont_tg AFTER INSERT ON cont_trigger FOR EACH STATEMENT EXECUTE PROCEDURE pipeline_stream_insert();
-ERROR:  "cont_trigger" is a continuous view
+CREATE TRIGGER cont_tg AFTER INSERT ON cont_tg_cv FOR EACH STATEMENT EXECUTE PROCEDURE cont_tg_func();
+ERROR:  "cont_tg_cv" is a continuous view
 DETAIL:  Continuous views can only have row-level AFTER triggers.
-CREATE TRIGGER cont_tg AFTER TRUNCATE ON cont_trigger FOR EACH ROW EXECUTE PROCEDURE pipeline_stream_insert();
-ERROR:  "cont_trigger" is a continuous view
+CREATE TRIGGER cont_tg AFTER TRUNCATE ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
+ERROR:  "cont_tg_cv" is a continuous view
 DETAIL:  Continuous views cannot have TRUNCATE triggers.
+-- Custom trigger function
+CREATE TRIGGER cont_tg AFTER INSERT ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
+select pipeline_trigger_debug('sync');
+ pipeline_trigger_debug 
+------------------------
+ 
+(1 row)
+
+INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM cont_tg_t;
+ count 
+-------
+     3
+(1 row)
+
+-- This shouldn't do anything
+INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM cont_tg_t;
+ count 
+-------
+     3
+(1 row)
+
+DROP TRIGGER cont_tg ON cont_tg_cv;
+TRUNCATE CONTINUOUS VIEW cont_tg_cv;
+TRUNCATE TABLE cont_tg_t;
+CREATE TRIGGER cont_tg AFTER UPDATE ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
+select pipeline_trigger_debug('sync');
+ pipeline_trigger_debug 
+------------------------
+ 
+(1 row)
+
+-- This shouldn't do anything
+INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM cont_tg_t;
+ count 
+-------
+(0 rows)
+
+INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM cont_tg_t;
+ count 
+-------
+     6
+(1 row)
+
+DROP TRIGGER cont_tg ON cont_tg_cv;
+TRUNCATE CONTINUOUS VIEW cont_tg_cv;
+TRUNCATE TABLE cont_tg_t;
+CREATE TRIGGER cont_tg AFTER INSERT OR UPDATE ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
+select pipeline_trigger_debug('sync');
+ pipeline_trigger_debug 
+------------------------
+ 
+(1 row)
+
+INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM cont_tg_t;
+ count 
+-------
+     3
+(1 row)
+
+INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM cont_tg_t;
+ count 
+-------
+     3
+     6
+(2 rows)
+
