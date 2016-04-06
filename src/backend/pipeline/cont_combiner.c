@@ -38,6 +38,7 @@
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/sw_vacuum.h"
+#include "storage/ipc.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
@@ -953,9 +954,10 @@ ContinuousQueryCombinerMain(void)
 					PopActiveSnapshot();
 
 				ContExecutorPurgeQuery(cont_exec);
+				IncrementCQErrors(1);
 
 				if (!continuous_query_crash_recovery)
-					exit(1);
+					proc_exit(1);
 
 				MemoryContextSwitchTo(cont_exec->exec_cxt);
 			}

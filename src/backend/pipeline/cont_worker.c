@@ -27,6 +27,7 @@
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream_fdw.h"
 #include "pipeline/transformReceiver.h"
+#include "storage/ipc.h"
 #include "tcop/dest.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"
@@ -258,9 +259,10 @@ ContinuousQueryWorkerMain(void)
 					UnsetEStateSnapshot(estate);
 
 				ContExecutorPurgeQuery(cont_exec);
+				IncrementCQErrors(1);
 
 				if (!continuous_query_crash_recovery)
-					exit(1);
+					proc_exit(1);
 
 				AbortCurrentTransaction();
 				StartTransactionCommand();
