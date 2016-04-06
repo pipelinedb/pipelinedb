@@ -316,8 +316,6 @@ def test_create_drop_trigger(pipeline, clean_db):
   lines = pipeline.read_trigger_output()
   assert len(lines) == 3
 
-  result = pipeline.execute('SELECT count FROM cv0').first()
-
   # Recreate t1 with a differnt WHEN clause and verify that it fires again
   pipeline.create_cv_trigger('t1', 'cv0', 'new.count > 2', 'pipeline_test_alert_new_row')
   pipeline.insert('stream', ('x',), [(0,)])
