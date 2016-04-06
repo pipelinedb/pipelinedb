@@ -27,55 +27,29 @@
 static void
 acquire_my_replication_slot()
 {
-	int i;
-	bool found = false;
+	LogicalDecodingContext *cxt;
 	char slot_name[256];
 	sprintf(slot_name, "pipelinedb_trigger_%d", MyContQueryProc->db_meta->db_oid);
 
 	Assert(!MyReplicationSlot);
 
-	LWLockAcquire(ReplicationSlotControlLock, LW_SHARED);
-	for (i = 0; i < max_replication_slots; i++)
-	{
-		ReplicationSlot *s = &ReplicationSlotCtl->replication_slots[i];
-		if (s->in_use && pg_strcasecmp(slot_name, NameStr(s->data.name)) == 0)
-		{
-			found = true;
-			break;
-		}
-	}
-	LWLockRelease(ReplicationSlotControlLock);
+	ReplicationSlotCreate(slot_name, true, RS_EPHEMERAL);
 
-	if (!found)
-	{
-		LogicalDecodingContext *cxt;
-		ReplicationSlotCreate(slot_name, true, RS_EPHEMERAL);
+	cxt = CreateInitDecodingContext("", NIL,
+			logical_read_local_xlog_page, NULL, NULL);
 
-		cxt = CreateInitDecodingContext("", NIL,
-				logical_read_local_xlog_page, NULL, NULL);
+	// OutputPluginCallbacks
+	cxt->callbacks.startup_cb = trigger_plugin_decode_startup;
+	cxt->callbacks.begin_cb = trigger_plugin_decode_begin_txn;
+	cxt->callbacks.change_cb = trigger_plugin_decode_change;
+	cxt->callbacks.commit_cb = trigger_plugin_decode_commit_txn;
+	cxt->callbacks.shutdown_cb = trigger_plugin_decode_shutdown;
 
-		// OutputPluginCallbacks
+	/* Build initial snapshot, for the slot. Might take a while. */
+	DecodingContextFindStartpoint(cxt);
 
-		cxt->callbacks.startup_cb = trigger_plugin_decode_startup;
-		cxt->callbacks.begin_cb = trigger_plugin_decode_begin_txn;
-		cxt->callbacks.change_cb = trigger_plugin_decode_change;
-		cxt->callbacks.commit_cb = trigger_plugin_decode_commit_txn;
-		cxt->callbacks.shutdown_cb = trigger_plugin_decode_shutdown;
-
-		/* Build initial snapshot, for the slot. Might take a while. */
-		DecodingContextFindStartpoint(cxt);
-
-		/* don't need the decoding context anymore */
-		FreeDecodingContext(cxt);
-
-		/* Ok, slot is now fully created, mark it as persistent .*/
-		ReplicationSlotPersist();
-
-		ReplicationSlotRelease();
-	}
-
-	ReplicationSlotAcquire(slot_name);
-	Assert(MyReplicationSlot);
+	/* don't need the decoding context anymore */
+	FreeDecodingContext(cxt);
 }
 
 /*
