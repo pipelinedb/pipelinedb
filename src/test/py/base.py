@@ -199,8 +199,6 @@ class PipelineDB(object):
         Create a trigger on a continuous view
         """
         result = self.execute('CREATE TRIGGER %s AFTER %s ON %s FOR ROW WHEN (%s) EXECUTE PROCEDURE %s()' % (name, ttype, view, when, proc))
-        self.trigger_sync()
-
         return result
 
     def drop_cv_trigger(self, name, view):
@@ -208,12 +206,7 @@ class PipelineDB(object):
         Drop a trigger
         """
         result = self.execute('DROP TRIGGER %s ON %s' % (name, view))
-        self.trigger_sync()
-
         return result
-
-    def trigger_sync(self):
-        self.execute("select pipeline_trigger_debug('sync')")
 
     def create_cv(self, name, stmt, **kw):
         """
@@ -340,7 +333,7 @@ def clean_db(request):
     """
     pdb = request.module.pipeline
     request.addfinalizer(pdb.drop_all_queries)
-    pdb.execute("select pipeline_trigger_debug('setup')")
+    pdb.execute("select pipeline_trigger_debug()")
 
 @pytest.fixture(scope='module')
 def pipeline(request):
