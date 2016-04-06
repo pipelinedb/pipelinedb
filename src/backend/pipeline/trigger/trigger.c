@@ -196,10 +196,10 @@ trigger_main()
 	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
 
 	XactReadOnly = true;
-	wal_init();
 
 	pqsignal(SIGHUP, sighup_handle);
 	pqsignal(SIGTERM, sigterm_handle);
+	wal_init();
 
 	state = create_trigger_process_state();
 	Assert(MyAlertServer == NULL);

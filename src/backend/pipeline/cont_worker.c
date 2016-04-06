@@ -278,8 +278,7 @@ next:
 		ContExecutorEndBatch(cont_exec, true);
 	}
 
-	if (!IsTransactionState())
-		StartTransactionCommand();
+	StartTransactionCommand();
 
 	for (query_id = 0; query_id < MAX_CQS; query_id++)
 	{
