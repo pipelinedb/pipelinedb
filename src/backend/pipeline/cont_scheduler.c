@@ -694,6 +694,8 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 	elog(LOG, "terminating continuous query processes for database: \"%s\"", NameStr(db_meta->db_name));
 
+	db_meta->terminate = true;
+
 	SpinLockAcquire(&db_meta->mutex);
 
 	for (i = 0; i < NUM_BG_WORKERS; i++)
