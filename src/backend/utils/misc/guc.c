@@ -58,6 +58,7 @@
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream.h"
 #include "pipeline/update.h"
+#include "pipeline/trigger/trigger.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
 #include "postmaster/bgwriter.h"
@@ -89,7 +90,6 @@
 #include "utils/snapmgr.h"
 #include "utils/tzparser.h"
 #include "utils/xml.h"
-#include "pipeline/trigger/config.h"
 
 #ifndef PG_KRB_SRVTAB
 #define PG_KRB_SRVTAB ""
@@ -2855,6 +2855,15 @@ static struct config_int ConfigureNamesInt[] =
 		1024, 1024, 8192,
 		NULL, NULL, NULL
 	},
+	{
+		{"alert_server_port", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+			gettext_noop("Base port to start assigning alert servers ports."),
+			NULL
+		},
+		&alert_server_port,
+		7432, 7432, 65535,
+		NULL, NULL, NULL
+	},
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0, 0, 0, NULL, NULL, NULL
@@ -3597,7 +3606,6 @@ static struct config_string ConfigureNamesString[] =
 		NULL,
 		NULL, NULL, NULL,
 	},
-
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, NULL, NULL, NULL, NULL

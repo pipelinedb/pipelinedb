@@ -7,15 +7,6 @@
  *
  *-------------------------------------------------------------------------
  */
-#include "pipeline/trigger/triggerfuncs.h"
-#include "storage/shmem.h"
-#include "lib/stringinfo.h"
-#include "commands/trigger.h"
-#include "utils/rel.h"
-#include "nodes/print.h"
-#include "pipeline/trigger/trigger.h"
-#include "pipeline/trigger/tuple_formatter.h"
-#include "pipeline/trigger/config.h"
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -23,8 +14,20 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#include "utils/builtins.h"
+
+#include "postgres.h"
+
+#include "commands/trigger.h"
+#include "lib/stringinfo.h"
 #include "miscadmin.h"
+#include "nodes/print.h"
+#include "pipeline/trigger/trigger.h"
+#include "pipeline/trigger/triggerfuncs.h"
+#include "pipeline/trigger/tuple_formatter.h"
+#include "postmaster/postmaster.h"
+#include "utils/builtins.h"
+#include "utils/rel.h"
+#include "storage/shmem.h"
 
 static int fd = -1;
 static const char *log_file_name = "/tmp/.pipelinedb_trigger_test.log";
@@ -105,8 +108,8 @@ pipeline_get_alert_server_conn(PG_FUNCTION_ARGS)
 	ContQueryDatabaseMetadata *data =
 		GetContQueryDatabaseMetadata(MyDatabaseId);
 
-	if (data)
-		appendStringInfo(info, "tcp:localhost:%d", 7432 + data->lock_idx);
+	if (data && data->alert_server_port)
+		appendStringInfo(info, "tcp:%s:%d", ListenAddresses, data->alert_server_port);
 
 	PG_RETURN_TEXT_P(CStringGetTextDatum(info->data));
 }

@@ -4,7 +4,7 @@ CREATE OR REPLACE FUNCTION cont_tg_func()
 RETURNS trigger AS
 $$
 BEGIN
- INSERT INTO ct2 (count) VALUES (NEW.count);
+ INSERT INTO cont_tg_t (count) VALUES (NEW.count);
  RETURN NEW;
 END;
 $$

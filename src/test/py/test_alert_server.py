@@ -2,8 +2,6 @@ from base import pipeline, clean_db
 import time
 import subprocess
 import os
-import json
-import sys
 
 def parse_log_file(fn):
   with open(fn) as f:

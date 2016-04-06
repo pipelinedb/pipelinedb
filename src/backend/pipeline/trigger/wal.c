@@ -11,7 +11,6 @@
 #include "pipeline/trigger/wal.h"
 #include "replication/slot.h"
 #include "replication/logicalfuncs.h"
-#include "pipeline/trigger/config.h"
 #include "pipeline/trigger/util.h"
 #include "miscadmin.h"
 #include "replication/walsender_private.h"
@@ -151,7 +150,7 @@ poll_wal_stream(WalStream *stream)
  * wal_stream_read
  */
 void
-wal_stream_read(WalStream *stream, bool *did_read)
+wal_stream_read(WalStream *stream, bool *saw_catalog_changes)
 {
 	XLogRecord *record;
 	char *errm;
@@ -172,10 +171,12 @@ wal_stream_read(WalStream *stream, bool *did_read)
 		if (!record)
 			break;
 
+		if (TransactionIdIsValid(record->xl_xid))
+			*saw_catalog_changes |= ReorderBufferXidHasCatalogChanges(stream->logical_decoding_ctx->reorder,
+					record->xl_xid);
+
 		LogicalDecodingProcessRecord(stream->logical_decoding_ctx,
 				stream->logical_decoding_ctx->reader);
-
-		*did_read = true;
 	}
 }
 
