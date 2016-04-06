@@ -44,7 +44,6 @@
 int alert_socket_mem;
 int alert_server_port;
 bool continuous_triggers_enabled;
-char *alert_server_address;
 
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
 
