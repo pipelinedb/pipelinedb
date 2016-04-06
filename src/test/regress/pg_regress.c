@@ -2327,6 +2327,8 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				 "-c \"continuous_query_max_wait=5\" "
 				 "-c \"continuous_queries_enabled=on\" "
 				 "-c \"continuous_triggers_enabled=on\" "
+				 "-c \"max_wal_senders=4\" "
+				 "-c \"max_replication_slots=4\" "
 				 "-c \"wal_level=logical\" "
 				 "-k \"%s\" "
 				 "> \"%s/log/postmaster.log\" 2>&1",

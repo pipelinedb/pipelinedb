@@ -42,25 +42,27 @@
 
 /* guc */
 int alert_socket_mem;
+int alert_server_port;
 bool continuous_triggers_enabled;
+char *alert_server_address;
 
 #define TRIGGER_CACHE_CLEANUP_INTERVAL 1 * 1000 /* 10s */
 
 AlertServer *MyAlertServer = NULL;
 
-volatile int got_sighup = 0;
-volatile int got_sigterm = 0;
+volatile sig_atomic_t got_SIGHUP = false;
+volatile sig_atomic_t got_SIGTERM = false;
 
 static void
 sighup_handle(int action)
 {
-	got_sighup = 1;
+	got_SIGHUP = true;
 }
 
 static void
 sigterm_handle(int action)
 {
-	got_sigterm = 1;
+	got_SIGTERM = true;
 }
 
 static void
@@ -188,7 +190,6 @@ trigger_main()
 	WalStream *ws;
 
 	CHECK_FOR_INTERRUPTS();
-	alert_server_port = 7432 + MyContQueryProc->db_meta->lock_idx;
 
 	pqsignal(SIGHUP, sighup_handle);
 	pqsignal(SIGTERM, sigterm_handle);
@@ -204,7 +205,7 @@ trigger_main()
 	{
 		CHECK_FOR_INTERRUPTS();
 
-		if (got_sigterm)
+		if (got_SIGTERM)
 			break;
 
 		check_syscache_dirty(state);
@@ -212,11 +213,11 @@ trigger_main()
 
 		check_syscache_dirty(state);
 
-		if (got_sighup)
+		if (got_SIGHUP)
 		{
 			synchronize(state);
 			state->dirty_syscache = true;
-			got_sighup = 0;
+			got_SIGHUP = false;
 		}
 
 		trigger_do_periodic(state);

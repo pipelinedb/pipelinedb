@@ -9,6 +9,12 @@ BEGIN
 END;
 $$
 LANGUAGE plpgsql;
+select pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
 -- Invalid triggers
 CREATE TRIGGER cont_tg BEFORE INSERT ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
 ERROR:  "cont_tg_cv" is a continuous view

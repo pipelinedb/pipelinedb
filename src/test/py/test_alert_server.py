@@ -22,7 +22,7 @@ def shared_func(pipeline, clean_db):
 
   conn_str = pipeline.get_conn_string()
 
-  pipeline.create_cv_trigger('t0', 'insert or update', 'cv0', 'true', 'pipeline_send_alert_new_row')
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_send_alert_new_row')
 
   # recv_alerts client needs pipeline on its path
 

@@ -1642,7 +1642,7 @@ static struct config_bool ConfigureNamesBool[] =
 		 NULL,
 		},
 		&continuous_queries_enabled,
-		1,
+		false,
 		NULL, NULL, NULL
 	},
 
@@ -1691,7 +1691,7 @@ static struct config_bool ConfigureNamesBool[] =
 		 NULL,
 		},
 		&continuous_triggers_enabled,
-		1,
+		false,
 		NULL, NULL, NULL
 	},
 	/* End-of-list marker */
@@ -2313,7 +2313,7 @@ static struct config_int ConfigureNamesInt[] =
 			NULL
 		},
 		&max_wal_senders,
-		10, 0, MAX_BACKENDS,
+		0, 0, MAX_BACKENDS,
 		NULL, NULL, NULL
 	},
 
@@ -2324,7 +2324,7 @@ static struct config_int ConfigureNamesInt[] =
 			NULL
 		},
 		&max_replication_slots,
-		10, 0, MAX_BACKENDS /* XXX? */ ,
+		0, 0, MAX_BACKENDS /* XXX? */ ,
 		NULL, NULL, NULL
 	},
 
@@ -2853,6 +2853,15 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&alert_socket_mem,
 		1024, 1024, 8192,
+		NULL, NULL, NULL
+	},
+	{
+		{"alert_server_port", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+			gettext_noop("Base port to start assigning alert servers ports."),
+			NULL
+		},
+		&alert_server_port,
+		7432, 7432, 65535,
 		NULL, NULL, NULL
 	},
 	/* End-of-list marker */
@@ -3597,7 +3606,15 @@ static struct config_string ConfigureNamesString[] =
 		NULL,
 		NULL, NULL, NULL,
 	},
-
+	{
+		{"alert_server_address", PGC_POSTMASTER, CUSTOM_OPTIONS,
+			gettext_noop("Sets the hostname returned to alert clients."),
+			NULL
+		},
+		&alert_server_address,
+		"localhost",
+		NULL, NULL, NULL
+	},
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, NULL, NULL, NULL, NULL
@@ -3789,7 +3806,7 @@ static struct config_enum ConfigureNamesEnum[] =
 			NULL
 		},
 		&wal_level,
-		WAL_LEVEL_LOGICAL, wal_level_options,
+		WAL_LEVEL_MINIMAL, wal_level_options,
 		NULL, NULL, NULL
 	},
 

@@ -10,6 +10,8 @@ END;
 $$
 LANGUAGE plpgsql;
 
+select pg_sleep(2);
+
 -- Invalid triggers
 CREATE TRIGGER cont_tg BEFORE INSERT ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
 CREATE TRIGGER cont_tg AFTER DELETE ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();

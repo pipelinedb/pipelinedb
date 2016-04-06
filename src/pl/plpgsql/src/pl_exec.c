@@ -608,8 +608,6 @@ plpgsql_exec_trigger(PLpgSQL_function *func,
 	plerrcontext.previous = error_context_stack;
 	error_context_stack = &plerrcontext;
 
-	elog(LOG, "exec trig %d", trigdata->tg_event);
-
 	/*
 	 * Make local execution copies of all the datums
 	 */
@@ -637,7 +635,6 @@ plpgsql_exec_trigger(PLpgSQL_function *func,
 
 	if (!TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
 	{
-		elog(LOG, "huh %d", trigdata->tg_event);
 		/*
 		 * Per-statement triggers don't use OLD/NEW variables
 		 */
@@ -648,18 +645,14 @@ plpgsql_exec_trigger(PLpgSQL_function *func,
 	{
 		rec_new->tup = trigdata->tg_trigtuple;
 		rec_old->tup = NULL;
-
-		elog(LOG, "hello1 newtup %p", rec_new->tup);
 	}
 	else if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
 	{
-		elog(LOG, "hello2");
 		rec_new->tup = trigdata->tg_newtuple;
 		rec_old->tup = trigdata->tg_trigtuple;
 	}
 	else if (TRIGGER_FIRED_BY_DELETE(trigdata->tg_event))
 	{
-		elog(LOG, "hello3");
 		rec_new->tup = NULL;
 		rec_old->tup = trigdata->tg_trigtuple;
 	}
@@ -2762,20 +2755,13 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 					PLpgSQL_rec *rec = (PLpgSQL_rec *) retvar;
 					TupleConversionMap *tupmap;
 
-					elog(LOG, "derp1");
-
 					if (!HeapTupleIsValid(rec->tup))
-					{
-						elog(LOG, "derp2");
 						ereport(ERROR,
 						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						   errmsg("record \"%s\" is not assigned yet",
 								  rec->refname),
 						errdetail("The tuple structure of a not-yet-assigned"
 								  " record is indeterminate.")));
-
-					}
-
 					tupmap = convert_tuples_by_position(rec->tupdesc,
 														tupdesc,
 														gettext_noop("wrong record type supplied in RETURN NEXT"));
@@ -4443,15 +4429,11 @@ exec_assign_value(PLpgSQL_execstate *estate,
 				 * structure.
 				 */
 				if (!HeapTupleIsValid(rec->tup))
-				{
-					elog(LOG, "wtff");
 					ereport(ERROR,
 						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						   errmsg("record \"%s\" is not assigned yet",
 								  rec->refname),
 						   errdetail("The tuple structure of a not-yet-assigned record is indeterminate.")));
-
-				}
 
 				/*
 				 * Get the number of the records field to change and the
@@ -4775,14 +4757,11 @@ exec_eval_datum(PLpgSQL_execstate *estate,
 				PLpgSQL_rec *rec = (PLpgSQL_rec *) datum;
 
 				if (!HeapTupleIsValid(rec->tup))
-				{
-					elog(LOG, "fucz");
 					ereport(ERROR,
 						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						   errmsg("record \"%s\" is not assigned yet",
 								  rec->refname),
 						   errdetail("The tuple structure of a not-yet-assigned record is indeterminate.")));
-				}
 				Assert(rec->tupdesc != NULL);
 				/* Make sure we have a valid type/typmod setting */
 				BlessTupleDesc(rec->tupdesc);
@@ -4804,14 +4783,11 @@ exec_eval_datum(PLpgSQL_execstate *estate,
 
 				rec = (PLpgSQL_rec *) (estate->datums[recfield->recparentno]);
 				if (!HeapTupleIsValid(rec->tup))
-				{
-					elog(LOG, "fuxor");
 					ereport(ERROR,
 						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						   errmsg("record \"%s\" is not assigned yet",
 								  rec->refname),
 						   errdetail("The tuple structure of a not-yet-assigned record is indeterminate.")));
-				}
 				fno = SPI_fnumber(rec->tupdesc, recfield->fieldname);
 				if (fno == SPI_ERROR_NOATTRIBUTE)
 					ereport(ERROR,
