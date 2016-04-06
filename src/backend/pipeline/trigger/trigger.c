@@ -49,8 +49,8 @@ bool continuous_triggers_enabled;
 
 AlertServer *MyAlertServer = NULL;
 
-volatile sig_atomic_t got_SIGUP = false;
-volatile sig_atomic_t got_SIGTERM = false;
+static volatile sig_atomic_t got_SIGUP = false;
+static volatile sig_atomic_t got_SIGTERM = false;
 
 static void
 sighup_handle(int action)
@@ -61,7 +61,12 @@ sighup_handle(int action)
 static void
 sigterm_handle(int action)
 {
+	int	save_errno = errno;
+
 	got_SIGTERM = true;
+	SetLatch(MyLatch);
+
+	errno = save_errno;
 }
 
 static void
@@ -227,7 +232,6 @@ trigger_main()
 
 	destroy_trigger_process_state(state);
 	destroy_wal_stream(ws);
-	proc_exit(0);
 }
 
 static inline List *

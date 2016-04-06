@@ -27,12 +27,26 @@
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream_fdw.h"
 #include "pipeline/transformReceiver.h"
+#include "storage/ipc.h"
 #include "tcop/dest.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "utils/resowner.h"
 #include "utils/snapmgr.h"
+
+static volatile sig_atomic_t got_SIGTERM = false;
+
+static void
+sigterm_handle(int action)
+{
+	int	save_errno = errno;
+
+	got_SIGTERM = true;
+	SetLatch(MyLatch);
+
+	errno = save_errno;
+}
 
 static ResourceOwner WorkerResOwner = NULL;
 
@@ -182,6 +196,8 @@ ContinuousQueryWorkerMain(void)
 	ContExecutor *cont_exec = ContExecutorNew(WORKER, &init_query_state);
 	Oid query_id;
 
+	pqsignal(SIGTERM, sigterm_handle);
+
 	WorkerResOwner = ResourceOwnerCreate(NULL, "WorkerResOwner");
 
 	/* Workers never perform any writes, so only need read only transactions. */
@@ -189,10 +205,12 @@ ContinuousQueryWorkerMain(void)
 
 	for (;;)
 	{
-		ContExecutorStartBatch(cont_exec);
+		CHECK_FOR_INTERRUPTS();
 
-		if (ShouldTerminateContQueryProcess())
+		if (got_SIGTERM)
 			break;
+
+		ContExecutorStartBatch(cont_exec);
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec)) != InvalidOid)
 		{
@@ -204,8 +222,6 @@ ContinuousQueryWorkerMain(void)
 			{
 				if (state == NULL)
 					goto next;
-
-				CHECK_FOR_INTERRUPTS();
 
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 				state->query_desc->estate = estate = CreateEState(state->query_desc);
@@ -243,9 +259,10 @@ ContinuousQueryWorkerMain(void)
 					UnsetEStateSnapshot(estate);
 
 				ContExecutorPurgeQuery(cont_exec);
+				IncrementCQErrors(1);
 
 				if (!continuous_query_crash_recovery)
-					exit(1);
+					proc_exit(1);
 
 				AbortCurrentTransaction();
 				StartTransactionCommand();

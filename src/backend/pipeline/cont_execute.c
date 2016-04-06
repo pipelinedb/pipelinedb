@@ -796,8 +796,6 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 	}
 
 	MemoryContextSwitchTo(old);
-
-	IncrementCQErrors(1);
 }
 
 static inline bool
