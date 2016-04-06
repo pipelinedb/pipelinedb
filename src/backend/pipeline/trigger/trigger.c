@@ -199,13 +199,25 @@ trigger_main()
 
 	pqsignal(SIGHUP, sighup_handle);
 	pqsignal(SIGTERM, sigterm_handle);
-	wal_init();
 
 	state = create_trigger_process_state();
 	Assert(MyAlertServer == NULL);
 
 	MyAlertServer = state->server;
-	ws = create_wal_stream(state);
+
+	PG_TRY();
+	{
+		wal_init();
+		ws = create_wal_stream(state);
+	}
+	PG_CATCH();
+	{
+		EmitErrorReport();
+		FlushErrorState();
+
+		proc_exit(0);
+	}
+	PG_END_TRY();
 
 	for (;;)
 	{
