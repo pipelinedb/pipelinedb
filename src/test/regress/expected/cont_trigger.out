@@ -4,7 +4,7 @@ CREATE OR REPLACE FUNCTION cont_tg_func()
 RETURNS trigger AS
 $$
 BEGIN
- INSERT INTO cont_tg_t(count) VALUES (NEW.count);
+ INSERT INTO cont_tg_t (count) VALUES (NEW.count);
  RETURN NEW;
 END;
 $$
@@ -30,12 +30,6 @@ ERROR:  "cont_tg_cv" is a continuous view
 DETAIL:  Continuous views cannot have TRUNCATE triggers.
 -- Custom trigger function
 CREATE TRIGGER cont_tg AFTER INSERT ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
-select pipeline_trigger_debug('sync');
- pipeline_trigger_debug 
-------------------------
- 
-(1 row)
-
 INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
  pg_sleep 
 ----------
@@ -65,12 +59,6 @@ DROP TRIGGER cont_tg ON cont_tg_cv;
 TRUNCATE CONTINUOUS VIEW cont_tg_cv;
 TRUNCATE TABLE cont_tg_t;
 CREATE TRIGGER cont_tg AFTER UPDATE ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
-select pipeline_trigger_debug('sync');
- pipeline_trigger_debug 
-------------------------
- 
-(1 row)
-
 -- This shouldn't do anything
 INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
  pg_sleep 
@@ -99,12 +87,6 @@ DROP TRIGGER cont_tg ON cont_tg_cv;
 TRUNCATE CONTINUOUS VIEW cont_tg_cv;
 TRUNCATE TABLE cont_tg_t;
 CREATE TRIGGER cont_tg AFTER INSERT OR UPDATE ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
-select pipeline_trigger_debug('sync');
- pipeline_trigger_debug 
-------------------------
- 
-(1 row)
-
 INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
  pg_sleep 
 ----------

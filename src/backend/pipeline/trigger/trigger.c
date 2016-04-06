@@ -54,12 +54,6 @@ volatile sig_atomic_t got_SIGHUP = false;
 volatile sig_atomic_t got_SIGTERM = false;
 
 static void
-sighup_handle(int action)
-{
-	got_SIGHUP = true;
-}
-
-static void
 sigterm_handle(int action)
 {
 	got_SIGTERM = true;
@@ -214,7 +208,7 @@ trigger_main()
 
 		check_syscache_dirty(state);
 
-		if (got_SIGHUP || saw_catalog_changes)
+		if (saw_catalog_changes)
 		{
 			InvalidateSystemCaches();
 			synchronize(state);
