@@ -65,7 +65,7 @@ write_to_file(StringInfo info)
 Datum
 pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 {
-	if (am_cont_trigger)
+	if (IsContQueryTriggerProcess())
 	{
 		HeapTuple new_tup = NULL;
 		TriggerData *data = (TriggerData *) (fcinfo->context);
@@ -88,7 +88,7 @@ pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 Datum
 pipeline_test_alert_new_row(PG_FUNCTION_ARGS)
 {
-	if (am_cont_trigger)
+	if (IsContQueryTriggerProcess())
 	{
 		HeapTuple new_tup = NULL;
 		TriggerData *data = (TriggerData *) (fcinfo->context);

@@ -2656,7 +2656,7 @@ CountOtherDBBackends(Oid databaseId, int *nbackends, int *nprepared)
 	int			autovac_pids[MAXAUTOVACPIDS];
 	int			tries;
 
-	SignalContQuerySchedulerTerminate(databaseId);
+	SignalContQuerySchedulerDropDB(databaseId);
 
 	/* 50 tries with 100ms sleep between tries makes 5 sec total wait */
 	for (tries = 0; tries < 50; tries++)

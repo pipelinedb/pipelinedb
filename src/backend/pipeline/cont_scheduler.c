@@ -50,28 +50,26 @@
 #include "pipeline/trigger/trigger.h"
 #include "pipeline/trigger/triggerfuncs.h"
 
-#define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
-#define INIT_PROC_TABLE_SZ 4
-#define NUM_BG_WORKERS (continuous_query_num_workers + continuous_query_num_combiners)
-#define NUM_LOCKS_PER_DB (NUM_BG_WORKERS + 1) /* add a lock for all adhoc processes */
-#define MIN_WAIT_TERMINATE_MS 250
+#define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners)
+#define NUM_LOCKS_PER_DB (NUM_BG_WORKERS_PER_DB + 1) /* single lock for all adhoc processes */
 
-typedef struct
+typedef struct DatabaseEntry
 {
 	Oid oid;
 	NameData name;
 	bool active;
 } DatabaseEntry;
 
-/* per proc structures */
+static List *DatabaseList = NIL;
+
+/* per-process structures */
 ContQueryProc *MyContQueryProc = NULL;
 
 /* flags to tell if we are in a continuous query process */
 static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
 static bool am_cont_adhoc = false;
-
-bool am_cont_trigger = false;
+static bool am_cont_trigger = false;
 bool am_cont_combiner = false;
 
 /* guc parameters */
@@ -94,7 +92,6 @@ static MemoryContext ContQuerySchedulerContext;
 /* flags set by signal handlers */
 static volatile sig_atomic_t got_SIGHUP = false;
 static volatile sig_atomic_t got_SIGTERM = false;
-static volatile sig_atomic_t got_SIGUSR2 = false;
 static volatile sig_atomic_t got_SIGINT = false;
 
 typedef struct LWLockSlot
@@ -108,7 +105,7 @@ typedef struct ContQuerySchedulerShmemStruct
 {
 	pid_t pid;
 
-	HTAB *proc_table;
+	HTAB *db_table;
 
 	ContQueryRunParams params;
 
@@ -133,7 +130,7 @@ static Size
 ContQueryDatabaseMetadataSize(void)
 {
 	return (sizeof(ContQueryDatabaseMetadata) +
-			(sizeof(ContQueryProc) * NUM_BG_WORKERS) +
+			(sizeof(ContQueryProc) * NUM_BG_WORKERS_PER_DB) +
 			(sizeof(ContQueryProc) * max_worker_processes));
 }
 
@@ -154,18 +151,17 @@ ContQuerySchedulerShmemInit(void)
 
 	if (!found)
 	{
-		HASHCTL info;
+		HASHCTL ctl;
 		char *ptr;
 		int i;
 
 		MemSet(ContQuerySchedulerShmem, 0, size);
 
-		info.keysize = sizeof(Oid);
-		info.entrysize = ContQueryDatabaseMetadataSize();
-		info.hash = oid_hash;
+		ctl.keysize = sizeof(Oid);
+		ctl.entrysize = ContQueryDatabaseMetadataSize();
+		ctl.hash = oid_hash;
 
-		ContQuerySchedulerShmem->proc_table = ShmemInitHash("ContQueryDatabaseMetadata", INIT_PROC_TABLE_SZ,
-				MAX_PROC_TABLE_SZ, &info, HASH_ELEM | HASH_FUNCTION);
+		ContQuerySchedulerShmem->db_table = ShmemInitHash("ContQueryDatabaseMetadata", 4, 16, &ctl, HASH_ELEM | HASH_FUNCTION);
 
 		update_run_params();
 
@@ -239,6 +235,12 @@ bool
 IsContQueryAdhocProcess(void)
 {
 	return am_cont_adhoc;
+}
+
+bool
+IsContQueryTriggerProcess(void)
+{
+	return am_cont_trigger;
 }
 
 bool
@@ -342,20 +344,19 @@ sigterm_handler(SIGNAL_ARGS)
 	errno = save_errno;
 }
 
-/* SIGUSR2: terminate DB conns */
+/* SIGUSR2: wake up */
 static void
 sigusr2_handler(SIGNAL_ARGS)
 {
 	int save_errno = errno;
 
-	got_SIGUSR2 = true;
 	if (MyProc)
 		SetLatch(MyLatch);
 
 	errno = save_errno;
 }
 
-/* SIGINT: refresh db list */
+/* SIGINT: refresh database list */
 static void
 sigint_handler(SIGNAL_ARGS)
 {
@@ -368,13 +369,8 @@ sigint_handler(SIGNAL_ARGS)
 	errno = save_errno;
 }
 
-/*
- * get_database_list
- *
- * Returns a list of all database OIDs found in pg_database.
- */
-static List *
-get_database_list(void)
+static void
+refresh_database_list(void)
 {
 	List *dbs = NIL;
 	Relation pg_database;
@@ -447,14 +443,17 @@ get_database_list(void)
 	}
 
 	heap_endscan(scan);
-	heap_close(pipeline_database, AccessShareLock);
+	heap_close(pipeline_database, NoLock);
 
 	/* Unlock pg_database at the very end. */
-	heap_close(pg_database, AccessExclusiveLock);
+	heap_close(pg_database, NoLock);
 
 	CommitTransactionCommand();
 
-	return dbs;
+	if (DatabaseList)
+		list_free_deep(DatabaseList);
+
+	DatabaseList = dbs;
 }
 
 static void
@@ -464,6 +463,7 @@ purge_adhoc_queries(void)
 	Bitmapset *view_ids;
 
 	StartTransactionCommand();
+
 	view_ids = GetAdhocContinuousViewIds();
 
 	while ((id = bms_first_member(view_ids)) >= 0)
@@ -481,14 +481,15 @@ cont_bgworker_main(Datum arg)
 	void (*run) (void);
 	ContQueryProc *proc;
 
-	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
-
-	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_meta->db_name), NULL);
 #define BACKTRACE_SEGFAULTS
 #ifdef BACKTRACE_SEGFAULTS
 	pqsignal(SIGSEGV, debug_segfault);
 #endif
+
+	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
+
+	BackgroundWorkerUnblockSignals();
+	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_meta->db_name), NULL);
 
 	/* if we got a cancel signal in prior command, quit */
 	CHECK_FOR_INTERRUPTS();
@@ -512,17 +513,18 @@ cont_bgworker_main(Datum arg)
 		case ADHOC:
 			/* Clean up and die. */
 			purge_adhoc_queries();
-			proc->group_id = 0;
 			return;
 		default:
-			ereport(ERROR, (errmsg("continuous queries can only be run as worker or combiner processes")));
+			elog(ERROR, "invalid continuous query process type: %d", proc->type);
 	}
 
 	if (proc->type != TRIG)
 	{
 		StartTransactionCommand();
+
 		proc->segment = dsm_attach(proc->db_meta->handle);
 		dsm_pin_mapping(proc->segment);
+
 		CommitTransactionCommand();
 	}
 	else
@@ -532,11 +534,10 @@ cont_bgworker_main(Datum arg)
 			return;
 	}
 
-	ereport(LOG, (errmsg("continuous query process \"%s\" running with pid %d",
-			GetContQueryProcName(proc), MyProcPid)));
+	elog(LOG, "continuous query process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);
 	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(proc));
 
-	/* Be nice! - give up some CPU. */
+	/* Be nice! Give up some CPU. */
 	SetNicePriority();
 
 	/* Initialize process level CQ stats. */
@@ -554,11 +555,11 @@ cont_bgworker_main(Datum arg)
 	/* If this isn't a clean termination, exit with a non-zero status code */
 	if (!proc->db_meta->terminate)
 	{
-		ereport(LOG, (errmsg("continuous query process \"%s\" was killed", GetContQueryProcName(proc))));
+		elog(LOG, "continuous query process \"%s\" was killed", GetContQueryProcName(proc));
 		proc_exit(1);
 	}
 	else
-		ereport(LOG, (errmsg("continuous query process \"%s\" shutting down", GetContQueryProcName(proc))));
+		elog(LOG, "continuous query process \"%s\" shutting down", GetContQueryProcName(proc));
 }
 
 static void
@@ -609,8 +610,7 @@ run_cont_bgworker(ContQueryProc *proc)
 
 	strcpy(worker.bgw_name, GetContQueryProcName(proc));
 
-	worker.bgw_flags = (BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION |
-			BGWORKER_IS_CONT_QUERY_PROC);
+	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION | BGWORKER_IS_CONT_QUERY_PROC;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	worker.bgw_main = cont_bgworker_main;
 	worker.bgw_notify_pid = 0;
@@ -698,7 +698,7 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 	SpinLockAcquire(&db_meta->mutex);
 
-	for (i = 0; i < NUM_BG_WORKERS; i++)
+	for (i = 0; i < NUM_BG_WORKERS_PER_DB; i++)
 		terminate_database_worker(&db_meta->db_procs[i]);
 
 	terminate_database_worker(&db_meta->trigger_proc);
@@ -711,8 +711,7 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 	SpinLockRelease(&db_meta->mutex);
 
-	hash_search(ContQuerySchedulerShmem->proc_table, &db_meta->db_oid, HASH_REMOVE, &found);
-
+	hash_search(ContQuerySchedulerShmem->db_table, &db_meta->db_oid, HASH_REMOVE, &found);
 	Assert(found);
 }
 
@@ -732,7 +731,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	/* Create dsm_segment for all worker queues */
 	CurrentResourceOwner = ResourceOwnerCreate(NULL, "Database dsm_segment ResourceOwner");
 
-	db_meta->segment = dsm_create(continuous_query_ipc_shared_mem * 1024 * NUM_BG_WORKERS, 0);
+	db_meta->segment = dsm_create(continuous_query_ipc_shared_mem * 1024 * NUM_BG_WORKERS_PER_DB, 0);
 	dsm_pin_mapping(db_meta->segment);
 	db_meta->handle = dsm_segment_handle(db_meta->segment);
 
@@ -759,7 +758,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	}
 
 	/* Start combiner processes. */
-	for (group_id = 0; slot_idx < NUM_BG_WORKERS; slot_idx++, group_id++)
+	for (group_id = 0; slot_idx < NUM_BG_WORKERS_PER_DB; slot_idx++, group_id++)
 	{
 		proc = &db_meta->db_procs[slot_idx];
 		MemSet(proc, 0, sizeof(ContQueryProc));
@@ -801,12 +800,86 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	}
 }
 
+static void
+reaper(void)
+{
+	HASH_SEQ_STATUS status;
+	ContQueryDatabaseMetadata *db_meta;
+	ListCell *lc;
+
+	/*
+	 * Check if any database is being dropped, remove it from the DatabaseList and terminate its
+	 * worker processes.
+	 */
+	hash_seq_init(&status, ContQuerySchedulerShmem->db_table);
+	while ((db_meta = (ContQueryDatabaseMetadata *) hash_seq_search(&status)) != NULL)
+	{
+		ListCell *lc;
+
+		if (!db_meta->dropdb)
+			continue;
+
+		foreach(lc, DatabaseList)
+		{
+			DatabaseEntry *entry = lfirst(lc);
+			if (entry->oid == db_meta->db_oid)
+			{
+				DatabaseList = list_delete_ptr(DatabaseList, entry);
+				pfree(entry);
+				break;
+			}
+		}
+
+		terminate_database_workers(db_meta);
+	}
+
+	/*
+	 * Go over the list of databases and ensure that any database with continuous queries activated
+	 * has background workers running and any database with continuous queries deactivated has
+	 * no background workers running.
+	 */
+	foreach(lc, DatabaseList)
+	{
+		DatabaseEntry *db_entry = lfirst(lc);
+		bool found;
+
+		db_meta = hash_search(ContQuerySchedulerShmem->db_table,
+				&db_entry->oid, HASH_FIND, &found);
+
+		/* Continuous queries activated but no workers running? */
+		if (db_entry->active && !found)
+		{
+			char *pos;
+
+			db_meta = hash_search(ContQuerySchedulerShmem->db_table,
+					&db_entry->oid, HASH_ENTER, &found);
+			Assert(!found);
+
+			MemSet(db_meta, 0, ContQueryDatabaseMetadataSize());
+
+			db_meta->db_oid = db_entry->oid;
+			namestrcpy(&db_meta->db_name, NameStr(db_entry->name));
+			SpinLockInit(&db_meta->mutex);
+
+			pos = (char *) db_meta;
+			pos += sizeof(ContQueryDatabaseMetadata);
+			db_meta->db_procs = (ContQueryProc *) pos;
+			pos += sizeof(ContQueryProc) * NUM_BG_WORKERS_PER_DB;
+			db_meta->adhoc_procs = (ContQueryProc *) pos;
+
+			start_database_workers(db_meta);
+		}
+		/* Continuous queries disabled but workers still running? */
+		else if (!db_entry->active && found)
+			terminate_database_workers(db_meta);
+	}
+}
+
+
 void
 ContQuerySchedulerMain(int argc, char *argv[])
 {
 	sigjmp_buf local_sigjmp_buf;
-	List *dbs = NIL;
-	ListCell *lc;
 
 	/* we are a postmaster subprocess now */
 	IsUnderPostmaster = true;
@@ -932,48 +1005,19 @@ ContQuerySchedulerMain(int argc, char *argv[])
 
 	ContQuerySchedulerShmem->pid = MyProcPid;
 
-	dbs = get_database_list();
-	if (list_length(dbs) * (NUM_BG_WORKERS + 1) > max_worker_processes)
+	refresh_database_list();
+	if (list_length(DatabaseList) * (NUM_BG_WORKERS_PER_DB + 1) > max_worker_processes)
 		ereport(ERROR,
-				(errmsg("%d background worker slots are required but there are only %d available", list_length(dbs) * NUM_BG_WORKERS, max_worker_processes),
-						errhint("Each database requires %d background worker slots. Increase max_worker_processes to enable more capacity.", NUM_BG_WORKERS)));
+				(errmsg("%d background worker slots are required but there are only %d available",
+						list_length(DatabaseList) * NUM_BG_WORKERS_PER_DB, max_worker_processes),
+				errhint("Each database requires %d background worker slots. Increase max_worker_processes to enable more capacity.", NUM_BG_WORKERS_PER_DB)));
 
 	/* Loop forever */
 	for (;;)
 	{
 		int rc;
 
-		foreach(lc, dbs)
-		{
-			DatabaseEntry *db_entry = lfirst(lc);
-			bool found;
-			ContQueryDatabaseMetadata *db_meta = hash_search(ContQuerySchedulerShmem->proc_table,
-					&db_entry->oid, HASH_FIND, &found);
-
-			if (db_entry->active && !found)
-			{
-				char *pos;
-
-				db_meta = hash_search(ContQuerySchedulerShmem->proc_table,
-						&db_entry->oid, HASH_ENTER, &found);
-
-				MemSet(db_meta, 0, ContQueryDatabaseMetadataSize());
-
-				db_meta->db_oid = db_entry->oid;
-				namestrcpy(&db_meta->db_name, NameStr(db_entry->name));
-				SpinLockInit(&db_meta->mutex);
-
-				pos = (char *) db_meta;
-				pos += sizeof(ContQueryDatabaseMetadata);
-				db_meta->db_procs = (ContQueryProc *) pos;
-				pos += sizeof(ContQueryProc) * NUM_BG_WORKERS;
-				db_meta->adhoc_procs = (ContQueryProc *) pos;
-
-				start_database_workers(db_meta);
-			}
-			else if (!db_entry->active && found)
-				terminate_database_workers(db_meta);
-		}
+		reaper();
 
 		/*
 		 * Wait until naptime expires or we get some type of signal (all the
@@ -993,54 +1037,20 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		if (got_SIGTERM)
 			break;
 
-		/* update config? */
 		if (got_SIGHUP)
 		{
 			got_SIGHUP = false;
-			ProcessConfigFile(PGC_SIGHUP);
 
-			/* update tuning parameters, so that they can be read downstream by background processes */
+			ProcessConfigFile(PGC_SIGHUP);
 			update_run_params();
 		}
 
-		/* terminate a proc group? */
-		if (got_SIGUSR2)
-		{
-			HASH_SEQ_STATUS status;
-			ContQueryDatabaseMetadata *db_meta;
-
-			got_SIGUSR2 = false;
-
-			hash_seq_init(&status, ContQuerySchedulerShmem->proc_table);
-			while ((db_meta = (ContQueryDatabaseMetadata *) hash_seq_search(&status)) != NULL)
-			{
-				ListCell *lc;
-
-				if (!db_meta->terminate)
-					continue;
-
-				foreach(lc, dbs)
-				{
-					DatabaseEntry *entry = lfirst(lc);
-					if (entry->oid == db_meta->db_oid)
-					{
-						dbs = list_delete_ptr(dbs, entry);
-						pfree(entry);
-						break;
-					}
-				}
-
-				terminate_database_workers(db_meta);
-			}
-		}
-
-		/* refresh db list? */
+		/* refresh database list? */
 		if (got_SIGINT)
 		{
 			got_SIGINT = false;
 
-			list_free_deep(dbs);
-			dbs = get_database_list();
+			refresh_database_list();
 		}
 	}
 
@@ -1081,26 +1091,26 @@ signal_cont_query_scheduler(int signal)
 			}
 		}
 		else
-			break; /* signal sent successfully */
+			return; /* signal sent successfully */
 
 		CHECK_FOR_INTERRUPTS();
-		pg_usleep(100 * 1000); /* wait 0.1 sec, then retry */
+		pg_usleep(100 * 1000); /* wait 100ms, then retry */
 	}
 }
 
 /*
- * SignalContQuerySchedulerTerminate
+ * SignalContQuerySchedulerDropDB
  */
 void
-SignalContQuerySchedulerTerminate(Oid db_oid)
+SignalContQuerySchedulerDropDB(Oid db_oid)
 {
 	bool found;
 	ContQueryDatabaseMetadata *db_meta = (ContQueryDatabaseMetadata *) hash_search(
-			ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, &found);
+			ContQuerySchedulerShmem->db_table, &db_oid, HASH_FIND, &found);
 
 	if (found)
 	{
-		db_meta->terminate = true;
+		db_meta->dropdb = true;
 		signal_cont_query_scheduler(SIGUSR2);
 	}
 }
@@ -1110,7 +1120,7 @@ GetContQueryDatabaseMetadata(Oid db_oid)
 {
 	ContQueryDatabaseMetadata *db_meta =
 		(ContQueryDatabaseMetadata *) hash_search(
-			ContQuerySchedulerShmem->proc_table, &db_oid, HASH_FIND, NULL);
+			ContQuerySchedulerShmem->db_table, &db_oid, HASH_FIND, NULL);
 
 	return db_meta;
 }
@@ -1140,7 +1150,7 @@ AdhocContQueryProcGet(void)
 	ContQueryProc *proc = NULL;
 
 	db_meta = (ContQueryDatabaseMetadata *) hash_search(
-				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+				ContQuerySchedulerShmem->db_table, &MyDatabaseId, HASH_FIND, &found);
 
 	if (!found)
 		elog(ERROR, "failed to find database metadata for continuous queries");
@@ -1191,7 +1201,7 @@ AdhocContQueryProcRelease(ContQueryProc *proc)
 	Assert(proc->group_id > 0);
 
 	db_meta = (ContQueryDatabaseMetadata *) hash_search(
-				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+				ContQuerySchedulerShmem->db_table, &MyDatabaseId, HASH_FIND, &found);
 
 	if (!found)
 		elog(ERROR, "failed to find database metadata for continuous queries");
@@ -1213,11 +1223,11 @@ GetDatabaseDSMHandle(char *dbname)
 
 	if (dbname == NULL)
 		db_meta = (ContQueryDatabaseMetadata *) hash_search(
-				ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+				ContQuerySchedulerShmem->db_table, &MyDatabaseId, HASH_FIND, &found);
 	else
 	{
 		HASH_SEQ_STATUS scan;
-		hash_seq_init(&scan, ContQuerySchedulerShmem->proc_table);
+		hash_seq_init(&scan, ContQuerySchedulerShmem->db_table);
 		while ((db_meta = (ContQueryDatabaseMetadata *) hash_seq_search(&scan)))
 		{
 			if (pg_strcasecmp(dbname, NameStr(db_meta->db_name)) == 0)
@@ -1247,7 +1257,7 @@ GetContQueryAdhocProcs(void)
 	ContQueryProc *procs;
 
 	db_meta = (ContQueryDatabaseMetadata *) hash_search(
-			ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+			ContQuerySchedulerShmem->db_table, &MyDatabaseId, HASH_FIND, &found);
 
 	if (!found)
 		elog(ERROR, "failed to find database metadata for continuous queries");
@@ -1267,7 +1277,7 @@ GetContAdhocProcLWLock(void)
 	int lock_idx = -1;
 
 	db_meta = (ContQueryDatabaseMetadata *) hash_search(
-			ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+			ContQuerySchedulerShmem->db_table, &MyDatabaseId, HASH_FIND, &found);
 
 	if (!found)
 		elog(ERROR, "failed to find database metadata for continuous queries");
@@ -1276,7 +1286,7 @@ GetContAdhocProcLWLock(void)
 	lock_idx = db_meta->lock_idx;
 	SpinLockRelease(&db_meta->mutex);
 
-	return (LWLock *) &ContQuerySchedulerShmem->locks[lock_idx + NUM_BG_WORKERS];
+	return (LWLock *) &ContQuerySchedulerShmem->locks[lock_idx + NUM_BG_WORKERS_PER_DB];
 }
 
 bool

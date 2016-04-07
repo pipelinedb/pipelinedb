@@ -892,14 +892,18 @@ set_cq_enabled(bool value, ProcessUtilityContext context)
 	ReleaseSysCache(tup);
 	heap_close(pipeline_database, NoLock);
 
-	if (changed)
-	{
-		PopActiveSnapshot();
-		CommitTransactionCommand();
-		SignalContQuerySchedulerRefresh();
-		StartTransactionCommand();
-		PushActiveSnapshot(GetTransactionSnapshot());
-	}
+	/* If we didn't change the active state, this is a noop, just log a notice */
+	if (!changed)
+		return;
+
+	PopActiveSnapshot();
+	CommitTransactionCommand();
+
+	SignalContQuerySchedulerRefresh();
+
+
+	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 }
 
 void
