@@ -399,20 +399,10 @@ exec_trigger_proc(TriggerData *tcontext, FmgrInfo *finfo,
 
 	pgstat_init_function_usage(&fcinfo, &fcusage);
 
-	PG_TRY();
-	{
-		/* Consume return value */
-		FunctionCallInvoke(&fcinfo);
-	}
-	PG_CATCH();
-	{
-		EmitErrorReport();
-		FlushErrorState();
-	}
-	PG_END_TRY();
+	/* Any errors get handled by process_batches in batching.c */
+	FunctionCallInvoke(&fcinfo);
 
 	pgstat_end_function_usage(&fcusage, true);
-
 	MemoryContextSwitchTo(oldContext);
 }
 
