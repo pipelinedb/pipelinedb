@@ -1062,6 +1062,9 @@ get_trig_oid_from_cvrel(Relation cvrel, const char *tname)
 	TriggerDesc *desc = cvrel->trigdesc;
 	int i = 0;
 
+	if (cvrel->trigdesc == NULL)
+		return InvalidOid;
+
 	for (i = 0; i < desc->numtriggers; ++i)
 	{
 		Trigger *trigger = &desc->triggers[i];
