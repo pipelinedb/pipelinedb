@@ -26,6 +26,9 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <errno.h>
+
+#include "access/xact.h"
+#include "commands/dbcommands.h"
 #include "lib/stringinfo.h"
 #include "lib/ilist.h"
 #include "pipeline/trigger/tuple_formatter.h"
@@ -35,6 +38,8 @@
 #include "utils/memutils.h"
 #include "pipeline/trigger/mirror_ringbuf.h"
 #include "pipeline/trigger/triggerfuncs.h"
+#include "access/xlog_internal.h"
+#include "miscadmin.h"
 
 #define TS_MSG_SUBSCRIBE "subscribe"
 #define TS_MSG_SUBSCRIBE_OK "subscribe_ok"
@@ -49,8 +54,6 @@
 
 #define TS_HEARTBEAT_TIMEOUT 5
 #define TS_READ_TIMEOUT 10
-
-int alert_server_port = 0;
 
 typedef enum
 {
@@ -131,9 +134,12 @@ chomp(StringInfo info)
 static ListenSocket *
 create_listen_socket()
 {
+	ContQueryDatabaseMetadata *meta;
 	int rc;
 	int opt;
+	int i;
 	struct sockaddr_in tcp_addr;
+	int aport;
 
 	static const int backlog = 100;
 	ListenSocket *sock = palloc0(sizeof(ListenSocket));
@@ -144,19 +150,48 @@ create_listen_socket()
 	opt = 1;
 	rc = setsockopt(sock->fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-	Assert(rc == 0);
-
-	/* TODO - put port assignment somewhere nicer */
+	if (rc != 0)
+		elog(ERROR, "could not setsockopt %m");
 
 	tcp_addr.sin_family = AF_INET;
 	tcp_addr.sin_port = htons(alert_server_port);
 	tcp_addr.sin_addr.s_addr = INADDR_ANY;
 
-	rc = bind(sock->fd, (struct sockaddr *) &tcp_addr, sizeof(tcp_addr));
-	Assert(rc == 0);
+	/* try and allocate a port from the range base ->
+	 * base + max_worker_processes */
+
+	for (i = 0; i < max_worker_processes; ++i)
+	{
+		aport = alert_server_port + i;
+		tcp_addr.sin_port = htons(aport);
+		rc = bind(sock->fd, (struct sockaddr *) &tcp_addr, sizeof(tcp_addr));
+
+		if (rc == 0)
+		{
+			MemoryContext old = CurrentMemoryContext;
+
+			StartTransactionCommand();
+			elog(LOG, "continuous query process \"alert server [%s]\" listening on port %d",
+					get_database_name(MyDatabaseId), aport);
+			CommitTransactionCommand();
+
+			MemoryContextSwitchTo(old);
+			break;
+		}
+
+		pg_usleep(100000);
+	}
+
+	if (rc != 0)
+		elog(ERROR, "failed to assign alert server port %d %m", aport);
 
 	rc = listen(sock->fd, backlog);
-	Assert(rc == 0);
+
+	if (rc != 0)
+		elog(ERROR, "failed to listen on alert server port %d %m", aport);
+
+	meta = GetContQueryDatabaseMetadata(MyDatabaseId);
+	meta->alert_server_port = aport;
 
 	return sock;
 }

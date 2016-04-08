@@ -21,6 +21,7 @@
 #include "timestamp_set.h"
 
 extern int alert_socket_mem;
+extern int alert_server_port;
 extern bool continuous_triggers_enabled;
 
 typedef enum TriggerProcessChangeType
@@ -99,7 +100,7 @@ typedef void (*TrigFunc)(TriggerCacheEntry *entry, Relation rel,
 			HeapTuple old_tup,
 			HeapTuple new_tup);
 
-typedef struct TriggerCacheEntry
+struct TriggerCacheEntry
 {
 	Oid matrelid;
 	Oid cvrelid;
@@ -139,7 +140,7 @@ typedef struct TriggerCacheEntry
 
 	TrigFunc trig_func;
 
-} TriggerCacheEntry;
+};
 
 typedef struct ViewInfo
 {

@@ -5918,7 +5918,7 @@ DESCR("serializer for array aggregation transition states");
 
 DATA(insert OID = 4484 ( pipeline_get_alert_server_conn PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 25 "" _null_ _null_ _null_ _null_ _null_ pipeline_get_alert_server_conn _null_ _null_ _null_ ));
 DESCR("get alert server connenction string");
-DATA(insert OID = 4485 ( pipeline_trigger_debug PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ _null_ pipeline_trigger_debug _null_ _null_ _null_ ));
+DATA(insert OID = 4485 ( pipeline_trigger_debug PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 16 "" _null_ _null_ _null_ _null_ _null_ pipeline_trigger_debug _null_ _null_ _null_ ));
 DESCR("continuous trigger debug utility");
 DATA(insert OID = 4486 ( pipeline_test_alert_new_row PGNSP PGUID 12 1 0 0 0 f f f f t f v 0 0 2279 "" _null_ _null_ _null_ _null_ _null_ pipeline_test_alert_new_row _null_ _null_ _null_ ));
 DESCR("test alert new row");

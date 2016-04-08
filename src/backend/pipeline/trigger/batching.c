@@ -309,8 +309,19 @@ process_batches(TriggerProcessState *state)
 		state->dirty_syscache = true;
 
 		StartTransactionCommand();
-		process_batch(state, batch);
-		CommitTransactionCommand();
+
+		PG_TRY();
+		{
+			process_batch(state, batch);
+			CommitTransactionCommand();
+		}
+		PG_CATCH();
+		{
+			EmitErrorReport();
+			FlushErrorState();
+			AbortCurrentTransaction();
+		}
+		PG_END_TRY();
 
 		cleanup_batch(batch);
 	}

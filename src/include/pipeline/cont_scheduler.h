@@ -70,6 +70,7 @@ struct ContQueryDatabaseMetadata
 	dsm_handle handle;
 
 	int adhoc_counter;
+	int alert_server_port;
 	/* Number of entries is equal to max_worker_processes. */
 	ContQueryProc *adhoc_procs;
 	ContQueryProc trigger_proc;
@@ -100,7 +101,6 @@ extern int  continuous_query_ipc_shared_mem;
 extern int continuous_query_commit_interval;
 extern double continuous_query_proc_priority;
 
-#define ShouldTerminateContQueryProcess() (MyContQueryProc->db_meta->terminate)
 #define MyDSMCQueue (MyContQueryProc->cq_handle->cqueue)
 
 /* shared memory stuff */

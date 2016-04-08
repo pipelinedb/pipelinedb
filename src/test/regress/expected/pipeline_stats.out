@@ -77,5 +77,12 @@ SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker'
        2000 |      316000 |      0
 (1 row)
 
+DEACTIVATE;
+SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
 \c regression
 DROP DATABASE pipeline_stats_db;

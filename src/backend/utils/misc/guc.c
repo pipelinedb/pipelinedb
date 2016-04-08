@@ -2855,6 +2855,15 @@ static struct config_int ConfigureNamesInt[] =
 		1024, 1024, 8192,
 		NULL, NULL, NULL
 	},
+	{
+		{"alert_server_port", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+			gettext_noop("Base port to start assigning alert servers ports."),
+			NULL
+		},
+		&alert_server_port,
+		7432, 7432, 65535,
+		NULL, NULL, NULL
+	},
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0, 0, 0, NULL, NULL, NULL
@@ -3597,7 +3606,6 @@ static struct config_string ConfigureNamesString[] =
 		NULL,
 		NULL, NULL, NULL,
 	},
-
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, NULL, NULL, NULL, NULL
