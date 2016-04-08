@@ -1,4 +1,4 @@
-CREATE CONTINUOUS VIEW cont_tg_cv AS SELECT count(*) FROM cont_tg_stream;
+CREATE CONTINUOUS VIEW cont_tg_cv AS SELECT x::int, count(*) FROM cont_tg_stream group by x;
 CREATE TABLE cont_tg_t (count int);
 CREATE OR REPLACE FUNCTION cont_tg_func()
 RETURNS trigger AS
@@ -10,7 +10,22 @@ END;
 $$
 LANGUAGE plpgsql;
 
-select pg_sleep(2);
+CREATE OR REPLACE FUNCTION bad_tg_func()
+RETURNS trigger AS
+$$
+BEGIN
+ INSERT INTO does_not_exist(count) VALUES (NEW.count);
+ RETURN NEW;
+END;
+$$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER bad_tg AFTER INSERT OR UPDATE ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE bad_tg_func();
+INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
+DROP TRIGGER bad_tg on cont_tg_cv;
+
+TRUNCATE CONTINUOUS VIEW cont_tg_cv;
+TRUNCATE TABLE cont_tg_t;
 
 -- Invalid triggers
 CREATE TRIGGER cont_tg BEFORE INSERT ON cont_tg_cv FOR EACH ROW EXECUTE PROCEDURE cont_tg_func();
