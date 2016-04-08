@@ -530,12 +530,6 @@ cont_bgworker_main(Datum arg)
 
 		CommitTransactionCommand();
 	}
-	else
-	{
-		/* Continuous triggers cannot run under both these conditions */
-		if (!continuous_triggers_enabled || !XLogLogicalInfoActive())
-			return;
-	}
 
 	elog(LOG, "continuous query process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);
 	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(proc));
@@ -721,12 +715,14 @@ wait_for_db_workers(ContQueryDatabaseMetadata *db_meta, BgwHandleStatus state)
 	{
 		cqproc = &db_meta->db_procs[i];
 		if (!wait_for_bg_worker_state(cqproc->bgw_handle, state, BG_PROC_STATUS_TIMEOUT))
-			elog(WARNING, "lolcat"); // todo
+			elog(WARNING, "timed out waiting for continuous query process \"%s\" to reach state %d",
+					GetContQueryProcName(cqproc), state);
 	}
 
 	cqproc = &db_meta->trigger_proc;
 	if (!wait_for_bg_worker_state(cqproc->bgw_handle, state, BG_PROC_STATUS_TIMEOUT))
-		elog(WARNING, "lolcat");
+		elog(WARNING, "timed out waiting for continuous query process \"%s\" to reach state %d",
+				GetContQueryProcName(cqproc), state);
 }
 
 static void
@@ -745,14 +741,16 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	for (i = 0; i < NUM_BG_WORKERS_PER_DB; i++)
 		TerminateBackgroundWorker(db_meta->db_procs[i].bgw_handle);
 
-	TerminateBackgroundWorker(db_meta->trigger_proc.bgw_handle);
+	if (db_meta->trigger_proc.bgw_handle)
+		TerminateBackgroundWorker(db_meta->trigger_proc.bgw_handle);
 
 	wait_for_db_workers(db_meta, BGWH_STOPPED);
 
 	for (i = 0; i < NUM_BG_WORKERS_PER_DB; i++)
 		pfree(db_meta->db_procs[i].bgw_handle);
 
-	pfree(db_meta->trigger_proc.bgw_handle);
+	if (db_meta->trigger_proc.bgw_handle)
+		pfree(db_meta->trigger_proc.bgw_handle);
 
 	/* XXX: Force delete segment? */
 	dsm_detach(db_meta->segment);
@@ -837,12 +835,14 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	/* Start a single trigger process */
 	proc = &db_meta->trigger_proc;
 	MemSet(proc, 0, sizeof(ContQueryProc));
+	if (continuous_triggers_enabled && XLogLogicalInfoActive())
+	{
+		proc->type = TRIG;
+		proc->group_id = 1;
+		proc->db_meta = db_meta;
 
-	proc->type = TRIG;
-	proc->group_id = 1;
-	proc->db_meta = db_meta;
-
-	success &= run_cont_bgworker(proc);
+		success &= run_cont_bgworker(proc);
+	}
 
 	SpinLockRelease(&db_meta->mutex);
 
@@ -1155,6 +1155,51 @@ signal_cont_query_scheduler(int signal)
 	}
 }
 
+bool
+WaitForContQueryActivation(void)
+{
+	ContQueryDatabaseMetadata *db_meta;
+	TimestampTz start = GetCurrentTimestamp();
+
+	while ((db_meta = GetContQueryDatabaseMetadata(MyDatabaseId)) == NULL ||
+			!db_meta->running)
+	{
+		pg_usleep(10 * 1000);
+
+		if (TimestampDifferenceExceeds(start, GetCurrentTimestamp(), CQ_STATE_CHANGE_TIMEOUT))
+			return false;
+	}
+
+	return true;
+}
+
+static bool
+wait_for_db_procs_to_stop(Oid dbid)
+{
+	ContQueryDatabaseMetadata *db_meta = GetContQueryDatabaseMetadata(dbid);
+	TimestampTz start = GetCurrentTimestamp();
+
+	/* No metadata? This means its already been deactivated. */
+	if (db_meta == NULL)
+		return true;
+
+	while (db_meta->running)
+	{
+		if (TimestampDifferenceExceeds(start, GetCurrentTimestamp(), CQ_STATE_CHANGE_TIMEOUT))
+			return false;
+
+		pg_usleep(10 * 1000);
+	}
+
+	return true;
+}
+
+bool
+WaitForContQueryDeactivation(void)
+{
+	return wait_for_db_procs_to_stop(MyDatabaseId);
+}
+
 /*
  * SignalContQuerySchedulerDropDB
  */
@@ -1169,6 +1214,7 @@ SignalContQuerySchedulerDropDB(Oid db_oid)
 	{
 		db_meta->dropdb = true;
 		signal_cont_query_scheduler(SIGUSR2);
+		wait_for_db_procs_to_stop(db_oid);
 	}
 }
 
@@ -1194,45 +1240,6 @@ void
 SignalContQuerySchedulerRefreshDBList(void)
 {
 	signal_cont_query_scheduler(SIGINT);
-}
-
-bool
-WaitForContQueryActivation(void)
-{
-	ContQueryDatabaseMetadata *db_meta;
-	TimestampTz start = GetCurrentTimestamp();
-
-	while ((db_meta = GetContQueryDatabaseMetadata(MyDatabaseId)) == NULL ||
-			!db_meta->running)
-	{
-		pg_usleep(10 * 1000);
-
-		if (TimestampDifferenceExceeds(start, GetCurrentTimestamp(), CQ_STATE_CHANGE_TIMEOUT))
-			return false;
-	}
-
-	return true;
-}
-
-bool
-WaitForContQueryDeactivation(void)
-{
-	ContQueryDatabaseMetadata *db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
-	TimestampTz start = GetCurrentTimestamp();
-
-	/* No metadata? This means its already been deactivated. */
-	if (db_meta == NULL)
-		return true;
-
-	while (db_meta->running)
-	{
-		if (TimestampDifferenceExceeds(start, GetCurrentTimestamp(), CQ_STATE_CHANGE_TIMEOUT))
-			return false;
-
-		pg_usleep(10 * 1000);
-	}
-
-	return true;
 }
 
 void
