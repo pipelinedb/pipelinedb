@@ -886,7 +886,8 @@ reaper(void)
 			}
 		}
 
-		terminate_database_workers(db_meta);
+		if (db_meta->running)
+			terminate_database_workers(db_meta);
 	}
 
 	/*
