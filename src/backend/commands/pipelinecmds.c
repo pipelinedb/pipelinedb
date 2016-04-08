@@ -858,8 +858,10 @@ set_cq_enabled(bool is_enabled, ProcessUtilityContext context)
 	HeapTuple tup;
 	Form_pipeline_database row;
 	bool changed = false;
+	bool success;
+	char *cmd = is_enabled ? "ACTIVATE" : "DEACTIVATE";
 
-	PreventTransactionChain(context == PROCESS_UTILITY_TOPLEVEL, is_enabled ? "ACTIVATE" : "DEACTIVATE");
+	PreventTransactionChain(context == PROCESS_UTILITY_TOPLEVEL, cmd);
 
 	pipeline_database = heap_open(PipelineDatabaseRelationId, RowExclusiveLock);
 	tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
@@ -902,10 +904,14 @@ set_cq_enabled(bool is_enabled, ProcessUtilityContext context)
 	SignalContQuerySchedulerRefreshDBList();
 
 	if (is_enabled)
-		WaitForContQueryActivation();
+		success = WaitForContQueryActivation();
 	else
-		WaitForContQueryDeactivation();
+		success = WaitForContQueryDeactivation();
 
+	if (!success)
+		ereport(WARNING,
+				(errmsg("%s timed out", cmd),
+				errhint("Check the postmaster log to ensure nothing failed.")));
 
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
