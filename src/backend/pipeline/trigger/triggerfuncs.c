@@ -94,6 +94,7 @@ pipeline_test_alert_new_row(PG_FUNCTION_ARGS)
 		TriggerData *data = (TriggerData *) (fcinfo->context);
 
 		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
+		Assert(f);
 		resetStringInfo(f->buf);
 
 		new_tup = TRIGGER_FIRED_BY_INSERT(data->tg_event) ?

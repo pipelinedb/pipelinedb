@@ -685,7 +685,7 @@ init_sw(TriggerCacheEntry *entry, Relation rel)
 
 	init_timestamp_set(&entry->timestamps, CurrentMemoryContext);
 
-	register_formatter(RelationGetRelid(rel), entry->output_desc);
+	register_formatter(entry->cvrelid, entry->output_desc);
 	table_scan(entry, rel);
 }
 
