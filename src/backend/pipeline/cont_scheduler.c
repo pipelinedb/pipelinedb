@@ -372,6 +372,12 @@ sigint_handler(SIGNAL_ARGS)
 	errno = save_errno;
 }
 
+bool
+ShouldTerminateContQueryProcess(void)
+{
+	return (bool) got_SIGTERM;
+}
+
 static void
 refresh_database_list(void)
 {
@@ -479,20 +485,6 @@ purge_adhoc_queries(void)
 }
 
 static void
-cqproc_sigterm_handler(SIGNAL_ARGS)
-{
-	int save_errno = errno;
-
-	Assert(MyContQueryProc);
-	MyContQueryProc->got_sigterm = true;
-
-	if (MyProc)
-		SetLatch(MyLatch);
-
-	errno = save_errno;
-}
-
-static void
 cont_bgworker_main(Datum arg)
 {
 	void (*run) (void);
@@ -500,7 +492,7 @@ cont_bgworker_main(Datum arg)
 
 	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
-	pqsignal(SIGTERM, cqproc_sigterm_handler);
+	pqsignal(SIGTERM, sigterm_handler);
 #define BACKTRACE_SEGFAULTS
 #ifdef BACKTRACE_SEGFAULTS
 	pqsignal(SIGSEGV, debug_segfault);

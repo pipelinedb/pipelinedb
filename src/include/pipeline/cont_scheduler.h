@@ -44,7 +44,6 @@ typedef struct ContQueryProc
 {
 	ContQueryProcType type;
 
-	volatile sig_atomic_t got_sigterm;
 	Latch *latch;
 
 	int id; /* unique across all cont query processes */
@@ -129,7 +128,6 @@ extern bool AreContQueriesEnabled(void);
 
 #define IsContQueryProcess() \
 	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess())
-#define ShouldTerminateContQueryProcess() (MyContQueryProc->got_sigterm)
 
 /* functions to start the scheduler process */
 extern pid_t StartContQueryScheduler(void);
@@ -140,6 +138,7 @@ extern void ContQuerySchedulerMain(int argc, char *argv[]) __attribute__((noretu
 
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
+extern bool ShouldTerminateContQueryProcess(void);
 
 extern void SignalContQuerySchedulerDropDB(Oid db_oid);
 extern void SignalContQuerySchedulerRefreshDBList(void);
