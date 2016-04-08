@@ -479,17 +479,32 @@ purge_adhoc_queries(void)
 }
 
 static void
+cqproc_sigterm_handler(SIGNAL_ARGS)
+{
+	int save_errno = errno;
+
+	Assert(MyContQueryProc);
+	MyContQueryProc->got_sigterm = true;
+
+	if (MyProc)
+		SetLatch(MyLatch);
+
+	errno = save_errno;
+}
+
+static void
 cont_bgworker_main(Datum arg)
 {
 	void (*run) (void);
 	ContQueryProc *proc;
 
+	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
+
+	pqsignal(SIGTERM, cqproc_sigterm_handler);
 #define BACKTRACE_SEGFAULTS
 #ifdef BACKTRACE_SEGFAULTS
 	pqsignal(SIGSEGV, debug_segfault);
 #endif
-
-	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
 	BackgroundWorkerUnblockSignals();
 	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_meta->db_name), NULL);

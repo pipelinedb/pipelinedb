@@ -43,10 +43,12 @@ typedef struct ContQueryDatabaseMetadata ContQueryDatabaseMetadata;
 typedef struct ContQueryProc
 {
 	ContQueryProcType type;
-	int volatile group_id; /* unqiue [0, n) for each db_oid, type pair */
 
-	int   id; /* unique across all cont query processes */
+	volatile sig_atomic_t got_sigterm;
 	Latch *latch;
+
+	int id; /* unique across all cont query processes */
+	volatile int group_id; /* unqiue [0, n) for each db_oid, type pair */
 
 	dsm_segment *segment;
 	dsm_handle dsm_handle; /* equals db_meta->handle for non-adhoc procs */
@@ -127,6 +129,7 @@ extern bool AreContQueriesEnabled(void);
 
 #define IsContQueryProcess() \
 	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess())
+#define ShouldTerminateContQueryProcess() (MyContQueryProc->got_sigterm)
 
 /* functions to start the scheduler process */
 extern pid_t StartContQueryScheduler(void);
