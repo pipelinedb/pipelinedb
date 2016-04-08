@@ -62,7 +62,7 @@ struct ContQueryDatabaseMetadata
 
 	slock_t mutex;
 
-	sig_atomic_t active;
+	sig_atomic_t running;
 	sig_atomic_t dropdb;
 	sig_atomic_t terminate;
 
@@ -139,7 +139,9 @@ extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
 
 extern void SignalContQuerySchedulerDropDB(Oid db_oid);
-extern void SignalContQuerySchedulerRefresh(void);
+extern void SignalContQuerySchedulerRefreshDBList(void);
+extern bool WaitForContQueryActivation(void);
+extern bool WaitForContQueryDeactivation(void);
 
 extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
 

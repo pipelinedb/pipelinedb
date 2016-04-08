@@ -53,6 +53,9 @@
 #define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners)
 #define NUM_LOCKS_PER_DB (NUM_BG_WORKERS_PER_DB + 1) /* single lock for all adhoc processes */
 
+#define BG_PROC_STATUS_TIMEOUT 500
+#define CQ_STATE_CHANGE_TIMEOUT 2000
+
 typedef struct DatabaseEntry
 {
 	Oid oid;
@@ -562,6 +565,37 @@ cont_bgworker_main(Datum arg)
 		elog(LOG, "continuous query process \"%s\" shutting down", GetContQueryProcName(proc));
 }
 
+/*
+ * wait_for_bg_worker_state
+ *
+ * We can't use WaitForBackgroundWorkerStartup/WaitForBackgroundWorkerShutdown because
+ * the continuous query scheduler isn't a normal backend and so cannot be signaled by
+ * the postmaster.
+ */
+static bool
+wait_for_bg_worker_state(BackgroundWorkerHandle *handle, BgwHandleStatus state, int timeoutms)
+{
+	TimestampTz start = GetCurrentTimestamp();
+	pid_t pid;
+	bool success = false;
+
+	if (!handle)
+		return true;
+
+	while (!TimestampDifferenceExceeds(start, GetCurrentTimestamp(), timeoutms))
+	{
+		if (GetBackgroundWorkerPid(handle, &pid) == state)
+		{
+			success = true;
+			break;
+		}
+
+		pg_usleep(10 * 1000); /* 10ms */
+	}
+
+	return success;
+}
+
 static void
 dsm_cqueue_setup(ContQueryProc *proc)
 {
@@ -620,12 +654,10 @@ run_cont_bgworker(ContQueryProc *proc)
 
 	success = RegisterDynamicBackgroundWorker(&worker, &handle);
 
-	/*
-	 * TODO(usmanm): We should probably use something like WaitForBackgroundWorkerStartup here, but
-	 * the postmaster can't signal the continuous query scheduler since it isn't a valid 'backend'.
-	 */
 	if (success)
 		proc->bgw_handle = handle;
+	else
+		proc->bgw_handle = NULL;
 
 	return success;
 }
@@ -680,17 +712,29 @@ release_locks(ContQueryDatabaseMetadata *db_meta)
 }
 
 static void
-terminate_database_worker(ContQueryProc *proc)
+wait_for_db_workers(ContQueryDatabaseMetadata *db_meta, BgwHandleStatus state)
 {
-	TerminateBackgroundWorker(proc->bgw_handle);
-	pfree(proc->bgw_handle);
+	ContQueryProc *cqproc;
+	int i;
+
+	for (i = 0; i < NUM_BG_WORKERS_PER_DB; i++)
+	{
+		cqproc = &db_meta->db_procs[i];
+		if (!wait_for_bg_worker_state(cqproc->bgw_handle, state, BG_PROC_STATUS_TIMEOUT))
+			elog(WARNING, "lolcat"); // todo
+	}
+
+	cqproc = &db_meta->trigger_proc;
+	if (!wait_for_bg_worker_state(cqproc->bgw_handle, state, BG_PROC_STATUS_TIMEOUT))
+		elog(WARNING, "lolcat");
 }
 
 static void
 terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 {
-	bool found;
 	int i;
+
+	Assert(db_meta->running);
 
 	elog(LOG, "terminating continuous query processes for database: \"%s\"", NameStr(db_meta->db_name));
 
@@ -699,9 +743,16 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	SpinLockAcquire(&db_meta->mutex);
 
 	for (i = 0; i < NUM_BG_WORKERS_PER_DB; i++)
-		terminate_database_worker(&db_meta->db_procs[i]);
+		TerminateBackgroundWorker(db_meta->db_procs[i].bgw_handle);
 
-	terminate_database_worker(&db_meta->trigger_proc);
+	TerminateBackgroundWorker(db_meta->trigger_proc.bgw_handle);
+
+	wait_for_db_workers(db_meta, BGWH_STOPPED);
+
+	for (i = 0; i < NUM_BG_WORKERS_PER_DB; i++)
+		pfree(db_meta->db_procs[i].bgw_handle);
+
+	pfree(db_meta->trigger_proc.bgw_handle);
 
 	/* XXX: Force delete segment? */
 	dsm_detach(db_meta->segment);
@@ -709,10 +760,10 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 	release_locks(db_meta);
 
-	SpinLockRelease(&db_meta->mutex);
+	db_meta->terminate = false;
+	db_meta->running = false;
 
-	hash_search(ContQuerySchedulerShmem->db_table, &db_meta->db_oid, HASH_REMOVE, &found);
-	Assert(found);
+	SpinLockRelease(&db_meta->mutex);
 }
 
 static void
@@ -723,6 +774,8 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	ContQueryProc *proc;
 	ResourceOwner res;
 	bool success = true;
+
+	Assert(!db_meta->running);
 
 	elog(LOG, "starting continuous query processes for database: \"%s\"", NameStr(db_meta->db_name));
 
@@ -798,6 +851,9 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 		terminate_database_workers(db_meta);
 		elog(ERROR, "failed to start some continuous query background workers");
 	}
+
+	wait_for_db_workers(db_meta, BGWH_STARTED);
+	db_meta->running = true;
 }
 
 static void
@@ -847,13 +903,12 @@ reaper(void)
 				&db_entry->oid, HASH_FIND, &found);
 
 		/* Continuous queries activated but no workers running? */
-		if (db_entry->active && !found)
+		if (db_entry->active && (!found || !db_meta->running))
 		{
 			char *pos;
 
 			db_meta = hash_search(ContQuerySchedulerShmem->db_table,
 					&db_entry->oid, HASH_ENTER, &found);
-			Assert(!found);
 
 			MemSet(db_meta, 0, ContQueryDatabaseMetadataSize());
 
@@ -870,7 +925,7 @@ reaper(void)
 			start_database_workers(db_meta);
 		}
 		/* Continuous queries disabled but workers still running? */
-		else if (!db_entry->active && found)
+		else if (!db_entry->active && (found && db_meta->running))
 			terminate_database_workers(db_meta);
 	}
 }
@@ -1023,7 +1078,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		 * Wait until naptime expires or we get some type of signal (all the
 		 * signal handlers will wake us by calling SetLatch).
 		 */
-		rc = WaitLatch(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, 5000);
+		rc = WaitLatch(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, 1000);
 		ResetLatch(MyLatch);
 
 		/*
@@ -1118,20 +1173,64 @@ SignalContQuerySchedulerDropDB(Oid db_oid)
 extern ContQueryDatabaseMetadata *
 GetContQueryDatabaseMetadata(Oid db_oid)
 {
+	bool found;
+
 	ContQueryDatabaseMetadata *db_meta =
 		(ContQueryDatabaseMetadata *) hash_search(
-			ContQuerySchedulerShmem->db_table, &db_oid, HASH_FIND, NULL);
+			ContQuerySchedulerShmem->db_table, &db_oid, HASH_FIND, &found);
+
+	if (!found)
+		return NULL;
 
 	return db_meta;
 }
 
 /*
- * SignalContQuerySchedulerRefresh
+ * SignalContQuerySchedulerRefreshDBList
  */
 void
-SignalContQuerySchedulerRefresh(void)
+SignalContQuerySchedulerRefreshDBList(void)
 {
 	signal_cont_query_scheduler(SIGINT);
+}
+
+bool
+WaitForContQueryActivation(void)
+{
+	ContQueryDatabaseMetadata *db_meta;
+	TimestampTz start = GetCurrentTimestamp();
+
+	while ((db_meta = GetContQueryDatabaseMetadata(MyDatabaseId)) == NULL ||
+			!db_meta->running)
+	{
+		pg_usleep(10 * 1000);
+
+		if (TimestampDifferenceExceeds(start, GetCurrentTimestamp(), CQ_STATE_CHANGE_TIMEOUT))
+			return false;
+	}
+
+	return true;
+}
+
+bool
+WaitForContQueryDeactivation(void)
+{
+	ContQueryDatabaseMetadata *db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
+	TimestampTz start = GetCurrentTimestamp();
+
+	/* No metadata? This means its already been deactivated. */
+	if (db_meta == NULL)
+		return true;
+
+	while (db_meta->running)
+	{
+		if (TimestampDifferenceExceeds(start, GetCurrentTimestamp(), CQ_STATE_CHANGE_TIMEOUT))
+			return false;
+
+		pg_usleep(10 * 1000);
+	}
+
+	return true;
 }
 
 void
