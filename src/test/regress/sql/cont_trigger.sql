@@ -1,5 +1,3 @@
-select pg_sleep(2);
-
 CREATE CONTINUOUS VIEW cont_tg_cv AS SELECT x::int, count(*) FROM cont_tg_stream group by x;
 CREATE TABLE cont_tg_t (count int);
 CREATE OR REPLACE FUNCTION cont_tg_func()
@@ -74,8 +72,9 @@ CREATE OR REPLACE FUNCTION tgfunc()
  $$
  LANGUAGE plpgsql;
 CREATE TRIGGER tg AFTER UPDATE OR INSERT ON v FOR EACH ROW EXECUTE PROCEDURE tgfunc();
-INSERT INTO stream (x) VALUES (1);
-INSERT INTO stream (x) VALUES (2);
-INSERT INTO stream (x) VALUES (3);
+INSERT INTO stream (x) VALUES (4);
+INSERT INTO stream (x) VALUES (5);
+INSERT INTO stream (x) VALUES (6);
+SELECT pg_sleep(2);
 
 SELECT * FROM t;
