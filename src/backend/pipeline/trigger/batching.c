@@ -196,9 +196,7 @@ cleanup_batch(XactBatch *batch)
  * Determine if this batch is visible
  */
 static bool
-should_process_batch(TriggerProcessState *state,
-		TriggerCacheEntry *entry, TransactionId batch_xid, Relation rel,
-		Relation cvrel)
+should_process_batch(TriggerCacheEntry *entry, TransactionId batch_xid)
 {
 	if (entry->numtriggers == 0)
 		return false;
@@ -222,7 +220,7 @@ process_changelist(TriggerProcessState *state,
 	dlist_iter iter;
 	diff_triggers(state, entry, rel, cvrel->trigdesc);
 
-	if (!should_process_batch(state, entry, xid, rel, cvrel))
+	if (!should_process_batch(entry, xid))
 		return;
 
 	dlist_foreach(iter, &cl->changes)

@@ -53,8 +53,8 @@
 #define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners)
 #define NUM_LOCKS_PER_DB (NUM_BG_WORKERS_PER_DB + 1) /* single lock for all adhoc processes */
 
-#define BG_PROC_STATUS_TIMEOUT 500
-#define CQ_STATE_CHANGE_TIMEOUT 2000
+#define BG_PROC_STATUS_TIMEOUT 1000
+#define CQ_STATE_CHANGE_TIMEOUT 5000
 
 typedef struct DatabaseEntry
 {
