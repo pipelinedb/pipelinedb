@@ -611,7 +611,6 @@ init_cache_entry(TriggerCacheEntry *entry, Relation rel)
 			ExecTypeFromTL(entry->pstmt->planTree->targetlist, false);
 
 		entry->trig_func = fire_triggers;
-
 		register_formatter(entry->cvrelid, entry->output_desc);
 	}
 	else
