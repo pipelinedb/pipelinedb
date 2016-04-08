@@ -902,8 +902,7 @@ reaper(void)
 		db_meta = hash_search(ContQuerySchedulerShmem->db_table,
 				&db_entry->oid, HASH_FIND, &found);
 
-		/* Continuous queries activated but no workers running? */
-		if (db_entry->active && (!found || !db_meta->running))
+		if (!found)
 		{
 			char *pos;
 
@@ -921,11 +920,13 @@ reaper(void)
 			db_meta->db_procs = (ContQueryProc *) pos;
 			pos += sizeof(ContQueryProc) * NUM_BG_WORKERS_PER_DB;
 			db_meta->adhoc_procs = (ContQueryProc *) pos;
-
-			start_database_workers(db_meta);
 		}
+
+		/* Continuous queries activated but no workers running? */
+		if (db_entry->active && !db_meta->running && !db_meta->dropdb)
+			start_database_workers(db_meta);
 		/* Continuous queries disabled but workers still running? */
-		else if (!db_entry->active && (found && db_meta->running))
+		else if (!db_entry->active && db_meta->running)
 			terminate_database_workers(db_meta);
 	}
 }
