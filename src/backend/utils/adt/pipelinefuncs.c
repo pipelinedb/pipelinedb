@@ -567,12 +567,12 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		StringInfoData buf;
 		Datum *cols;
 
-		if (!relname)
-			continue;
-
 		namespace = get_namespace_name(RelationGetNamespace(rel));
 		if (!namespace)
+		{
+			heap_close(rel, NoLock);
 			continue;
+		}
 
 		MemSet(nulls, 0, sizeof(nulls));
 
