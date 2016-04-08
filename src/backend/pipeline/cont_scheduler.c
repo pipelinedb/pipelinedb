@@ -372,6 +372,12 @@ sigint_handler(SIGNAL_ARGS)
 	errno = save_errno;
 }
 
+bool
+ShouldTerminateContQueryProcess(void)
+{
+	return (bool) got_SIGTERM;
+}
+
 static void
 refresh_database_list(void)
 {
@@ -484,12 +490,13 @@ cont_bgworker_main(Datum arg)
 	void (*run) (void);
 	ContQueryProc *proc;
 
+	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
+
+	pqsignal(SIGTERM, sigterm_handler);
 #define BACKTRACE_SEGFAULTS
 #ifdef BACKTRACE_SEGFAULTS
 	pqsignal(SIGSEGV, debug_segfault);
 #endif
-
-	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
 	BackgroundWorkerUnblockSignals();
 	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_meta->db_name), NULL);

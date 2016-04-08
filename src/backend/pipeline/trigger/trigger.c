@@ -49,19 +49,6 @@ bool continuous_triggers_enabled;
 
 AlertServer *MyAlertServer = NULL;
 
-volatile sig_atomic_t got_SIGTERM = false;
-
-static void
-sigterm_handle(int action)
-{
-	int save_errno = errno;
-
-	got_SIGTERM = true;
-	SetLatch(MyLatch);
-
-	errno = save_errno;
-}
-
 static void
 ResetTriggerCacheEntry(TriggerProcessState *state, TriggerCacheEntry *entry);
 
@@ -189,7 +176,6 @@ trigger_main()
 
 	CHECK_FOR_INTERRUPTS();
 
-	pqsignal(SIGTERM, sigterm_handle);
 	wal_init();
 
 	state = create_trigger_process_state();
@@ -202,7 +188,7 @@ trigger_main()
 	{
 		CHECK_FOR_INTERRUPTS();
 
-		if (got_SIGTERM)
+		if (ShouldTerminateContQueryProcess())
 			break;
 
 		check_syscache_dirty(state);

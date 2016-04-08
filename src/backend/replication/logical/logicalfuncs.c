@@ -251,6 +251,13 @@ logical_read_local_xlog_page(XLogReaderState *state, XLogRecPtr targetPagePtr,
 		if (loc <= flushptr)
 			break;
 
+		/*
+		 * We need this for the continuous trigger process to not livelock, in case it hasn't found a
+		 * consistent point and the postmaster has already signaled a shutdown request.
+		 */
+		if (IsContQueryTriggerProcess() && ShouldTerminateContQueryProcess())
+			break;
+
 		CHECK_FOR_INTERRUPTS();
 		pg_usleep(1000L);
 	}
