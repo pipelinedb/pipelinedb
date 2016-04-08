@@ -125,18 +125,18 @@ SELECT * FROM cont_tg_t;
      6
 (2 rows)
 
-CREATE CONTINUOUS VIEW v AS SELECT count(DISTINCT x::int) FROM stream;
-CREATE TABLE t (count int);
+CREATE CONTINUOUS VIEW cont_tg_v2 AS SELECT count(DISTINCT x::int) FROM stream;
+TRUNCATE TABLE cont_tg_t;
 CREATE OR REPLACE FUNCTION tgfunc()
  RETURNS trigger AS
  $$
  BEGIN
-  INSERT INTO t (count) VALUES (NEW.count);
+  INSERT INTO cont_tg_t (count) VALUES (NEW.count);
   RETURN NEW;
  END;
  $$
  LANGUAGE plpgsql;
-CREATE TRIGGER tg AFTER UPDATE OR INSERT ON v FOR EACH ROW EXECUTE PROCEDURE tgfunc();
+CREATE TRIGGER tg AFTER UPDATE OR INSERT ON cont_tg_v2 FOR EACH ROW EXECUTE PROCEDURE tgfunc();
 INSERT INTO stream (x) VALUES (4);
 INSERT INTO stream (x) VALUES (5);
 INSERT INTO stream (x) VALUES (6);
@@ -146,7 +146,7 @@ SELECT pg_sleep(2);
  
 (1 row)
 
-SELECT * FROM t;
+SELECT * FROM cont_tg_t;
  count 
 -------
      1
@@ -154,10 +154,10 @@ SELECT * FROM t;
      3
 (3 rows)
 
-DROP TRIGGER tg ON v;
-TRUNCATE CONTINUOUS VIEW v;
-TRUNCATE TABLE t;
-CREATE TRIGGER tg AFTER UPDATE OR INSERT ON v FOR EACH ROW WHEN (NEW.count > 5) EXECUTE PROCEDURE tgfunc();
+DROP TRIGGER tg ON cont_tg_v2;
+TRUNCATE CONTINUOUS VIEW cont_tg_v2;
+TRUNCATE TABLE cont_tg_t;
+CREATE TRIGGER tg AFTER UPDATE OR INSERT ON cont_tg_v2 FOR EACH ROW WHEN (NEW.count > 5) EXECUTE PROCEDURE tgfunc();
 INSERT INTO stream (x) VALUES (4);
 INSERT INTO stream (x) VALUES (5);
 INSERT INTO stream (x) VALUES (6);
@@ -172,7 +172,7 @@ SELECT pg_sleep(2);
  
 (1 row)
 
-SELECT * FROM t;
+SELECT * FROM cont_tg_t;
  count 
 -------
      6
