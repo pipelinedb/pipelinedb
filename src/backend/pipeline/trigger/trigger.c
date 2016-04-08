@@ -885,8 +885,7 @@ do_synchronize(TriggerProcessState *state)
 	XactBatch *batch = start_new_batch(state, "sync", GetTopTransactionId(),
 			GetCurrentTimestamp());
 
-	RangeVar *rv = makeRangeVar(NULL, "pipeline_query", 0);
-	Relation prel = heap_openrv(rv, AccessShareLock);
+	Relation prel = heap_open(PipelineQueryRelationId, AccessShareLock);
 
 	HeapScanDesc scan = heap_beginscan(prel, GetTransactionSnapshot(), 0, NULL);
 

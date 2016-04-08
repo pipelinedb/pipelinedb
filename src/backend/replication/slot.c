@@ -748,6 +748,10 @@ ReplicationSlotsCountDBSlots(Oid dboid, int *nslots, int *nactive)
 		if (s->data.database != dboid)
 			continue;
 
+		/* pipeline_trigger slot, skip */
+		if (strlen((const char *) NameStr(s->data.plugin)) == 0)
+			continue;
+
 		/* count slots with spinlock held */
 		SpinLockAcquire(&s->mutex);
 		(*nslots)++;

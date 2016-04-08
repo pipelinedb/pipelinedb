@@ -59,21 +59,27 @@ struct ContQueryDatabaseMetadata
 {
 	Oid      db_oid;
 	NameData db_name;
-	slock_t  mutex;
+
+	slock_t mutex;
+
+	sig_atomic_t running;
+	sig_atomic_t dropdb;
 	sig_atomic_t terminate;
 
 	int lock_idx; /* ContQuerySchedulerShmem->locks index where the locks for this DB's workers start */
 
 	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
 	ContQueryProc *db_procs;
+
 	dsm_segment *segment;
 	dsm_handle handle;
 
 	int adhoc_counter;
-	int alert_server_port;
 	/* Number of entries is equal to max_worker_processes. */
 	ContQueryProc *adhoc_procs;
+
 	ContQueryProc trigger_proc;
+	int alert_server_port;
 };
 
 typedef struct ContQueryRunParams
@@ -110,13 +116,13 @@ extern ContQueryRunParams *GetContQueryRunParams(void);
 extern int GetContSchedulerTrancheId(void);
 
 extern bool am_cont_combiner;
-extern bool am_cont_trigger;
 
 /* status inquiry functions */
 extern bool IsContQuerySchedulerProcess(void);
 extern bool IsContQueryWorkerProcess(void);
 extern bool IsContQueryCombinerProcess(void);
 extern bool IsContQueryAdhocProcess(void);
+extern bool IsContQueryTriggerProcess(void);
 extern bool AreContQueriesEnabled(void);
 
 #define IsContQueryProcess() \
@@ -132,8 +138,10 @@ extern void ContQuerySchedulerMain(int argc, char *argv[]) __attribute__((noretu
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
 
-extern void SignalContQuerySchedulerTerminate(Oid db_oid);
-extern void SignalContQuerySchedulerRefresh(void);
+extern void SignalContQuerySchedulerDropDB(Oid db_oid);
+extern void SignalContQuerySchedulerRefreshDBList(void);
+extern bool WaitForContQueryActivation(void);
+extern bool WaitForContQueryDeactivation(void);
 
 extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
 

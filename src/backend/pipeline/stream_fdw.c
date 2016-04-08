@@ -113,7 +113,6 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 
 	if (!IsContQueryProcess())
 	{
-		Relation rel;
 		PlannerInfo *parent = root;
 
 		/* If the root query is continuous, we can read from streams */
@@ -122,11 +121,9 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 
 		if (!parent->parse->isContinuous)
 		{
-			rel = heap_open(streamid, NoLock);
-
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("\"%s\" is a stream", RelationGetRelationName(rel)),
+					 errmsg("\"%s\" is a stream", get_rel_name(streamid)),
 					 errhint("Streams can only be read by a continuous view's FROM clause.")));
 		}
 	}

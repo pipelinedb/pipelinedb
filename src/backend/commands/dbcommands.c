@@ -686,7 +686,7 @@ createdb(const CreatedbStmt *stmt)
 	PG_END_ENSURE_ERROR_CLEANUP(createdb_failure_callback,
 								PointerGetDatum(&fparms));
 
-	SignalContQuerySchedulerRefresh();
+	SignalContQuerySchedulerRefreshDBList();
 
 	return dboid;
 }
@@ -860,11 +860,18 @@ dropdb(const char *dbname, bool missing_ok)
 	 * As in CREATE DATABASE, check this after other error conditions.
 	 */
 	if (CountOtherDBBackends(db_id, &notherbackends, &npreparedxacts))
+	{
+		/*
+		 * This will restart the continuous query processes that we terminated inside CountOtherDBBackends.
+		 */
+		SignalContQuerySchedulerRefreshDBList();
+
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_IN_USE),
 				 errmsg("database \"%s\" is being accessed by other users",
 						dbname),
 				 errdetail_busy_db(notherbackends, npreparedxacts)));
+	}
 
 	/*
 	 * Remove the database's tuple from pg_database.
@@ -940,7 +947,7 @@ dropdb(const char *dbname, bool missing_ok)
 	 */
 	ForceSyncCommit();
 
-	SignalContQuerySchedulerRefresh();
+	SignalContQuerySchedulerRefreshDBList();
 }
 
 

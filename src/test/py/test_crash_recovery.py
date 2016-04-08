@@ -217,8 +217,6 @@ def test_activate_deactivate(pipeline, clean_db):
   cur.close()
   conn.close()
 
-  time.sleep(2)
-
   pipeline.insert('stream', ('x', ), [(1, )])
   count = pipeline.execute('SELECT * FROM v').first()['count']
   assert count == 2
