@@ -29,7 +29,7 @@ acquire_my_replication_slot()
 {
 	LogicalDecodingContext *cxt;
 	char slot_name[256];
-	sprintf(slot_name, "pipelinedb_trigger_%d", MyContQueryProc->db_meta->db_oid);
+	sprintf(slot_name, "pipeline_trigger_%d", MyContQueryProc->db_meta->db_oid);
 
 	Assert(!MyReplicationSlot);
 

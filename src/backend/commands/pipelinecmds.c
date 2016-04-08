@@ -852,14 +852,16 @@ ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
 }
 
 static void
-set_cq_enabled(bool value, ProcessUtilityContext context)
+set_cq_enabled(bool is_enabled, ProcessUtilityContext context)
 {
 	Relation pipeline_database;
 	HeapTuple tup;
 	Form_pipeline_database row;
 	bool changed = false;
+	bool success;
+	char *cmd = is_enabled ? "ACTIVATE" : "DEACTIVATE";
 
-	PreventTransactionChain(context == PROCESS_UTILITY_TOPLEVEL, value ? "ACTIVATE" : "DEACTIVATE");
+	PreventTransactionChain(context == PROCESS_UTILITY_TOPLEVEL, cmd);
 
 	pipeline_database = heap_open(PipelineDatabaseRelationId, RowExclusiveLock);
 	tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
@@ -868,7 +870,7 @@ set_cq_enabled(bool value, ProcessUtilityContext context)
 
 	row = (Form_pipeline_database) GETSTRUCT(tup);
 
-	if (row->cq_enabled != value)
+	if (row->cq_enabled != is_enabled)
 	{
 		bool replace[Natts_pipeline_database];
 		bool nulls[Natts_pipeline_database];
@@ -878,7 +880,7 @@ set_cq_enabled(bool value, ProcessUtilityContext context)
 		MemSet(replace, 0 , sizeof(replace));
 		MemSet(nulls, 0 , sizeof(nulls));
 		replace[Anum_pipeline_database_cq_enabled - 1] = true;
-		values[Anum_pipeline_database_cq_enabled - 1] = BoolGetDatum(value);
+		values[Anum_pipeline_database_cq_enabled - 1] = BoolGetDatum(is_enabled);
 
 		new = heap_modify_tuple(tup, pipeline_database->rd_att,	values, nulls, replace);
 
@@ -892,14 +894,27 @@ set_cq_enabled(bool value, ProcessUtilityContext context)
 	ReleaseSysCache(tup);
 	heap_close(pipeline_database, NoLock);
 
-	if (changed)
-	{
-		PopActiveSnapshot();
-		CommitTransactionCommand();
-		SignalContQuerySchedulerRefresh();
-		StartTransactionCommand();
-		PushActiveSnapshot(GetTransactionSnapshot());
-	}
+	/* If we didn't change the cq_enabled state, this is a noop. */
+	if (!changed)
+		return;
+
+	PopActiveSnapshot();
+	CommitTransactionCommand();
+
+	SignalContQuerySchedulerRefreshDBList();
+
+	if (is_enabled)
+		success = WaitForContQueryActivation();
+	else
+		success = WaitForContQueryDeactivation();
+
+	if (!success)
+		ereport(WARNING,
+				(errmsg("%s timed out", cmd),
+				errhint("Check the postmaster log to ensure nothing failed.")));
+
+	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 }
 
 void
