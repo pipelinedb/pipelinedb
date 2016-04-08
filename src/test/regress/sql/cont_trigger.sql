@@ -61,3 +61,21 @@ INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
 SELECT * FROM cont_tg_t;
 INSERT INTO cont_tg_stream (x) VALUES (1), (1), (1); SELECT pg_sleep(2);
 SELECT * FROM cont_tg_t;
+
+CREATE CONTINUOUS VIEW v AS SELECT count(DISTINCT x::int) FROM stream;
+CREATE TABLE t (count int);
+CREATE OR REPLACE FUNCTION tgfunc()
+ RETURNS trigger AS
+ $$
+ BEGIN
+  INSERT INTO t (count) VALUES (NEW.count);
+  RETURN NEW;
+ END;
+ $$
+ LANGUAGE plpgsql;
+CREATE TRIGGER tg AFTER UPDATE OR INSERT ON v FOR EACH ROW EXECUTE PROCEDURE tgfunc();
+INSERT INTO stream (x) VALUES (1);
+INSERT INTO stream (x) VALUES (2);
+INSERT INTO stream (x) VALUES (3);
+
+SELECT * FROM t;

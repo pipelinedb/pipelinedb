@@ -453,7 +453,7 @@ fire_triggers(TriggerCacheEntry *entry, Relation rel,
 
 	context.type = T_TriggerData;
 	context.tg_event = TRIGGER_EVENT_ROW | trig_action;
-	context.tg_relation = rel;
+	context.tg_relation = cvrel;
 	context.tg_newtuplebuf = InvalidBuffer;
 	context.tg_trigtuplebuf = InvalidBuffer;
 
@@ -611,7 +611,8 @@ init_cache_entry(TriggerCacheEntry *entry, Relation rel)
 			ExecTypeFromTL(entry->pstmt->planTree->targetlist, false);
 
 		entry->trig_func = fire_triggers;
-		register_formatter(RelationGetRelid(rel), entry->output_desc);
+
+		register_formatter(entry->cvrelid, entry->output_desc);
 	}
 	else
 	{
