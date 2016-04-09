@@ -1,6 +1,6 @@
-# src/backends/pipeline/trigger
+# src/backends/pipeline/ipc
 
-subdir = src/backend/pipeline/trigger
+subdir = src/backend/pipeline/ipc
 top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 

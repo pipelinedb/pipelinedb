@@ -657,6 +657,9 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 	if (IsContQuerySchedulerProcess())
 		return;
 
+	if (IsIPCMessageBrokerProcess())
+		return;
+
 	/*
 	 * Start a new transaction here before first access to db, and get a
 	 * snapshot.  We don't have a use for the snapshot itself, but we're

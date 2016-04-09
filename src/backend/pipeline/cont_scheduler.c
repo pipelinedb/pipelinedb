@@ -85,7 +85,6 @@ int  continuous_query_batch_size;
 int  continuous_query_max_wait;
 int  continuous_query_combiner_work_mem;
 int  continuous_query_combiner_synchronous_commit;
-int  continuous_query_ipc_shared_mem;
 int continuous_query_commit_interval;
 double continuous_query_proc_priority;
 
@@ -252,55 +251,18 @@ IsContQueryCombinerProcess(void)
 	return am_cont_combiner;
 }
 
-#ifdef EXEC_BACKEND
-/*
- * forkexec routine for the continuous query launcher process.
- *
- * Format up the arglist, then fork and exec.
- */
-static pid_t
-cqscheduler_forkexec(void)
-{
-	char *av[10];
-	int ac = 0;
-
-	av[ac++] = "pipeline-server";
-	av[ac++] = "--forkcqscheduler";
-	av[ac++] = NULL; /* filled in by postmaster_forkexec */
-	av[ac] = NULL;
-
-	Assert(ac < lengthof(av));
-
-	return postmaster_forkexec(ac, av);
-}
-
-/*
- * We need this set from the outside, before InitProcess is called
- */
-void
-ContQuerySchdulerIAm(void)
-{
-	am_cont_scheduler = true;
-}
-#endif
-
 pid_t
 StartContQueryScheduler(void)
 {
 	pid_t pid;
 
-#ifdef EXEC_BACKEND
-	switch ((pid = cqscheduler_forkexec()))
-#else
 	switch ((pid = fork_process()))
-#endif
 	{
 	case -1:
 		ereport(LOG,
 				(errmsg("could not fork continuous query scheduler process: %m")));
 		return 0;
 
-#ifndef EXEC_BACKEND
 	case 0:
 		InitPostmasterChild();
 		/* in postmaster child ... */
@@ -312,7 +274,6 @@ StartContQueryScheduler(void)
 
 		ContQuerySchedulerMain(0, NULL);
 		break;
-#endif
 	default:
 		return pid;
 	}
@@ -938,7 +899,6 @@ reaper(void)
 			terminate_database_workers(db_meta);
 	}
 }
-
 
 void
 ContQuerySchedulerMain(int argc, char *argv[])

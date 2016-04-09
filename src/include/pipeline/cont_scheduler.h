@@ -15,6 +15,7 @@
 
 #include "storage/latch.h"
 #include "pipeline/dsm_cqueue.h"
+#include "pipeline/ipc/broker.h"
 #include "postmaster/bgworker.h"
 #include "storage/dsm.h"
 #include "storage/spin.h"
@@ -104,7 +105,7 @@ extern int  continuous_query_batch_size;
 extern int  continuous_query_max_wait;
 extern int  continuous_query_combiner_work_mem;
 extern int  continuous_query_combiner_synchronous_commit;
-extern int  continuous_query_ipc_shared_mem;
+
 extern int continuous_query_commit_interval;
 extern double continuous_query_proc_priority;
 
@@ -131,10 +132,6 @@ extern bool AreContQueriesEnabled(void);
 
 /* functions to start the scheduler process */
 extern pid_t StartContQueryScheduler(void);
-#ifdef EXEC_BACKEND
-void ContQuerySchedulerIAm(void);
-extern void ContQuerySchedulerMain(int argc, char *argv[]) __attribute__((noreturn));
-#endif
 
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
