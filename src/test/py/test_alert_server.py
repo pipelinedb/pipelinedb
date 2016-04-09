@@ -81,3 +81,32 @@ def test_alert_server_t2(pipeline, clean_db):
   Repeat the first test to exercise the cleanup logic
   """
   shared_func(pipeline, clean_db)
+
+def test_multi_client(pipeline, clean_db):
+  """
+  Regression test for multi client.
+  """
+
+  TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_pipeline_test.log'
+  pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream group by x')
+
+  conn_str = pipeline.get_conn_string()
+
+  pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_send_alert_new_row')
+
+  # recv_alerts client needs pipeline on its path
+
+  client_env = os.environ.copy()
+  client_env["PATH"] = client_env["PATH"] + ":" + pipeline.get_bin_dir()
+
+  cmd = [pipeline.get_recv_alerts(), '-d', conn_str, '-a', 'cv0.t0'];
+  time.sleep(2)
+
+  outfile = open(TRIGGER_OUTPUT_LOGFILE, 'w')
+  client1 = subprocess.Popen(cmd, env=client_env)
+  client2 = subprocess.Popen(cmd, env=client_env)
+
+  time.sleep(4)
+
+  client1.terminate()
+  client2.terminate()
