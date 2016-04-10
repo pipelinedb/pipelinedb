@@ -109,7 +109,7 @@ ipc_queue_has_unread(ipc_queue *ipcq)
 	return pg_atomic_read_u64(&ipcq->head) > pg_atomic_read_u64(&ipcq->cursor);
 }
 
-static bool
+bool
 ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 {
 	uint64_t head;
@@ -169,8 +169,9 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 			return false;
 
 		WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
-		CHECK_FOR_INTERRUPTS();
 		ResetLatch(producer_latch);
+
+		CHECK_FOR_INTERRUPTS();
 	}
 
 	pg_atomic_write_u64(&ipcq->producer_latch, (uint64) NULL);
@@ -209,21 +210,15 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 }
 
 bool
-mp_queue_push(mp_queue *ipcq, void *ptr, int len, bool wait)
+ipc_queue_push(ipc_queue *ipcq, void *ptr, int len, bool wait)
 {
 	bool success;
 
-	mp_queue_lock(ipcq);
-	success = ipc_queue_push_nolock((mp_queue *) ipcq, ptr, len, wait);
-	mp_queue_unlock(ipcq);
+	ipc_queue_lock(ipcq, true);
+	success = ipc_queue_push_nolock(ipcq, ptr, len, wait);
+	ipc_queue_unlock(ipcq);
 
 	return success;
-}
-
-bool
-sp_queue_push(sp_queue *ipcq, void *ptr, int len, bool wait)
-{
-	return ipc_queue_push_nolock((sp_queue *) ipcq, ptr, len, wait);
 }
 
 void *
@@ -365,26 +360,26 @@ ipc_queue_set_handlers(ipc_queue *ipcq, ipc_queue_peek_fn peek_fn,
 	ipcq->copy_fn = cpy_fn;
 }
 
-void
-mp_queue_lock(mp_queue *mpq)
-{
-	Assert(mpq->magic == MAGIC);
-	Assert(mpq->lock);
-	LWLockAcquire(mpq->lock, LW_EXCLUSIVE);
-}
-
-void
-mp_queue_unlock(mp_queue *mpq)
-{
-	Assert(mpq->magic == MAGIC);
-	Assert(mpq->lock);
-	LWLockRelease(mpq->lock);
-}
-
 bool
-mp_queue_lock_nowait(mp_queue *mpq)
+ipc_queue_lock(ipc_queue *mpq, bool wait)
 {
 	Assert(mpq->magic == MAGIC);
 	Assert(mpq->lock);
+
+	if (wait)
+	{
+		LWLockAcquire(mpq->lock, LW_EXCLUSIVE);
+		return true;
+	}
+
 	return LWLockConditionalAcquire(mpq->lock, LW_EXCLUSIVE);
+}
+
+void
+ipc_queue_unlock(ipc_queue *mpq)
+{
+	Assert(mpq->magic == MAGIC);
+	Assert(mpq->lock);
+	Assert(LWLockHeldByMe(mpq->lock));
+	LWLockRelease(mpq->lock);
 }
