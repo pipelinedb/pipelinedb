@@ -889,13 +889,28 @@ do_synchronize(TriggerProcessState *state)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
 		Oid relid = row->matrel;
+		Relation rel = NULL;
 
-		Relation rel = heap_open(relid, AccessShareLock);
+		PG_TRY();
+		{
+			rel = heap_open(relid, NoLock);
+		}
+		PG_CATCH();
+		{
+			/*
+			 * This will happen in case the continuous view was dropped, so we don't really
+			 * need to emit the error message. We can simply skip this view.
+			 */
+			FlushErrorState();
+		}
+		PG_END_TRY();
 
-		do_decode_change(state, batch, rel, TRIGGER_PROCESS_CHANGE_NOOP,
-				NULL, NULL);
-
-		heap_close(rel, AccessShareLock);
+		if (rel)
+		{
+			do_decode_change(state, batch, rel, TRIGGER_PROCESS_CHANGE_NOOP,
+					NULL, NULL);
+			heap_close(rel, NoLock);
+		}
 	}
 
 	heap_endscan(scan);
