@@ -522,8 +522,8 @@ selector_poll(Selector *selector, int timeout)
 
 	if (selector->ready_cap < selector->poll_n)
 	{
-		selector->ready = repalloc(selector->ready, sizeof(Stream **));
-		selector->ready_cap = selector->ready_cap;
+		selector->ready = repalloc(selector->ready, selector->poll_n * sizeof(Stream **));
+		selector->ready_cap = selector->poll_n;
 	}
 
 	i = 0;

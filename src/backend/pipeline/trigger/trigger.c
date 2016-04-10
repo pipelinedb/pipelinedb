@@ -398,7 +398,7 @@ exec_trigger_proc(TriggerData *tcontext, FmgrInfo *finfo,
  * Fire all qualifying triggers for the given tuple
  */
 void
-fire_triggers(TriggerCacheEntry *entry, Relation rel,
+fire_triggers(TriggerCacheEntry *entry,
 		Relation cvrel,
 		TriggerProcessChangeType action,
 		HeapTuple old_tup, HeapTuple new_tup)
@@ -683,8 +683,7 @@ find_trigger_info(TriggerCacheEntry *entry, Oid tgoid);
  */
 void
 diff_triggers(TriggerProcessState *state, TriggerCacheEntry *entry,
-		Relation rel,
-		TriggerDesc *newdesc)
+		Oid matrelid, TriggerDesc *newdesc)
 {
 	dlist_mutable_iter iter;
 	int num_old = entry->numtriggers;
@@ -716,10 +715,21 @@ diff_triggers(TriggerProcessState *state, TriggerCacheEntry *entry,
 	if (num_old == 0 && num_new != 0)
 	{
 		MemoryContext old;
+		Relation rel = NULL;
 		entry->xmin = GetTopTransactionId();
-		old = MemoryContextSwitchTo(state->cache_cxt);
-		init_cache_entry(entry, rel);
-		MemoryContextSwitchTo(old);
+
+		rel = try_relation_open(matrelid, AccessShareLock);
+
+		if (rel)
+		{
+			old = MemoryContextSwitchTo(state->cache_cxt);
+			init_cache_entry(entry, rel);
+			MemoryContextSwitchTo(old);
+
+			relation_close(rel, AccessShareLock);
+		}
+		else
+			num_new = 0; /* assume CV has been dropped */
 	}
 
 	/* just stopped */
@@ -879,13 +889,28 @@ do_synchronize(TriggerProcessState *state)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
 		Oid relid = row->matrel;
+		Relation rel = NULL;
 
-		Relation rel = heap_open(relid, AccessShareLock);
+		PG_TRY();
+		{
+			rel = heap_open(relid, NoLock);
+		}
+		PG_CATCH();
+		{
+			/*
+			 * This will happen in case the continuous view was dropped, so we don't really
+			 * need to emit the error message. We can simply skip this view.
+			 */
+			FlushErrorState();
+		}
+		PG_END_TRY();
 
-		do_decode_change(state, batch, rel, TRIGGER_PROCESS_CHANGE_NOOP,
-				NULL, NULL);
-
-		heap_close(rel, AccessShareLock);
+		if (rel)
+		{
+			do_decode_change(state, batch, rel, TRIGGER_PROCESS_CHANGE_NOOP,
+					NULL, NULL);
+			heap_close(rel, NoLock);
+		}
 	}
 
 	heap_endscan(scan);

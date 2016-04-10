@@ -107,7 +107,7 @@ run_plan(TriggerCacheEntry *tc_entry)
  * This currently executes the view overlay plan for every change.
  */
 static void
-execute_sw_view(TriggerCacheEntry *trg_entry, Relation cvrel, Relation rel,
+execute_sw_view(TriggerCacheEntry *trg_entry, Relation cvrel,
 		TupleTableSlot *key_slot)
 {
 	ResultEntry *res_entry;
@@ -149,7 +149,7 @@ execute_sw_view(TriggerCacheEntry *trg_entry, Relation cvrel, Relation rel,
 			TRIGGER_PROCESS_CHANGE_INSERT;
 	}
 
-	fire_triggers(trg_entry, rel, cvrel, event_type, old_tup, new_tup);
+	fire_triggers(trg_entry, cvrel, event_type, old_tup, new_tup);
 
 	if (old_tup)
 		heap_freetuple(old_tup);
@@ -341,7 +341,6 @@ add_to_ts_group(TriggerCacheEntry *trg_entry,
  */
 static void
 track_sw_change(TriggerCacheEntry *trg_entry,
-				Relation rel,
 				Relation cvrel,
 				enum TriggerProcessChangeType action,
 				HeapTuple old_tup, HeapTuple new_tup)
@@ -427,7 +426,7 @@ track_sw_change(TriggerCacheEntry *trg_entry,
 	}
 
 	if (touched)
-		execute_sw_view(trg_entry, cvrel, rel, slot);
+		execute_sw_view(trg_entry, cvrel, slot);
 }
 
 /*

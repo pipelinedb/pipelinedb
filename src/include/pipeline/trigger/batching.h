@@ -66,7 +66,7 @@ extern void cleanup_changelist(ChangeList *cl);
 extern void cleanup_batch(XactBatch *batch);
 
 extern void process_changelist(TriggerProcessState *state,
-		ChangeList *cl, TransactionId xid, Relation rel,
+		ChangeList *cl, TransactionId xid,
 		Relation cvrel, TriggerCacheEntry *entry);
 
 extern void process_batch(TriggerProcessState *state, XactBatch *batch);

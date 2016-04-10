@@ -214,11 +214,11 @@ should_process_batch(TriggerCacheEntry *entry, TransactionId batch_xid)
  */
 void
 process_changelist(TriggerProcessState *state,
-		ChangeList *cl, TransactionId xid, Relation rel,
+		ChangeList *cl, TransactionId xid,
 		Relation cvrel, TriggerCacheEntry *entry)
 {
 	dlist_iter iter;
-	diff_triggers(state, entry, rel, cvrel->trigdesc);
+	diff_triggers(state, entry, cl->relid, cvrel->trigdesc);
 
 	if (!should_process_batch(entry, xid))
 		return;
@@ -226,7 +226,7 @@ process_changelist(TriggerProcessState *state,
 	dlist_foreach(iter, &cl->changes)
 	{
 		Change *chg = dlist_container(Change, list_node, iter.cur);
-		entry->trig_func(entry, rel, cvrel, chg->action,
+		entry->trig_func(entry, cvrel, chg->action,
 				chg->old_tup, chg->new_tup);
 	}
 }
@@ -245,7 +245,6 @@ process_batch(TriggerProcessState *state, XactBatch *batch)
 	dlist_foreach(iter, &batch->cl_list)
 	{
 		Relation cvrel = NULL;
-		Relation rel = NULL;
 
 		ChangeList *cl =
 			dlist_container(ChangeList, list_node, iter.cur);
@@ -260,16 +259,10 @@ process_batch(TriggerProcessState *state, XactBatch *batch)
 		cvrel = try_relation_open(entry->cvrelid, AccessShareLock);
 
 		if (cvrel)
-			rel = try_relation_open(cl->relid, AccessShareLock);
-
-		if (rel && cvrel)
-			process_changelist(state, cl, batch->xmin, rel, cvrel, entry);
+			process_changelist(state, cl, batch->xmin, cvrel, entry);
 
 		if (cvrel)
 			relation_close(cvrel, AccessShareLock);
-
-		if (rel)
-			relation_close(rel, AccessShareLock);
 	}
 }
 
