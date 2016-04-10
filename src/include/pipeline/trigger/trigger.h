@@ -94,8 +94,7 @@ typedef struct TimestampEntry
 
 typedef struct TriggerCacheEntry TriggerCacheEntry;
 
-typedef void (*TrigFunc)(TriggerCacheEntry *entry, Relation rel,
-			Relation cvrel,
+typedef void (*TrigFunc)(TriggerCacheEntry *entry, Relation cvrel,
 			TriggerProcessChangeType action,
 			HeapTuple old_tup,
 			HeapTuple new_tup);
@@ -174,12 +173,12 @@ extern void trigger_plugin_decode_commit_txn(LogicalDecodingContext *ctx, Reorde
 extern void trigger_plugin_decode_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn, Relation matrel, ReorderBufferChange *change);
 
 extern void diff_triggers(TriggerProcessState *state, TriggerCacheEntry *entry,
-		Relation rel, TriggerDesc *newdesc);
+		Oid relid, TriggerDesc *newdesc);
 
 extern void trigger_check_catalog(void *data, const char *name);
 extern AlertServer *MyAlertServer;
 
-extern void fire_triggers(TriggerCacheEntry *entry, Relation rel,
+extern void fire_triggers(TriggerCacheEntry *entry,
 		Relation cvrel,
 		TriggerProcessChangeType action,
 		HeapTuple old_tup, HeapTuple new_tup);

@@ -398,7 +398,7 @@ exec_trigger_proc(TriggerData *tcontext, FmgrInfo *finfo,
  * Fire all qualifying triggers for the given tuple
  */
 void
-fire_triggers(TriggerCacheEntry *entry, Relation rel,
+fire_triggers(TriggerCacheEntry *entry,
 		Relation cvrel,
 		TriggerProcessChangeType action,
 		HeapTuple old_tup, HeapTuple new_tup)
@@ -683,8 +683,7 @@ find_trigger_info(TriggerCacheEntry *entry, Oid tgoid);
  */
 void
 diff_triggers(TriggerProcessState *state, TriggerCacheEntry *entry,
-		Relation rel,
-		TriggerDesc *newdesc)
+		Oid matrelid, TriggerDesc *newdesc)
 {
 	dlist_mutable_iter iter;
 	int num_old = entry->numtriggers;
@@ -716,10 +715,21 @@ diff_triggers(TriggerProcessState *state, TriggerCacheEntry *entry,
 	if (num_old == 0 && num_new != 0)
 	{
 		MemoryContext old;
+		Relation rel = NULL;
 		entry->xmin = GetTopTransactionId();
-		old = MemoryContextSwitchTo(state->cache_cxt);
-		init_cache_entry(entry, rel);
-		MemoryContextSwitchTo(old);
+
+		rel = try_relation_open(matrelid, AccessShareLock);
+
+		if (rel)
+		{
+			old = MemoryContextSwitchTo(state->cache_cxt);
+			init_cache_entry(entry, rel);
+			MemoryContextSwitchTo(old);
+
+			relation_close(rel, AccessShareLock);
+		}
+		else
+			num_new = 0; /* assume CV has been dropped */
 	}
 
 	/* just stopped */
