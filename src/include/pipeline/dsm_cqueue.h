@@ -74,6 +74,4 @@ extern void dsm_cqueue_lock(dsm_cqueue *cq);
 extern bool dsm_cqueue_lock_nowait(dsm_cqueue *cq);
 extern void dsm_cqueue_unlock(dsm_cqueue *cq);
 
-extern void dsm_cqueue_test(void);
-
 #endif   /* DSM_CQUEUE_H */

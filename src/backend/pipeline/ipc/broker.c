@@ -11,29 +11,58 @@
 
 #include "postgres.h"
 
+#include "access/heapam.h"
+#include "access/htup_details.h"
+#include "access/xact.h"
+#include "catalog/pg_database.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "pipeline/ipc/broker.h"
+#include "pipeline/ipc/queue.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
 #include "signal.h"
+#include "storage/dsm.h"
 #include "storage/ipc.h"
 #include "storage/latch.h"
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
+#include "storage/spin.h"
 #include "tcop/tcopprot.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
+#include "utils/snapmgr.h"
 #include "utils/timeout.h"
 
-#define NUM_INTERNAL_QUEUES = 4;
+static dsm_segment *my_segment = NULL;
+
+typedef struct dsm_segment_slot
+{
+	dsm_segment *segment;
+	dsm_handle *handle;
+} dsm_segment_slot;
+
+typedef struct BrokerPerDBMeta
+{
+	Oid dbid;
+	slock_t mutex;
+
+	/* segment for ipc queues of all database worker and combiner processes */
+	dsm_segment_slot *segment;
+
+	/* ephemeral segments used by adhoc query processes */
+	HTAB *ephemeral_segments;
+} BrokerPerDBMeta;
 
 /* guc */
 int continuous_query_ipc_shared_mem;
 
 /* flag to tell if we're in IPC broker process */
 static bool am_ipc_msg_broker = false;
+
+/* metadata for managing dsm segments and ipc queues */
+static HTAB *broker_meta_hash = NULL;
 
 /* flags set by signal handlers */
 static volatile sig_atomic_t got_SIGTERM = false;
@@ -49,6 +78,108 @@ sigterm_handler(SIGNAL_ARGS)
 		SetLatch(MyLatch);
 
 	errno = save_errno;
+}
+
+static List *
+get_database_oids(void)
+{
+	List *db_oids = NIL;
+	Relation pg_database;
+	HeapScanDesc scan;
+	HeapTuple tup;
+	MemoryContext resultcxt;
+
+	/* This is the context that we will allocate our output data in */
+	resultcxt = CurrentMemoryContext;
+
+	/*
+	 * Start a transaction so we can access pg_database, and get a snapshot.
+	 * We don't have a use for the snapshot itself, but we're interested in
+	 * the secondary effect that it sets RecentGlobalXmin.  (This is critical
+	 * for anything that reads heap pages, because HOT may decide to prune
+	 * them even if the process doesn't attempt to modify any tuples.)
+	 */
+	StartTransactionCommand();
+	(void) GetTransactionSnapshot();
+
+	/* We take a AccessExclusiveLock so we don't conflict with any DATABASE commands */
+	pg_database = heap_open(DatabaseRelationId, AccessExclusiveLock);
+	scan = heap_beginscan_catalog(pg_database, 0, NULL);
+
+	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
+	{
+		MemoryContext old;
+		Form_pg_database row = (Form_pg_database) GETSTRUCT(tup);
+
+		/* Ignore template databases or ones that don't allow connections. */
+		if (row->datistemplate || !row->datallowconn)
+			continue;
+
+		/*
+		 * Allocate our results in the caller's context, not the
+		 * transaction's. We do this inside the loop, and restore the original
+		 * context at the end, so that leaky things like heap_getnext() are
+		 * not called in a potentially long-lived context.
+		 */
+		old = MemoryContextSwitchTo(resultcxt);
+
+		db_oids = lappend_oid(db_oids, HeapTupleGetOid(tup));
+
+		MemoryContextSwitchTo(old);
+	}
+
+	heap_endscan(scan);
+	heap_close(pg_database, NoLock);
+
+	CommitTransactionCommand();
+
+	return db_oids;
+}
+
+static void
+gc_dropped_dbs(void)
+{
+	static TimestampTz last_gc = 0;
+	List *db_oids;
+	List *dbs_to_remove = NIL;
+	HASH_SEQ_STATUS status;
+	BrokerPerDBMeta *db_meta;
+
+	if (!TimestampDifferenceExceeds(last_gc, GetCurrentTimestamp(), 60 * 1000)) /* 60s */
+		return;
+
+	db_oids = get_database_oids();
+
+	hash_seq_init(&status, broker_meta_hash);
+	while ((db_meta = (BrokerPerDBMeta *) hash_seq_search(&status)) != NULL)
+	{
+		bool found = false;
+		ListCell *lc;
+
+		foreach(lc, db_oids)
+		{
+			if (lfirst_oid(lc) == db_meta->dbid)
+			{
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+			dbs_to_remove = lappend_oid(dbs_to_remove, db_meta->dbid);
+	}
+
+	if (list_length(dbs_to_remove))
+	{
+		ListCell *lc;
+
+		foreach(lc, dbs_to_remove)
+		{
+
+		}
+	}
+
+	last_gc = GetCurrentTimestamp();
 }
 
 static void
@@ -162,8 +293,10 @@ ipc_msg_broker_main(int argc, char *argv[])
 	{
 		int rc;
 
+		gc_dropped_dbs();
+
 		/* wait until timeout or signaled */
-		rc = WaitLatch(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, 1000);
+		rc = WaitLatch(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 1000);
 		ResetLatch(MyLatch);
 
 		/* emergency bailout if postmaster has died. */
@@ -175,7 +308,7 @@ ipc_msg_broker_main(int argc, char *argv[])
 			break;
 	}
 
-	elog(LOG, "ipc broker shutting down");
+	elog(LOG, "ipc message broker shutting down");
 
 	proc_exit(0); /* done */
 }

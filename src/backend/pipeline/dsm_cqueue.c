@@ -340,9 +340,7 @@ dsm_cqueue_lock(dsm_cqueue *cq)
 {
 	Assert(cq->magic == MAGIC);
 
-	lw_lock_high_priority = IsContQueryWorkerProcess();
 	LWLockAcquire(cq->lock, LW_EXCLUSIVE);
-	lw_lock_high_priority = false;
 }
 
 void
