@@ -1016,7 +1016,7 @@ AdhocInsertStateCreate(Bitmapset *queries)
 		if (proc->group_id == 0 || handle == 0 || !bms_is_member(proc->group_id, queries))
 			continue;
 
-		segment = dsm_find_or_attach(handle);
+		segment = attach_to_dsm_segment(handle);
 		if (segment == NULL)
 			continue;
 

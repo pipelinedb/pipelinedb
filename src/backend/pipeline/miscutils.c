@@ -295,7 +295,7 @@ SetDefaultPriority()
 }
 
 dsm_segment *
-dsm_find_or_attach(dsm_handle handle)
+attach_to_dsm_segment(dsm_handle handle)
 {
 	dsm_segment *segment = dsm_find_mapping(handle);
 	if (segment == NULL)

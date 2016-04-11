@@ -438,7 +438,7 @@ attach_to_db_dsm_segment(void)
 		dsm_detach(db_dsm_segment);
 
 	db_dsm_handle = handle;
-	db_dsm_segment = dsm_find_or_attach(handle);
+	db_dsm_segment = attach_to_dsm_segment(handle);
 	dsm_pin_mapping(db_dsm_segment);
 	return db_dsm_segment;
 }

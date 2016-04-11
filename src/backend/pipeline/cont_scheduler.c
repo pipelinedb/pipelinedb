@@ -28,6 +28,7 @@
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/dsm_cqueue.h"
+#include "pipeline/ipc/broker.h"
 #include "pipeline/miscutils.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -496,6 +497,8 @@ cont_bgworker_main(Datum arg)
 		proc->segment = dsm_attach(proc->db_meta->handle);
 		dsm_pin_mapping(proc->segment);
 
+		proc->queue = acquire_my_ipc_consumer_queue();
+
 		CommitTransactionCommand();
 	}
 
@@ -515,7 +518,11 @@ cont_bgworker_main(Datum arg)
 	cq_stat_send_purge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
 
 	if (proc->type != TRIG)
+	{
 		dsm_detach(proc->segment);
+
+		release_my_ipc_consumer_queue();
+	}
 
 	/* If this isn't a clean termination, exit with a non-zero status code */
 	if (!proc->db_meta->terminate)

@@ -6,18 +6,39 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef _H
-#define _H
+#ifndef IPC_QUEUE_H
+#define IPC_QUEUE_H
 
 #include "postgres.h"
 
 #include "storage/lwlock.h"
 
-typedef struct ipc_queue ipc_queue;
-
+typedef struct ipc_queue_slot ipc_queue_slot;
 typedef void (*ipc_queue_peek_fn) (void *ptr, int len);
 typedef void (*ipc_queue_pop_fn) (void *ptr, int len);
 typedef void (*ipc_queue_copy_fn) (void *dest, void *src, int len);
+
+typedef struct ipc_queue
+{
+	int magic;
+
+	LWLock *lock;
+
+	Size size; /* physical size of buffer */
+
+	pg_atomic_uint64 head;
+	pg_atomic_uint64 tail;
+	pg_atomic_uint64 cursor;
+
+	pg_atomic_uint64 producer_latch;
+	pg_atomic_uint64 consumer_latch;
+
+	ipc_queue_peek_fn peek_fn;
+	ipc_queue_pop_fn  pop_fn;
+	ipc_queue_copy_fn copy_fn;
+
+	char bytes[1]; /* length equal to size */
+} ipc_queue;
 
 extern void ipc_queue_init(void *ptr, Size size, LWLock *lock);
 extern void ipc_queue_set_handlers(ipc_queue *ipcq, ipc_queue_peek_fn peek_fn,

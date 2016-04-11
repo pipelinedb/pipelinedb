@@ -19,35 +19,13 @@
 #define WAIT_SLEEP_NS 250
 #define MAX_WAIT_SLEEP_NS 5000 /* 5ms */
 
-typedef struct ipc_queue_slot
+struct ipc_queue_slot
 {
 	uint64_t next;
 	bool     wraps;
 	bool     peeked;
 	int      len;
 	char     bytes[1]; /* dynamically allocated */
-} ipc_queue_slot;
-
-struct ipc_queue
-{
-	int magic;
-
-	LWLock *lock;
-
-	Size size; /* physical size of buffer */
-
-	pg_atomic_uint64 head;
-	pg_atomic_uint64 tail;
-	pg_atomic_uint64 cursor;
-
-	pg_atomic_uint64 producer_latch;
-	pg_atomic_uint64 consumer_latch;
-
-	ipc_queue_peek_fn peek_fn;
-	ipc_queue_pop_fn  pop_fn;
-	ipc_queue_copy_fn copy_fn;
-
-	char bytes[1]; /* length equal to size */
 };
 
 static inline uint64_t

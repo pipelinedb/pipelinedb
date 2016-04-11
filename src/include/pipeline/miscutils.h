@@ -35,6 +35,6 @@ extern void DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf);
 extern int SetNicePriority(void);
 extern int SetDefaultPriority(void);
 
-extern dsm_segment *dsm_find_or_attach(dsm_handle handle);
+extern dsm_segment *attach_to_dsm_segment(dsm_handle handle);
 
 #endif   /* MISCUTILS_H */

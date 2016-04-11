@@ -50,6 +50,8 @@ typedef struct ContQueryProc
 	int id; /* unique across all cont query processes */
 	volatile int group_id; /* unqiue [0, n) for each db_oid, type pair */
 
+	ipc_queue *queue;
+
 	dsm_segment *segment;
 	dsm_handle dsm_handle; /* equals db_meta->handle for non-adhoc procs */
 	BackgroundWorkerHandle *bgw_handle;
