@@ -12,6 +12,7 @@
 #include "access/heapam.h"
 #include "storage/lock.h"
 #include "access/xact.h"
+#include "utils/snapmgr.h"
 
 /*
  * find_change_list
@@ -300,16 +301,19 @@ process_batches(TriggerProcessState *state)
 		state->dirty_syscache = true;
 
 		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
 
 		PG_TRY();
 		{
 			process_batch(state, batch);
+			PopActiveSnapshot();
 			CommitTransactionCommand();
 		}
 		PG_CATCH();
 		{
 			EmitErrorReport();
 			FlushErrorState();
+			PopActiveSnapshot();
 			AbortCurrentTransaction();
 		}
 		PG_END_TRY();
