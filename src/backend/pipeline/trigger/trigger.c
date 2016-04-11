@@ -176,6 +176,7 @@ trigger_main()
 
 	CHECK_FOR_INTERRUPTS();
 
+	CheckContinuousTriggerRequirements(ERROR);
 	wal_init();
 
 	state = create_trigger_process_state();
