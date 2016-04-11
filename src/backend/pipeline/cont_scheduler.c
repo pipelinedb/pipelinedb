@@ -1437,7 +1437,7 @@ CheckContinuousTriggerRequirements(int elevel)
 
 	if (!XLogLogicalInfoActive())
 	{
-		elog(elevel, "continuous triggers require wal_level set to wal_level_logical");
+		elog(elevel, "continuous triggers require wal_level set to logical");
 		return false;
 	}
 
