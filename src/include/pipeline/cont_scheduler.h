@@ -23,13 +23,6 @@
 #define MAX_CQS 1024
 #define BGWORKER_IS_CONT_QUERY_PROC 0x1000
 
-#define GetContProcCQueue(proc) ((dsm_cqueue *) ((char *) dsm_segment_address((proc)->segment) + \
-			(continuous_query_ipc_shared_mem * 1024 * (proc)->id)))
-#define GetWorkerCQueue(segment, idx) ((dsm_cqueue *) ((char *) dsm_segment_address(segment) + \
-				(continuous_query_ipc_shared_mem * 1024 * (idx))))
-#define GetCombinerCQueue(segment, idx) ((dsm_cqueue *) ((char *) dsm_segment_address(segment) + \
-				(continuous_query_ipc_shared_mem * 1024 * ((idx) + continuous_query_num_workers))))
-
 typedef enum
 {
 	COMBINER,

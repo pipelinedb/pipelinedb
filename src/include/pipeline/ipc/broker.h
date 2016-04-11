@@ -21,10 +21,12 @@ extern void IPCMessageBrokerShmemInit(void);
 extern pid_t StartIPCMessageBroker(void);
 extern bool IsIPCMessageBrokerProcess(void);
 
-extern ipc_queue *acquire_my_ipc_consumer_queue(void);
-extern void release_my_ipc_consumer_queue(void);
+extern void signal_ipc_broker_process(void);
 
-extern ipc_queue *get_worker_producer_queue_with_lock(void);
-extern ipc_queue *get_combiner_producer_queue_with_lock(int idx);
+extern ipc_queue *acquire_my_ipc_queue(void);
+extern void release_my_ipc_queue(void);
+
+extern ipc_queue *get_worker_queue_with_lock(void);
+extern ipc_queue *get_combiner_queue_with_lock(int idx);
 
 #endif

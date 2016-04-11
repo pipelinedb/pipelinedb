@@ -18,6 +18,7 @@
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "nodes/print.h"
+#include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/ipc/broker.h"
 #include "pipeline/ipc/queue.h"
@@ -42,13 +43,12 @@
 #define num_bg_workers_per_db (continuous_query_num_workers + continuous_query_num_combiners)
 #define num_locks_per_db (num_bg_workers_per_db + 1) /* +1 for all ephemeral ipc queues */
 #define ipc_queue_size (continuous_query_ipc_shared_mem * 1024)
-#define db_dsm_segment_size (ipc_queue_size * num_bg_workers_per_db * 2)
+#define db_dsm_segment_size (ipc_queue_size * ((continuous_query_num_workers * 2) + continuous_query_num_combiners))
 #define broker_db_meta_size (sizeof(broker_db_meta) + (max_worker_processes * sizeof(dsm_segment_slot)))
 
 typedef struct dsm_segment_slot
 {
 	pg_atomic_flag used;
-	dsm_segment *segment;
 	dsm_handle handle;
 } dsm_segment_slot;
 
@@ -76,7 +76,8 @@ typedef struct broker_db_meta
 	int lock_idx;
 
 	/* segment for ipc queues of all database worker and combiner processes */
-	dsm_segment_slot seg_slot;
+	dsm_segment *segment;
+	dsm_handle handle;
 
 	/* ephemeral segments used by adhoc query processes */
 	dsm_segment_slot ephemeral_seg_slots[1]; /* max_worker_processes total slots */
@@ -234,16 +235,18 @@ get_database_oids(void)
 static void
 purge_dropped_db_segments(void)
 {
-	static TimestampTz last_gc = 0;
+	static TimestampTz last_purge_time = 0;
 	List *db_oids;
 	List *dbs_to_remove = NIL;
 	HASH_SEQ_STATUS status;
 	broker_db_meta *db_meta;
 
-	if (!TimestampDifferenceExceeds(last_gc, GetCurrentTimestamp(), 30 * 1000)) /* 30s */
+	if (!TimestampDifferenceExceeds(last_purge_time, GetCurrentTimestamp(), 30 * 1000)) /* 30s */
 		return;
 
 	db_oids = get_database_oids();
+
+	LWLockAcquire(IPCMessageBrokerIndexLock, LW_SHARED);
 
 	hash_seq_init(&status, broker_meta->db_meta_hash);
 	while ((db_meta = (broker_db_meta *) hash_seq_search(&status)) != NULL)
@@ -264,61 +267,157 @@ purge_dropped_db_segments(void)
 			dbs_to_remove = lappend_oid(dbs_to_remove, db_meta->dbid);
 	}
 
+	LWLockRelease(IPCMessageBrokerIndexLock);
+
 	if (list_length(dbs_to_remove))
 	{
 		ListCell *lc;
+
+		LWLockAcquire(IPCMessageBrokerIndexLock, LW_EXCLUSIVE);
 
 		foreach(lc, dbs_to_remove)
 		{
 			Oid dbid = lfirst_oid(lc);
 			bool found;
 			broker_db_meta *meta;
-			int i;
 
 			meta = hash_search(broker_meta->db_meta_hash, &dbid, HASH_FIND, &found);
 			Assert(found);
 
-			Assert(!pg_atomic_unlocked_test_flag(&meta->seg_slot.used));
-			Assert(meta->seg_slot.segment);
-			Assert(meta->seg_slot.handle > 0);
+			Assert(meta->handle > 0);
 
 			/* detach from main db segment */
-			dsm_detach(meta->seg_slot.segment);
-
-			/* detach from any adhoc proc segments */
-			for (i = 0; i < max_worker_processes; i++)
-			{
-				dsm_segment_slot *slot = &meta->ephemeral_seg_slots[i];
-
-				if (pg_atomic_unlocked_test_flag(&slot->used))
-					continue;
-
-				Assert(slot->handle > 0);
-
-				/* we might have not attached to the segment yet */
-				if (!slot->segment)
-					continue;
-
-				dsm_detach(slot->segment);
-			}
+			if (meta->segment)
+				dsm_detach(meta->segment);
 
 			hash_search(broker_meta->db_meta_hash, &dbid, HASH_REMOVE, &found);
 			Assert(found);
 		}
+
+		LWLockRelease(IPCMessageBrokerIndexLock);
 	}
 
-	last_gc = GetCurrentTimestamp();
+	last_purge_time = GetCurrentTimestamp();
+}
+
+static dsm_segment *
+dsm_attach_and_pin(dsm_handle handle)
+{
+	ResourceOwner res;
+	ResourceOwner old;
+	dsm_segment *segment;
+
+	segment = dsm_find_mapping(handle);
+	if (segment != NULL)
+		return segment;
+
+	old = CurrentResourceOwner;
+	CurrentResourceOwner = ResourceOwnerCreate(NULL, "BrokerDBMeta dsm_segment ResourceOwner");
+
+	segment = dsm_attach(handle);
+	dsm_pin_mapping(segment);
+
+	res = CurrentResourceOwner;
+	CurrentResourceOwner = old;
+	ResourceOwnerDelete(res);
+
+	return segment;
 }
 
 static int
 copy_messages(void)
 {
-	return 0;
+	HASH_SEQ_STATUS status;
+	broker_db_meta *db_meta;
+	int num_copied = 0;
+
+	LWLockAcquire(IPCMessageBrokerIndexLock, LW_SHARED);
+
+	hash_seq_init(&status, broker_meta->db_meta_hash);
+	while ((db_meta = (broker_db_meta *) hash_seq_search(&status)) != NULL)
+	{
+		int i;
+		char *ptr;
+
+		if (db_meta->segment == NULL)
+			db_meta->segment = dsm_attach_and_pin(db_meta->handle);
+
+		ptr = dsm_segment_address(db_meta->segment);
+
+		for (i = 0; i < continuous_query_num_workers; i++)
+		{
+			ipc_queue *dest;
+			ipc_queue *src;
+
+			dest = (ipc_queue *) ptr;
+			ptr += ipc_queue_size;
+			src = (ipc_queue *) ptr;
+			ptr += ipc_queue_size;
+
+			while (true)
+			{
+				int len;
+				void *msg = ipc_queue_peek_next(src, &len);
+
+				if (msg == NULL)
+					break;
+
+				if (!ipc_queue_push_nolock(dest, msg, len, false))
+				{
+					ipc_queue_unpeek(src);
+					break;
+				}
+				else
+				{
+					ipc_queue_pop_peeked(src);
+					num_copied++;
+				}
+			}
+		}
+	}
+
+	LWLockRelease(IPCMessageBrokerIndexLock);
+
+	return num_copied;
 }
 
 static bool
 have_pending_messages(void)
 {
+	HASH_SEQ_STATUS status;
+	broker_db_meta *db_meta;
+
+	LWLockAcquire(IPCMessageBrokerIndexLock, LW_SHARED);
+
+	hash_seq_init(&status, broker_meta->db_meta_hash);
+	while ((db_meta = (broker_db_meta *) hash_seq_search(&status)) != NULL)
+	{
+		int i;
+		char *ptr;
+
+		Assert(db_meta->segment);
+		ptr = dsm_segment_address(db_meta->segment);
+
+		for (i = 0; i < num_bg_workers_per_db; i++)
+		{
+			ipc_queue *src;
+
+			ptr += ipc_queue_size;
+			src = (ipc_queue *) ptr;
+			ptr += ipc_queue_size;
+
+			if (!ipc_queue_is_empty(src))
+			{
+				hash_seq_term(&status);
+				LWLockRelease(IPCMessageBrokerIndexLock);
+
+				return true;
+			}
+		}
+	}
+
+	LWLockRelease(IPCMessageBrokerIndexLock);
+
 	return false;
 }
 
@@ -530,30 +629,6 @@ dsm_create_and_pin(Size size)
 	return segment;
 }
 
-static dsm_segment *
-dsm_attach_and_pin(dsm_handle handle)
-{
-	ResourceOwner res;
-	ResourceOwner old;
-	dsm_segment *segment;
-
-	segment = dsm_find_mapping(handle);
-	if (segment != NULL)
-		return segment;
-
-	old = CurrentResourceOwner;
-	CurrentResourceOwner = ResourceOwnerCreate(NULL, "BrokerDBMeta dsm_segment ResourceOwner");
-
-	segment = dsm_attach(handle);
-	dsm_pin_mapping(segment);
-
-	res = CurrentResourceOwner;
-	CurrentResourceOwner = old;
-	ResourceOwnerDelete(res);
-
-	return segment;
-}
-
 static broker_db_meta *
 get_db_meta(Oid dbid)
 {
@@ -579,18 +654,14 @@ get_db_meta(Oid dbid)
 	if (!found)
 	{
 		int i;
-		dsm_segment_slot *seg_slot;
 		dsm_segment *segment;
 		char *ptr;
+		lw_lock_slot *lock_slot;
 
 		MemSet(db_meta, 0, broker_db_meta_size);
 
 		db_meta->dbid = MyDatabaseId;
 		db_meta->lock_idx = -1;
-
-		seg_slot = &db_meta->seg_slot;
-		pg_atomic_init_flag(&seg_slot->used);
-		pg_atomic_test_set_flag(&seg_slot->used);
 
 		for (i = 0; i < max_worker_processes; i++)
 		{
@@ -602,7 +673,7 @@ get_db_meta(Oid dbid)
 		segment = dsm_create_and_pin(db_dsm_segment_size);
 
 		/* Set handle on the dsm_segment_slot. */
-		seg_slot->handle = dsm_segment_handle(segment);
+		db_meta->handle = dsm_segment_handle(segment);
 
 		/* Pick a lock index for this database. */
 		for (i = 0; i < max_worker_processes; i++)
@@ -618,6 +689,7 @@ get_db_meta(Oid dbid)
 
 		/* XXX(usmanm): Is this totally kosher? */
 		Assert(db_meta->lock_idx != -1);
+		lock_slot = &broker_meta->locks[db_meta->lock_idx];
 
 		for (i = 0; i < num_locks_per_db; i++)
 		{
@@ -630,22 +702,33 @@ get_db_meta(Oid dbid)
 		ptr = dsm_segment_address(segment);
 		MemSet(ptr, 0, db_dsm_segment_size);
 
-		for (i = 0; i < num_bg_workers_per_db; i++)
+		for (i = 0; i < continuous_query_num_workers; i++)
 		{
-			lw_lock_slot *slot = &broker_meta->locks[db_meta->lock_idx + i];
-
 			/*
-			 * We have two queues per process, one is a multi producer queue which requires a LWLock,
+			 * We have two queues per worker process, one is a multi producer queue which requires a LWLock,
 			 * the other one is a single producer queue and doesn't require a LWLock. The single producer
-			 * queue is used by the continuous query process to read messages being sent to it while the
-			 * multi producer queue is used other other processes to send messages to the continuous query
-			 * process. The IPC broker process moves messages between these two queues.
+			 * queue is used by the worker process to read messages being sent to it while the
+			 * multi producer queue is used other other processes to send messages to the worker process.
+			 * The IPC broker process moves messages between these two queues.
 			 */
-			ipc_queue_init(ptr, ipc_queue_size, NULL);
+			ipc_queue_init(ptr, ipc_queue_size, NULL, false);
+			ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, StreamTupleStatePopFn, NULL);
 			ptr += ipc_queue_size;
 
-			ipc_queue_init(ptr, ipc_queue_size, &slot->lock);
+			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, true);
+			ipc_queue_set_handlers((ipc_queue *) ptr, NULL, NULL, StreamTupleStateCopyFn);
 			ptr += ipc_queue_size;
+
+			lock_slot++;
+		}
+
+		for (i = 0; i < continuous_query_num_combiners; i++)
+		{
+			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, false);
+			ipc_queue_set_handlers((ipc_queue *) ptr, PartialTupleStatePeekFn, PartialTupleStatePopFn, PartialTupleStateCopyFn);
+			ptr += ipc_queue_size;
+
+			lock_slot++;
 		}
 
 		LWLockRelease(IPCMessageBrokerIndexLock);
@@ -657,17 +740,31 @@ get_db_meta(Oid dbid)
 	return db_meta;
 }
 
-static inline int
-get_ipc_queue_idx_in_segment(int group_id, bool is_worker)
+static ipc_queue *
+get_bg_worker_queue(dsm_segment *segment, int group_id, bool is_worker, bool for_producers)
 {
-	int idx = group_id;
-	if (!is_worker)
-		idx += continuous_query_num_workers;
-	return idx;
+	char *ptr = dsm_segment_address(segment);
+	ipc_queue *ipcq;
+
+	if (is_worker)
+	{
+		ptr += ipc_queue_size * group_id * 2;
+		if (for_producers)
+			ptr += ipc_queue_size; /* skip over to the producer queue */
+	}
+	else
+	{
+		ptr += ipc_queue_size * continuous_query_num_workers * 2;
+		ptr += ipc_queue_size * group_id;
+	}
+
+	ipcq = (ipc_queue *) ptr;
+
+	return ipcq;
 }
 
 ipc_queue *
-acquire_my_ipc_consumer_queue(void)
+acquire_my_ipc_queue(void)
 {
 	broker_db_meta *db_meta;
 	MemoryContext old;
@@ -703,35 +800,24 @@ acquire_my_ipc_consumer_queue(void)
 		/* XXX(usmanm): Is this totally kosher? */
 		Assert(my_ipc_meta->seg_slot);
 
-		segment = dsm_create_and_pin(ipc_queue_size * 2);
+		segment = dsm_create_and_pin(ipc_queue_size);
 		my_ipc_meta->seg_slot->handle = dsm_segment_handle(segment);
 		my_ipc_meta->segment = segment;
 
 		ptr = dsm_segment_address(my_ipc_meta->segment);
-		ipc_queue_init(ptr, ipc_queue_size, NULL);
-		my_ipc_meta->queue = (ipc_queue *) ptr;
-
-		ptr += ipc_queue_size;
 		ipc_queue_init(ptr, ipc_queue_size,
-				&broker_meta->locks[db_meta->lock_idx + num_bg_workers_per_db].lock);
+				&broker_meta->locks[db_meta->lock_idx + num_bg_workers_per_db].lock, false);
+		ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, StreamTupleStatePopFn, StreamTupleStateCopyFn);
 	}
 	else
 	{
-		int idx;
-		char *ptr;
-
 		/*
 		 * For worker and combiner processes, we simply connect to the DB's primary dsm_segment
 		 * and find the correct ipc_queue within that dsm_segment.
 		 */
-		idx = get_ipc_queue_idx_in_segment(MyContQueryProc->group_id, IsContQueryWorkerProcess());
-
-		my_ipc_meta->seg_slot = &db_meta->seg_slot;
-		my_ipc_meta->segment = dsm_attach_and_pin(db_meta->seg_slot.handle);
-
-		ptr = dsm_segment_address(my_ipc_meta->segment);
-		ptr += ipc_queue_size * idx * 2;
-		my_ipc_meta->queue = (ipc_queue *) ptr;
+		my_ipc_meta->segment = dsm_attach_and_pin(db_meta->handle);
+		my_ipc_meta->queue = get_bg_worker_queue(my_ipc_meta->segment, MyContQueryProc->group_id, IsContQueryWorkerProcess(), false);
+		my_ipc_meta->seg_slot = NULL;
 	}
 
 	MemoryContextSwitchTo(old);
@@ -740,45 +826,31 @@ acquire_my_ipc_consumer_queue(void)
 }
 
 void
-release_my_ipc_consumer_queue()
+release_my_ipc_queue()
 {
 	Assert(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess());
 	Assert(my_ipc_meta);
-	Assert(!pg_atomic_unlocked_test_flag(&my_ipc_meta->seg_slot->used));
 
 	dsm_detach(my_ipc_meta->segment);
 
 	if (IsContQueryAdhocProcess())
+	{
+		Assert(!pg_atomic_unlocked_test_flag(&my_ipc_meta->seg_slot->used));
 		pg_atomic_clear_flag(&my_ipc_meta->seg_slot->used);
+	}
 
 	pfree(my_ipc_meta);
 	my_ipc_meta = NULL;
 }
 
-static ipc_queue *
-get_bg_worker_queue_for_producers(dsm_segment *segment, int group_id, bool is_worker)
-{
-	int idx = get_ipc_queue_idx_in_segment(group_id, is_worker);
-	char *ptr = dsm_segment_address(segment);
-	ipc_queue *ipcq;
-
-	ptr += ipc_queue_size * idx * 2;
-	ptr += ipc_queue_size; /* skip over to the producer queue */
-
-	ipcq = (ipc_queue *) ptr;
-	Assert(ipcq->lock);
-
-	return ipcq;
-}
-
 ipc_queue *
-get_worker_producer_queue_with_lock(void)
+get_worker_queue_with_lock(void)
 {
 	static long idx = -1;
 	int ntries = 0;
 	ipc_queue *ipcq = NULL;
 	broker_db_meta *db_meta = get_db_meta(MyDatabaseId);
-	dsm_segment *segment = dsm_attach_and_pin(db_meta->seg_slot.handle);
+	dsm_segment *segment = dsm_attach_and_pin(db_meta->handle);
 
 	if (idx == -1)
 		idx = rand() % continuous_query_num_workers;
@@ -787,7 +859,17 @@ get_worker_producer_queue_with_lock(void)
 
 	for (;;)
 	{
-		ipcq = get_bg_worker_queue_for_producers(segment, idx, true);
+		/*
+		 * If we have multiple workers and we're trying to write from a continuous transform, never write to our
+		 * own queue.
+		 */
+		if (IsContQueryWorkerProcess() && continuous_query_num_workers > 1 && idx == MyContQueryProc->id)
+		{
+			ntries++;
+			idx = (idx + 1) % continuous_query_num_workers;
+		}
+
+		ipcq = get_bg_worker_queue(segment, idx, true, true);
 
 		/*
 		 * Try to lock dsm_cqueue of any worker that is not already locked in
@@ -816,11 +898,18 @@ get_worker_producer_queue_with_lock(void)
 }
 
 ipc_queue *
-get_combiner_producer_queue_with_lock(int idx)
+get_combiner_queue_with_lock(int idx)
 {
 	broker_db_meta *db_meta = get_db_meta(MyDatabaseId);
-	dsm_segment *segment = dsm_attach_and_pin(db_meta->seg_slot.handle);
-	ipc_queue *ipcq = get_bg_worker_queue_for_producers(segment, idx, false);
+	dsm_segment *segment = dsm_attach_and_pin(db_meta->handle);
+	ipc_queue *ipcq = get_bg_worker_queue(segment, idx, false, true);
 	ipc_queue_lock(ipcq, true);
 	return ipcq;
+}
+
+void
+signal_ipc_broker_process(void)
+{
+	if (!pg_atomic_unlocked_test_flag(&broker_meta->waiting))
+		SetLatch(broker_meta->latch);
 }

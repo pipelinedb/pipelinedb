@@ -10,6 +10,7 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
+#include "pipeline/ipc/broker.h"
 #include "pipeline/ipc/queue.h"
 #include "port/atomics.h"
 #include "storage/latch.h"
@@ -49,7 +50,7 @@ ipc_queue_slot_get(ipc_queue *ipcq, uint64_t ptr)
 }
 
 void
-ipc_queue_init(void *ptr, Size size, LWLock *lock)
+ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router)
 {
 	ipc_queue *ipcq;
 
@@ -58,6 +59,8 @@ ipc_queue_init(void *ptr, Size size, LWLock *lock)
 		elog(ERROR, "ipc_queue already initialized");
 
 	MemSet((char *) ipcq, 0, size);
+
+	ipcq->used_by_router = used_by_router;
 
 	/* We leave enough space for a ipc_queue_slot to go at the end, so we never overflow the buffer. */
 	ipcq->size = size - sizeof(ipc_queue) - sizeof(ipc_queue_slot);
@@ -100,7 +103,8 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 	bool needs_wrap = false;
 
 	Assert(ipcq->magic == MAGIC);
-	Assert(LWLockHeldByMe(ipcq->lock));
+	if (ipcq->lock)
+		Assert(LWLockHeldByMe(ipcq->lock));
 
 	len_needed = sizeof(ipc_queue_slot) + len;
 	if (len_needed > ipcq->size)
@@ -180,9 +184,14 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 	slot->next = head;
 	pg_atomic_write_u64(&ipcq->head, head);
 
-	consumer_latch = (Latch *) pg_atomic_read_u64(&ipcq->consumer_latch);
-	if (consumer_latch)
-		SetLatch(consumer_latch);
+	if (ipcq->used_by_router)
+		signal_ipc_broker_process();
+	else
+	{
+		consumer_latch = (Latch *) pg_atomic_read_u64(&ipcq->consumer_latch);
+		if (consumer_latch)
+			SetLatch(consumer_latch);
+	}
 
 	return true;
 }

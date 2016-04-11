@@ -223,7 +223,7 @@ CombinerDestReceiverFlush(DestReceiver *self)
 		{
 			List *partials = c->partials[i];
 			ListCell *lc;
-			dsm_cqueue *cq = NULL;
+			ipc_queue *ipcq = NULL;
 
 			if (partials == NIL)
 				continue;
@@ -235,17 +235,17 @@ CombinerDestReceiverFlush(DestReceiver *self)
 						HEAPTUPLESIZE + pts->tup->t_len +
 						(pts->nacks * sizeof(InsertBatchAck)));
 
-				if (cq == NULL)
-					cq = GetCombinerQueue(pts);
+				if (ipcq == NULL)
+					ipcq = get_combiner_queue_with_lock(pts->hash % continuous_query_num_combiners);
 
-				Assert(cq);
-				dsm_cqueue_push_nolock(cq, pts, len, true);
+				Assert(ipcq);
+				ipc_queue_push_nolock(ipcq, pts, len, true);
 
 				IncrementCQWrite(1, len);
 			}
 
-			Assert(cq);
-			dsm_cqueue_unlock(cq);
+			Assert(ipcq);
+			ipc_queue_unlock(ipcq);
 
 			list_free_deep(partials);
 			c->partials[i] = NIL;

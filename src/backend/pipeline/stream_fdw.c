@@ -57,7 +57,7 @@ typedef struct StreamInsertState
 	TupleDesc desc;
 	bytea *packed_desc;
 
-	dsm_cqueue *worker_queue;
+	ipc_queue *worker_queue;
 	AdhocInsertState *adhoc_state;
 } StreamInsertState;
 
@@ -490,7 +490,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 			ack->batch = batch;
 		}
 
-		sis->worker_queue = GetWorkerQueue();
+		sis->worker_queue = get_worker_queue_with_lock();
 		Assert(sis->worker_queue);
 	}
 
@@ -531,21 +531,21 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 		 */
 		if (sis->count && (sis->count % continuous_query_batch_size == 0))
 		{
-			dsm_cqueue_unlock(sis->worker_queue);
-			sis->worker_queue = GetWorkerQueue();
+			ipc_queue_unlock(sis->worker_queue);
+			sis->worker_queue = get_worker_queue_with_lock();
 			sis->num_batches++;
 		}
 
-		if (!dsm_cqueue_push_nolock(sis->worker_queue, sts, len, false))
+		if (!ipc_queue_push_nolock(sis->worker_queue, sts, len, false))
 		{
 			sis->num_batches++;
 
 			do
 			{
-				dsm_cqueue_unlock(sis->worker_queue);
-				sis->worker_queue = GetWorkerQueue();
+				ipc_queue_unlock(sis->worker_queue);
+				sis->worker_queue = get_worker_queue_with_lock();
 			}
-			while (!dsm_cqueue_push_nolock(sis->worker_queue, sts, len, false));
+			while (!ipc_queue_push_nolock(sis->worker_queue, sts, len, false));
 		}
 
 	}
@@ -573,7 +573,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 
 	if (sis->worker_queue)
 	{
-		dsm_cqueue_unlock(sis->worker_queue);
+		ipc_queue_unlock(sis->worker_queue);
 		if (synchronous_stream_insert)
 			InsertBatchWaitAndRemove(sis->batch, sis->count);
 	}

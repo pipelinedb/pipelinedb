@@ -492,14 +492,8 @@ cont_bgworker_main(Datum arg)
 
 	if (proc->type != TRIG)
 	{
-		StartTransactionCommand();
-
-		proc->segment = dsm_attach(proc->db_meta->handle);
-		dsm_pin_mapping(proc->segment);
-
-		proc->queue = acquire_my_ipc_consumer_queue();
-
-		CommitTransactionCommand();
+		cq_stat_init(&MyProcCQStats, 0, MyProcPid);
+		proc->queue = acquire_my_ipc_queue();
 	}
 
 	elog(LOG, "continuous query process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);
@@ -508,20 +502,13 @@ cont_bgworker_main(Datum arg)
 	/* Be nice! Give up some CPU. */
 	SetNicePriority();
 
-	/* Initialize process level CQ stats. */
-	cq_stat_init(&MyProcCQStats, 0, MyProcPid);
-
 	/* Run the continuous execution function. */
 	run();
 
-	/* Purge process level CQ stats. */
-	cq_stat_send_purge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
-
 	if (proc->type != TRIG)
 	{
-		dsm_detach(proc->segment);
-
-		release_my_ipc_consumer_queue();
+		cq_stat_send_purge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+		release_my_ipc_queue();
 	}
 
 	/* If this isn't a clean termination, exit with a non-zero status code */

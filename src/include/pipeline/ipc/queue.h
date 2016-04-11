@@ -23,6 +23,7 @@ typedef struct ipc_queue
 	int magic;
 
 	LWLock *lock;
+	bool used_by_router;
 
 	Size size; /* physical size of buffer */
 
@@ -40,7 +41,7 @@ typedef struct ipc_queue
 	char bytes[1]; /* length equal to size */
 } ipc_queue;
 
-extern void ipc_queue_init(void *ptr, Size size, LWLock *lock);
+extern void ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router);
 extern void ipc_queue_set_handlers(ipc_queue *ipcq, ipc_queue_peek_fn peek_fn,
 		ipc_queue_pop_fn pop_fn, ipc_queue_copy_fn cpy_fn);
 

@@ -188,7 +188,7 @@ TransformDestReceiverFlush(DestReceiver *self)
 			Bitmapset *targets;
 			bytea *packed_desc;
 			Size size = 0;
-			dsm_cqueue *cq;
+			ipc_queue *ipcq;
 			int batch = 0;
 			int nbatches = 1;
 
@@ -209,7 +209,7 @@ TransformDestReceiverFlush(DestReceiver *self)
 			}
 
 			packed_desc = PackTupleDesc(RelationGetDescr(t->tg_rel));
-			cq = GetWorkerQueueForWorker();
+			ipcq = get_worker_queue_with_lock();
 
 			foreach(lc, t->tups)
 			{
@@ -220,24 +220,20 @@ TransformDestReceiverFlush(DestReceiver *self)
 
 				if (batch == continuous_query_batch_size)
 				{
-					if (cq)
-						dsm_cqueue_unlock(cq);
-					cq = GetWorkerQueueForWorker();
+					ipc_queue_unlock(ipcq);
+					ipcq = get_worker_queue_with_lock();
 					batch = 0;
 					nbatches++;
 				}
 
-				if (cq && dsm_cqueue_push_nolock(cq, sts, len, false))
+				if (ipc_queue_push_nolock(ipcq, sts, len, false))
 				{
 					batch++;
 					size += len;
 				}
-				else
-					StreamTupleStateBuffer(sts, len);
 			}
 
-			if (cq)
-				dsm_cqueue_unlock(cq);
+			ipc_queue_unlock(ipcq);
 
 			pfree(packed_desc);
 			heap_close(rel, NoLock);
