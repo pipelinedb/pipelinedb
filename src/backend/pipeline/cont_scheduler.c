@@ -49,6 +49,9 @@
 #include "utils/timeout.h"
 #include "pipeline/trigger/trigger.h"
 #include "pipeline/trigger/triggerfuncs.h"
+#include "replication/walsender.h"
+#include "replication/walsender_private.h"
+#include "replication/slot.h"
 
 #define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners)
 #define NUM_LOCKS_PER_DB (NUM_BG_WORKERS_PER_DB + 1) /* single lock for all adhoc processes */
@@ -842,7 +845,15 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	/* Start a single trigger process */
 	proc = &db_meta->trigger_proc;
 	MemSet(proc, 0, sizeof(ContQueryProc));
-	if (continuous_triggers_enabled && XLogLogicalInfoActive())
+
+	/*
+	 * XXX - jasonm
+	 * Currently this will spit out a warning, but everything will still
+	 * proceed. The semantic should be to not activate the database.
+	 */
+
+	if (continuous_triggers_enabled &&
+			CheckContinuousTriggerRequirements(WARNING))
 	{
 		proc->type = TRIG;
 		proc->group_id = 1;
@@ -1415,4 +1426,71 @@ AreContQueriesEnabled(void)
 	enabled = ((Form_pipeline_database) GETSTRUCT(tup))->cq_enabled;
 	ReleaseSysCache(tup);
 	return enabled;
+}
+
+bool
+CheckContinuousTriggerRequirements(int elevel)
+{
+	int i = 0;
+	bool free_wal_sender = false;
+	bool free_repl_slot = false;
+
+	if (!XLogLogicalInfoActive())
+	{
+		elog(elevel, "continuous triggers require wal_level set to logical");
+		return false;
+	}
+
+	if (max_wal_senders == 0)
+	{
+		elog(elevel, "continuous triggers require a wal sender for each database. max_wal_senders is currently %d", max_wal_senders);
+		return false;
+	}
+
+	if (max_replication_slots == 0)
+	{
+		elog(elevel, "continuous triggers require a replication slot for each database. max_replication_slots is currently %d", max_replication_slots);
+		return false;
+	}
+
+	for (i = 0; i < max_wal_senders; i++)
+	{
+		/* use volatile pointer to prevent code rearrangement */
+		volatile WalSnd *walsnd = &WalSndCtl->walsnds[i];
+
+		SpinLockAcquire(&walsnd->mutex);
+		free_wal_sender = (walsnd->pid == 0);
+		SpinLockRelease(&walsnd->mutex);
+
+		if (free_wal_sender)
+			break;
+	}
+
+	if (!free_wal_sender)
+	{
+		elog(elevel, "continuous trigger require a wal sender for each database. max_wal_senders is currently %d", max_wal_senders);
+		return false;
+	}
+
+	LWLockAcquire(ReplicationSlotControlLock, LW_SHARED);
+
+	for (i = 0; i < max_replication_slots; i++)
+	{
+		ReplicationSlot *s = &ReplicationSlotCtl->replication_slots[i];
+
+		if (!s->in_use)
+		{
+			free_repl_slot = true;
+			break;
+		}
+	}
+	LWLockRelease(ReplicationSlotControlLock);
+
+	if (!free_repl_slot)
+	{
+		elog(elevel, "continuous triggers require a replication slot for each database. max_replication_slots is currently %d", max_replication_slots);
+		return false;
+	}
+
+	return true;
 }

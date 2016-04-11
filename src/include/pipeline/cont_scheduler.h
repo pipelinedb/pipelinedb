@@ -156,4 +156,6 @@ extern LWLock *GetContAdhocProcLWLock(void);
 extern dsm_handle GetDatabaseDSMHandle(char *dbname);
 extern ContQueryProc *GetContQueryAdhocProcs(void);
 
+extern bool CheckContinuousTriggerRequirements(int elevel);
+
 #endif   /* CONT_SCHEDULER_H */
