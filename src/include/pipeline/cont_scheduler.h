@@ -142,4 +142,6 @@ extern void AdhocContQueryProcRelease(void);
 
 extern ContQueryProc *GetContQueryAdhocProcs(void);
 
+extern bool CheckContinuousTriggerRequirements(int elevel);
+
 #endif   /* CONT_SCHEDULER_H */
