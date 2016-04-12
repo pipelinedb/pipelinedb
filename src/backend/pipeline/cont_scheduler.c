@@ -872,7 +872,8 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		EmitErrorReport();
 
 		/* Abort the current transaction in order to recover */
-		AbortCurrentTransaction();
+		if (IsTransactionState())
+			AbortCurrentTransaction();
 
 		/*
 		 * Now return to normal top-level context and clear ErrorContext for

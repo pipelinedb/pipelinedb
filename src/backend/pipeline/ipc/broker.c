@@ -435,6 +435,8 @@ copy_messages(void)
 							pfree(slot->msg);
 							pfree(slot);
 							nremoved++;
+
+							num_copied++;
 						}
 
 						while (nremoved--)
@@ -495,7 +497,11 @@ have_pending_messages(void)
 			local_buffer *local_buf = &my_local_buffers[i];
 
 			if (list_length(local_buf->slots))
+			{
+				hash_seq_term(&status);
+				LWLockRelease(IPCMessageBrokerIndexLock);
 				return true;
+			}
 
 			ptr += ipc_queue_size;
 			src = (ipc_queue *) ptr;
@@ -612,6 +618,10 @@ ipc_msg_broker_main(int argc, char *argv[])
 		/* Report the error to the server log */
 		EmitErrorReport();
 
+		/* Abort the current transaction in order to recover */
+		if (IsTransactionState())
+			AbortCurrentTransaction();
+
 		/*
 		 * Now return to normal top-level context and clear ErrorContext for
 		 * next time.
@@ -650,6 +660,7 @@ ipc_msg_broker_main(int argc, char *argv[])
 		int num_copied;
 
 		purge_dropped_db_segments();
+
 		num_copied = copy_messages();
 
 		/* If we didn't copy any messages, try to sleep and wait for new ones to arrive. */
