@@ -306,6 +306,7 @@ purge_dropped_db_segments(void)
 			Oid dbid = lfirst_oid(lc);
 			bool found;
 			broker_db_meta *meta;
+			int i;
 
 			meta = hash_search(broker_meta->db_meta_hash, &dbid, HASH_FIND, &found);
 			Assert(found);
@@ -315,6 +316,14 @@ purge_dropped_db_segments(void)
 			/* detach from main db segment */
 			if (meta->segment)
 				dsm_detach(meta->segment);
+
+			/* mark all lock slots as unused */
+			for (i = 0; i < num_locks_per_db; i++)
+			{
+				lw_lock_slot *slot = &broker_meta->locks[db_meta->lock_idx + i];
+				Assert(slot->used);
+				slot->used = false;
+			}
 
 			hash_search(broker_meta->db_meta_hash, &dbid, HASH_REMOVE, &found);
 			Assert(found);
