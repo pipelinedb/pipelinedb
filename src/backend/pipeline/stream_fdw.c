@@ -538,14 +538,16 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 
 		if (!ipc_queue_push_nolock(sis->worker_queue, sts, len, false))
 		{
+			int ntries = 0;
 			sis->num_batches++;
 
 			do
 			{
+				ntries++;
 				ipc_queue_unlock(sis->worker_queue);
 				sis->worker_queue = get_worker_queue_with_lock();
 			}
-			while (!ipc_queue_push_nolock(sis->worker_queue, sts, len, false));
+			while (!ipc_queue_push_nolock(sis->worker_queue, sts, len, ntries == continuous_query_num_workers));
 		}
 
 	}

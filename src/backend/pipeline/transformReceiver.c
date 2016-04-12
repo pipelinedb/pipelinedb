@@ -189,7 +189,7 @@ TransformDestReceiverFlush(DestReceiver *self)
 			bytea *packed_desc;
 			Size size = 0;
 			ipc_queue *ipcq;
-			int batch = 0;
+			int ninserted = 0;
 			int nbatches = 1;
 
 			targets = bms_difference(GetStreamReaders(relid), GetAdhocContinuousViewIds());
@@ -218,17 +218,28 @@ TransformDestReceiverFlush(DestReceiver *self)
 				StreamTupleState *sts = StreamTupleStateCreate(tup, RelationGetDescr(t->tg_rel), packed_desc, targets,
 						t->acks, t->nacks, &len);
 
-				if (batch == continuous_query_batch_size)
+				if (ninserted == continuous_query_batch_size)
 				{
 					ipc_queue_unlock(ipcq);
 					ipcq = get_worker_queue_with_lock();
-					batch = 0;
+					ninserted = 0;
 					nbatches++;
 				}
 
-				if (ipc_queue_push_nolock(ipcq, sts, len, false))
+				if (!ipc_queue_push_nolock(ipcq, sts, len, false))
 				{
-					batch++;
+					int ntries = 0;
+					nbatches++;
+
+					do
+					{
+						ntries++;
+						ipc_queue_unlock(ipcq);
+						ipcq = get_worker_queue_with_lock();
+					}
+					while (!ipc_queue_push_nolock(ipcq, sts, len, ntries == continuous_query_num_workers));
+
+					ninserted++;
 					size += len;
 				}
 			}

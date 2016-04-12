@@ -49,14 +49,17 @@
 typedef struct local_buffer_slot
 {
 	int len;
-	void *ptr;
+	void *msg;
 } local_buffer_slot;
 
 typedef struct local_buffer
 {
+	Size max_size;
 	Size size;
 	List *slots;
 } local_buffer;
+
+static local_buffer *my_local_buffer = NULL;
 
 typedef struct dsm_segment_slot
 {
@@ -358,6 +361,7 @@ copy_messages(void)
 
 		for (i = 0; i < continuous_query_num_workers; i++)
 		{
+			ListCell *lc;
 			ipc_queue *dest;
 			ipc_queue *src;
 
@@ -365,6 +369,28 @@ copy_messages(void)
 			ptr += ipc_queue_size;
 			src = (ipc_queue *) ptr;
 			ptr += ipc_queue_size;
+
+			/* Try to process any locally buffered tuples first */
+			if (list_length(my_local_buffer->slots))
+			{
+				int nremoved = 0;
+
+				foreach(lc, my_local_buffer->slots)
+				{
+					local_buffer_slot *slot = (local_buffer_slot *) lfirst(lc);
+
+					if (!ipc_queue_push_nolock(dest, slot->msg, slot->len, false))
+						break;
+
+					my_local_buffer->size -= slot->len;
+					pfree(slot->msg);
+					pfree(slot);
+					nremoved++;
+				}
+
+				while (nremoved--)
+					my_local_buffer->slots = list_delete_first(my_local_buffer->slots);
+			}
 
 			while (true)
 			{
@@ -379,7 +405,15 @@ copy_messages(void)
 
 				if (!ipc_queue_push_nolock(dest, msg, len, false))
 				{
-					ipc_queue_push_nolock(dest, msg, len, true);
+					/* Buffer it locally and move on */
+					local_buffer_slot *slot = palloc0(sizeof(local_buffer_slot));
+					slot->len = len;
+					slot->msg = palloc(len);
+					memcpy(slot->msg, msg, len);
+
+					my_local_buffer->slots = lappend(my_local_buffer->slots, slot);
+					my_local_buffer->size += len;
+
 					ipc_queue_pop_peeked(src);
 					break;
 				}
@@ -399,6 +433,10 @@ have_pending_messages(void)
 {
 	HASH_SEQ_STATUS status;
 	broker_db_meta *db_meta;
+
+	/* Do we have any locally buffered messages? */
+	if (list_length(my_local_buffer->slots))
+		return true;
 
 	LWLockAcquire(IPCMessageBrokerIndexLock, LW_SHARED);
 
@@ -540,6 +578,9 @@ ipc_msg_broker_main(int argc, char *argv[])
 
 	broker_meta->pid = MyProcPid;
 	broker_meta->latch = MyLatch;
+
+	my_local_buffer = (local_buffer *) palloc0(sizeof(local_buffer));
+	my_local_buffer->max_size = ipc_queue_size * continuous_query_num_workers;
 
 	/* Loop forever */
 	for (;;)

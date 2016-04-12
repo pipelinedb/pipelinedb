@@ -122,14 +122,16 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 			if (!ipc_queue_push_nolock(ipcq, sts, len, false))
 			{
+				int ntries = 0;
 				nbatches++;
 
 				do
 				{
+					ntries++;
 					ipc_queue_unlock(ipcq);
 					ipcq = get_worker_queue_with_lock();
 				}
-				while (!ipc_queue_push_nolock(ipcq, sts, len, false));
+				while (!ipc_queue_push_nolock(ipcq, sts, len, ntries == continuous_query_num_workers));
 			}
 
 			size += len;
