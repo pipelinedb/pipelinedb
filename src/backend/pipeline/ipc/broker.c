@@ -69,7 +69,7 @@ typedef struct dsm_segment_slot
 
 typedef struct lw_lock_slot
 {
-	bool used;
+	Oid dbid;
 	LWLock lock;
 } lw_lock_slot;
 
@@ -187,7 +187,7 @@ IPCMessageBrokerShmemInit(void)
 		{
 			lw_lock_slot *slot = &broker_meta->locks[i];
 			LWLockInitialize(&slot->lock, broker_meta->tranche_id);
-			slot->used = false;
+			slot->dbid = InvalidOid;
 		}
 	}
 
@@ -322,8 +322,8 @@ purge_dropped_db_segments(void)
 			for (i = 0; i < num_locks_per_db; i++)
 			{
 				lw_lock_slot *slot = &broker_meta->locks[db_meta->lock_idx + i];
-				Assert(slot->used);
-				slot->used = false;
+				if (slot->dbid == dbid)
+					slot->dbid = InvalidOid;
 			}
 
 			hash_search(broker_meta->db_meta_hash, &dbid, HASH_REMOVE, &found);
@@ -755,7 +755,7 @@ get_db_meta(Oid dbid)
 		{
 			lw_lock_slot *slot = &broker_meta->locks[i];
 
-			if (slot->used)
+			if (OidIsValid(slot->dbid))
 				continue;
 
 			db_meta->lock_idx = i;
@@ -769,8 +769,8 @@ get_db_meta(Oid dbid)
 		for (i = 0; i < num_locks_per_db; i++)
 		{
 			lw_lock_slot *slot = &broker_meta->locks[db_meta->lock_idx + i];
-			Assert(!slot->used);
-			slot->used = true;
+			Assert(!OidIsValid(slot->dbid));
+			slot->dbid = MyDatabaseId;
 		}
 
 		/* Initialize all ipc_queues for worker and combiner processes. */
