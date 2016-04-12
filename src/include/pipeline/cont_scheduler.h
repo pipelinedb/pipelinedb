@@ -68,9 +68,6 @@ struct ContQueryDatabaseMetadata
 	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
 	ContQueryProc *db_procs;
 
-	dsm_segment *segment;
-	dsm_handle handle;
-
 	int adhoc_counter;
 	/* Number of entries is equal to max_worker_processes. */
 	ContQueryProc *adhoc_procs;
@@ -145,7 +142,6 @@ extern ContQueryProc *AdhocContQueryProcGet(void);
 extern void AdhocContQueryProcRelease(ContQueryProc *proc);
 extern LWLock *GetContAdhocProcLWLock(void);
 
-extern dsm_handle GetDatabaseDSMHandle(char *dbname);
 extern ContQueryProc *GetContQueryAdhocProcs(void);
 
 #endif   /* CONT_SCHEDULER_H */

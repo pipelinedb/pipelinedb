@@ -552,51 +552,12 @@ wait_for_bg_worker_state(BackgroundWorkerHandle *handle, BgwHandleStatus state, 
 	return success;
 }
 
-static void
-dsm_cqueue_setup(ContQueryProc *proc)
-{
-	dsm_cqueue_peek_fn peek_fn;
-	dsm_cqueue_pop_fn pop_fn;
-	dsm_cqueue_copy_fn cpy_fn;
-	void *ptr;
-	Size size;
-	LWLock *lock;
-	int lock_idx;
-
-	if (proc->type == COMBINER)
-	{
-		peek_fn = &PartialTupleStatePeekFn;
-		pop_fn = &PartialTupleStatePopFn;
-		cpy_fn = &PartialTupleStateCopyFn;
-	}
-	else if (proc->type == WORKER)
-	{
-		peek_fn = &StreamTupleStatePeekFn;
-		pop_fn = &StreamTupleStatePopFn;
-		cpy_fn = &StreamTupleStateCopyFn;
-	}
-	else
-		return;
-
-	lock_idx = proc->id + proc->db_meta->lock_idx;
-	Assert(lock_idx >= 0);
-
-	lock = (LWLock *) &ContQuerySchedulerShmem->locks[lock_idx];
-
-	size = continuous_query_ipc_shared_mem * 1024;
-	ptr = (char *) dsm_segment_address(proc->db_meta->segment) + (size * proc->id);
-	dsm_cqueue_init(ptr, size, lock);
-	dsm_cqueue_set_handlers((dsm_cqueue *) ptr, peek_fn, pop_fn, cpy_fn);
-}
-
 static bool
 run_cont_bgworker(ContQueryProc *proc)
 {
 	BackgroundWorker worker;
 	BackgroundWorkerHandle *handle;
 	bool success;
-
-	dsm_cqueue_setup(proc);
 
 	strcpy(worker.bgw_name, GetContQueryProcName(proc));
 
@@ -714,10 +675,6 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	if (db_meta->trigger_proc.bgw_handle)
 		pfree(db_meta->trigger_proc.bgw_handle);
 
-	/* XXX: Force delete segment? */
-	dsm_detach(db_meta->segment);
-	db_meta->handle = 0;
-
 	release_locks(db_meta);
 
 	db_meta->terminate = false;
@@ -743,10 +700,6 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 	/* Create dsm_segment for all worker queues */
 	CurrentResourceOwner = ResourceOwnerCreate(NULL, "Database dsm_segment ResourceOwner");
-
-	db_meta->segment = dsm_create(continuous_query_ipc_shared_mem * 1024 * NUM_BG_WORKERS_PER_DB, 0);
-	dsm_pin_mapping(db_meta->segment);
-	db_meta->handle = dsm_segment_handle(db_meta->segment);
 
 	res = CurrentResourceOwner;
 	CurrentResourceOwner = NULL;
@@ -1281,41 +1234,6 @@ AdhocContQueryProcRelease(ContQueryProc *proc)
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
 	SpinLockRelease(&db_meta->mutex);
-}
-
-dsm_handle
-GetDatabaseDSMHandle(char *dbname)
-{
-	bool found = false;
-	ContQueryDatabaseMetadata *db_meta;
-	dsm_handle handle;
-
-	if (dbname == NULL)
-		db_meta = (ContQueryDatabaseMetadata *) hash_search(
-				ContQuerySchedulerShmem->db_table, &MyDatabaseId, HASH_FIND, &found);
-	else
-	{
-		HASH_SEQ_STATUS scan;
-		hash_seq_init(&scan, ContQuerySchedulerShmem->db_table);
-		while ((db_meta = (ContQueryDatabaseMetadata *) hash_seq_search(&scan)))
-		{
-			if (pg_strcasecmp(dbname, NameStr(db_meta->db_name)) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		hash_seq_term(&scan);
-	}
-
-	if (!found)
-		elog(ERROR, "failed to find database metadata for continuous queries");
-
-	SpinLockAcquire(&db_meta->mutex);
-	handle = db_meta->handle;
-	SpinLockRelease(&db_meta->mutex);
-
-	return handle;
 }
 
 ContQueryProc *
