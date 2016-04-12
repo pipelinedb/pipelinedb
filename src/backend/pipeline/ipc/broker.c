@@ -318,6 +318,7 @@ purge_dropped_db_segments(void)
 				dsm_detach(meta->segment);
 
 			/* mark all lock slots as unused */
+			Assert(db_meta->lock_idx != -1);
 			for (i = 0; i < num_locks_per_db; i++)
 			{
 				lw_lock_slot *slot = &broker_meta->locks[db_meta->lock_idx + i];
