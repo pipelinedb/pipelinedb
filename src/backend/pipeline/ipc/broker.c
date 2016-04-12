@@ -46,6 +46,18 @@
 #define db_dsm_segment_size (ipc_queue_size * ((continuous_query_num_workers * 2) + continuous_query_num_combiners))
 #define broker_db_meta_size (sizeof(broker_db_meta) + (max_worker_processes * sizeof(dsm_segment_slot)))
 
+typedef struct local_buffer_slot
+{
+	int len;
+	void *ptr;
+} local_buffer_slot;
+
+typedef struct local_buffer
+{
+	Size size;
+	List *slots;
+} local_buffer;
+
 typedef struct dsm_segment_slot
 {
 	pg_atomic_flag used;
@@ -360,18 +372,19 @@ copy_messages(void)
 				void *msg = ipc_queue_peek_next(src, &len);
 
 				if (msg == NULL)
+				{
+					ipc_queue_pop_peeked(src);
 					break;
+				}
 
 				if (!ipc_queue_push_nolock(dest, msg, len, false))
 				{
-					ipc_queue_unpeek(src);
+					ipc_queue_push_nolock(dest, msg, len, true);
+					ipc_queue_pop_peeked(src);
 					break;
 				}
 				else
-				{
-					ipc_queue_pop_peeked(src);
 					num_copied++;
-				}
 			}
 		}
 	}
@@ -398,7 +411,7 @@ have_pending_messages(void)
 		Assert(db_meta->segment);
 		ptr = dsm_segment_address(db_meta->segment);
 
-		for (i = 0; i < num_bg_workers_per_db; i++)
+		for (i = 0; i < continuous_query_num_workers; i++)
 		{
 			ipc_queue *src;
 

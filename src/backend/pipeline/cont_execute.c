@@ -432,7 +432,7 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 	exec->initfn = initfn;
 
 	exec->ipcq = MyContQueryProc->queue;
-	ipc_queue_unpeek(exec->ipcq);
+	ipc_queue_unpeek_all(exec->ipcq);
 
 	MemoryContextSwitchTo(old);
 
@@ -767,7 +767,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 	if (!exec->started)
 		return;
 
-	ipc_queue_unpeek(exec->ipcq);
+	ipc_queue_unpeek_all(exec->ipcq);
 
 	if (!bms_is_empty(exec->queries_seen) && exec->update_queries)
 	{

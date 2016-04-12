@@ -244,17 +244,10 @@ ipc_queue_peek_next(ipc_queue *ipcq, int *len)
 }
 
 void
-ipc_queue_unpeek(ipc_queue *ipcq)
+ipc_queue_unpeek_all(ipc_queue *ipcq)
 {
 	Assert(ipcq->magic == MAGIC);
 	pg_atomic_write_u64(&ipcq->cursor, pg_atomic_read_u64(&ipcq->tail));
-}
-
-bool
-ipc_queue_has_unpopped(ipc_queue *ipcq)
-{
-	Assert(ipcq->magic == MAGIC);
-	return pg_atomic_read_u64(&ipcq->tail) == pg_atomic_read_u64(&ipcq->cursor);
 }
 
 void

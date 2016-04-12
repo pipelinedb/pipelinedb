@@ -11,6 +11,7 @@
 
 #include "postgres.h"
 
+#include "port/atomics.h"
 #include "storage/lwlock.h"
 
 typedef struct ipc_queue_slot ipc_queue_slot;
@@ -46,10 +47,9 @@ extern void ipc_queue_set_handlers(ipc_queue *ipcq, ipc_queue_peek_fn peek_fn,
 		ipc_queue_pop_fn pop_fn, ipc_queue_copy_fn cpy_fn);
 
 extern void *ipc_queue_peek_next(ipc_queue *ipcq, int *len);
-extern void ipc_queue_unpeek(ipc_queue *ipcq);
+extern void ipc_queue_unpeek_all(ipc_queue *ipcq);
 extern void ipc_queue_pop_peeked(ipc_queue *ipcq);
 extern bool ipc_queue_is_empty(ipc_queue *ipcq);
-extern bool ipc_queue_has_unpopped(ipc_queue *ipcq);
 extern bool ipc_queue_has_unread(ipc_queue *ipcq);
 extern void ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms);
 
