@@ -254,6 +254,34 @@ get_database_oids(void)
 	return db_oids;
 }
 
+static void
+free_unused_locks(List *db_oids)
+{
+	int i;
+
+	for (i = 0; i < max_worker_processes; i++)
+	{
+		lw_lock_slot *slot = &broker_meta->locks[i];
+		ListCell *lc;
+		bool found = false;
+
+		if (!OidIsValid(slot->dbid))
+			continue;
+
+		foreach(lc, db_oids)
+		{
+			if (slot->dbid == lfirst_oid(lc))
+			{
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+			slot->dbid = InvalidOid;
+	}
+}
+
 /*
  * purge_dropped_db_segments
  */
@@ -304,30 +332,21 @@ purge_dropped_db_segments(void)
 		{
 			Oid dbid = lfirst_oid(lc);
 			bool found;
-			broker_db_meta *meta;
-			int i;
 
-			meta = hash_search(broker_meta->db_meta_hash, &dbid, HASH_FIND, &found);
+			db_meta = hash_search(broker_meta->db_meta_hash, &dbid, HASH_FIND, &found);
 			Assert(found);
 
-			Assert(meta->handle > 0);
+			Assert(db_meta->handle > 0);
 
 			/* detach from main db segment */
-			if (meta->segment)
-				dsm_detach(meta->segment);
-
-			/* mark all lock slots as unused */
-			Assert(db_meta->lock_idx != -1);
-			for (i = 0; i < num_locks_per_db; i++)
-			{
-				lw_lock_slot *slot = &broker_meta->locks[db_meta->lock_idx + i];
-				if (slot->dbid == dbid)
-					slot->dbid = InvalidOid;
-			}
+			if (db_meta->segment)
+				dsm_detach(db_meta->segment);
 
 			hash_search(broker_meta->db_meta_hash, &dbid, HASH_REMOVE, &found);
 			Assert(found);
 		}
+
+		free_unused_locks(db_oids);
 
 		LWLockRelease(IPCMessageBrokerIndexLock);
 	}
@@ -774,6 +793,7 @@ get_db_meta(Oid dbid)
 		db_meta->handle = dsm_segment_handle(segment);
 
 		/* Pick a lock index for this database. */
+		free_unused_locks(get_database_oids());
 		for (i = 0; i < max_worker_processes; i++)
 		{
 			lw_lock_slot *slot = &broker_meta->locks[i];
