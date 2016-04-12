@@ -54,12 +54,11 @@ typedef struct local_buffer_slot
 
 typedef struct local_buffer
 {
-	Size max_size;
 	Size size;
 	List *slots;
 } local_buffer;
 
-static local_buffer *my_local_buffer = NULL;
+static local_buffer *my_local_buffers = NULL;
 
 typedef struct dsm_segment_slot
 {
@@ -385,33 +384,12 @@ copy_messages(void)
 			ListCell *lc;
 			ipc_queue *dest;
 			ipc_queue *src;
+			local_buffer *local_buf = &my_local_buffers[i];
 
 			dest = (ipc_queue *) ptr;
 			ptr += ipc_queue_size;
 			src = (ipc_queue *) ptr;
 			ptr += ipc_queue_size;
-
-			/* Try to process any locally buffered tuples first */
-			if (list_length(my_local_buffer->slots))
-			{
-				int nremoved = 0;
-
-				foreach(lc, my_local_buffer->slots)
-				{
-					local_buffer_slot *slot = (local_buffer_slot *) lfirst(lc);
-
-					if (!ipc_queue_push_nolock(dest, slot->msg, slot->len, false))
-						break;
-
-					my_local_buffer->size -= slot->len;
-					pfree(slot->msg);
-					pfree(slot);
-					nremoved++;
-				}
-
-				while (nremoved--)
-					my_local_buffer->slots = list_delete_first(my_local_buffer->slots);
-			}
 
 			while (true)
 			{
@@ -421,6 +399,29 @@ copy_messages(void)
 				if (msg == NULL)
 				{
 					ipc_queue_pop_peeked(src);
+
+					/* Try to send any locally buffered tuples first */
+					if (list_length(local_buf->slots))
+					{
+						int nremoved = 0;
+
+						foreach(lc, local_buf->slots)
+						{
+							local_buffer_slot *slot = (local_buffer_slot *) lfirst(lc);
+
+							if (!ipc_queue_push_nolock(dest, slot->msg, slot->len, false))
+								break;
+
+							local_buf->size -= slot->len;
+							pfree(slot->msg);
+							pfree(slot);
+							nremoved++;
+						}
+
+						while (nremoved--)
+							local_buf->slots = list_delete_first(local_buf->slots);
+					}
+
 					break;
 				}
 
@@ -432,11 +433,14 @@ copy_messages(void)
 					slot->msg = palloc(len);
 					memcpy(slot->msg, msg, len);
 
-					my_local_buffer->slots = lappend(my_local_buffer->slots, slot);
-					my_local_buffer->size += len;
+					local_buf->slots = lappend(local_buf->slots, slot);
+					local_buf->size += len;
 
-					ipc_queue_pop_peeked(src);
-					break;
+					if (local_buf->size > (ipc_queue_size / 4))
+					{
+						ipc_queue_pop_peeked(src);
+						break;
+					}
 				}
 				else
 					num_copied++;
@@ -455,10 +459,6 @@ have_pending_messages(void)
 	HASH_SEQ_STATUS status;
 	broker_db_meta *db_meta;
 
-	/* Do we have any locally buffered messages? */
-	if (list_length(my_local_buffer->slots))
-		return true;
-
 	LWLockAcquire(IPCMessageBrokerIndexLock, LW_SHARED);
 
 	hash_seq_init(&status, broker_meta->db_meta_hash);
@@ -473,6 +473,10 @@ have_pending_messages(void)
 		for (i = 0; i < continuous_query_num_workers; i++)
 		{
 			ipc_queue *src;
+			local_buffer *local_buf = &my_local_buffers[i];
+
+			if (list_length(local_buf->slots))
+				return true;
 
 			ptr += ipc_queue_size;
 			src = (ipc_queue *) ptr;
@@ -491,6 +495,24 @@ have_pending_messages(void)
 	LWLockRelease(IPCMessageBrokerIndexLock);
 
 	return false;
+}
+
+static void
+disconnect_from_all_segments(void)
+{
+	HASH_SEQ_STATUS status;
+	broker_db_meta *db_meta;
+
+	LWLockAcquire(IPCMessageBrokerIndexLock, LW_SHARED);
+
+	hash_seq_init(&status, broker_meta->db_meta_hash);
+	while ((db_meta = (broker_db_meta *) hash_seq_search(&status)) != NULL)
+	{
+		if (db_meta->segment)
+			dsm_detach(db_meta->segment);
+	}
+
+	LWLockRelease(IPCMessageBrokerIndexLock);
 }
 
 /*
@@ -600,8 +622,7 @@ ipc_msg_broker_main(int argc, char *argv[])
 	broker_meta->pid = MyProcPid;
 	broker_meta->latch = MyLatch;
 
-	my_local_buffer = (local_buffer *) palloc0(sizeof(local_buffer));
-	my_local_buffer->max_size = ipc_queue_size * continuous_query_num_workers;
+	my_local_buffers = (local_buffer *) palloc0(sizeof(local_buffer) * continuous_query_num_workers);
 
 	/* Loop forever */
 	for (;;)
@@ -634,6 +655,8 @@ ipc_msg_broker_main(int argc, char *argv[])
 		if (got_SIGTERM)
 			break;
 	}
+
+	disconnect_from_all_segments();
 
 	elog(LOG, "ipc message broker shutting down");
 
