@@ -41,7 +41,7 @@
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/dsm_cqueue.h"
+#include "pipeline/ipc/broker.h"
 #include "pipeline/miscutils.h"
 #include "storage/ipc.h"
 #include "storage/proc.h"
@@ -69,7 +69,7 @@
 
 struct AdhocExecutor
 {
-	dsm_cqueue *cqueue;
+	ipc_queue *ipcq;
 	int nitems;
 	Timestamp start_time;
 };
@@ -130,7 +130,7 @@ AdhocExecutorYieldItem(AdhocExecutor *exec, int *len)
 			return NULL;
 		}
 
-		ptr = dsm_cqueue_peek_next(exec->cqueue, len);
+		ptr = ipc_queue_peek_next(exec->ipcq, len);
 
 		if (ptr)
 		{
@@ -194,19 +194,6 @@ get_cont_view_id(RangeVar *name)
 	return row_id;
 }
 
-static void
-acquire_cont_query_proc()
-{
-	MyContQueryProc = AdhocContQueryProcGet();
-}
-
-static void
-release_cont_query_proc()
-{
-	AdhocContQueryProcRelease(MyContQueryProc);
-	MyContQueryProc = NULL;
-}
-
 /* generate a unique name for the adhoc view */
 static char *
 get_unique_adhoc_view_name()
@@ -265,7 +252,7 @@ init_cont_view(ContinuousViewData *view_data, SelectStmt *stmt,
 
 /* get the worker plan and set up the worker state for execution */
 static AdhocWorkerState *
-init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver, dsm_segment *segment)
+init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver, ipc_queue *ipcq)
 {
 	PlannedStmt *pstmt = 0;
 	AdhocWorkerState *state = palloc0(sizeof(AdhocWorkerState));
@@ -273,7 +260,7 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver, dsm_segment *
 	init_cont_query_batch_context();
 
 	MemSet(&state->exec, 0, sizeof(AdhocExecutor));
-	state->exec.cqueue = (dsm_cqueue *) dsm_segment_address(segment);
+	state->exec.ipcq = ipcq;
 
 	state->view_id = data.view_id;
 	state->view = data.view;
@@ -430,7 +417,7 @@ exec_adhoc_worker(AdhocWorkerState *state)
 	EState *estate;
 	int num_processed = 0;
 
-	dsm_cqueue_wait_non_empty(state->exec.cqueue, ADHOC_TIMEOUT_MS);
+	ipc_queue_wait_non_empty(state->exec.ipcq, ADHOC_TIMEOUT_MS);
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -462,7 +449,7 @@ exec_adhoc_worker(AdhocWorkerState *state)
 
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 
-	dsm_cqueue_pop_peeked(state->exec.cqueue);
+	ipc_queue_pop_peeked(state->exec.ipcq);
 
 	return num_processed > 0;
 }
@@ -684,7 +671,6 @@ typedef struct CleanupData
 {
 	ContinuousViewData *cont_view_data;
 	AdhocWorkerState *worker_state;
-	dsm_segment *segment;
 	ResourceOwner owner;
 } CleanupData;
 
@@ -699,40 +685,14 @@ cleanup(int code, Datum arg)
 
 	XactReadOnly = false;
 	
-	release_cont_query_proc();
+	AdhocContQueryProcRelease();
 
-	dsm_detach(cleanup->segment);
+	release_my_ipc_queue();
 	ResourceOwnerDelete(cleanup->owner);
 
 	StartTransactionCommand();
 	CleanupAdhocContinuousView(cleanup->cont_view_data->view);
 	CommitTransactionCommand();
-}
-
-static dsm_segment *
-create_dsm_cqueue(ResourceOwner owner)
-{
-	dsm_segment *segment;
-	dsm_handle handle;
-	Size size;
-	void *ptr;
-
-	CurrentResourceOwner = owner;
-
-	/* Create dsm_segment and pin it. */
-	size = continuous_query_ipc_shared_mem * 1024;
-	segment = dsm_create(size, 0);
-	dsm_pin_mapping(segment);
-	handle = dsm_segment_handle(segment);
-
-	/* Initialize dsm_cqueue. */
-	ptr = dsm_segment_address(segment);
-	dsm_cqueue_init(ptr, size, GetContAdhocProcLWLock());
-	dsm_cqueue_set_handlers((dsm_cqueue *) ptr, StreamTupleStatePeekFn, NULL, StreamTupleStateCopyFn);
-
-	MyContQueryProc->dsm_handle = handle;
-
-	return segment;
 }
 
 /*
@@ -757,17 +717,17 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	ContinuousViewData view_data;
 	Tuplestorestate *batch;
 	CleanupData cleanup_data;
-	dsm_segment *segment;
+	ipc_queue *ipcq;
 
-	ResourceOwner owner = ResourceOwnerCreate(CurrentResourceOwner, "LongTermResOwner");
+	ResourceOwner owner = ResourceOwnerCreate(CurrentResourceOwner, "AdhocQueryResOwner");
 
-	acquire_cont_query_proc();
+	AdhocContQueryProcAcquire();
 
 	if (!MyContQueryProc)
 		elog(ERROR, "too many adhoc processes");
 
 	/* Create dsm_cqueue */
-	segment = create_dsm_cqueue(owner);
+	ipcq = acquire_my_ipc_queue();
 
 	StartTransactionCommand();
 	MemoryContextSwitchTo(run_cxt);
@@ -784,7 +744,7 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	StartTransactionCommand();
 	MemoryContextSwitchTo(run_cxt);
 	CurrentResourceOwner = owner;
-	worker_state = init_adhoc_worker(view_data, worker_receiver, segment);
+	worker_state = init_adhoc_worker(view_data, worker_receiver, ipcq);
 	combiner_state = init_adhoc_combiner(view_data, batch);
 
 	if (combiner_state->existing)
@@ -805,7 +765,6 @@ exec_adhoc_query(SelectStmt *stmt, const char *s)
 	cleanup_data.cont_view_data = &view_data;
 	cleanup_data.worker_state = worker_state;
 	cleanup_data.owner = owner;
-	cleanup_data.segment = segment;
 
 	PG_ENSURE_ERROR_CLEANUP(cleanup, PointerGetDatum(&cleanup_data));
 	{
@@ -989,6 +948,15 @@ pipeline_exec_adhoc_query(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(CStringGetTextDatum(""));
 }
 
+static dsm_segment *
+attach_to_dsm_segment(dsm_handle handle)
+{
+	dsm_segment *segment = dsm_find_mapping(handle);
+	if (segment == NULL)
+		segment = dsm_attach(handle);
+	return segment;
+}
+
 AdhocInsertState *
 AdhocInsertStateCreate(Bitmapset *queries)
 {
@@ -1023,7 +991,7 @@ AdhocInsertStateCreate(Bitmapset *queries)
 		qstate = &astate->queries[idx];
 		qstate->active = &proc->group_id;
 		qstate->segment = segment;
-		qstate->cqueue = dsm_segment_address(segment);
+		qstate->ipcq = dsm_segment_address(segment);
 
 		idx++;
 	}
@@ -1033,6 +1001,8 @@ AdhocInsertStateCreate(Bitmapset *queries)
 		pfree(astate);
 		return NULL;
 	}
+
+	astate->nqueries = idx;
 
 	return astate;
 }
@@ -1050,7 +1020,7 @@ adhoc_insert_state_resync(AdhocInsertState *astate)
 		{
 			dsm_detach(qstate->segment);
 			qstate->segment = NULL;
-			qstate->cqueue = NULL;
+			qstate->ipcq = NULL;
 		}
 	}
 }
@@ -1089,7 +1059,7 @@ AdhocInsertStateSend(AdhocInsertState *astate, StreamTupleState *sts, int len)
 		if (qstate->segment == NULL)
 			continue;
 
-		dsm_cqueue_push(qstate->cqueue, sts, len);
+		ipc_queue_push(qstate->ipcq, sts, len, true);
 	}
 
 	sts->acks = acks;

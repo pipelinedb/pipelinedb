@@ -38,7 +38,7 @@ typedef struct AdhocQueryState
 {
 	int volatile *active;
 	dsm_segment *segment;
-	dsm_cqueue *cqueue;
+	ipc_queue *ipcq;
 } AdhocQueryState;
 
 typedef struct AdhocInsertState

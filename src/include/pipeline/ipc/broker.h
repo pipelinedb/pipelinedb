@@ -16,6 +16,7 @@
 /* guc */
 extern int continuous_query_ipc_shared_mem;
 
+extern Size IPCMessageBrokerShmemSize(void);
 extern void IPCMessageBrokerShmemInit(void);
 
 extern pid_t StartIPCMessageBroker(void);

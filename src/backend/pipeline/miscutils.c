@@ -293,12 +293,3 @@ SetDefaultPriority()
 {
 	return nice(default_priority);
 }
-
-dsm_segment *
-attach_to_dsm_segment(dsm_handle handle)
-{
-	dsm_segment *segment = dsm_find_mapping(handle);
-	if (segment == NULL)
-		segment = dsm_attach(handle);
-	return segment;
-}

@@ -138,13 +138,22 @@ sigterm_handler(SIGNAL_ARGS)
 }
 
 /*
+ * IPCMessageBrokerShmemSize
+ */
+Size
+IPCMessageBrokerShmemSize(void)
+{
+	return sizeof(BrokerMeta) + (max_worker_processes * sizeof(lw_lock_slot));
+}
+
+/*
  * IPCMessageBrokerShmemInit
  */
 void
 IPCMessageBrokerShmemInit(void)
 {
 	bool found;
-	Size size = sizeof(BrokerMeta) + (max_worker_processes * sizeof(lw_lock_slot));
+	Size size = IPCMessageBrokerShmemSize();
 
 	LWLockAcquire(IPCMessageBrokerIndexLock, LW_EXCLUSIVE);
 
@@ -183,6 +192,8 @@ IPCMessageBrokerShmemInit(void)
 	}
 
 	LWLockRelease(IPCMessageBrokerIndexLock);
+
+	LWLockRegisterTranche(broker_meta->tranche_id, &broker_meta->tranche);
 }
 
 /*
@@ -838,7 +849,6 @@ acquire_my_ipc_queue(void)
 	{
 		int i;
 		dsm_segment *segment;
-		char *ptr;
 
 		for (i = 0; i < max_worker_processes; i++)
 		{
@@ -857,11 +867,13 @@ acquire_my_ipc_queue(void)
 		segment = dsm_create_and_pin(ipc_queue_size);
 		my_ipc_meta->seg_slot->handle = dsm_segment_handle(segment);
 		my_ipc_meta->segment = segment;
+		my_ipc_meta->queue = (ipc_queue *) dsm_segment_address(my_ipc_meta->segment);
 
-		ptr = dsm_segment_address(my_ipc_meta->segment);
-		ipc_queue_init(ptr, ipc_queue_size,
+		ipc_queue_init(my_ipc_meta->queue, ipc_queue_size,
 				&broker_meta->locks[db_meta->lock_idx + num_bg_workers_per_db].lock, false);
-		ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, StreamTupleStatePopFn, StreamTupleStateCopyFn);
+		ipc_queue_set_handlers(my_ipc_meta->queue, StreamTupleStatePeekFn, StreamTupleStatePopFn, StreamTupleStateCopyFn);
+
+		MyContQueryProc->dsm_handle = dsm_segment_handle(segment);
 	}
 	else
 	{

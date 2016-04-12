@@ -44,9 +44,8 @@ typedef struct ContQueryProc
 	volatile int group_id; /* unqiue [0, n) for each db_oid, type pair */
 
 	ipc_queue *queue;
+	dsm_handle dsm_handle; /* only valid for adhoc processes */
 
-	dsm_segment *segment;
-	dsm_handle dsm_handle; /* equals db_meta->handle for non-adhoc procs */
 	BackgroundWorkerHandle *bgw_handle;
 
 	ContQueryDatabaseMetadata *db_meta;
@@ -138,9 +137,8 @@ extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
 
 /* Adhoc Process Management */
 extern void SetAmContQueryAdhoc(bool value);
-extern ContQueryProc *AdhocContQueryProcGet(void);
-extern void AdhocContQueryProcRelease(ContQueryProc *proc);
-extern LWLock *GetContAdhocProcLWLock(void);
+extern void AdhocContQueryProcAcquire(void);
+extern void AdhocContQueryProcRelease(void);
 
 extern ContQueryProc *GetContQueryAdhocProcs(void);
 
