@@ -15,3 +15,6 @@ rm -f /usr/bin/psql
 rm -f /usr/bin/pipeline
 rm -f /usr/bin/pg_config
 rm -f /usr/bin/padhoc
+rm -f /usr/bin/pipeline-dump
+rm -f /usr/bin/pipeline-dumpall
+rm -f /usr/bin/pipeline-restore

@@ -11,6 +11,9 @@ ln -s $INSTALL_PREFIX/bin/psql /usr/local/bin/psql
 ln -s $INSTALL_PREFIX/bin/psql /usr/local/bin/pipeline
 ln -s $INSTALL_PREFIX/bin/pipeline-config /usr/local/bin/pg_config
 ln -s $INSTALL_PREFIX/bin/padhoc /usr/local/bin/padhoc
+ln -s $INSTALL_PREFIX/bin/pipeline-dump /usr/local/bin/pipeline-dump
+ln -s $INSTALL_PREFIX/bin/pipeline-dumpall /usr/local/bin/pipeline-dumpall
+ln -s $INSTALL_PREFIX/bin/pipeline-restore /usr/local/bin/pipeline-restore
 
 rm $INSTALL_PREFIX/postinst
 

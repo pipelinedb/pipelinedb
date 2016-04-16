@@ -15,6 +15,9 @@ ln -s $INSTALL_PREFIX/bin/psql /usr/bin/psql
 ln -s $INSTALL_PREFIX/bin/psql /usr/bin/pipeline
 ln -s $INSTALL_PREFIX/bin/pipeline-config /usr/bin/pg_config
 ln -s $INSTALL_PREFIX/bin/padhoc /usr/bin/padhoc
+ln -s $INSTALL_PREFIX/bin/pipeline-dump /usr/bin/pipeline-dump
+ln -s $INSTALL_PREFIX/bin/pipeline-dumpall /usr/bin/pipeline-dumpall
+ln -s $INSTALL_PREFIX/bin/pipeline-restore /usr/bin/pipeline-restore
 
 echo "
     ____  _            ___            ____  ____
