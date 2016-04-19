@@ -53,6 +53,15 @@ debug_segfault(SIGNAL_ARGS)
 	fprintf(stderr, "backtrace:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
 
+#ifdef SLEEP_ON_ASSERT
+
+	/*
+	 * It would be nice to use pg_usleep() here, but only does 2000 sec or 33
+	 * minutes, which seems too short.
+	 */
+	sleep(1000000);
+#endif
+
 #ifdef DUMP_CORE
 	abort();
 #else
