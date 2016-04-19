@@ -89,14 +89,6 @@ typedef struct BackgroundWorker
 	Datum		bgw_main_arg;
 	char		bgw_extra[BGW_EXTRALEN];
 	pid_t		bgw_notify_pid; /* SIGUSR1 this backend on start/stop */
-
-	/*
-	 * Don't try to restart this worker if it crashes
-	 *
-	 * PipelineDB TODO: we should support custom crash handlers.
-	 * A noop can be passed if want to just let the process crash.
-	 */
-	bool		bgw_let_crash;
 } BackgroundWorker;
 
 typedef enum BgwHandleStatus
@@ -131,8 +123,6 @@ extern BgwHandleStatus
 
 /* Terminate a bgworker */
 extern void TerminateBackgroundWorker(BackgroundWorkerHandle *handle);
-
-extern void ChangeBackgroundWorkerRestartState(BackgroundWorkerHandle *handle, bool let_crash, int restart_time);
 
 /* This is valid in a running worker */
 extern PGDLLIMPORT BackgroundWorker *MyBgworkerEntry;

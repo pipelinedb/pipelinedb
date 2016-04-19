@@ -252,7 +252,6 @@ BackgroundWorkerStateChange(void)
 			/*
 			 * Update the recovery related metadata.
 			 */
-			rw->rw_worker.bgw_let_crash = slot->worker.bgw_let_crash;
 			rw->rw_worker.bgw_restart_time = slot->worker.bgw_restart_time;
 
 			continue;
@@ -319,7 +318,6 @@ BackgroundWorkerStateChange(void)
 		rw->rw_worker.bgw_restart_time = slot->worker.bgw_restart_time;
 		rw->rw_worker.bgw_main = slot->worker.bgw_main;
 		rw->rw_worker.bgw_main_arg = slot->worker.bgw_main_arg;
-		rw->rw_worker.bgw_let_crash = slot->worker.bgw_let_crash;
 
 		/*
 		 * Copy the PID to be notified about state changes, but only if the
@@ -1078,32 +1076,6 @@ TerminateBackgroundWorker(BackgroundWorkerHandle *handle)
 	if (handle->generation == slot->generation)
 	{
 		slot->terminate = true;
-		signal_postmaster = true;
-	}
-	LWLockRelease(BackgroundWorkerLock);
-
-	/* Make sure the postmaster notices the change to shared memory. */
-	if (signal_postmaster)
-		SendPostmasterSignal(PMSIGNAL_BACKGROUND_WORKER_CHANGE);
-}
-
-/*
- * ChangeBackgroundWorkerRestartState
- */
-void
-ChangeBackgroundWorkerRestartState(BackgroundWorkerHandle *handle, bool let_crash, int restart_time)
-{
-	BackgroundWorkerSlot *slot;
-	bool signal_postmaster = false;
-
-	Assert(handle->slot < max_worker_processes);
-	slot = &BackgroundWorkerData->slot[handle->slot];
-
-	LWLockAcquire(BackgroundWorkerLock, LW_EXCLUSIVE);
-	if (handle->generation == slot->generation)
-	{
-		slot->worker.bgw_let_crash = let_crash;
-		slot->worker.bgw_restart_time = restart_time;
 		signal_postmaster = true;
 	}
 	LWLockRelease(BackgroundWorkerLock);
