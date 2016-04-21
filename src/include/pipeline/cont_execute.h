@@ -21,7 +21,7 @@
 #include "nodes/pg_list.h"
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/dsm_cqueue.h"
+#include "pipeline/ipc/queue.h"
 #include "port/atomics.h"
 #include "storage/spin.h"
 #include "utils/timestamp.h"
@@ -80,7 +80,6 @@ extern void StreamTupleStatePeekFn(void *ptr, int len);
 extern void StreamTupleStateCopyFn(void *dest, void *src, int len);
 extern StreamTupleState *StreamTupleStateCreate(HeapTuple tup, TupleDesc desc, bytea *packed_desc,
 		Bitmapset *queries, InsertBatchAck *acks, int nacks, int *len);
-extern void StreamTupleStateBuffer(StreamTupleState *sts, int len);
 
 
 typedef struct PartialTupleState
@@ -102,10 +101,6 @@ extern void PartialTupleStatePopFn(void *ptr, int len);
 extern void PartialTupleStatePeekFn(void *ptr, int len);
 extern void PartialTupleStateCopyFn(void *dest, void *src, int len);
 
-extern dsm_cqueue *GetWorkerQueue(void);
-extern dsm_cqueue * GetWorkerQueueForWorker(void);
-extern dsm_cqueue *GetCombinerQueue(PartialTupleState *pts);
-
 typedef struct ContQueryState
 {
 	Oid query_id;
@@ -125,7 +120,7 @@ struct ContExecutor
 
 	ContQueryProcType ptype;
 
-	dsm_cqueue *cqueue;
+	ipc_queue *ipcq;
 	Bitmapset *queries;
 	bool update_queries;
 

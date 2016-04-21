@@ -2801,7 +2801,7 @@ static struct config_int ConfigureNamesInt[] =
 		 gettext_noop("A higher number will utilize multiple cores and increase throughput.")
 		},
 		&continuous_query_num_combiners,
-		1, 1, MAX_BACKENDS,
+		4, 1, MAX_BACKENDS,
 		NULL, NULL, NULL
 	},
 
@@ -2811,7 +2811,7 @@ static struct config_int ConfigureNamesInt[] =
 		 gettext_noop("A higher number will utilize multiple cores and increase throughput.")
 		},
 		&continuous_query_num_workers,
-		1, 1, MAX_BACKENDS,
+		4, 1, MAX_BACKENDS,
 		NULL, NULL, NULL
 	},
 

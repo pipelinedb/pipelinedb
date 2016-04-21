@@ -14,20 +14,13 @@
 #define CONT_SCHEDULER_H
 
 #include "storage/latch.h"
-#include "pipeline/dsm_cqueue.h"
+#include "pipeline/ipc/broker.h"
 #include "postmaster/bgworker.h"
 #include "storage/dsm.h"
 #include "storage/spin.h"
 
 #define MAX_CQS 1024
 #define BGWORKER_IS_CONT_QUERY_PROC 0x1000
-
-#define GetContProcCQueue(proc) ((dsm_cqueue *) ((char *) dsm_segment_address((proc)->segment) + \
-			(continuous_query_ipc_shared_mem * 1024 * (proc)->id)))
-#define GetWorkerCQueue(segment, idx) ((dsm_cqueue *) ((char *) dsm_segment_address(segment) + \
-				(continuous_query_ipc_shared_mem * 1024 * (idx))))
-#define GetCombinerCQueue(segment, idx) ((dsm_cqueue *) ((char *) dsm_segment_address(segment) + \
-				(continuous_query_ipc_shared_mem * 1024 * ((idx) + continuous_query_num_workers))))
 
 typedef enum
 {
@@ -49,8 +42,9 @@ typedef struct ContQueryProc
 	int id; /* unique across all cont query processes */
 	volatile int group_id; /* unqiue [0, n) for each db_oid, type pair */
 
-	dsm_segment *segment;
-	dsm_handle dsm_handle; /* equals db_meta->handle for non-adhoc procs */
+	ipc_queue *queue;
+	dsm_handle dsm_handle; /* only valid for adhoc processes */
+
 	BackgroundWorkerHandle *bgw_handle;
 
 	ContQueryDatabaseMetadata *db_meta;
@@ -71,9 +65,6 @@ struct ContQueryDatabaseMetadata
 
 	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
 	ContQueryProc *db_procs;
-
-	dsm_segment *segment;
-	dsm_handle handle;
 
 	int adhoc_counter;
 	/* Number of entries is equal to max_worker_processes. */
@@ -104,7 +95,7 @@ extern int  continuous_query_batch_size;
 extern int  continuous_query_max_wait;
 extern int  continuous_query_combiner_work_mem;
 extern int  continuous_query_combiner_synchronous_commit;
-extern int  continuous_query_ipc_shared_mem;
+
 extern int continuous_query_commit_interval;
 extern double continuous_query_proc_priority;
 
@@ -131,10 +122,6 @@ extern bool AreContQueriesEnabled(void);
 
 /* functions to start the scheduler process */
 extern pid_t StartContQueryScheduler(void);
-#ifdef EXEC_BACKEND
-void ContQuerySchedulerIAm(void);
-extern void ContQuerySchedulerMain(int argc, char *argv[]) __attribute__((noreturn));
-#endif
 
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
@@ -149,11 +136,9 @@ extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
 
 /* Adhoc Process Management */
 extern void SetAmContQueryAdhoc(bool value);
-extern ContQueryProc *AdhocContQueryProcGet(void);
-extern void AdhocContQueryProcRelease(ContQueryProc *proc);
-extern LWLock *GetContAdhocProcLWLock(void);
+extern void AdhocContQueryProcAcquire(void);
+extern void AdhocContQueryProcRelease(void);
 
-extern dsm_handle GetDatabaseDSMHandle(char *dbname);
 extern ContQueryProc *GetContQueryAdhocProcs(void);
 
 extern bool CheckContinuousTriggerRequirements(int elevel);

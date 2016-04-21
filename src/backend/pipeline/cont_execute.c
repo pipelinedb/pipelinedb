@@ -32,15 +32,11 @@
 
 #define SLEEP_MS 1
 
-dsm_cqueue_peek_fn PartialTupleStatePeekFnHook = NULL;
-
 typedef struct BufferedStreamTupleState
 {
 	int len;
 	StreamTupleState sts;
 } BufferedStreamTupleState;
-
-static List *MyBufferedSTS = NIL;
 
 void
 PartialTupleStateCopyFn(void *dest, void *src, int len)
@@ -409,150 +405,6 @@ InsertBatchAckCreate(List *sts, int *nacksptr)
 	return acks;
 }
 
-static dsm_segment *
-attach_to_db_dsm_segment(void)
-{
-	static dsm_segment *db_dsm_segment = NULL;
-	static dsm_handle db_dsm_handle = 0;
-	dsm_handle handle;
-	Timestamp start_time;
-
-	start_time = GetCurrentTimestamp();
-
-	/* Wait till all db workers have started up */
-	while ((handle = GetDatabaseDSMHandle(NULL)) == 0)
-	{
-		pg_usleep(SLEEP_MS);
-
-		if (TimestampDifferenceExceeds(start_time, GetCurrentTimestamp(), 1000))
-			elog(ERROR, "could not connect to database dsm segment");
-	}
-
-	if (handle == db_dsm_handle)
-	{
-		Assert(db_dsm_segment);
-		return db_dsm_segment;
-	}
-
-	if (db_dsm_handle > 0)
-		dsm_detach(db_dsm_segment);
-
-	db_dsm_handle = handle;
-	db_dsm_segment = dsm_find_or_attach(handle);
-	dsm_pin_mapping(db_dsm_segment);
-	return db_dsm_segment;
-}
-
-dsm_cqueue *
-GetWorkerQueue(void)
-{
-	static long idx = -1;
-	int ntries = 0;
-	dsm_cqueue *cq = NULL;
-	dsm_segment *segment;
-
-	segment = attach_to_db_dsm_segment();
-
-	if (idx == -1)
-		idx = rand() % continuous_query_num_workers;
-
-	idx = (idx + 1) % continuous_query_num_workers;
-
-	for (;;)
-	{
-		cq = GetWorkerCQueue(segment, idx);
-
-		/*
-		 * Try to lock dsm_cqueue of any worker that is not already locked in
-		 * a round robin fashion.
-		 */
-		if (ntries < continuous_query_num_workers)
-		{
-			if (dsm_cqueue_lock_nowait(cq))
-				break;
-		}
-		else
-		{
-			/* If all workers are locked, then just wait for the lock. */
-			dsm_cqueue_lock(cq);
-			break;
-		}
-
-		ntries++;
-		idx = (idx + 1) % continuous_query_num_workers;
-	}
-
-	Assert(cq);
-	Assert(LWLockHeldByMe(cq->lock));
-
-	return cq;
-}
-
-dsm_cqueue *
-GetWorkerQueueForWorker(void)
-{
-	static long idx = -1;
-	int ntries = 0;
-	dsm_cqueue *cq = NULL;
-	dsm_segment *segment;
-
-	Assert(IsContQueryWorkerProcess());
-
-	segment = attach_to_db_dsm_segment();
-
-	if (idx == -1)
-		idx = rand() % continuous_query_num_workers;
-
-	idx = (idx + 1) % continuous_query_num_workers;
-
-	for (;;)
-	{
-		/*
-		 * If we have multiple workers and we're trying to write from a continuous transform, never write to our
-		 * own queue so we never have to buffer tuples that don't fit in the queue in process local memory.
-		 */
-		if (continuous_query_num_workers > 1 && idx == MyContQueryProc->id)
-		{
-			ntries++;
-			idx = (idx + 1) % continuous_query_num_workers;
-		}
-
-		cq = GetWorkerCQueue(segment, idx);
-
-		/*
-		 * Try to lock dsm_cqueue of any worker that is not already locked in
-		 * a round robin fashion.
-		 */
-		if (ntries < continuous_query_num_workers)
-		{
-			if (dsm_cqueue_lock_nowait(cq))
-				break;
-		}
-		else
-		{
-			cq = NULL;
-			break;
-		}
-
-		ntries++;
-		idx = (idx + 1) % continuous_query_num_workers;
-	}
-
-	Assert(cq == NULL || LWLockHeldByMe(cq->lock));
-
-	return cq;
-}
-
-dsm_cqueue *
-GetCombinerQueue(PartialTupleState *pts)
-{
-	int idx = pts->hash % continuous_query_num_combiners;
-	dsm_segment *segment = attach_to_db_dsm_segment();
-	dsm_cqueue *cq = GetCombinerCQueue(segment, idx);
-	dsm_cqueue_lock(cq);
-	return cq;
-}
-
 ContExecutor *
 ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 {
@@ -579,8 +431,8 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 	exec->current_query_id = InvalidOid;
 	exec->initfn = initfn;
 
-	exec->cqueue = GetContProcCQueue(MyContQueryProc);
-	dsm_cqueue_unpeek(exec->cqueue);
+	exec->ipcq = MyContQueryProc->queue;
+	ipc_queue_unpeek_all(exec->ipcq);
 
 	MemoryContextSwitchTo(old);
 
@@ -590,14 +442,14 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 void
 ContExecutorDestroy(ContExecutor *exec)
 {
-	dsm_cqueue_pop_peeked(exec->cqueue);
+	ipc_queue_pop_peeked(exec->ipcq);
 	MemoryContextDelete(exec->cxt);
 }
 
 void
 ContExecutorStartBatch(ContExecutor *exec)
 {
-	if (dsm_cqueue_is_empty(exec->cqueue) && list_length(MyBufferedSTS) == 0)
+	if (ipc_queue_is_empty(exec->ipcq))
 	{
 		if (!IsTransactionState())
 		{
@@ -606,7 +458,7 @@ ContExecutorStartBatch(ContExecutor *exec)
 			cq_stat_report(true);
 
 			pgstat_report_activity(STATE_IDLE, proc_name);
-			dsm_cqueue_wait_non_empty(exec->cqueue, 0);
+			ipc_queue_wait_non_empty(exec->ipcq, 0);
 			pgstat_report_activity(STATE_RUNNING, proc_name);
 
 			pfree(proc_name);
@@ -843,7 +695,7 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			if (exec->depleted)
 				return NULL;
 
-			ptr = dsm_cqueue_peek_next(exec->cqueue, len);
+			ptr = ipc_queue_peek_next(exec->ipcq, len);
 			Assert(ptr);
 
 			if (ptr == exec->cursor)
@@ -876,7 +728,7 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			return NULL;
 		}
 
-		ptr = dsm_cqueue_peek_next(exec->cqueue, len);
+		ptr = ipc_queue_peek_next(exec->ipcq, len);
 
 		if (ptr)
 		{
@@ -915,7 +767,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 	if (!exec->started)
 		return;
 
-	dsm_cqueue_unpeek(exec->cqueue);
+	ipc_queue_unpeek_all(exec->ipcq);
 
 	if (!bms_is_empty(exec->queries_seen) && exec->update_queries)
 	{
@@ -959,44 +811,12 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	while (exec->nitems--)
 	{
 		int len;
-		ptr = dsm_cqueue_peek_next(exec->cqueue, &len);
+		ptr = ipc_queue_peek_next(exec->ipcq, &len);
 	}
 
 	Assert(exec->cursor == NULL || exec->cursor == ptr);
 
-	if (MyBufferedSTS)
-	{
-		ListCell *lc;
-		List *to_remove = NIL;
-		dsm_cqueue *cq = NULL;
-
-		Assert(IsContQueryWorkerProcess());
-
-		cq = GetWorkerQueue();
-
-		dsm_cqueue_pop_peeked(exec->cqueue);
-
-		foreach(lc, MyBufferedSTS)
-		{
-			BufferedStreamTupleState *bsts = (BufferedStreamTupleState *) lfirst(lc);
-
-			if (dsm_cqueue_push_nolock(cq, &bsts->sts, bsts->len, false))
-				to_remove = lappend(to_remove, bsts);
-			else
-				break;
-		}
-
-		dsm_cqueue_unlock(cq);
-
-		foreach(lc, to_remove)
-		{
-			BufferedStreamTupleState *bsts = (BufferedStreamTupleState *) lfirst(lc);
-			MyBufferedSTS = list_delete(MyBufferedSTS, bsts);
-			pfree(bsts);
-		}
-	}
-	else
-		dsm_cqueue_pop_peeked(exec->cqueue);
+	ipc_queue_pop_peeked(exec->ipcq);
 
 	exec->cursor = NULL;
 	exec->nitems = 0;
@@ -1005,19 +825,4 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	exec->depleted = false;
 	exec->queries_seen = NULL;
 	exec->exec_queries = NULL;
-}
-
-void
-StreamTupleStateBuffer(StreamTupleState *sts, int len)
-{
-	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
-	BufferedStreamTupleState *bsts = (BufferedStreamTupleState *) palloc0(sizeof(BufferedStreamTupleState) + len);
-
-	bsts->len = len;
-	StreamTupleStateCopyFn(&bsts->sts, sts, len);
-	StreamTupleStatePeekFn(&bsts->sts, len);
-
-	MyBufferedSTS = lappend(MyBufferedSTS, bsts);
-
-	MemoryContextSwitchTo(old);
 }

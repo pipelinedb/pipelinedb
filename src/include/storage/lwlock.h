@@ -19,8 +19,6 @@
 #include "storage/s_lock.h"
 #include "port/atomics.h"
 
-extern bool lw_lock_high_priority;
-
 struct PGPROC;
 
 /*
@@ -140,7 +138,8 @@ extern PGDLLIMPORT LWLockPadded *MainLWLockArray;
 #define ReplicationOriginLock		(&MainLWLockArray[40].lock)
 #define MultiXactTruncationLock		(&MainLWLockArray[41].lock)
 #define ContQuerySchedulerLock		(&MainLWLockArray[42].lock)
-#define NUM_INDIVIDUAL_LWLOCKS		43
+#define IPCMessageBrokerIndexLock	(&MainLWLockArray[43].lock)
+#define NUM_INDIVIDUAL_LWLOCKS		44
 
 /*
  * It's a bit odd to declare NUM_BUFFER_PARTITIONS and NUM_LOCK_PARTITIONS
