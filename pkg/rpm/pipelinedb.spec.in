@@ -33,6 +33,9 @@ ln -s $RPM_INSTALL_PREFIX/bin/psql /usr/bin/psql
 ln -s $RPM_INSTALL_PREFIX/bin/psql /usr/bin/pipeline
 ln -s $RPM_INSTALL_PREFIX/bin/pipeline-config /usr/bin/pg_config
 ln -s $RPM_INSTALL_PREFIX/bin/padhoc /usr/bin/padhoc
+ln -s $RPM_INSTALL_PREFIX/bin/pipeline-dump /usr/bin/pipeline-dump
+ln -s $RPM_INSTALL_PREFIX/bin/pipeline-dumpall /usr/bin/pipeline-dumpall
+ln -s $RPM_INSTALL_PREFIX/bin/pipeline-restore /usr/bin/pipeline-restore
 
 echo "
     ____  _            ___            ____  ____
@@ -68,5 +71,8 @@ rm -f /usr/bin/psql
 rm -f /usr/bin/pipeline
 rm -f /usr/bin/pg_config
 rm -f /usr/bin/padhoc
+rm -f /usr/bin/pipeline-dump
+rm -f /usr/bin/pipeline-dumpall
+rm -f /usr/bin/pipeline-restore
 
 %clean

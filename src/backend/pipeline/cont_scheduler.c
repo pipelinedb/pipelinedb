@@ -537,7 +537,6 @@ run_cont_bgworker(ContQueryProc *proc)
 	worker.bgw_main = cont_bgworker_main;
 	worker.bgw_notify_pid = 0;
 	worker.bgw_restart_time = 1; /* recover in 1s */
-	worker.bgw_let_crash = false;
 	worker.bgw_main_arg = PointerGetDatum(proc);
 
 	success = RegisterDynamicBackgroundWorker(&worker, &handle);
