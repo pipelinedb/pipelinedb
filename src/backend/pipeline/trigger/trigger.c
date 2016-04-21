@@ -195,13 +195,10 @@ trigger_main()
 		check_syscache_dirty(state);
 		wal_stream_read(ws, &saw_catalog_changes);
 
-		check_syscache_dirty(state);
-
 		if (saw_catalog_changes)
 		{
 			InvalidateSystemCaches();
 			synchronize(state);
-			state->dirty_syscache = true;
 			saw_catalog_changes = false;
 		}
 
