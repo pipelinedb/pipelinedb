@@ -709,7 +709,7 @@ RangeVarIsForStream(RangeVar *rv, bool *is_inferred)
 	if (!is_stream)
 		return false;
 
-	if (is_inferred != NULL)
+	if (is_inferred)
 	{
 		tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(relid));
 		Assert(HeapTupleIsValid(tup));

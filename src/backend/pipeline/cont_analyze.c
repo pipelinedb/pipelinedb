@@ -1007,6 +1007,40 @@ validate_target_list(SelectStmt *stmt)
 	}
 }
 
+static bool
+ensure_inner_joins(Node *node, ContAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, JoinExpr))
+	{
+		JoinExpr *join = (JoinExpr *) node;
+
+		if (IsA(join->larg, RangeVar))
+		{
+			RangeVar *rv = (RangeVar *) join->larg;
+
+			if (RangeVarIsForStream(rv, NULL) && join->jointype != JOIN_INNER)
+				ereport(ERROR,
+						(errmsg("streams only support INNER JOINs"),
+						parser_errposition(context->pstate, rv->location)));
+		}
+
+		if (IsA(join->rarg, RangeVar))
+		{
+			RangeVar *rv = (RangeVar *) join->rarg;
+
+			if (RangeVarIsForStream(rv, NULL) && join->jointype != JOIN_INNER)
+				ereport(ERROR,
+						(errmsg("streams only support INNER JOINs"),
+						parser_errposition(context->pstate, rv->location)));
+		}
+	}
+
+	return raw_expression_tree_walker(node, ensure_inner_joins, context);
+}
+
 /*
  * ValidateContQuery
  */
@@ -1106,6 +1140,9 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				errmsg("continuous queries cannot read from themselves"),
 				errhint("Remove \"%s\" from the FROM clause.", stream->relname),
 				parser_errposition(context->pstate, stream->location)));
+
+	if (list_length(context->rels))
+		ensure_inner_joins((Node *) select->fromClause, context);
 
 	/*
 	 * Ensure that we have no `*` in the target list.

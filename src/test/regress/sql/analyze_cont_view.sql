@@ -38,18 +38,23 @@ CREATE CONTINUOUS VIEW cqanalyze26 AS SELECT s.id FROM analyze_cont_stream s WHE
 
 -- Verify that NOTICEs are properly shown when joining on unindexed columns
 CREATE TABLE tnotice (x integer, y integer);
-CREATE CONTINUOUS VIEW cvnotice0 AS SELECT stream.x::integer FROM analyze_cont_stream2 JOIN tnotice ON stream.x = tnotice.x;
+CREATE CONTINUOUS VIEW cvnotice0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream JOIN tnotice ON stream.x = tnotice.x;
 
 -- tnotice.x NOTICE should only be shown once
-CREATE CONTINUOUS VIEW cvnotice1 AS SELECT stream.x::integer FROM analyze_cont_stream2 JOIN tnotice ON stream.x = tnotice.x AND stream.x = tnotice.x;
-CREATE CONTINUOUS VIEW cvnotice2 AS SELECT stream.x::integer FROM analyze_cont_stream2, tnotice WHERE tnotice.x = stream.x;
+CREATE CONTINUOUS VIEW cvnotice1 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream JOIN tnotice ON stream.x = tnotice.x AND stream.x = tnotice.x;
+CREATE CONTINUOUS VIEW cvnotice2 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream, tnotice WHERE tnotice.x = stream.x;
 
 CREATE INDEX tnotice_idx ON tnotice(x);
 
 -- No NOTICE should be given now that an index exists
-CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x::integer FROM analyze_cont_stream, tnotice WHERE tnotice.x = stream.x;
+CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream, tnotice WHERE tnotice.x = stream.x;
 
-DROP TABLE tnotice;
+-- Only INNERT JOINs
+CREATE CONTINUOUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream LEFT JOIN tnotice ON stream.x = tnotice.x WHERE tnotice.x = stream.x;
+
+CREATE CONTINUOUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream INNER JOIN tnotice ON stream.x = tnotice.x WHERE tnotice.x = stream.x;
+
+DROP TABLE tnotice CASCADE;
 
 -- Verify all relevant types are recognized
 CREATE CONTINUOUS VIEW cqanalyze27 AS SELECT

@@ -52,26 +52,29 @@ LINE 1: CREATE CONTINUOUS VIEW cqanalyze26 AS SELECT s.id FROM analy...
 HINT:  Explicitly cast to the desired type, e.g. s.id::integer, or create the stream "analyze_cont_stream" with CREATE STREAM.
 -- Verify that NOTICEs are properly shown when joining on unindexed columns
 CREATE TABLE tnotice (x integer, y integer);
-CREATE CONTINUOUS VIEW cvnotice0 AS SELECT stream.x::integer FROM analyze_cont_stream2 JOIN tnotice ON stream.x = tnotice.x;
-ERROR:  missing FROM-clause entry for table "stream"
-LINE 1: ...integer FROM analyze_cont_stream2 JOIN tnotice ON stream.x =...
-                                                             ^
+CREATE CONTINUOUS VIEW cvnotice0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream JOIN tnotice ON stream.x = tnotice.x;
+NOTICE:  consider creating an index on tnotice.x for improved stream-table join performance
 -- tnotice.x NOTICE should only be shown once
-CREATE CONTINUOUS VIEW cvnotice1 AS SELECT stream.x::integer FROM analyze_cont_stream2 JOIN tnotice ON stream.x = tnotice.x AND stream.x = tnotice.x;
-ERROR:  missing FROM-clause entry for table "stream"
-LINE 1: ...integer FROM analyze_cont_stream2 JOIN tnotice ON stream.x =...
-                                                             ^
-CREATE CONTINUOUS VIEW cvnotice2 AS SELECT stream.x::integer FROM analyze_cont_stream2, tnotice WHERE tnotice.x = stream.x;
-ERROR:  missing FROM-clause entry for table "stream"
-LINE 1: CREATE CONTINUOUS VIEW cvnotice2 AS SELECT stream.x::integer...
-                                                   ^
+CREATE CONTINUOUS VIEW cvnotice1 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream JOIN tnotice ON stream.x = tnotice.x AND stream.x = tnotice.x;
+NOTICE:  consider creating an index on tnotice.x for improved stream-table join performance
+CREATE CONTINUOUS VIEW cvnotice2 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream, tnotice WHERE tnotice.x = stream.x;
+NOTICE:  consider creating an index on tnotice.x for improved stream-table join performance
 CREATE INDEX tnotice_idx ON tnotice(x);
 -- No NOTICE should be given now that an index exists
-CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x::integer FROM analyze_cont_stream, tnotice WHERE tnotice.x = stream.x;
-ERROR:  missing FROM-clause entry for table "stream"
-LINE 1: CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x::integer...
-                                                   ^
-DROP TABLE tnotice;
+CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream, tnotice WHERE tnotice.x = stream.x;
+-- Only INNERT JOINs
+CREATE CONTINUOUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream LEFT JOIN tnotice ON stream.x = tnotice.x WHERE tnotice.x = stream.x;
+ERROR:  streams only support INNER JOINs
+LINE 1: ...OUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_co...
+                                                             ^
+CREATE CONTINUOUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream INNER JOIN tnotice ON stream.x = tnotice.x WHERE tnotice.x = stream.x;
+DROP TABLE tnotice CASCADE;
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to continuous view cvnotice0
+drop cascades to continuous view cvnotice1
+drop cascades to continuous view cvnotice2
+drop cascades to continuous view cvnotice3
+drop cascades to continuous view cvjoin0
 -- Verify all relevant types are recognized
 CREATE CONTINUOUS VIEW cqanalyze27 AS SELECT
 a::bigint,
