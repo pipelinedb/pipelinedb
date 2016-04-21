@@ -14,7 +14,6 @@
 #define CONT_SCHEDULER_H
 
 #include "storage/latch.h"
-#include "pipeline/dsm_cqueue.h"
 #include "pipeline/ipc/broker.h"
 #include "postmaster/bgworker.h"
 #include "storage/dsm.h"

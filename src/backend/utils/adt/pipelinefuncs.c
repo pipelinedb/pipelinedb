@@ -22,7 +22,6 @@
 #include "catalog/pipeline_stream_fn.h"
 #include "fmgr.h"
 #include "pipeline/cont_analyze.h"
-#include "pipeline/dsm_cqueue.h"
 #include "pipeline/stream.h"
 #include "miscadmin.h"
 #include "utils/array.h"

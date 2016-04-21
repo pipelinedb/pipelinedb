@@ -27,7 +27,6 @@
 #include "pgstat.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/dsm_cqueue.h"
 #include "pipeline/ipc/broker.h"
 #include "pipeline/miscutils.h"
 #include "postmaster/fork_process.h"
