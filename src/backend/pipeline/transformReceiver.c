@@ -174,11 +174,13 @@ TransformDestReceiverFlush(DestReceiver *self)
 	{
 		int i;
 		ListCell *lc;
+		bytea *packed_desc;
 
 		if (list_length(t->tups) == 0)
 			return;
 
 		Assert(t->tg_rel);
+		packed_desc = PackTupleDesc(RelationGetDescr(t->tg_rel));
 
 		for (i = 0; i < t->cont_query->tgnargs; i++)
 		{
@@ -186,7 +188,6 @@ TransformDestReceiverFlush(DestReceiver *self)
 			Relation rel = heap_openrv(rv, AccessShareLock);
 			Oid relid = RelationGetRelid(rel);
 			Bitmapset *targets;
-			bytea *packed_desc;
 			Size size = 0;
 			dsm_cqueue *cq;
 			int batch = 0;
@@ -208,7 +209,6 @@ TransformDestReceiverFlush(DestReceiver *self)
 				}
 			}
 
-			packed_desc = PackTupleDesc(RelationGetDescr(t->tg_rel));
 			cq = GetWorkerQueueForWorker();
 
 			foreach(lc, t->tups)
@@ -239,11 +239,12 @@ TransformDestReceiverFlush(DestReceiver *self)
 			if (cq)
 				dsm_cqueue_unlock(cq);
 
-			pfree(packed_desc);
 			heap_close(rel, NoLock);
 
 			stream_stat_increment(relid, list_length(t->tups), nbatches, size);
 		}
+
+		pfree(packed_desc);
 
 		if (t->acks)
 		{
