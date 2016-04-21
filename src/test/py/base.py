@@ -1,6 +1,7 @@
 import getpass
 import os
 import pytest
+import select
 import shutil
 import signal
 import socket
@@ -107,7 +108,12 @@ class PipelineDB(object):
         self.proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
 
         # Wait for PipelineDB to start up
+        poller = select.poll()
+        poller.register(self.proc.stderr, select.POLLIN)
         while True:
+          if not poller.poll(10 * 1000): # Wait at most 10s
+            # If we don't see any new line till 10s, assume we're ready to go.
+            break
           line = self.proc.stderr.readline()
           sys.stderr.write(line)
           if 'database system is ready to accept connections' in line:
@@ -115,6 +121,7 @@ class PipelineDB(object):
           elif ('database system is shut down' in line or
                 (line == '' and self.proc.poll() != None)):
             raise Exception('Failed to start up PipelineDB')
+        poller.unregister(self.proc.stderr)
 
         # Add log tailer
         def run():

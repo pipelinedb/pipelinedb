@@ -91,7 +91,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	Bitmapset *all_targets = GetStreamReaders(RelationGetRelid(stream));
 	Bitmapset *adhoc = GetAdhocContinuousViewIds();
 	Bitmapset *targets = bms_difference(all_targets, adhoc);
-	dsm_cqueue *cq = NULL;
+	ipc_queue *ipcq = NULL;
 	bytea *packed_desc;
 	int nbatches = 1;
 
@@ -110,7 +110,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 			ack->batch = batch;
 		}
 
-		cq = GetWorkerQueue();
+		ipcq = get_worker_queue_with_lock();
 
 		for (i=0; i<ntuples; i++)
 		{
@@ -120,22 +120,24 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 			sts = StreamTupleStateCreate(tup, desc, packed_desc, targets, ack, synchronous_stream_insert ? 1 : 0, &len);
 
-			if (!dsm_cqueue_push_nolock(cq, sts, len, false))
+			if (!ipc_queue_push_nolock(ipcq, sts, len, false))
 			{
+				int ntries = 0;
 				nbatches++;
 
 				do
 				{
-					dsm_cqueue_unlock(cq);
-					cq = GetWorkerQueue();
+					ntries++;
+					ipc_queue_unlock(ipcq);
+					ipcq = get_worker_queue_with_lock();
 				}
-				while (!dsm_cqueue_push_nolock(cq, sts, len, false));
+				while (!ipc_queue_push_nolock(ipcq, sts, len, ntries == continuous_query_num_workers));
 			}
 
 			size += len;
 		}
 
-		dsm_cqueue_unlock(cq);
+		ipc_queue_unlock(ipcq);
 	}
 
 	pfree(packed_desc);
