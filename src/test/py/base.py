@@ -121,6 +121,7 @@ class PipelineDB(object):
           elif ('database system is shut down' in line or
                 (line == '' and self.proc.poll() != None)):
             raise Exception('Failed to start up PipelineDB')
+        poller.unregister(self.proc.stderr)
 
         # Add log tailer
         def run():
