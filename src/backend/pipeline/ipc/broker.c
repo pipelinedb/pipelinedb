@@ -449,13 +449,20 @@ copy_messages(void)
 				if (!ipc_queue_push_nolock(dest, msg, len, false))
 				{
 					/* Buffer it locally and move on */
-					local_buffer_slot *slot = palloc0(sizeof(local_buffer_slot));
+					MemoryContext old;
+					local_buffer_slot *slot;
+
+					old =  MemoryContextSwitchTo(CacheMemoryContext);
+
+					slot = palloc0(sizeof(local_buffer_slot));
 					slot->len = len;
 					slot->msg = palloc(len);
 					memcpy(slot->msg, msg, len);
 
 					local_buf->slots = lappend(local_buf->slots, slot);
 					local_buf->size += len;
+
+					MemoryContextSwitchTo(old);
 
 					if (local_buf->size > (ipc_queue_size / 4))
 					{
@@ -548,6 +555,7 @@ ipc_msg_broker_main(int argc, char *argv[])
 {
 	sigjmp_buf local_sigjmp_buf;
 	MemoryContext work_ctx;
+	MemoryContext old;
 
 	IsUnderPostmaster = true;
 	am_ipc_msg_broker = true;
@@ -651,13 +659,18 @@ ipc_msg_broker_main(int argc, char *argv[])
 	broker_meta->pid = MyProcPid;
 	broker_meta->latch = MyLatch;
 
+	old = MemoryContextSwitchTo(CacheMemoryContext);
 	my_local_buffers = (local_buffer *) palloc0(sizeof(local_buffer) * continuous_query_num_workers);
+	MemoryContextSwitchTo(old);
 
 	/* Loop forever */
 	for (;;)
 	{
 		int rc;
 		int num_copied;
+
+		MemoryContextSwitchTo(work_ctx);
+		MemoryContextReset(work_ctx);
 
 		purge_dropped_db_segments();
 
