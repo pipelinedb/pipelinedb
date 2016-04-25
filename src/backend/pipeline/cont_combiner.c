@@ -734,6 +734,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
+	matrel = heap_openrv_extended(base->query->matrel, AccessShareLock, true);
 	pstmt = GetContPlan(base->query, COMBINER);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
@@ -749,7 +750,6 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	state->group_hashes_len = continuous_query_batch_size;
 	state->group_hashes = palloc0(state->group_hashes_len * sizeof(int64));
 
-	matrel = heap_openrv_extended(base->query->matrel, AccessShareLock, true);
 	if (matrel == NULL)
 	{
 		base->query = NULL;
