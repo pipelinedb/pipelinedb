@@ -10,6 +10,7 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/ipc/broker.h"
 #include "pipeline/ipc/queue.h"
 #include "port/atomics.h"
@@ -136,9 +137,10 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 		pg_atomic_write_u64(&ipcq->producer_latch, (uint64) producer_latch);
 	}
 
-	/* FIXME(usmanm): On postmaster shutdown, this stays looping, we must break out. */
 	for (;;)
 	{
+		int r;
+
 		int space_used;
 
 		tail = pg_atomic_read_u64(&ipcq->tail);
@@ -150,9 +152,11 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 		else if (!wait)
 			return false;
 
-		WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
-		ResetLatch(producer_latch);
+		r = WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+		if (r & WL_POSTMASTER_DEATH)
+			return false;
 
+		ResetLatch(producer_latch);
 		CHECK_FOR_INTERRUPTS();
 	}
 
@@ -319,14 +323,25 @@ ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms)
 	if (timeoutms > 0)
 		flags |= WL_TIMEOUT;
 
-	head = pg_atomic_read_u64(&ipcq->head);
+	for (;;)
+	{
+		int r;
 
-	if (head > tail)
-		return;
+		head = pg_atomic_read_u64(&ipcq->head);
 
-	WaitLatch(consumer_latch, flags, timeoutms);
-	CHECK_FOR_INTERRUPTS();
-	ResetLatch(consumer_latch);
+		if (head > tail)
+			break;
+
+		r = WaitLatch(consumer_latch, flags, timeoutms);
+		if (r & WL_POSTMASTER_DEATH)
+			break;
+
+		if (ShouldTerminateContQueryProcess())
+			break;
+
+		ResetLatch(consumer_latch);
+		CHECK_FOR_INTERRUPTS();
+	}
 
 	pg_atomic_write_u64(&ipcq->consumer_latch, (uint64) NULL);
 }
