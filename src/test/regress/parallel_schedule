@@ -127,7 +127,13 @@ test: sw_vacuum
 # ----------
 # Another group of parallel tests
 # ----------
-test: analyze_cont_view create_cont_view cont_view_sanity cont_window
+test: create_cont_view cont_view_sanity cont_window
+
+# ----------
+# Another group of parallel tests
+# XXX(loadzero) - taken out of above group due to #1473
+# ----------
+test: analyze_cont_view
 
 # ----------
 # Another group of parallel tests
