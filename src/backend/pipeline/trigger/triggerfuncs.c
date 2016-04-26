@@ -21,6 +21,7 @@
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
 #include "nodes/print.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/trigger/trigger.h"
 #include "pipeline/trigger/triggerfuncs.h"
 #include "pipeline/trigger/tuple_formatter.h"

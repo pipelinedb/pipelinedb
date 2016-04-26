@@ -22,8 +22,6 @@
 #include "lib/pairingheap.h"
 #include "nodes/params.h"
 #include "nodes/plannodes.h"
-#include "pipeline/cont_adhoc.h"
-#include "pipeline/cont_execute.h"
 #include "pipeline/bloom.h"
 #include "utils/reltrigger.h"
 #include "utils/sortsupport.h"

@@ -46,6 +46,7 @@
 #include "optimizer/clauses.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_coerce.h"
+#include "pipeline/cont_scheduler.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"

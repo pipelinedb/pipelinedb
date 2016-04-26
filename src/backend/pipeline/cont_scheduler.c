@@ -25,6 +25,7 @@
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "pgstat.h"
+#include "pipeline/cont_adhoc.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/ipc/broker.h"

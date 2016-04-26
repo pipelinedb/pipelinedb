@@ -20,6 +20,7 @@
 #include "executor/executor.h"
 #include "executor/nodeContinuousUnique.h"
 #include "miscadmin.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/miscutils.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"

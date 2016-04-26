@@ -105,6 +105,7 @@
 #include "nodes/print.h"
 #include "pg_getopt.h"
 #include "pgstat.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/ipc/broker.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"

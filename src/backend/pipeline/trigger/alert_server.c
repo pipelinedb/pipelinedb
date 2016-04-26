@@ -36,6 +36,7 @@
 #include "pipeline/trigger/alert_server.h"
 
 #include "utils/memutils.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/trigger/mirror_ringbuf.h"
 #include "pipeline/trigger/triggerfuncs.h"
 #include "access/xlog_internal.h"

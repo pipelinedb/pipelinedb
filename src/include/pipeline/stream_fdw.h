@@ -12,6 +12,7 @@
 
 #include "foreign/foreign.h"
 #include "lib/stringinfo.h"
+#include "pipeline/cont_adhoc.h"
 #include "nodes/execnodes.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
