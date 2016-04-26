@@ -179,7 +179,7 @@ add_paths_to_joinrel(PlannerInfo *root,
 	 */
 	if (IS_STREAM_RTE(innerrel->relid, root))
 	{
-		StreamTableJoinPath *path;
+		HashPath *path;
 		Path *outerpath = outerrel->cheapest_total_path;
 		Path *innerpath = innerrel->cheapest_total_path;
 		Relids requiredouter = calc_non_nestloop_required_outer(outerpath, innerpath);
@@ -210,7 +210,7 @@ add_paths_to_joinrel(PlannerInfo *root,
 			hashclauses = lappend(hashclauses, restrictinfo);
 		}
 
-		path = create_stream_table_join_path(root, joinrel, jointype,
+		path = create_stream_hashjoin_path(root, joinrel, jointype,
 				outerpath, innerpath, requiredouter, hashclauses, &extra);
 
 		add_path(joinrel, (Path *) path);

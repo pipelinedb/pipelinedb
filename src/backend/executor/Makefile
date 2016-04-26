@@ -26,7 +26,7 @@ OBJS = execAmi.o execCurrent.o execGrouping.o execIndexing.o execJunk.o \
        nodeSamplescan.o nodeSeqscan.o nodeSetOp.o nodeSort.o nodeUnique.o \
        nodeValuesscan.o nodeCtescan.o nodeWorktablescan.o \
        nodeGroup.o nodeSubplan.o nodeSubqueryscan.o nodeTidscan.o \
-       nodeForeignscan.o nodeWindowAgg.o nodeStreamTablejoin.o \
+       nodeForeignscan.o nodeWindowAgg.o \
        nodeTuplestoreScan.o nodeContinuousUnique.o \
        nodePhysicalGroupLookup.o tstoreReceiver.o spi.o tupletableReceiver.o
 

@@ -259,40 +259,6 @@ typedef struct ProjectionInfo
 	int			pi_lastScanVar;
 } ProjectionInfo;
 
-typedef struct StreamProjectionInfo
-{
-	/*
-	 * Temporary context to use during stream projections,
-	 * reset after each stream scan batch
-	 */
-	MemoryContext ctxt;
-	/* expression context for evaluating stream event cast expressions */
-	ExprContext *econtext;
-	/*
-	 * Descriptor for the event currently being projected,
-	 * may be cached across projections
-	 */
-	TupleDesc eventdesc;
-	/*
-	 * Descriptor for the projection result, used for all projections
-	 * performed by this StreamProjectionInfo
-	 */
-	TupleDesc resultdesc;
-	/* slot to store the current stream event in, may be cached across projections */
-	TupleTableSlot *curslot;
-	/*
-	 * Mapping from event attribute to result attribute position,
-	 * may be cached across projections
-	 */
-	int *attrmap;
-
-	/*
-	 * Serialized event descriptor used to detect when a new event descriptor
-	 * has arrived without having to fully unpack it
-	 */
-	bytea *raweventdesc;
-} StreamProjectionInfo;
-
 /* ----------------
  *	  JunkFilter
  *
@@ -1997,18 +1963,6 @@ typedef struct WindowAggState
 	/* currently active aggregate */
 	WindowStatePerAgg curperagg;
 } WindowAggState;
-
-/* ----------------
- *	StreamScanState information
- * ----------------
- */
-typedef struct StreamScanState
-{
-	ScanState ss;
-	ContExecutor *cont_executor;
-	AdhocExecutor *adhoc_executor;
-	StreamProjectionInfo *pi;
-} StreamScanState;
 
 /* ----------------
  *	 UniqueState information

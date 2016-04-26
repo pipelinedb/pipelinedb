@@ -938,7 +938,6 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			pname = "Merge";	/* "Join" gets added by jointype switch */
 			sname = "Merge Join";
 			break;
-		case T_StreamTableJoin:
 		case T_HashJoin:
 			pname = "Hash";		/* "Join" gets added by jointype switch */
 			sname = "Hash Join";
@@ -1157,7 +1156,6 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		case T_NestLoop:
 		case T_MergeJoin:
 		case T_HashJoin:
-		case T_StreamTableJoin:
 			{
 				const char *jointype;
 
@@ -1479,7 +1477,6 @@ ExplainNode(PlanState *planstate, List *ancestors,
 										   planstate, es);
 			break;
 		case T_HashJoin:
-		case T_StreamTableJoin:
 			show_upper_qual(((HashJoin *) plan)->hashclauses,
 							"Hash Cond", planstate, ancestors, es);
 			show_upper_qual(((HashJoin *) plan)->join.joinqual,

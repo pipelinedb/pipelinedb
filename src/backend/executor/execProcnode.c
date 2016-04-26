@@ -109,7 +109,6 @@
 #include "executor/nodeSeqscan.h"
 #include "executor/nodeSetOp.h"
 #include "executor/nodeSort.h"
-#include "executor/nodeStreamTablejoin.h"
 #include "executor/nodeSubplan.h"
 #include "executor/nodeSubqueryscan.h"
 #include "executor/nodeTidscan.h"
@@ -291,12 +290,6 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 													estate, eflags);
 			break;
 
-		case T_StreamTableJoin:
-			result = (PlanState *) ExecInitStreamTableJoin((StreamTableJoin *) node,
-													estate, eflags);
-
-			break;
-
 			/*
 			 * materialization nodes
 			 */
@@ -397,9 +390,6 @@ ExecEndBatch(PlanState *node)
 	{
 		case T_AggState:
 			ExecEndBatchAgg((AggState *) node);
-			break;
-
-		case T_StreamScanState:
 			break;
 
 		case T_ContinuousUniqueState:
@@ -539,10 +529,6 @@ ExecProcNode(PlanState *node)
 
 		case T_HashJoinState:
 			result = ExecHashJoin((HashJoinState *) node);
-			break;
-
-		case T_StreamTableJoinState:
-			result = ExecStreamTableJoin((StreamTableJoinState *) node);
 			break;
 
 			/*
@@ -802,10 +788,6 @@ ExecEndNode(PlanState *node)
 
 		case T_HashJoinState:
 			ExecEndHashJoin((HashJoinState *) node);
-			break;
-
-		case T_StreamTableJoinState:
-			ExecEndStreamTableJoin((StreamTableJoinState *) node);
 			break;
 
 			/*

@@ -29,10 +29,6 @@ extern ProcessUtility_hook_type SaveUtilityHook;
 #define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
 	((planner_rt_fetch(relid, root))->relkind == RELKIND_STREAM))
 
-#define IS_STREAM_TREE(node) ((IsA((node), ForeignScanState) && \
-		(((ForeignScanState *) (node))->ss.ss_currentRelation->rd_rel->relkind == RELKIND_STREAM)) || \
-		IsA((node), StreamTableJoinState))
-
 extern PlannedStmt *GetContPlan(ContQuery *view, ContQueryProcType type);
 extern TuplestoreScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
 extern FuncExpr *GetGroupHashIndexExpr(ResultRelInfo *ri);

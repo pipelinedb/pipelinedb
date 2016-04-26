@@ -1841,7 +1841,7 @@ create_tuplestore_scan_path(RelOptInfo *parent)
 }
 
 /*
- * create_stream_table_join_path
+ * create_stream_hash_join_path
  *	  Creates a pathnode corresponding to a join between a stream and a table.
  *
  * 'joinrel' is the join relation
@@ -1853,8 +1853,8 @@ create_tuplestore_scan_path(RelOptInfo *parent)
  * 'hashclauses' are the RestrictInfo nodes to use as hash clauses
  *		(this should be a subset of the restrict_clauses list)
  */
-StreamTableJoinPath *
-create_stream_table_join_path(PlannerInfo *root,
+HashPath *
+create_stream_hashjoin_path(PlannerInfo *root,
 				 RelOptInfo *joinrel,
 				 JoinType jointype,
 				 Path *outer_path,
@@ -1863,14 +1863,14 @@ create_stream_table_join_path(PlannerInfo *root,
 				 List *hashclauses,
 				 JoinPathExtraData *extra)
 {
-	StreamTableJoinPath *pathnode = makeNode(StreamTableJoinPath);
+	HashPath *pathnode = makeNode(HashPath);
 	JoinCostWorkspace workspace;
 
 	initial_cost_hashjoin(root, &workspace, jointype, hashclauses,
 						  outer_path, inner_path,
 						  extra->sjinfo, &extra->semifactors);
 
-	pathnode->jpath.path.pathtype = T_StreamTableJoin;
+	pathnode->jpath.path.pathtype = T_HashJoin;
 	pathnode->jpath.path.parent = joinrel;
 	pathnode->jpath.path.param_info = get_baserel_parampathinfo(root, joinrel,
 													 required_outer);

@@ -634,7 +634,7 @@ join_is_legal(PlannerInfo *root, RelOptInfo *rel1, RelOptInfo *rel2,
 	}
 
 	/*
-	 * If this is a stream-table join, we always want the stream
+	 * If this is a stream-table inner join, we always want the stream
 	 * on the inner side of the join
 	 */
 	if (IS_STREAM_RTE(rel1->relid, root))

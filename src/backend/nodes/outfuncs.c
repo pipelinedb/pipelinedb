@@ -675,14 +675,6 @@ _outHashJoin(StringInfo str, const HashJoin *node)
 }
 
 static void
-_outStreamTableJoin(StringInfo str, const StreamTableJoin *node)
-{
-	WRITE_NODE_TYPE("STREAMTABLEJOIN");
-
-	_outJoinPlanInfo(str, (const Join *) node);
-}
-
-static void
 _outPhysicalGroupLookup(StringInfo str, const PhysicalGroupLookup *node)
 {
 	WRITE_NODE_TYPE("PHYSICALGROUPLOOKUP");
@@ -3098,9 +3090,6 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_HashJoin:
 				_outHashJoin(str, obj);
-				break;
-			case T_StreamTableJoin:
-				_outStreamTableJoin(str, obj);
 				break;
 			case T_PhysicalGroupLookup:
 				_outPhysicalGroupLookup(str, obj);

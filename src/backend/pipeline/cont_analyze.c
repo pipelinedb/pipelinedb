@@ -1008,7 +1008,7 @@ validate_target_list(SelectStmt *stmt)
 }
 
 static bool
-ensure_inner_joins(Node *node, ContAnalyzeContext *context)
+validate_joins(Node *node, ContAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -1038,7 +1038,7 @@ ensure_inner_joins(Node *node, ContAnalyzeContext *context)
 		}
 	}
 
-	return raw_expression_tree_walker(node, ensure_inner_joins, context);
+	return raw_expression_tree_walker(node, validate_joins, context);
 }
 
 /*
@@ -1142,7 +1142,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				parser_errposition(context->pstate, stream->location)));
 
 	if (list_length(context->rels))
-		ensure_inner_joins((Node *) select->fromClause, context);
+		validate_joins((Node *) select->fromClause, context);
 
 	/*
 	 * Ensure that we have no `*` in the target list.

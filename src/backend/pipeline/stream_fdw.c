@@ -60,6 +60,41 @@ typedef struct StreamInsertState
 	AdhocInsertState *adhoc_state;
 } StreamInsertState;
 
+
+struct StreamProjectionInfo {
+	/*
+	 * Temporary context to use during stream projections,
+	 * reset after each stream scan batch
+	 */
+	MemoryContext ctxt;
+	/* expression context for evaluating stream event cast expressions */
+	ExprContext *econtext;
+	/*
+	 * Descriptor for the event currently being projected,
+	 * may be cached across projections
+	 */
+	TupleDesc eventdesc;
+	/*
+	 * Descriptor for the projection result, used for all projections
+	 * performed by this StreamProjectionInfo
+	 */
+	TupleDesc resultdesc;
+	/* slot to store the current stream event in, may be cached across projections */
+	TupleTableSlot *curslot;
+	/*
+	 * Mapping from event attribute to result attribute position,
+	 * may be cached across projections
+	 */
+	int *attrmap;
+
+	/*
+	 * Serialized event descriptor used to detect when a new event descriptor
+	 * has arrived without having to fully unpack it
+	 */
+	bytea *raweventdesc;
+};
+
+
 /*
  * stream_fdw_handler
  */
@@ -161,8 +196,7 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 	List *physical_tlist = (List *) lsecond(plan->fdw_private);
 	int i = 0;
 
-	state = makeNode(StreamScanState);
-	state->ss.ps.plan = (Plan *) node;
+	state = palloc0(sizeof(StreamScanState));
 
 	state->pi = palloc(sizeof(StreamProjectionInfo));
 	state->pi->ctxt = AllocSetContextCreate(CurrentMemoryContext,
@@ -182,9 +216,6 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 		Value *v = (Value *) lfirst(lc);
 		namestrcpy(&(state->pi->resultdesc->attrs[i++]->attname), strVal(v));
 	}
-
-	ExecInitResultTupleSlot(node->ss.ps.state, &state->ss.ps);
-	ExecInitScanTupleSlot(node->ss.ps.state, &state->ss);
 
 	ExecAssignScanType(&node->ss, state->pi->resultdesc);
 

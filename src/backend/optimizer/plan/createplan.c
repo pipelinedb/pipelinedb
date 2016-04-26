@@ -95,8 +95,6 @@ static MergeJoin *create_mergejoin_plan(PlannerInfo *root, MergePath *best_path,
 					  Plan *outer_plan, Plan *inner_plan);
 static HashJoin *create_hashjoin_plan(PlannerInfo *root, HashPath *best_path,
 					 Plan *outer_plan, Plan *inner_plan);
-static StreamTableJoin *create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
-					 Plan *outer_plan, Plan *inner_plan);
 static PhysicalGroupLookup *create_physical_group_lookup_plan(PlannerInfo *root, PhysicalGroupLookupPath *best_path,
 					 Plan *outer_plan, Plan *inner_plan);
 static Node *replace_nestloop_params(PlannerInfo *root, Node *expr);
@@ -260,7 +258,6 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_HashJoin:
 		case T_MergeJoin:
 		case T_NestLoop:
-		case T_StreamTableJoin:
 		case T_PhysicalGroupLookup:
 			plan = create_join_plan(root,
 									(JoinPath *) best_path);
@@ -709,12 +706,6 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 												 (NestPath *) best_path,
 												 outer_plan,
 												 inner_plan);
-			break;
-		case T_StreamTableJoin:
-			plan = (Plan *) create_stream_table_join_plan(root,
-												(StreamTableJoinPath *) best_path,
-												outer_plan,
-												inner_plan);
 			break;
 		case T_PhysicalGroupLookup:
 			plan = (Plan *) create_physical_group_lookup_plan(root,
@@ -2807,78 +2798,6 @@ create_hashjoin_plan(PlannerInfo *root,
 	copy_path_costsize(&join_plan->join.plan, &best_path->jpath.path);
 
 	return join_plan;
-}
-
-static StreamTableJoin *
-create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
-					 Plan *outer_plan, Plan *inner_plan)
-{
-
-	StreamTableJoin *node = makeNode(StreamTableJoin);
-	Plan *plan = &node->join.plan;
-	List *joinrestrictclauses = best_path->jpath.joinrestrictinfo;
-	List *joinclauses;
-	List *otherclauses;
-	Hash *hash_plan;
-	List *hashclauses;
-
-	joinrestrictclauses = order_qual_clauses(root, joinrestrictclauses);
-
-	/* Get the join qual clauses (in plain expression form) */
-	/* Any pseudoconstant clauses are ignored here */
-	if (IS_OUTER_JOIN(best_path->jpath.jointype))
-	{
-		extract_actual_join_clauses(joinrestrictclauses,
-									&joinclauses, &otherclauses);
-	}
-	else
-	{
-		/* We can treat all clauses alike for an inner join */
-		joinclauses = extract_actual_clauses(joinrestrictclauses, false);
-		otherclauses = NIL;
-	}
-
-	hashclauses = get_actual_clauses(best_path->path_hashclauses);
-	joinclauses = list_difference(joinclauses, hashclauses);
-
-	/*
-	 * Replace any outer-relation variables with nestloop params.  There
-	 * should not be any in the hashclauses.
-	 */
-	if (best_path->jpath.path.param_info)
-	{
-		joinclauses = (List *)
-			replace_nestloop_params(root, (Node *) joinclauses);
-		otherclauses = (List *)
-			replace_nestloop_params(root, (Node *) otherclauses);
-	}
-
-	/*
-	 * Rearrange hashclauses, if needed, so that the outer variable is always
-	 * on the left.
-	 */
-	hashclauses = get_switched_clauses(best_path->path_hashclauses,
-							 best_path->jpath.outerjoinpath->parent->relids);
-
-	/* We don't want any excess columns in the hashed tuples */
-	disuse_physical_tlist(root, inner_plan, best_path->jpath.innerjoinpath);
-
-	/*
-	 * Build the hash node and hash join node.
-	 */
-	hash_plan = make_hash(inner_plan, 0, 0, 0, 0, 0);
-
-	plan->targetlist = build_path_tlist(root, &best_path->jpath.path);
-	plan->qual = otherclauses;
-	plan->lefttree = outer_plan;
-	plan->righttree = (Plan *) hash_plan;
-	node->join.jointype = best_path->jpath.jointype;
-	node->join.joinqual = joinclauses;
-	node->hashclauses = hashclauses;
-
-	copy_path_costsize(&node->join.plan, &best_path->jpath.path);
-
-	return node;
 }
 
 static PhysicalGroupLookup *

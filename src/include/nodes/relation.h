@@ -1122,8 +1122,6 @@ typedef struct HashPath
 	int			num_batches;	/* number of batches expected */
 } HashPath;
 
-typedef HashPath StreamTableJoinPath;
-
 typedef NestPath PhysicalGroupLookupPath;
 
 /*

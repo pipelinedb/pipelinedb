@@ -17,6 +17,15 @@
 #include "nodes/relation.h"
 #include "utils/rel.h"
 
+typedef struct StreamProjectionInfo StreamProjectionInfo;
+
+typedef struct StreamScanState
+{
+	ContExecutor *cont_executor;
+	AdhocExecutor *adhoc_executor;
+	StreamProjectionInfo *pi;
+} StreamScanState;
+
 extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);
 
 extern void GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid);
