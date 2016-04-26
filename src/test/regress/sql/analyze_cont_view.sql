@@ -49,11 +49,6 @@ CREATE INDEX tnotice_idx ON tnotice(x);
 -- No NOTICE should be given now that an index exists
 CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream, tnotice WHERE tnotice.x = stream.x;
 
--- Only INNERT JOINs
-CREATE CONTINUOUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream LEFT JOIN tnotice ON stream.x = tnotice.x WHERE tnotice.x = stream.x;
-
-CREATE CONTINUOUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream INNER JOIN tnotice ON stream.x = tnotice.x WHERE tnotice.x = stream.x;
-
 DROP TABLE tnotice CASCADE;
 
 -- Verify all relevant types are recognized

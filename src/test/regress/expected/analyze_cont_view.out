@@ -62,19 +62,12 @@ NOTICE:  consider creating an index on tnotice.x for improved stream-table join 
 CREATE INDEX tnotice_idx ON tnotice(x);
 -- No NOTICE should be given now that an index exists
 CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream, tnotice WHERE tnotice.x = stream.x;
--- Only INNERT JOINs
-CREATE CONTINUOUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream LEFT JOIN tnotice ON stream.x = tnotice.x WHERE tnotice.x = stream.x;
-ERROR:  streams only support INNER JOINs
-LINE 1: ...OUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_co...
-                                                             ^
-CREATE CONTINUOUS VIEW cvjoin0 AS SELECT stream.x::integer FROM analyze_cont_stream2 AS stream INNER JOIN tnotice ON stream.x = tnotice.x WHERE tnotice.x = stream.x;
 DROP TABLE tnotice CASCADE;
-NOTICE:  drop cascades to 5 other objects
+NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to continuous view cvnotice0
 drop cascades to continuous view cvnotice1
 drop cascades to continuous view cvnotice2
 drop cascades to continuous view cvnotice3
-drop cascades to continuous view cvjoin0
 -- Verify all relevant types are recognized
 CREATE CONTINUOUS VIEW cqanalyze27 AS SELECT
 a::bigint,

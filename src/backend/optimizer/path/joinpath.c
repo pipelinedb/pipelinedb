@@ -69,7 +69,8 @@ try_stream_index_join_path(PlannerInfo *root,
 						SpecialJoinInfo *sjinfo,
 						Path *outer_path,
 						Path *inner_path,
-						List *restrict_clauses);
+						List *restrict_clauses,
+						JoinPathExtraData *extra);
 
 static void
 physical_group_lookup(PlannerInfo *root,
@@ -173,9 +174,9 @@ add_paths_to_joinrel(PlannerInfo *root,
 									   jointype, sjinfo, restrictlist,
 									   &extra.semifactors);
 
-
 	/*
-	 * If this is a stream-table join, then there is only one join path so bail early if that's the case.
+	 * If this is a stream-table join and the stream is the inner relation, then we should only
+	 * consider a hash join with the stream as the inner relation which is hashed.
 	 */
 	if (IS_STREAM_RTE(innerrel->relid, root))
 	{
@@ -214,11 +215,15 @@ add_paths_to_joinrel(PlannerInfo *root,
 				outerpath, innerpath, requiredouter, hashclauses, &extra);
 
 		add_path(joinrel, (Path *) path);
-
 		set_cheapest(joinrel);
+
 		return;
 	}
 
+	/*
+	 * If this is a stream-table join and the stream is the outer relation, then we should
+	 * only consider a nested loop join with the stream on the outside.
+	 */
 	if (IS_STREAM_RTE(outerrel->relid, root))
 	{
 		Path *outerpath = outerrel->cheapest_total_path;
@@ -232,17 +237,26 @@ add_paths_to_joinrel(PlannerInfo *root,
 		{
 			innerpath = (Path *) lfirst(lc);
 			try_stream_index_join_path(root, joinrel, jointype, sjinfo,
-					outerpath, innerpath, restrictlist);
+					outerpath, innerpath, restrictlist, &extra);
 		}
 
 		foreach(lc, innerrel->cheapest_parameterized_paths)
 		{
 			innerpath = (Path *) lfirst(lc);
 			try_stream_index_join_path(root, joinrel, jointype, sjinfo,
-					outerpath, innerpath, restrictlist);
+					outerpath, innerpath, restrictlist, &extra);
 		}
 
-		set_cheapest(joinrel);
+		/* Set the cheapest path, only if we actually added any paths. */
+		if (joinrel->pathlist)
+			set_cheapest(joinrel);
+		/*
+		 * In case it's an ANTI or SEMI join and we didn't have any indices on the relation,
+		 * throw an error.
+		 */
+		else if (jointype == JOIN_ANTI || jointype == JOIN_SEMI)
+			elog(ERROR, "streams only support anti or semi JOINs when there is an index on the table column being joined on");
+
 		return;
 	}
 
@@ -530,7 +544,8 @@ try_stream_index_join_path(PlannerInfo *root,
 						SpecialJoinInfo *sjinfo,
 						Path *outer_path,
 						Path *inner_path,
-						List *restrict_clauses)
+						List *restrict_clauses,
+						JoinPathExtraData *extra)
 {
 	Relids required_outer = calc_nestloop_required_outer(outer_path, inner_path);
 	JoinCostWorkspace workspace;
@@ -542,14 +557,14 @@ try_stream_index_join_path(PlannerInfo *root,
 		return;
 
 	path = create_nestloop_path(root, joinrel, jointype, &workspace,
-									  sjinfo, NULL, outer_path, inner_path, restrict_clauses,
+									  sjinfo, &extra->semifactors, outer_path, inner_path,
+									  restrict_clauses,
 									  pathkeys, required_outer);
 
 	/* we only care about the cost of the table side of a stream-table join */
 	path->path.startup_cost = 0;
 	path->path.total_cost = inner_path->total_cost;
 	add_path(joinrel, (Path *) path);
-
 }
 
 /*

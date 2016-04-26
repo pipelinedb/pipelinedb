@@ -633,13 +633,6 @@ join_is_legal(PlannerInfo *root, RelOptInfo *rel1, RelOptInfo *rel2,
 		}
 	}
 
-	/*
-	 * If this is a stream-table inner join, we always want the stream
-	 * on the inner side of the join
-	 */
-	if (IS_STREAM_RTE(rel1->relid, root))
-		reversed = true;
-
 	/* Otherwise, it's a valid join */
 	*sjinfo_p = match_sjinfo;
 	*reversed_p = reversed;

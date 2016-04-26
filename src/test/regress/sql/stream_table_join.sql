@@ -242,3 +242,55 @@ DROP TABLE test_stj_t3;
 DROP TABLE test_stj_location;
 DROP TABLE test_stj_blocks;
 DROP TABLE test_stj_empty;
+
+-- Join types
+CREATE TABLE test_stj_t (x int);
+INSERT INTO test_stj_t (x) SELECT generate_series(0, 1000) AS x;
+
+CREATE STREAM test_stj_stream (x int);
+CREATE CONTINUOUS VIEW test_stj_inner AS SELECT s.x FROM test_stj_stream AS s JOIN test_stj_t AS t ON (s.x = t.x);
+CREATE CONTINUOUS VIEW test_stj_left AS SELECT s.x FROM test_stj_stream AS s LEFT JOIN test_stj_t AS t ON (s.x = t.x);
+CREATE CONTINUOUS VIEW test_stj_right AS SELECT s.x FROM test_stj_t AS t RIGHT JOIN test_stj_stream AS s ON (s.x = t.x);
+-- Erroneous
+CREATE CONTINUOUS VIEW test_stj_anti AS SELECT s.x FROM test_stj_stream AS s LEFT JOIN test_stj_t AS t ON (s.x = t.x) WHERE t.x IS NULL;
+CREATE CONTINUOUS VIEW test_stj_semi AS SELECT s.x FROM test_stj_stream AS s WHERE EXISTS (SELECT 1 FROM test_stj_t AS t WHERE t.x = s.x);
+
+EXPLAIN CONTINUOUS VIEW test_stj_inner;
+EXPLAIN CONTINUOUS VIEW test_stj_left;
+EXPLAIN CONTINUOUS VIEW test_stj_right;
+
+INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
+INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;
+
+SELECT * FROM test_stj_inner ORDER BY x;
+SELECT * FROM test_stj_left ORDER BY x;
+SELECT * FROM test_stj_right ORDER BY x;
+
+TRUNCATE CONTINUOUS VIEW test_stj_inner;
+TRUNCATE CONTINUOUS VIEW test_stj_left;
+TRUNCATE CONTINUOUS VIEW test_stj_right;
+
+CREATE INDEX test_stj_t_idx ON test_stj_t (x);
+ANALYZE test_stj_t;
+
+CREATE CONTINUOUS VIEW test_stj_anti AS SELECT s.x FROM test_stj_stream AS s LEFT JOIN test_stj_t AS t ON (s.x = t.x) WHERE t.x IS NULL;
+CREATE CONTINUOUS VIEW test_stj_semi AS SELECT s.x FROM test_stj_stream AS s WHERE EXISTS (SELECT 1 FROM test_stj_t AS t WHERE t.x = s.x);
+
+EXPLAIN CONTINUOUS VIEW test_stj_inner;
+EXPLAIN CONTINUOUS VIEW test_stj_left;
+EXPLAIN CONTINUOUS VIEW test_stj_right;
+EXPLAIN CONTINUOUS VIEW test_stj_anti;
+EXPLAIN CONTINUOUS VIEW test_stj_semi;
+
+INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
+INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;
+
+SELECT * FROM test_stj_inner ORDER BY x;
+SELECT * FROM test_stj_left ORDER BY x;
+SELECT * FROM test_stj_right ORDER BY x;
+SELECT * FROM test_stj_anti ORDER BY x;
+SELECT * FROM test_stj_semi ORDER BY x;
+
+
+DROP STREAM test_stj_stream CASCADE;
+DROP TABLE test_stj_t;
