@@ -19,6 +19,7 @@
 #include "foreign/fdwapi.h"
 #include "nodes/makefuncs.h"
 #include "nodes/relation.h"
+#include "optimizer/cost.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/plancat.h"
 #include "optimizer/planmain.h"
@@ -128,13 +129,13 @@ stream_fdw_handler(PG_FUNCTION_ARGS)
  * GetStreamSize
  */
 void
-GetStreamSize(PlannerInfo *root, RelOptInfo *rel, Oid streamid)
+GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 {
 	StreamFdwInfo *sinfo = (StreamFdwInfo *) palloc0(sizeof(StreamFdwInfo));
-	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+	RangeTblEntry *rte = planner_rt_fetch(baserel->relid, root);
 
 	sinfo->colnames = rte->eref->colnames;
-	rel->fdw_private = (void *) sinfo;
+	baserel->fdw_private = (void *) sinfo;
 }
 
 /*
@@ -144,6 +145,9 @@ void
 GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 {
 	ForeignPath *path;
+	Cost startup_cost;
+	Cost total_cost;
+	double rows;
 
 	if (!IsContQueryProcess())
 	{
@@ -162,7 +166,12 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 		}
 	}
 
-	path = create_foreignscan_path(root, baserel, 0, 0, 0, NIL, NULL, NULL, NIL);
+	rows = Min(100, continuous_query_batch_size * 0.25);
+	startup_cost = baserel->baserestrictcost.startup;
+	total_cost = startup_cost + (cpu_tuple_cost * rows);
+
+	path = create_foreignscan_path(root, baserel, rows, startup_cost, total_cost,
+			NIL, NULL, NULL, NIL);
 	add_path(baserel, (Path *) path);
 }
 

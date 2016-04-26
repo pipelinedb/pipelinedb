@@ -1875,7 +1875,7 @@ create_stream_hashjoin_path(PlannerInfo *root,
 	pathnode->jpath.path.param_info = get_baserel_parampathinfo(root, joinrel,
 													 required_outer);
 	pathnode->jpath.path.pathkeys = NIL;
-
+	pathnode->jpath.jointype = jointype;
 	pathnode->jpath.outerjoinpath = outer_path;
 	pathnode->jpath.innerjoinpath = inner_path;
 	pathnode->jpath.joinrestrictinfo = extra->restrictlist;
