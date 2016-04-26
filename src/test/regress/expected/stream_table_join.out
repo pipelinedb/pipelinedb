@@ -442,7 +442,7 @@ EXPLAIN CONTINUOUS VIEW test_stj_right;
 
 INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
 INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;
-SELECT * FROM test_stj_inner;
+SELECT * FROM test_stj_inner ORDER BY x;
  x 
 ---
  0
@@ -453,7 +453,7 @@ SELECT * FROM test_stj_inner;
  5
 (6 rows)
 
-SELECT * FROM test_stj_left;
+SELECT * FROM test_stj_left ORDER BY x;
   x   
 ------
     0
@@ -462,15 +462,15 @@ SELECT * FROM test_stj_left;
     3
     4
     5
- 2005
- 2004
  2000
- 2003
- 2002
  2001
+ 2002
+ 2003
+ 2004
+ 2005
 (12 rows)
 
-SELECT * FROM test_stj_right;
+SELECT * FROM test_stj_right ORDER BY x;
   x   
 ------
     0
@@ -479,12 +479,12 @@ SELECT * FROM test_stj_right;
     3
     4
     5
- 2005
- 2004
  2000
- 2003
- 2002
  2001
+ 2002
+ 2003
+ 2004
+ 2005
 (12 rows)
 
 TRUNCATE CONTINUOUS VIEW test_stj_inner;
@@ -566,7 +566,7 @@ EXPLAIN CONTINUOUS VIEW test_stj_semi;
 
 INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
 INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;
-SELECT * FROM test_stj_inner;
+SELECT * FROM test_stj_inner ORDER BY x;
  x 
 ---
  0
@@ -577,7 +577,7 @@ SELECT * FROM test_stj_inner;
  5
 (6 rows)
 
-SELECT * FROM test_stj_left;
+SELECT * FROM test_stj_left ORDER BY x;
   x   
 ------
     0
@@ -586,15 +586,15 @@ SELECT * FROM test_stj_left;
     3
     4
     5
- 2005
- 2004
  2000
- 2003
- 2002
  2001
+ 2002
+ 2003
+ 2004
+ 2005
 (12 rows)
 
-SELECT * FROM test_stj_right;
+SELECT * FROM test_stj_right ORDER BY x;
   x   
 ------
     0
@@ -603,15 +603,15 @@ SELECT * FROM test_stj_right;
     3
     4
     5
- 2005
- 2004
  2000
- 2003
- 2002
  2001
+ 2002
+ 2003
+ 2004
+ 2005
 (12 rows)
 
-SELECT * FROM test_stj_anti;
+SELECT * FROM test_stj_anti ORDER BY x;
   x   
 ------
  2000
@@ -622,7 +622,7 @@ SELECT * FROM test_stj_anti;
  2005
 (6 rows)
 
-SELECT * FROM test_stj_semi;
+SELECT * FROM test_stj_semi ORDER BY x;
  x 
 ---
  0

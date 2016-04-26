@@ -262,9 +262,9 @@ EXPLAIN CONTINUOUS VIEW test_stj_right;
 INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
 INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;
 
-SELECT * FROM test_stj_inner;
-SELECT * FROM test_stj_left;
-SELECT * FROM test_stj_right;
+SELECT * FROM test_stj_inner ORDER BY x;
+SELECT * FROM test_stj_left ORDER BY x;
+SELECT * FROM test_stj_right ORDER BY x;
 
 TRUNCATE CONTINUOUS VIEW test_stj_inner;
 TRUNCATE CONTINUOUS VIEW test_stj_left;
@@ -285,11 +285,11 @@ EXPLAIN CONTINUOUS VIEW test_stj_semi;
 INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
 INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;
 
-SELECT * FROM test_stj_inner;
-SELECT * FROM test_stj_left;
-SELECT * FROM test_stj_right;
-SELECT * FROM test_stj_anti;
-SELECT * FROM test_stj_semi;
+SELECT * FROM test_stj_inner ORDER BY x;
+SELECT * FROM test_stj_left ORDER BY x;
+SELECT * FROM test_stj_right ORDER BY x;
+SELECT * FROM test_stj_anti ORDER BY x;
+SELECT * FROM test_stj_semi ORDER BY x;
 
 
 DROP STREAM test_stj_stream CASCADE;
