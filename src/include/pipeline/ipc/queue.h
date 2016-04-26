@@ -30,7 +30,7 @@ typedef struct ipc_queue
 
 	pg_atomic_uint64 head;
 	pg_atomic_uint64 tail;
-	pg_atomic_uint64 cursor;
+	uint64 cursor;
 
 	pg_atomic_uint64 producer_latch;
 	pg_atomic_uint64 consumer_latch;

@@ -69,7 +69,8 @@ ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router)
 	/* Initialize atomic types. */
 	pg_atomic_init_u64(&ipcq->head, 0);
 	pg_atomic_init_u64(&ipcq->tail, 0);
-	pg_atomic_init_u64(&ipcq->cursor, 0);
+	ipcq->cursor = 0;
+
 	pg_atomic_init_u64(&ipcq->producer_latch, 0);
 	pg_atomic_init_u64(&ipcq->consumer_latch, 0);
 
@@ -88,7 +89,7 @@ ipc_queue_is_empty(ipc_queue *ipcq)
 bool
 ipc_queue_has_unread(ipc_queue *ipcq)
 {
-	return pg_atomic_read_u64(&ipcq->head) > pg_atomic_read_u64(&ipcq->cursor);
+	return pg_atomic_read_u64(&ipcq->head) > ipcq->cursor;
 }
 
 bool
@@ -227,15 +228,14 @@ ipc_queue_peek_next(ipc_queue *ipcq, int *len)
 		return NULL;
 	}
 
-	slot = ipc_queue_slot_get(ipcq, pg_atomic_read_u64(&ipcq->cursor));
+	slot = ipc_queue_slot_get(ipcq, ipcq->cursor);
 
 	if (slot->wraps)
 		pos = ipcq->bytes;
 	else
 		pos = slot->bytes;
 
-	pg_atomic_write_u64(&ipcq->cursor, slot->next);
-
+	ipcq->cursor = slot->next;
 	*len = slot->len;
 
 	if (ipcq->peek_fn && !slot->peeked)
@@ -251,7 +251,7 @@ void
 ipc_queue_unpeek_all(ipc_queue *ipcq)
 {
 	Assert(ipcq->magic == MAGIC);
-	pg_atomic_write_u64(&ipcq->cursor, pg_atomic_read_u64(&ipcq->tail));
+	ipcq->cursor = pg_atomic_read_u64(&ipcq->tail);
 }
 
 void
@@ -264,7 +264,7 @@ ipc_queue_pop_peeked(ipc_queue *ipcq)
 	Assert(ipcq->magic == MAGIC);
 
 	tail = pg_atomic_read_u64(&ipcq->tail);
-	cur = pg_atomic_read_u64(&ipcq->cursor);
+	cur = ipcq->cursor;
 
 	Assert(tail <= cur);
 
