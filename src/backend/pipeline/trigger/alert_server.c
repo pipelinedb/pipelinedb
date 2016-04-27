@@ -144,7 +144,7 @@ create_listen_socket()
 	int opt;
 	int i;
 	struct sockaddr_in tcp_addr;
-	int aport;
+	int aport = 0;
 
 	static const int backlog = 100;
 	ListenSocket *sock = palloc0(sizeof(ListenSocket));

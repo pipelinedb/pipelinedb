@@ -42,7 +42,7 @@ static void check_file()
 	}
 }
 
-static void
+static Size
 write_to_file(StringInfo info)
 {
 	struct iovec iov;
@@ -54,8 +54,7 @@ write_to_file(StringInfo info)
 	iov.iov_len = info->len;
 
 	/* Use writev to atomically write the tuple to the file */
-
-	writev(fd, &iov, 1);
+	return writev(fd, &iov, 1);
 }
 
 /*

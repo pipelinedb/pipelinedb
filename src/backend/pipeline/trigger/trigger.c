@@ -498,7 +498,7 @@ make_full_name(RangeVar *rv, const char *tgname)
 static Oid
 GetMatrelOidForView(const char *name)
 {
-	RangeVar *rv = makeRangeVar(0, (char*) name, -1);
+	RangeVar *rv = makeRangeVar(NULL, (char *) name, -1);
 	Oid matrel_oid = InvalidOid;
 
 	HeapTuple tuple = GetPipelineQueryTuple(rv);

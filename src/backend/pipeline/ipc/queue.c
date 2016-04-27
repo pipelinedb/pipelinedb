@@ -97,7 +97,7 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 {
 	uint64_t head;
 	uint64_t tail;
-	Latch *producer_latch;
+	Latch *producer_latch = NULL;
 	Latch *consumer_latch;
 	ipc_queue_slot *slot;
 	int len_needed;
@@ -152,6 +152,8 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 			break;
 		else if (!wait)
 			return false;
+
+		Assert(producer_latch);
 
 		r = WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
 		if (r & WL_POSTMASTER_DEATH)

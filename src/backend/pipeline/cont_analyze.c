@@ -3264,7 +3264,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	{
 		Oid fnoid;
 		Oid type;
-		Oid finaltype;
+		Oid finaltype = InvalidOid;
 		Oid aggtype;
 		Var *v;
 		Node *result;
@@ -3545,7 +3545,7 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 		Var *v;
 		Node *agg;
 		TargetEntry *te;
-		Oid fnoid;
+		Oid fnoid = InvalidOid;
 		Oid type;
 		Oid finaltype;
 		Oid finalfn;
