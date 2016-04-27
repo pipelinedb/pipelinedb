@@ -666,7 +666,6 @@ ipc_msg_broker_main(int argc, char *argv[])
 	/* Loop forever */
 	for (;;)
 	{
-		int rc;
 		int num_copied;
 
 		MemoryContextSwitchTo(work_ctx);
@@ -679,20 +678,24 @@ ipc_msg_broker_main(int argc, char *argv[])
 		/* If we didn't copy any messages, try to sleep and wait for new ones to arrive. */
 		if (num_copied == 0)
 		{
+			int rc;
+
 			/* Mark as waiting */
 			pg_atomic_test_set_flag(&broker_meta->waiting);
 
 			/* If we have no pending messages, sleep till we get signaled. */
 			if (!have_pending_messages())
+			{
 				rc = WaitLatch(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 1000);
+				ResetLatch(MyLatch);
+
+				/* Emergency bail out if postmaster has died */
+				if (rc & WL_POSTMASTER_DEATH)
+					proc_exit(1);
+			}
 
 			pg_atomic_clear_flag(&broker_meta->waiting);
-			ResetLatch(MyLatch);
 		}
-
-		/* Emergency bail out if postmaster has died */
-		if (rc & WL_POSTMASTER_DEATH)
-			proc_exit(1);
 
 		/* Shutdown signaled? */
 		if (got_SIGTERM)
