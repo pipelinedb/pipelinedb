@@ -39,6 +39,10 @@
 
 #include "options.h"
 
+#ifndef SOL_TCP
+#define SOL_TCP IPPROTO_TCP
+#endif
+
 #define MAX_NODES 64
 #define MAX_MSG_TYPE_LEN 63
 #define READ_BUF_LEN 4096

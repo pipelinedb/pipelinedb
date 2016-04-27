@@ -42,6 +42,10 @@
 #include "access/xlog_internal.h"
 #include "miscadmin.h"
 
+#ifndef SOL_TCP
+#define SOL_TCP IPPROTO_TCP
+#endif
+
 #define TS_MSG_SUBSCRIBE "subscribe"
 #define TS_MSG_SUBSCRIBE_OK "subscribe_ok"
 #define TS_MSG_SUBSCRIBE_FAIL "subscribe_fail"
