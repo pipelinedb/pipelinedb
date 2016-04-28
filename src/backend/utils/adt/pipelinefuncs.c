@@ -217,7 +217,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 			continue;
 
 		/* just ignore stale stats entries */
-		cv = GetContQueryForViewId(viewid);
+		cv = GetContQueryForId(viewid);
 		if (!cv)
 			continue;
 
