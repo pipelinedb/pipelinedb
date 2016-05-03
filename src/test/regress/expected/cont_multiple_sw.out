@@ -521,3 +521,14 @@ DROP CONTINUOUS VIEW msw5 CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view msw6
 drop cascades to view msw7
+-- max_age of view vs step_size
+CREATE CONTINUOUS VIEW msw8 WITH (max_age='10 minute', step_factor=10) AS SELECT count(*) FROM stream;
+CREATE VIEW msw9 WITH (max_age='5 minute') AS SELECT * FROM msw8;
+CREATE VIEW msw10 WITH (max_age='2 minute') AS SELECT * FROM msw8;
+CREATE VIEW msw11 WITH (max_age='1 minute') AS SELECT * FROM msw8;
+ERROR:  "max_age" value is too small
+HINT:  "max_age" must be at least twice as much as the step size of the base continuous view.
+DROP CONTINUOUS VIEW msw8 CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view msw9
+drop cascades to view msw10
