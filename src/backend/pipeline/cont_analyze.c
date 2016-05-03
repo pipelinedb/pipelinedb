@@ -65,12 +65,6 @@ int sliding_window_step_factor;
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
 #define DATE_ROUND "date_round"
-#define DATE_TRUNC "date_trunc"
-#define DATE_TRUNC_YEAR "year"
-#define DATE_TRUNC_MONTH "month"
-#define DATE_TRUNC_DAY "day"
-#define DATE_TRUNC_HOUR "hour"
-#define DATE_TRUNC_MINUTE "minute"
 #define DATE_TRUNC_SECOND "second"
 #define TO_TIMESTAMP "to_timestamp"
 
@@ -80,7 +74,7 @@ int sliding_window_step_factor;
 #define INTERNAL_COLNAME_PREFIX "_"
 #define IS_DISTINCT_ONLY_AGG(name) (pg_strcasecmp((name), "count") == 0 || pg_strcasecmp((name), "array_agg") == 0)
 
-#define MIN_MAX_AGE_FACTOR 0.25
+#define MIN_VIEW_MAX_AGE_FACTOR 0.5
 
 /*
  * Maps hypothetical set aggregates to their streaming variants
@@ -567,15 +561,6 @@ get_truncation_from_interval(SelectStmt *select, Node *time, Node *interval)
 	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), interval, EXPR_KIND_WHERE);
 	Const *c;
 	Interval *window;
-
-	Assert(IsA(expr, Const));
-	c = (Const *) expr;
-
-	Assert(c->consttype == INTERVALOID);
-	window = (Interval *) c->constvalue;
-
-#ifdef HAVE_INT64_TIMESTAMP
-{
 	FuncCall *func;
 	Interval *step;
 	Interval min_step;
@@ -583,6 +568,12 @@ get_truncation_from_interval(SelectStmt *select, Node *time, Node *interval)
 	int cmp;
 	char *step_str;
 	A_Const *step_const;
+
+	Assert(IsA(expr, Const));
+	c = (Const *) expr;
+
+	Assert(c->consttype == INTERVALOID);
+	window = (Interval *) c->constvalue;
 
 	MemSet(&min_step, 0, sizeof(Interval));
 	min_step.time = 1000 * 1000;
@@ -602,30 +593,6 @@ get_truncation_from_interval(SelectStmt *select, Node *time, Node *interval)
 	func->args = list_make2(time, step_const);
 
 	return (Node *) func;
-}
-/* No int64 timestamp support? Resort to lame duck truncation approach */
-#else
-{
-	Const *c;
-	FuncCall *func = makeNode(FuncCall);
-	char *name;
-
-	/* We make the step size one unit smaller than the granularity of the window size unit */
-	if (window->month)
-		name = DATE_TRUNC_DAY;
-	else if (window->day)
-		name = DATE_TRUNC_HOUR;
-	else if (window->time >= HOUR_USEC)
-		name = DATE_TRUNC_MINUTE;
-	else
-		name = DATE_TRUNC_SECOND;
-
-	func->funcname = list_make1(makeString(name));
-	func->args = list_make1(time);
-
-	return (Node *) func;
-}
-#endif
 }
 
 static ColumnRef *
@@ -659,25 +626,14 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 			FuncCall *fc = (FuncCall *) col;
 			char *name = NameListToString(fc->funcname);
 
-			if (!(pg_strcasecmp(name, DATE_ROUND) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_HOUR) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_MINUTE) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0 ||
-					pg_strcasecmp(name, TO_TIMESTAMP) == 0))
+			if (pg_strcasecmp(name, TO_TIMESTAMP) != 0)
 				return NULL;
 
 			/* Date truncation should happen at the top level */
 			if (saw_expr)
 				return NULL;
 
-			if (pg_strcasecmp(name, DATE_TRUNC) == 0)
-				col = lsecond(fc->args);
-			else
-				col = linitial(fc->args);
+			col = linitial(fc->args);
 
 			continue;
 		}
@@ -2170,99 +2126,64 @@ make_distincts_explicit(SelectStmt *stmt, ContAnalyzeContext *context)
 	}
 }
 
-static bool
+static void
 truncate_timestamp_field(SelectStmt *select, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
-	ListCell *lc;
-	bool truncated = false;
-
 	context->funcs = NIL;
 	collect_funcs(time, context);
 
-	foreach(lc, context->funcs)
+	/* For sliding windows we try to keep around a certain "fan in" threshold */
+	if (sw_expr)
 	{
-		FuncCall *fc = lfirst(lc);
-		char *name = NameListToString(fc->funcname);
+		A_Expr *ct_expr;
 
-		if (pg_strcasecmp(name, DATE_ROUND) == 0 ||
-				pg_strcasecmp(name, DATE_TRUNC) ||
-				pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
-				pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
-				pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||
-				pg_strcasecmp(name, DATE_TRUNC_HOUR) == 0 ||
-				pg_strcasecmp(name, DATE_TRUNC_MINUTE) == 0 ||
-				pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0)
-		{
-			truncated = true;
-			break;
-		}
-	}
-
-	if (!truncated)
-	{
-		/* For sliding windows we try to keep around a certain "fan in" threshold */
-		if (sw_expr)
-		{
-			A_Expr *ct_expr;
-
-			if (equal(sw_expr->lexpr, time))
-				ct_expr = (A_Expr *) sw_expr->rexpr;
-			else
-				ct_expr = (A_Expr *) sw_expr->lexpr;
-
-			/* Fix default step size hint hack */
-			if (select->swStepFactor > 100)
-				select->swStepFactor -= 100;
-
-			time = get_truncation_from_interval(select, time, ct_expr->rexpr);
-		}
+		if (equal(sw_expr->lexpr, time))
+			ct_expr = (A_Expr *) sw_expr->rexpr;
 		else
-		{
-			FuncCall *func = makeNode(FuncCall);
-			func->args = list_make1(copyObject(time));
-			func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
-			time = (Node *) func;
-		}
+			ct_expr = (A_Expr *) sw_expr->lexpr;
+
+		time = get_truncation_from_interval(select, time, ct_expr->rexpr);
 	}
-	else if (select->swStepFactor > 0 && select->swStepFactor <=100)
-		elog(ERROR, "cannot specify both \"step_factor\" and an explicit truncation function");
+	else
+	{
+		FuncCall *func = makeNode(FuncCall);
+		func->args = list_make1(copyObject(time));
+		func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
+		time = (Node *) func;
+	}
 
 	context->expr = time;
-
-	return !truncated;
 }
 
 static ColumnRef *
 hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
-	bool replace = truncate_timestamp_field(proc, time, sw_expr, context);
 	ListCell *lc;
 	bool found = false;
 	ColumnRef *cref;
+	List *groupClause;
 
-	if (replace)
+	truncate_timestamp_field(proc, time, sw_expr, context);
+
+	/* Replace timestamp column with the truncated expr */
+	foreach(lc, proc->targetList)
 	{
-		List *groupClause;
-
-		foreach(lc, proc->targetList)
-		{
-			ResTarget *res = lfirst(lc);
-			if (equal(res->val, time))
-				res->val = context->expr;
-		}
-
-		groupClause = NIL;
-		foreach(lc, proc->groupClause)
-		{
-			Node *node = lfirst(lc);
-			if (equal(node, time))
-				groupClause = lappend(groupClause, context->expr);
-			else
-				groupClause = lappend(groupClause, node);
-		}
-
-		proc->groupClause = groupClause;
+		ResTarget *res = lfirst(lc);
+		if (equal(res->val, time))
+			res->val = context->expr;
 	}
+
+	groupClause = NIL;
+	foreach(lc, proc->groupClause)
+	{
+		Node *node = lfirst(lc);
+		if (equal(node, time))
+			groupClause = lappend(groupClause, context->expr);
+		else
+			groupClause = lappend(groupClause, node);
+	}
+
+	proc->groupClause = groupClause;
 
 	time = context->expr;
 	cref = hoist_node(&proc->targetList, time, context);
@@ -3893,23 +3814,31 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 
 	/*
 	 * If we are creating a view on top a continuous view, we must ensure that the step_size of the
-	 * continuous view is at least MIN_MAX_AGE_FACTOR of the max_age being specified.
+	 * continuous view is at most MIN_VIEW_MAX_AGE_FACTOR of the max_age being specified.
 	 */
 	if (sw_cv)
 	{
 		Interval *sw_interval = GetSWInterval(sw_cv);
-
+		int step_factor = GetContWorkerQuery(sw_cv)->swStepFactor;
 		Interval *view_interval = parse_node_to_interval((Node *) interval);
+		Interval *step_interval;
 		Interval *min_interval;
 		bool is_lt;
 
 		Assert(sw_interval);
 
+		step_interval = DatumGetIntervalP(DirectFunctionCall2(
+				interval_mul, PointerGetDatum(sw_interval), Float8GetDatum(step_factor / (float8) 100.0)));
 		min_interval = DatumGetIntervalP(DirectFunctionCall2(
-				interval_mul, PointerGetDatum(sw_interval), Float8GetDatum(MIN_MAX_AGE_FACTOR)));
-
+				interval_div, PointerGetDatum(step_interval), Float8GetDatum(MIN_VIEW_MAX_AGE_FACTOR)));
 		is_lt = DatumGetBool(DirectFunctionCall2(
 				interval_lt, PointerGetDatum(view_interval), PointerGetDatum(min_interval)));
+
+		if (is_lt)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					errmsg("\"max_age\" value is too small"),
+					errhint("\"max_age\" must be at least twice as much as the step size of the base continuous view.")));
 	}
 
 	arrival_ts = makeNode(ColumnRef);
@@ -3957,24 +3886,21 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 		if (!IsA(def->arg, Integer))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("\"step_size\" must be a valid integer in the range 1..100"),
+					 errmsg("\"step_size\" must be a valid integer in the range 1..50"),
 					 errhint("For example, ... WITH (step_factor = 25) ...")));
 
 		factor = intVal(def->arg);
-		if (factor < 1 || factor > 100)
+		if (factor < 1 || factor > 50)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("\"step_size\" must be a valid integer in the range 1..100"),
+					 errmsg("\"step_size\" must be a valid integer in the range 1..50"),
 					 errhint("For example, ... WITH (step_factor = 25) ...")));
 
 		select->swStepFactor = factor;
 		stmt->into->options = list_delete(stmt->into->options, def);
 	}
 	else
-	{
-		/* This is a hack to specify the step factor, but at the same time indicate that it wasn't explicitly specified */
-		select->swStepFactor = 100 + sliding_window_step_factor;
-	}
+		select->swStepFactor = sliding_window_step_factor;
 }
 
 void

@@ -2832,7 +2832,7 @@ static struct config_int ConfigureNamesInt[] =
 		 gettext_noop("A higher number will improve performance but tradeoff refresh interval.")
 		},
 		&sliding_window_step_factor,
-		5, 1, 100,
+		5, 1, 50,
 		NULL, NULL, NULL
 	},
 
