@@ -80,6 +80,8 @@ int sliding_window_step_factor;
 #define INTERNAL_COLNAME_PREFIX "_"
 #define IS_DISTINCT_ONLY_AGG(name) (pg_strcasecmp((name), "count") == 0 || pg_strcasecmp((name), "array_agg") == 0)
 
+#define MIN_MAX_AGE_FACTOR 0.25
+
 /*
  * Maps hypothetical set aggregates to their streaming variants
  *
@@ -3632,6 +3634,28 @@ GetSWExpr(RangeVar *cv)
 	return view->whereClause;
 }
 
+static Interval *
+parse_node_to_interval(Node *inode)
+{
+	ExprState *estate;
+	ParseState *ps = make_parsestate(NULL);
+	Expr *expr;
+	Datum d;
+	ExprContext *econtext = CreateStandaloneExprContext();
+	bool isnull;
+
+	inode = transformExpr(ps, (Node *) inode, EXPR_KIND_OTHER);
+	expr = expression_planner((Expr *) inode);
+
+	estate = ExecInitExpr(expr, NULL);
+	d = ExecEvalExpr(estate, econtext, &isnull, NULL);
+
+	free_parsestate(ps);
+	FreeExprContext(econtext, false);
+
+	return DatumGetIntervalP(d);
+}
+
 /*
  * GetSWInterval
  *
@@ -3642,33 +3666,18 @@ GetSWInterval(RangeVar *rv)
 {
 	Node *sw_expr = GetSWExpr(rv);
 	ContAnalyzeContext context;
-	Node *rexpr;
-	Node *inode;
-	Expr *expr;
-	ExprState *expr_state;
-	ParseState *ps = make_parsestate(NULL);
-	bool isnull;
-	Datum d;
-	ExprContext *econtext = CreateStandaloneExprContext();
+	Node *expr;
 
 	find_clock_timestamp_expr(sw_expr, &context);
 	Assert(IsA(context.expr, A_Expr));
 
 	/* arrival_timestamp > clock_timestamp() - interval... */
-	rexpr = ((A_Expr *) context.expr)->rexpr;
-	Assert(IsA(rexpr, A_Expr));
+	expr = ((A_Expr *) context.expr)->rexpr;
+	Assert(IsA(expr, A_Expr));
 
-	inode = ((A_Expr *) rexpr)->rexpr;
-	inode = transformExpr(ps, inode, EXPR_KIND_OTHER);
-	expr = expression_planner((Expr *) inode);
+	expr = ((A_Expr *) expr)->rexpr;
 
-	expr_state = ExecInitExpr(expr, NULL);
-	d = ExecEvalExpr(expr_state, econtext, &isnull, NULL);
-
-	free_parsestate(ps);
-	FreeExprContext(econtext, false);
-
-	return DatumGetIntervalP(d);
+	return parse_node_to_interval(expr);
 }
 
 ColumnRef *
@@ -3860,11 +3869,13 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	A_Const *arg;
 	A_Expr *rexpr;
 	ColumnRef *arrival_ts;
+	RangeVar *sw_cv;
 
 	if (has_clock_timestamp(stmt->whereClause, NULL))
 		elog(ERROR, "cannot specify both \"max_age\" and a sliding window expression in the WHERE clause");
 
-	if (!ContainsSlidingWindowContinuousView(stmt->fromClause) && stmt->forContinuousView == false)
+	sw_cv = GetSWContinuousViewRangeVar(stmt->fromClause);
+	if (sw_cv == NULL && stmt->forContinuousView == false)
 		elog(ERROR, "\"max_age\" can only be specified when reading from a stream or continuous view");
 
 	if (!IsA(max_age->arg, String))
@@ -3873,18 +3884,39 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 				 errmsg("\"max_age\" must be a valid interval string"),
 				 errhint("For example, ... WITH (max_age = '1 hour') ...")));
 
-	arrival_ts = makeNode(ColumnRef);
-	arrival_ts->fields = list_make1(makeString(ARRIVAL_TIMESTAMP));
-
-	clock_ts = makeNode(FuncCall);
-	clock_ts->funcname = list_make1(makeString(CLOCK_TIMESTAMP));
-
 	arg = makeNode(A_Const);
 	arg->val = *((Value *) max_age->arg);
 
 	interval = makeNode(TypeCast);
 	interval->arg = (Node *) arg;
 	interval->typeName = SystemTypeName("interval");
+
+	/*
+	 * If we are creating a view on top a continuous view, we must ensure that the step_size of the
+	 * continuous view is at least MIN_MAX_AGE_FACTOR of the max_age being specified.
+	 */
+	if (sw_cv)
+	{
+		Interval *sw_interval = GetSWInterval(sw_cv);
+
+		Interval *view_interval = parse_node_to_interval((Node *) interval);
+		Interval *min_interval;
+		bool is_lt;
+
+		Assert(sw_interval);
+
+		min_interval = DatumGetIntervalP(DirectFunctionCall2(
+				interval_mul, PointerGetDatum(sw_interval), Float8GetDatum(MIN_MAX_AGE_FACTOR)));
+
+		is_lt = DatumGetBool(DirectFunctionCall2(
+				interval_lt, PointerGetDatum(view_interval), PointerGetDatum(min_interval)));
+	}
+
+	arrival_ts = makeNode(ColumnRef);
+	arrival_ts->fields = list_make1(makeString(ARRIVAL_TIMESTAMP));
+
+	clock_ts = makeNode(FuncCall);
+	clock_ts->funcname = list_make1(makeString(CLOCK_TIMESTAMP));
 
 	rexpr = makeA_Expr(AEXPR_OP, list_make1(makeString("-")), (Node *) clock_ts, (Node *) interval, -1);
 	where = makeA_Expr(AEXPR_OP, list_make1(makeString(">")), (Node *) arrival_ts, (Node *) rexpr, -1);
@@ -3912,7 +3944,7 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 		stmt->into->options = list_delete(stmt->into->options, def);
 	}
 
-	/* SWStepFactor */
+	/* step_factor */
 	select->swStepFactor = 0;
 	def = GetContinuousViewOption(stmt->into->options, OPTION_STEP_FACTOR);
 	if (def)
