@@ -30,22 +30,9 @@ INSERT INTO cqwindow_stream (key, x) VALUES ('a', 10), ('b', 11), ('b', 12);
 
 SELECT * FROM cqwindow1 ORDER BY key;
 
-CREATE CONTINUOUS VIEW cqwindow2 AS SELECT COUNT(*) FROM cqwindow_stream WHERE (hour(arrival_timestamp) > clock_timestamp() - interval '1 hour');
-CREATE CONTINUOUS VIEW cqwindow3 AS SELECT COUNT(*) FROM cqwindow_stream WHERE (year(arrival_timestamp) > clock_timestamp() - interval '10 years');
-
-INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
-SELECT pg_sleep(1);
-INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
-SELECT pg_sleep(1);
-
-SELECT COUNT(*) FROM cqwindow2_mrel;
-SELECT COUNT(*) FROM cqwindow3_mrel;
-
-CREATE CONTINUOUS VIEW cqwindow4 AS SELECT COUNT(*) FROM cqwindow_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour';
-SELECT pipeline_get_worker_querydef('cqwindow4');
+CREATE CONTINUOUS VIEW cqwindow2 AS SELECT COUNT(*) FROM cqwindow_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour';
+SELECT pipeline_get_worker_querydef('cqwindow2');
 
 DROP CONTINUOUS VIEW cqwindow0;
 DROP CONTINUOUS VIEW cqwindow1;
 DROP CONTINUOUS VIEW cqwindow2;
-DROP CONTINUOUS VIEW cqwindow3;
-DROP CONTINUOUS VIEW cqwindow4;

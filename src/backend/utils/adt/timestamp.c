@@ -5533,10 +5533,6 @@ timestamptz_round(PG_FUNCTION_ARGS)
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
 	TimestampTz interval_ts;
 
-#ifndef HAVE_INT64_TIMESTAMP
-	elog(ERROR, "date_round is only available when PipelineDB is compiled with --enable-integer-datetimes");
-#endif
-
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 

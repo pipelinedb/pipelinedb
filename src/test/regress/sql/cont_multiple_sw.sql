@@ -10,7 +10,7 @@ WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
 DROP CONTINUOUS VIEW msw0;
 
 CREATE CONTINUOUS VIEW msw0 AS SELECT x::integer, COUNT(*), avg(x) FROM msw_stream
-WHERE second(arrival_timestamp) > clock_timestamp() - interval '1 minute' GROUP BY x;
+WHERE arrival_timestamp > clock_timestamp() - interval '10 second' GROUP BY x;
 
 CREATE VIEW msw1 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0
 WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
@@ -73,9 +73,9 @@ DROP CONTINUOUS VIEW msw3 CASCADE;
 
 CREATE CONTINUOUS VIEW msw5 AS
 SELECT
-  minute(arrival_timestamp) AS sw_time
+  arrival_timestamp AS sw_time
 FROM stream
-WHERE minute(arrival_timestamp) > clock_timestamp() - INTERVAL '10 minute';
+WHERE arrival_timestamp > clock_timestamp() - INTERVAL '10 minute';
 \d+ msw5
 
 CREATE VIEW msw6 WITH (max_age = '1 minute') AS SELECT * FROM msw5;
