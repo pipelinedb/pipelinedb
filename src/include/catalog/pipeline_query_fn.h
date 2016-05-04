@@ -67,7 +67,7 @@ extern Bitmapset *GetContinuousViewIds(void);
 extern Bitmapset *GetAdhocContinuousViewIds(void);
 extern Bitmapset *GetContinuousTransformIds(void);
 
-extern Oid GetContViewId(RangeVar *name);
+extern Oid GetContQueryId(RangeVar *name);
 extern ContQuery *GetContQueryForViewId(Oid id);
 extern ContQuery *GetContQueryForView(RangeVar *cv_name);
 
@@ -75,5 +75,7 @@ extern Oid DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, O
 extern ContQuery *GetContQueryForTransformId(Oid id);
 
 extern ContQuery *GetContQueryForId(Oid id);
+
+extern bool ContQuerySetActive(Oid id, bool active);
 
 #endif

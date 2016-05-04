@@ -2942,7 +2942,7 @@ opt_qualified_name_list: qualified_name_list
 ActivateStmt: ACTIVATE opt_qualified_name_list where_clause
         {
           ActivateStmt *s = makeNode(ActivateStmt);
-          s->views = (List *) $2;
+          s->queries = (List *) $2;
           $$ = (Node *) s;
         }
     ;
@@ -2950,7 +2950,7 @@ ActivateStmt: ACTIVATE opt_qualified_name_list where_clause
 DeactivateStmt: DEACTIVATE opt_qualified_name_list where_clause
         {
           DeactivateStmt *s = makeNode(DeactivateStmt);
-          s->views = (List *) $2;
+          s->queries = (List *) $2;
           $$ = (Node *)s;
         }
     ;

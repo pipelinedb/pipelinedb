@@ -128,8 +128,6 @@ extern bool ShouldTerminateContQueryProcess(void);
 
 extern void SignalContQuerySchedulerDropDB(Oid db_oid);
 extern void SignalContQuerySchedulerRefreshDBList(void);
-extern bool WaitForContQueryActivation(void);
-extern bool WaitForContQueryDeactivation(void);
 
 extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
 

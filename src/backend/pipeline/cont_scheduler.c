@@ -964,24 +964,6 @@ signal_cont_query_scheduler(int signal)
 	}
 }
 
-bool
-WaitForContQueryActivation(void)
-{
-	ContQueryDatabaseMetadata *db_meta;
-	TimestampTz start = GetCurrentTimestamp();
-
-	while ((db_meta = GetContQueryDatabaseMetadata(MyDatabaseId)) == NULL ||
-			!db_meta->running)
-	{
-		pg_usleep(10 * 1000);
-
-		if (TimestampDifferenceExceeds(start, GetCurrentTimestamp(), CQ_STATE_CHANGE_TIMEOUT))
-			return false;
-	}
-
-	return true;
-}
-
 static bool
 wait_for_db_procs_to_stop(Oid dbid)
 {
@@ -1001,12 +983,6 @@ wait_for_db_procs_to_stop(Oid dbid)
 	}
 
 	return true;
-}
-
-bool
-WaitForContQueryDeactivation(void)
-{
-	return wait_for_db_procs_to_stop(MyDatabaseId);
 }
 
 /*

@@ -850,48 +850,58 @@ ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
 	}
 }
 
+static Bitmapset *
+get_query_ids(List *queries)
+{
+	Bitmapset *ids = NULL;
+	ListCell *lc;
+
+	if (queries == NIL)
+		return GetContinuousQueryIds();
+
+	foreach(lc, queries)
+	{
+		RangeVar *rv = lfirst(lc);
+		Oid id = GetContQueryId(rv);
+
+		if (!OidIsValid(id))
+			ereport(ERROR,
+					(errmsg("continuous query \"%s\" does not exist", rv->relname)));
+
+		ids = bms_add_member(ids, id);
+	}
+
+	return ids;
+}
+
 static void
-set_cq_enabled(bool is_enabled, ProcessUtilityContext context)
+set_cq_enabled(List *queries, bool activate)
 {
 	bool changed = false;
-	bool success;
-	char *cmd = is_enabled ? "ACTIVATE" : "DEACTIVATE";
+	Oid query_id;
 
-	PreventTransactionChain(context == PROCESS_UTILITY_TOPLEVEL, cmd);
+	while ((query_id = bms_first_member(get_query_ids(queries))) >= 0)
+	{
+		Assert(OidIsValid(query_id));
+		changed |= ContQuerySetActive(query_id, activate);
+	}
 
-	/* If we didn't change the cq_enabled state, this is a noop. */
+
+	/* If we didn't change the activate state of any CQ, this is a noop. */
 	if (!changed)
 		return;
-
-	PopActiveSnapshot();
-	CommitTransactionCommand();
-
-	SignalContQuerySchedulerRefreshDBList();
-
-	if (is_enabled)
-		success = WaitForContQueryActivation();
-	else
-		success = WaitForContQueryDeactivation();
-
-	if (!success)
-		ereport(WARNING,
-				(errmsg("%s timed out", cmd),
-				errhint("Check the postmaster log to ensure nothing failed.")));
-
-	StartTransactionCommand();
-	PushActiveSnapshot(GetTransactionSnapshot());
 }
 
 void
-ExecActivateStmt(ActivateStmt *stmt, ProcessUtilityContext context)
+ExecActivateStmt(ActivateStmt *stmt)
 {
-	set_cq_enabled(true, context);
+	set_cq_enabled(stmt->queries, true);
 }
 
 void
-ExecDeactivateStmt(DeactivateStmt *stmt, ProcessUtilityContext context)
+ExecDeactivateStmt(DeactivateStmt *stmt)
 {
-	set_cq_enabled(false, context);
+	set_cq_enabled(stmt->queries, false);
 }
 
 static void

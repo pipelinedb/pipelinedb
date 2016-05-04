@@ -40,7 +40,7 @@ CATALOG(pipeline_query,4242)
 	Oid         seqrel;
 	bool		gc;
 	bool 		adhoc;
-	int8 		step_factor;
+	int16 		step_factor;
 
 	/* valid for transforms only */
 	Oid			tgfn;
