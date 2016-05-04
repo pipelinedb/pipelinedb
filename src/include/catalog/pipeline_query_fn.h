@@ -55,7 +55,7 @@ extern void RemovePipelineQueryById(Oid oid);
 extern Oid DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
 extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);
 extern bool IsAContinuousView(RangeVar *name);
-extern bool ContainsSlidingWindowContinuousView(List *nodes);
+extern RangeVar *GetSWContinuousViewRangeVar(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
 extern bool RelIdIsForMatRel(Oid relid, RangeVar **cvname);
 extern bool GetGCFlag(RangeVar *name);

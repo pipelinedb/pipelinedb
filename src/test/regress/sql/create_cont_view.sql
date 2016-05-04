@@ -139,7 +139,7 @@ DROP CONTINUOUS VIEW arrts;
 -- WITH max_age
 CREATE CONTINUOUS VIEW ma0 WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream;
 \d+ ma0;
-CREATE VIEW ma1 WITH (max_age = '1 hour') AS SELECT COUNT(*) FROM ma0;
+CREATE VIEW ma1 WITH (max_age = '10 hours') AS SELECT COUNT(*) FROM ma0;
 \d+ ma1;
 
 -- max_age must be a valid interval string

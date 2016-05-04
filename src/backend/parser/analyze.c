@@ -1121,7 +1121,7 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);
 
-	if (ContainsSlidingWindowContinuousView(stmt->fromClause))
+	if (GetSWContinuousViewRangeVar(stmt->fromClause))
 		pstate->p_post_columnref_hook = CreateOuterSWTimeColumnRef;
 
 	/* transform targetlist */

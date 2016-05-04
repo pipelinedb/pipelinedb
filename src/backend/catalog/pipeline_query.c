@@ -392,19 +392,21 @@ IsAContinuousView(RangeVar *name)
  * Returns true if any of the given nodes represents a
  * sliding window continuous view
  */
-bool
-ContainsSlidingWindowContinuousView(List *nodes)
+RangeVar *
+GetSWContinuousViewRangeVar(List *nodes)
 {
 	ListCell *lc;
 	foreach(lc, nodes)
 	{
 		if (IsA(lfirst(lc), RangeVar))
 		{
-			if (IsAContinuousView((RangeVar *) lfirst(lc)) && GetGCFlag((RangeVar *) lfirst(lc)))
-				return true;
+			RangeVar *rv = lfirst(lc);
+
+			if (IsAContinuousView(rv) && GetGCFlag(rv))
+				return rv;
 		}
 	}
-	return false;
+	return NULL;
 }
 
 /*
