@@ -20,7 +20,6 @@
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/pg_database.h"
-#include "catalog/pipeline_database.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "nodes/print.h"
@@ -64,7 +63,6 @@ typedef struct DatabaseEntry
 {
 	Oid oid;
 	NameData name;
-	bool active;
 } DatabaseEntry;
 
 static List *DatabaseList = NIL;
@@ -316,7 +314,6 @@ refresh_database_list(void)
 {
 	List *dbs = NIL;
 	Relation pg_database;
-	Relation pipeline_database;
 	HeapScanDesc scan;
 	HeapTuple tup;
 	MemoryContext resultcxt;
@@ -365,29 +362,6 @@ refresh_database_list(void)
 	}
 
 	heap_endscan(scan);
-
-	/* Get enabled flags */
-	pipeline_database = heap_open(PipelineDatabaseRelationId, AccessShareLock);
-	scan = heap_beginscan_catalog(pipeline_database, 0, NULL);
-
-	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
-	{
-		Form_pipeline_database row = (Form_pipeline_database) GETSTRUCT(tup);
-		ListCell *lc;
-
-		foreach(lc, dbs)
-		{
-			DatabaseEntry *db_entry = (DatabaseEntry *) lfirst(lc);
-
-			if (db_entry->oid == row->dbid)
-				db_entry->active = row->cq_enabled;
-		}
-	}
-
-	heap_endscan(scan);
-	heap_close(pipeline_database, NoLock);
-
-	/* Unlock pg_database at the very end. */
 	heap_close(pg_database, NoLock);
 
 	CommitTransactionCommand();
@@ -731,9 +705,7 @@ reaper(void)
 	}
 
 	/*
-	 * Go over the list of databases and ensure that any database with continuous queries activated
-	 * has background workers running and any database with continuous queries deactivated has
-	 * no background workers running.
+	 * Go over the list of databases and ensure that all databases have background workers running.
 	 */
 	foreach(lc, DatabaseList)
 	{
@@ -761,14 +733,11 @@ reaper(void)
 			db_meta->db_procs = (ContQueryProc *) pos;
 			pos += sizeof(ContQueryProc) * NUM_BG_WORKERS_PER_DB;
 			db_meta->adhoc_procs = (ContQueryProc *) pos;
+
+			start_database_workers(db_meta);
 		}
 
-		/* Continuous queries activated but no workers running? */
-		if (db_entry->active && !db_meta->running && !db_meta->dropdb)
-			start_database_workers(db_meta);
-		/* Continuous queries disabled but workers still running? */
-		else if (!db_entry->active && db_meta->running)
-			terminate_database_workers(db_meta);
+		Assert(db_meta->running);
 	}
 }
 
@@ -1183,19 +1152,6 @@ GetContQueryAdhocProcs(void)
 	SpinLockRelease(&db_meta->mutex);
 
 	return procs;
-}
-
-bool
-AreContQueriesEnabled(void)
-{
-	HeapTuple tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
-	bool enabled;
-
-	Assert(HeapTupleIsValid(tup));
-
-	enabled = ((Form_pipeline_database) GETSTRUCT(tup))->cq_enabled;
-	ReleaseSysCache(tup);
-	return enabled;
 }
 
 bool

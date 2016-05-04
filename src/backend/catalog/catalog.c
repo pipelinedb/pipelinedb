@@ -38,7 +38,6 @@
 #include "catalog/pg_shdescription.h"
 #include "catalog/pg_shseclabel.h"
 #include "catalog/pg_tablespace.h"
-#include "catalog/pipeline_database.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/toasting.h"
 #include "miscadmin.h"
@@ -229,7 +228,6 @@ IsSharedRelation(Oid relationId)
 		relationId == SharedSecLabelRelationId ||
 		relationId == TableSpaceRelationId ||
 		relationId == DbRoleSettingRelationId ||
-		relationId == PipelineDatabaseRelationId ||
 		relationId == ReplicationOriginRelationId)
 		return true;
 	/* These are their indexes (see indexing.h) */
@@ -247,7 +245,6 @@ IsSharedRelation(Oid relationId)
 		relationId == TablespaceOidIndexId ||
 		relationId == TablespaceNameIndexId ||
 		relationId == DbRoleSettingDatidRolidIndexId ||
-		relationId == PipelineDatabaseDbIdIndexId ||
 		relationId == ReplicationOriginIdentIndex ||
 		relationId == ReplicationOriginNameIndex)
 		return true;

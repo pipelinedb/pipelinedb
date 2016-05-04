@@ -92,7 +92,6 @@ class PipelineDB(object):
           'continuous_query_num_workers': 2,
           'anonymous_update_checks': 'off',
           'continuous_query_max_wait': 5,
-          'continuous_queries_enabled': 'on',
           'wal_level': 'logical',
           'max_wal_senders': 1,
           'max_replication_slots': 1

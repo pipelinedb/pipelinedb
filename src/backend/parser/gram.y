@@ -374,6 +374,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
         create_generic_options alter_generic_options
         relation_expr_list dostmt_opt_list
         transform_element_list transform_type_list
+        opt_qualified_name_list
 
 %type <list>  group_by_list
 %type <node>  group_by_item empty_grouping_set rollup_clause cube_clause
@@ -2924,27 +2925,32 @@ create_ct_target:
 /*****************************************************************************
  *
  *    QUERY :
- *        ACTIVATE
+ *        ACTIVATE | DEACTIVATE [continuous view list]
  *
  *****************************************************************************/
+ 
+opt_qualified_name_list: qualified_name_list
+ 				{
+ 					$$ = (List *) $1;
+ 				}
+ 			| /* EMPTY */
+ 				{
+ 					$$ = NIL;
+ 				}
+ 		;
 
-ActivateStmt: ACTIVATE
+ActivateStmt: ACTIVATE opt_qualified_name_list where_clause
         {
           ActivateStmt *s = makeNode(ActivateStmt);
+          s->views = (List *) $2;
           $$ = (Node *) s;
         }
     ;
 
-/*****************************************************************************
- *
- *    QUERY :
- *        DEACTIVATE
- *
- *****************************************************************************/
-
-DeactivateStmt: DEACTIVATE
+DeactivateStmt: DEACTIVATE opt_qualified_name_list where_clause
         {
           DeactivateStmt *s = makeNode(DeactivateStmt);
+          s->views = (List *) $2;
           $$ = (Node *)s;
         }
     ;

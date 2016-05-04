@@ -29,7 +29,6 @@
 #include "catalog/pg_class.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
-#include "catalog/pipeline_database.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
@@ -854,45 +853,11 @@ ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
 static void
 set_cq_enabled(bool is_enabled, ProcessUtilityContext context)
 {
-	Relation pipeline_database;
-	HeapTuple tup;
-	Form_pipeline_database row;
 	bool changed = false;
 	bool success;
 	char *cmd = is_enabled ? "ACTIVATE" : "DEACTIVATE";
 
 	PreventTransactionChain(context == PROCESS_UTILITY_TOPLEVEL, cmd);
-
-	pipeline_database = heap_open(PipelineDatabaseRelationId, RowExclusiveLock);
-	tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
-
-	Assert(HeapTupleIsValid(tup));
-
-	row = (Form_pipeline_database) GETSTRUCT(tup);
-
-	if (row->cq_enabled != is_enabled)
-	{
-		bool replace[Natts_pipeline_database];
-		bool nulls[Natts_pipeline_database];
-		Datum values[Natts_pipeline_database];
-		HeapTuple new;
-
-		MemSet(replace, 0 , sizeof(replace));
-		MemSet(nulls, 0 , sizeof(nulls));
-		replace[Anum_pipeline_database_cq_enabled - 1] = true;
-		values[Anum_pipeline_database_cq_enabled - 1] = BoolGetDatum(is_enabled);
-
-		new = heap_modify_tuple(tup, pipeline_database->rd_att,	values, nulls, replace);
-
-		simple_heap_update(pipeline_database, &tup->t_self, new);
-		CatalogUpdateIndexes(pipeline_database, new);
-		CommandCounterIncrement();
-
-		changed = true;
-	}
-
-	ReleaseSysCache(tup);
-	heap_close(pipeline_database, NoLock);
 
 	/* If we didn't change the cq_enabled state, this is a noop. */
 	if (!changed)

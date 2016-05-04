@@ -336,9 +336,6 @@ DECLARE_UNIQUE_INDEX(pipeline_tstate_id_index, 4252, on pipeline_tstate using bt
 DECLARE_UNIQUE_INDEX(pipeline_combine_oid_index, 4256, on pipeline_combine using btree(oid oid_ops));
 #define PipelineCombineOidIndexId					4256
 
-DECLARE_UNIQUE_INDEX(pipeline_database_dbid_index, 4468, on pipeline_database using btree(dbid oid_ops));
-#define PipelineDatabaseDbIdIndexId					4468
-
 DECLARE_UNIQUE_INDEX(pg_policy_oid_index, 3257, on pg_policy using btree(oid oid_ops));
 #define PolicyOidIndexId				3257
 

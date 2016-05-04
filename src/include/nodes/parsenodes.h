@@ -3105,11 +3105,15 @@ typedef struct CreateContTransformStmt
 typedef struct DeactivateStmt
 {
 	NodeTag	type;
+	List *views;
+	Node *whereClause;
 } DeactivateStmt;
 
 typedef struct ActivateStmt
 {
 	NodeTag	type;
+	List *views;
+	Node *whereClause;
 } ActivateStmt;
 
 #endif   /* PARSENODES_H */
