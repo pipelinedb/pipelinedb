@@ -878,9 +878,10 @@ static void
 set_cq_enabled(List *queries, bool activate)
 {
 	bool changed = false;
-	Oid query_id;
+	int query_id;
+	Bitmapset *query_ids = get_query_ids(queries);
 
-	while ((query_id = bms_first_member(get_query_ids(queries))) >= 0)
+	while ((query_id = bms_first_member(query_ids)) >= 0)
 	{
 		Assert(OidIsValid(query_id));
 		changed |= ContQuerySetActive(query_id, activate);
