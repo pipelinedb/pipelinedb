@@ -219,6 +219,9 @@ CombinerDestReceiverFlush(DestReceiver *self)
 	}
 	else
 	{
+		int ninserted = 0;
+		Size size = 0;
+
 		for (i = 0; i < continuous_query_num_combiners; i++)
 		{
 			List *partials = c->partials[i];
@@ -241,8 +244,11 @@ CombinerDestReceiverFlush(DestReceiver *self)
 				Assert(ipcq);
 				ipc_queue_push_nolock(ipcq, pts, len, true);
 
-				IncrementCQWrite(1, len);
+				size += len;
+				ninserted++;
 			}
+
+			IncrementCQWrite(ninserted, size);
 
 			Assert(ipcq);
 			ipc_queue_unlock(ipcq);
