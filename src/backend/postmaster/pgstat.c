@@ -1537,11 +1537,10 @@ pgstat_init_function_usage(FunctionCallInfoData *fcinfo,
 		memset(&hash_ctl, 0, sizeof(hash_ctl));
 		hash_ctl.keysize = sizeof(Oid);
 		hash_ctl.entrysize = sizeof(PgStat_BackendFunctionEntry);
-		hash_ctl.hash = oid_hash;
 		pgStatFunctions = hash_create("Function stat entries",
 									  PGSTAT_FUNCTION_HASH_SIZE,
 									  &hash_ctl,
-									  HASH_ELEM | HASH_FUNCTION);
+									  HASH_ELEM | HASH_BLOBS);
 	}
 
 	/* Get the stats entry for this function, create if necessary */
@@ -2893,13 +2892,12 @@ pgstat_report_appname(const char *appname)
 	 * st_changecount before and after.  We use a volatile pointer here to
 	 * ensure the compiler doesn't try to get cute.
 	 */
-	beentry->st_changecount++;
+	pgstat_increment_changecount_before(beentry);
 
 	memcpy((char *) beentry->st_appname, appname, len);
 	beentry->st_appname[len] = '\0';
 
-	beentry->st_changecount++;
-	Assert((beentry->st_changecount & 1) == 0);
+	pgstat_increment_changecount_after(beentry);
 }
 
 /*
@@ -3573,12 +3571,11 @@ PgstatCollectorMain(int argc, char *argv[])
 		 * to not provoke "using stale statistics" complaints from
 		 * backend_read_statsfile.
 		 */
-		wr = WaitLatchOrSocket(&pgStatLatch,
+		wr = WaitLatchOrSocket(MyLatch,
 		WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_SOCKET_READABLE | WL_TIMEOUT,
 							   pgStatSock,
 							   2 * 1000L /* msec */ );
 #endif
-
 		if (anonymous_update_checks)
 		{
 			/* only check at startup and a maximum of once per hour */
@@ -3680,7 +3677,7 @@ reset_dbentry_counters(PgStat_StatDBEntry *dbentry)
 	dbentry->functions = hash_create("Per-database function",
 									 PGSTAT_FUNCTION_HASH_SIZE,
 									 &hash_ctl,
-									  HASH_ELEM | HASH_BLOBS);
+									 HASH_ELEM | HASH_BLOBS);
 
 	hash_ctl.keysize = sizeof(int64);
 	hash_ctl.entrysize = sizeof(CQStatEntry);
@@ -5759,7 +5756,7 @@ cq_stat_send_purge(Oid viewid, int pid, int64 ptype)
 
 	SetCQStatView(msg.m_key, viewid);
 	SetCQStatProcPid(msg.m_key, pid);
-	SetCQStatProcType(msg.m_key, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+	SetCQStatProcType(msg.m_key, ptype);
 
 	msg.m_databaseid = MyDatabaseId;
 

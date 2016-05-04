@@ -48,8 +48,7 @@ def handle_sigint(sig, frame):
   """
   Ctrl+C
   """
-  _kill(signal.SIGINT)
-  _kill(signal.SIGKILL)
+  _kill(signal.SIGTERM)
 
 signal.signal(signal.SIGINT, handle_sigint)
 
