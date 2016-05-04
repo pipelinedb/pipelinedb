@@ -37,7 +37,6 @@ extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
 extern void CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
-extern Bitmapset *GetStreamReaders(Oid relid);
 
 extern Datum pipeline_stream_insert(PG_FUNCTION_ARGS);
 

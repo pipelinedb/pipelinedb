@@ -53,23 +53,6 @@ char *stream_targets;
 int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;
 void *copy_iter_arg = NULL;
 
-Bitmapset *
-GetStreamReaders(Oid relid)
-{
-	Bitmapset *targets;
-	char *name = get_rel_name(relid);;
-
-	targets = GetLocalStreamReaders(relid);
-
-	if (targets == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("no continuous views are currently reading from stream %s", name),
-				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", name)));
-
-	return targets;
-}
-
 /*
  * CopyIntoStream
  *
@@ -83,7 +66,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	InsertBatch *batch = NULL;
 	Size size = 0;
 	bool snap = ActiveSnapshotSet();
-	Bitmapset *all_targets = GetStreamReaders(RelationGetRelid(stream));
+	Bitmapset *all_targets = GetLocalStreamReaders(RelationGetRelid(stream));
 	Bitmapset *adhoc = GetAdhocContinuousViewIds();
 	Bitmapset *targets = bms_difference(all_targets, adhoc);
 	ipc_queue *ipcq = NULL;

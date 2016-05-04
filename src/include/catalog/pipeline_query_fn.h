@@ -30,6 +30,7 @@ typedef struct ContQuery
 {
 	Oid id;
 	Oid oid; /* OID in pipeline_query table */
+	bool active;
 	ContQueryType type;
 
 	/* meta */
@@ -53,6 +54,8 @@ extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern void RemovePipelineQueryById(Oid oid);
 
 extern Oid DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
+extern Oid DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, List *args);
+
 extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);
 extern bool IsAContinuousView(RangeVar *name);
 extern RangeVar *GetSWContinuousViewRangeVar(List *nodes);
@@ -68,13 +71,11 @@ extern Bitmapset *GetAdhocContinuousViewIds(void);
 extern Bitmapset *GetContinuousTransformIds(void);
 
 extern Oid GetContQueryId(RangeVar *name);
-extern ContQuery *GetContQueryForViewId(Oid id);
-extern ContQuery *GetContQueryForView(RangeVar *cv_name);
-
-extern Oid DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, List *args);
-extern ContQuery *GetContQueryForTransformId(Oid id);
 
 extern ContQuery *GetContQueryForId(Oid id);
+extern ContQuery *GetContQueryForView(RangeVar *cv_name);
+extern ContQuery *GetContQueryForViewId(Oid id);
+extern ContQuery *GetContQueryForTransformId(Oid id);
 
 extern bool ContQuerySetActive(Oid id, bool active);
 

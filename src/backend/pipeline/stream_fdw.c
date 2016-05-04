@@ -506,7 +506,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	Relation stream = result_info->ri_RelationDesc;
 	Oid streamid = RelationGetRelid(stream);
 	StreamInsertState *sis = palloc0(sizeof(StreamInsertState));
-	Bitmapset *all_targets = GetStreamReaders(streamid);
+	Bitmapset *all_targets = GetLocalStreamReaders(streamid);
 	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
 	Bitmapset *worker_targets = bms_difference(all_targets, all_adhoc);
 	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ?

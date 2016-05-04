@@ -879,7 +879,12 @@ set_cq_enabled(List *queries, bool activate)
 {
 	bool changed = false;
 	int query_id;
-	Bitmapset *query_ids = get_query_ids(queries);
+	Bitmapset *query_ids;
+	Relation pipeline_query;
+
+	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+
+	query_ids = get_query_ids(queries);
 
 	while ((query_id = bms_first_member(query_ids)) >= 0)
 	{
@@ -888,9 +893,10 @@ set_cq_enabled(List *queries, bool activate)
 	}
 
 
-	/* If we didn't change the activate state of any CQ, this is a noop. */
-	if (!changed)
-		return;
+	if (changed)
+		UpdatePipelineStreamCatalog();
+
+	heap_close(pipeline_query, NoLock);
 }
 
 void

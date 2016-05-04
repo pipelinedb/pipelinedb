@@ -533,6 +533,7 @@ GetContQueryForId(Oid id)
 	cq->namespace = row->namespace;
 	cq->seqrel = row->seqrel;
 	cq->matrelid = row->matrel;
+	cq->active = row->active;
 
 	if (cq->type == CONT_VIEW)
 	{
