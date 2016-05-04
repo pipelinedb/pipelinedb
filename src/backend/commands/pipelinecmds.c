@@ -892,7 +892,6 @@ set_cq_enabled(List *queries, bool activate)
 		changed |= ContQuerySetActive(query_id, activate);
 	}
 
-
 	if (changed)
 		UpdatePipelineStreamCatalog();
 
