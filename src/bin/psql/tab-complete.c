@@ -370,7 +370,23 @@ static const SchemaQuery Query_for_list_of_constraints_with_schema = {
 	NULL
 };
 
-/* Relations supporting INSERT, UPDATE or DELETE */
+/* Relations supporting INSERT */
+static const SchemaQuery Query_for_list_of_insertables = {
+	/* catname */
+	"pg_catalog.pg_class c",
+	/* selcondition */
+	"c.relkind IN ('r', 'f', 'v', '$')",
+	/* viscondition */
+	"pg_catalog.pg_table_is_visible(c.oid)",
+	/* namespace */
+	"c.relnamespace",
+	/* result */
+	"pg_catalog.quote_ident(c.relname)",
+	/* qualresult */
+	NULL
+};
+
+/* Relations supporting UPDATE or DELETE */
 static const SchemaQuery Query_for_list_of_updatables = {
 	/* catname */
 	"pg_catalog.pg_class c",
@@ -405,7 +421,7 @@ static const SchemaQuery Query_for_list_of_tsvmf = {
 	/* catname */
 	"pg_catalog.pg_class c",
 	/* selcondition */
-	"c.relkind IN ('r', 'S', 'v', 'm', 'f')",
+	"c.relkind IN ('r', 'S', 'v', 'm', 'f', 'C')",
 	/* viscondition */
 	"pg_catalog.pg_table_is_visible(c.oid)",
 	/* namespace */
@@ -3340,7 +3356,7 @@ psql_completion(const char *text, int start, int end)
 	/* Complete INSERT INTO with table names */
 	else if (pg_strcasecmp(prev2_wd, "INSERT") == 0 &&
 			 pg_strcasecmp(prev_wd, "INTO") == 0)
-		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_updatables, NULL);
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_insertables, NULL);
 	/* Complete "INSERT INTO <table> (" with attribute names */
 	else if (pg_strcasecmp(prev4_wd, "INSERT") == 0 &&
 			 pg_strcasecmp(prev3_wd, "INTO") == 0 &&
