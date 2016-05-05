@@ -107,7 +107,7 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 		bool nulls[11];
 		HeapTuple tup;
 		Datum result;
-		pid_t pid = GetCQStatProcPid(entry->key);
+		pid_t pid = GetStatCQEntryProcPid(entry->key);
 
 		/* keep scanning if it's a CQ-level stats entry */
 		if (!pid)
@@ -120,14 +120,14 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 		if (kill(pid, 0) == -1 && errno == ESRCH)
 		{
 			/* stale proc, purge it */
-			pgstat_send_cqpurge(0, pid, GetCQStatProcType(entry->key));
+			pgstat_send_cqpurge(0, pid, GetStatCQEntryProcType(entry->key));
 			continue;
 		}
 
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, 0, sizeof(nulls));
 
-		values[0] = CStringGetTextDatum((GetCQStatProcType(entry->key) == CQ_STAT_WORKER ? "worker" : "combiner"));
+		values[0] = CStringGetTextDatum((GetStatCQEntryProcType(entry->key) == WORKER ? "worker" : "combiner"));
 		values[1] = Int32GetDatum(pid);
 		values[2] = TimestampTzGetDatum(entry->start_ts);
 		values[3] = Int64GetDatum(entry->input_rows);
@@ -208,7 +208,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		bool nulls[9];
 		HeapTuple tup;
 		Datum result;
-		Oid viewid = GetCQStatView(entry->key);
+		Oid viewid = GetStatCQEntryViewId(entry->key);
 		ContQuery *cv;
 		char *viewname;
 
@@ -227,7 +227,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		MemSet(nulls, 0, sizeof(nulls));
 
 		values[0] = CStringGetTextDatum(viewname);
-		values[1] = CStringGetTextDatum((GetCQStatProcType(entry->key) == CQ_STAT_WORKER ? "worker" : "combiner"));
+		values[1] = CStringGetTextDatum((GetStatCQEntryProcType(entry->key) == WORKER ? "worker" : "combiner"));
 		values[2] = Int64GetDatum(entry->input_rows);
 		values[3] = Int64GetDatum(entry->output_rows);
 		values[4] = Int64GetDatum(entry->updated_rows);
@@ -337,7 +337,7 @@ pipeline_stat_get(PG_FUNCTION_ARGS)
 	bool nulls[12];
 	Datum result;
 	HeapTuple tup;
-	CQStatsType ptype;
+	ContQueryProcType ptype;
 
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -371,7 +371,7 @@ pipeline_stat_get(PG_FUNCTION_ARGS)
 		SRF_RETURN_DONE(funcctx);
 
 	stats = pgstat_fetch_cqstat_all();
-	ptype = funcctx->call_cntr == 0 ? CQ_STAT_COMBINER : CQ_STAT_WORKER;
+	ptype = funcctx->call_cntr == 0 ? COMBINER : WORKER;
 	global = pgstat_fetch_stat_global_cqentry(stats, ptype);
 
 	if (!global->start_ts)
@@ -380,7 +380,7 @@ pipeline_stat_get(PG_FUNCTION_ARGS)
 	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, 0, sizeof(nulls));
 
-	values[0] = CStringGetTextDatum(ptype == CQ_STAT_COMBINER ? "combiner" : "worker");
+	values[0] = CStringGetTextDatum(ptype == COMBINER ? "combiner" : "worker");
 	values[1] = TimestampTzGetDatum(global->start_ts);
 	values[2] = Int64GetDatum(global->input_rows);
 	values[3] = Int64GetDatum(global->output_rows);

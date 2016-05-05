@@ -15,6 +15,7 @@
 #include "datatype/timestamp.h"
 #include "fmgr.h"
 #include "libpq/pqcomm.h"
+#include "pipeline/cont_scheduler.h"
 #include "portability/instr_time.h"
 #include "postmaster/pgarch.h"
 #include "storage/barrier.h"
@@ -1033,15 +1034,6 @@ extern PgStat_ArchiverStats *pgstat_fetch_stat_archiver(void);
 extern PgStat_GlobalStats *pgstat_fetch_global(void);
 
 /*
- *	CQ stats process type
- */
-typedef enum CQStatsType
-{
-	CQ_STAT_COMBINER,
-	CQ_STAT_WORKER,
-} CQStatsType;
-
-/*
  * PipelineDB stats for continuous queries
  */
 /*
@@ -1065,7 +1057,7 @@ typedef struct PgStat_StatCQEntry
 	 * to the current stats de/serialization scheme, which expects a single-level
 	 * hashtable having fixed-size entries.
 	 */
-	int64 key;
+	uint64 key;
 
 	TimestampTz start_ts;
 	PgStat_Counter input_rows;
@@ -1104,13 +1096,13 @@ typedef struct PgStat_MsgCQpurge
 extern PgStat_StatCQEntry MyProcStatCQEntry;
 extern PgStat_StatCQEntry *MyStatCQEntry;
 
-#define SetCQStatView(key, view) ((key) |= (int64) (view))
-#define SetCQStatProcPid(key, pid) ((key) |= ((int64 ) (pid) << 30L))
-#define SetCQStatProcType(key, type) ((key) |= ((int64) (type) << 63L))
+#define SetStatCQEntryViewId(key, view) ((key) |= (uint64) (view))
+#define SetStatCQEntryProcPid(key, pid) ((key) |= ((uint64 ) (pid) << 30L))
+#define SetStatCQEntryProcType(key, type) ((key) |= ((uint64) (type) << 63L))
 
-#define GetCQStatView(key) (0xFFFF & (key))
-#define GetCQStatProcPid(key) (0xFFFF & (key >> 30L))
-#define GetCQStatProcType(key) (0x1 & (key >> 63L))
+#define GetStatCQEntryViewId(key) (0xFFFF & (key))
+#define GetStatCQEntryProcPid(key) (0xFFFF & (key >> 30L))
+#define GetStatCQEntryProcType(key) (0x1 & (key >> 63L))
 
 #define pgstat_increment_cq_read(rows, nbytes) \
 	do { \
@@ -1162,8 +1154,8 @@ extern PgStat_StatCQEntry *MyStatCQEntry;
 extern void pgstat_init_cqstat(PgStat_StatCQEntry *entry, Oid viewid, pid_t pid);
 extern void pgstat_report_cqstat(bool force);
 extern void pgstat_report_create_drop_cv(bool create);
-extern void pgstat_send_cqpurge(Oid viewid, int pid, int64 ptype);
-extern PgStat_StatCQEntry *pgstat_fetch_stat_cqentry(HTAB *cont_queries, Oid viewoid, int pid, int ptype);
+extern void pgstat_send_cqpurge(Oid viewid, pid_t pid, ContQueryProcType ptype);
+extern PgStat_StatCQEntry *pgstat_fetch_stat_cqentry(HTAB *cont_queries, Oid viewoid, int pid, ContQueryProcType ptype);
 extern HTAB *pgstat_fetch_cqstat_all(void);
 #define pgstat_fetch_stat_global_cqentry(cont_queries, ptype) \
 	pgstat_fetch_stat_cqentry(cont_queries, 0, 0, ptype)

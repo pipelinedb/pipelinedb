@@ -167,7 +167,7 @@ AnonymousPost(char *path, char *payload, char *resp_buf, int resp_len)
  * Aggregate all database-level stats
  */
 static char *
-get_stats(HTAB *all_dbs, bool startup, CQStatsType ptype)
+get_stats(HTAB *all_dbs, bool startup, ContQueryProcType ptype)
 {
 	HASH_SEQ_STATUS db_iter;
 	PgStat_StatDBEntry *db_entry;
@@ -176,7 +176,7 @@ get_stats(HTAB *all_dbs, bool startup, CQStatsType ptype)
 	StringInfoData payload;
 	struct utsname mname;
 	char name[64];
-	char proc = ptype == CQ_STAT_COMBINER ? 'c' : 'w';
+	char proc = ptype == COMBINER ? 'c' : 'w';
 	char *etype = startup ? "s" : "h";
 	long rows_in = 0;
 	long bytes_in = 0;
@@ -235,8 +235,8 @@ void
 UpdateCheck(HTAB *all_dbs, bool startup)
 {
 	StringInfoData payload;
-	char *combiner = get_stats(all_dbs, startup, CQ_STAT_COMBINER);
-	char *worker = get_stats(all_dbs, startup, CQ_STAT_WORKER);
+	char *combiner = get_stats(all_dbs, startup, COMBINER);
+	char *worker = get_stats(all_dbs, startup, WORKER);
 	char buf[4096];
 
 	if (combiner == NULL)

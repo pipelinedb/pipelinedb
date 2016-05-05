@@ -3734,7 +3734,7 @@ reset_dbentry_counters(PgStat_StatDBEntry *dbentry)
 									 &hash_ctl,
 									 HASH_ELEM | HASH_BLOBS);
 
-	hash_ctl.keysize = sizeof(int64);
+	hash_ctl.keysize = sizeof(uint64);
 	hash_ctl.entrysize = sizeof(PgStat_StatCQEntry);
 	hash_ctl.hash = tag_hash;
 	dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
@@ -4083,6 +4083,10 @@ pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent)
 	hash_seq_init(&qstat, dbentry->cont_queries);
 	while ((cqentry = (PgStat_StatCQEntry *) hash_seq_search(&qstat)) != NULL)
 	{
+		/* Don't dump process level stats to permanent stats file */
+		if (permanent && !OidIsValid(GetStatCQEntryViewId(cqentry->key)))
+			continue;
+
 		fputc('Q', fpout);
 		rc = fwrite(cqentry, sizeof(PgStat_StatCQEntry), 1, fpout);
 		(void) rc;				/* we'll check for error with ferror */
@@ -4314,7 +4318,7 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 												 &hash_ctl,
 									  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
-				hash_ctl.keysize = sizeof(int64);
+				hash_ctl.keysize = sizeof(uint64);
 				hash_ctl.entrysize = sizeof(PgStat_StatCQEntry);
 				hash_ctl.hash = tag_hash;
 				hash_ctl.hcxt = pgStatLocalContext;
@@ -5597,9 +5601,9 @@ pgstat_init_cqstat(PgStat_StatCQEntry *entry, Oid viewid, pid_t pid)
 	entry->start_ts = GetCurrentTimestamp();
 	entry->last_report = GetCurrentTimestamp();
 
-	SetCQStatView(entry->key, viewid);
-	SetCQStatProcPid(entry->key, pid);
-	SetCQStatProcType(entry->key, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+	SetStatCQEntryViewId(entry->key, viewid);
+	SetStatCQEntryProcPid(entry->key, pid);
+	SetStatCQEntryProcType(entry->key, IsContQueryWorkerProcess() ? WORKER : COMBINER);
 }
 
 /*
@@ -5673,8 +5677,8 @@ pgstat_report_create_drop_cv(bool create)
 		stats.cv_drop += 1;
 
 	/* we arbitrarily choose to report create/drop stats under the combiner */
-	SetCQStatProcType(stats.key, CQ_STAT_COMBINER);
-	SetCQStatProcPid(stats.key, MyProcPid);
+	SetStatCQEntryProcType(stats.key, COMBINER);
+	SetStatCQEntryProcPid(stats.key, MyProcPid);
 	cq_stat_report_entry(&stats);
 }
 
@@ -5704,15 +5708,15 @@ pgstat_report_cqstat(bool force)
  * Retrieve a CQ stats entry matching the given parameters
  */
 PgStat_StatCQEntry *
-pgstat_fetch_stat_cqentry(HTAB *cont_queries, Oid viewoid, int pid, int ptype)
+pgstat_fetch_stat_cqentry(HTAB *cont_queries, Oid viewoid, pid_t pid, ContQueryProcType ptype)
 {
 	PgStat_StatCQEntry *result;
 	bool found;
-	int64 key = 0;
+	uint64 key = 0;
 
-	SetCQStatView(key, viewoid);
-	SetCQStatProcPid(key, pid);
-	SetCQStatProcType(key, ptype);
+	SetStatCQEntryViewId(key, viewoid);
+	SetStatCQEntryProcPid(key, pid);
+	SetStatCQEntryProcType(key, ptype);
 
 	result = (PgStat_StatCQEntry *) hash_search(cont_queries, (void *) &key, HASH_ENTER, &found);
 	if (!found)
@@ -5740,7 +5744,7 @@ cq_stat_aggregate(PgStat_StatCQEntry *result, PgStat_StatCQEntry *incoming)
 }
 
 static void
-cq_stat_recv_global(HTAB *cont_queries, PgStat_StatCQEntry *stats, CQStatsType ptype)
+cq_stat_recv_global(HTAB *cont_queries, PgStat_StatCQEntry *stats, ContQueryProcType ptype)
 {
 	PgStat_StatCQEntry *global = pgstat_fetch_stat_global_cqentry(cont_queries, ptype);
 
@@ -5768,9 +5772,9 @@ pgstat_recv_cqstat(PgStat_MsgCQstat *msg, int len)
 	PgStat_StatCQEntry stats = msg->m_entry;
 	PgStat_StatCQEntry *existing;
 	PgStat_StatDBEntry *db;
-	Oid viewid = GetCQStatView(stats.key);
-	pid_t pid = GetCQStatProcPid(stats.key);
-	int ptype = GetCQStatProcType(stats.key);
+	Oid viewid = GetStatCQEntryViewId(stats.key);
+	pid_t pid = GetStatCQEntryProcPid(stats.key);
+	int ptype = GetStatCQEntryProcType(stats.key);
 
 	db = pgstat_get_db_entry(msg->m_databaseid, true);
 
@@ -5803,15 +5807,15 @@ pgstat_recv_cqstat(PgStat_MsgCQstat *msg, int len)
  * stats can be discarded
  */
 void
-pgstat_send_cqpurge(Oid viewid, int pid, int64 ptype)
+pgstat_send_cqpurge(Oid viewid, pid_t pid, ContQueryProcType ptype)
 {
 	PgStat_MsgCQpurge msg;
 
 	MemSet(&msg, 0, sizeof(PgStat_MsgCQpurge));
 
-	SetCQStatView(msg.m_key, viewid);
-	SetCQStatProcPid(msg.m_key, pid);
-	SetCQStatProcType(msg.m_key, ptype);
+	SetStatCQEntryViewId(msg.m_key, viewid);
+	SetStatCQEntryProcPid(msg.m_key, pid);
+	SetStatCQEntryProcType(msg.m_key, ptype);
 
 	msg.m_databaseid = MyDatabaseId;
 

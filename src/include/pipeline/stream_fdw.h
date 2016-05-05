@@ -25,6 +25,8 @@ typedef struct StreamScanState
 	ContExecutor *cont_executor;
 	AdhocExecutor *adhoc_executor;
 	StreamProjectionInfo *pi;
+	Size nbytes;
+	int ntuples;
 } StreamScanState;
 
 extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);

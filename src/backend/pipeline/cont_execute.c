@@ -795,7 +795,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 	if (exec->current_query)
 		pgstat_report_cqstat(false);
 	else
-		pgstat_send_cqpurge(exec->current_query_id, 0, exec->ptype == WORKER ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+		pgstat_send_cqpurge(exec->current_query_id, 0, exec->ptype == WORKER);
 
 	debug_query_string = NULL;
 }

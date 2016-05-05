@@ -452,7 +452,7 @@ cont_bgworker_main(Datum arg)
 
 	if (proc->type != TRIG)
 	{
-		pgstat_send_cqpurge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+		pgstat_send_cqpurge(0, MyProcPid, proc->type);
 		release_my_ipc_queue();
 	}
 

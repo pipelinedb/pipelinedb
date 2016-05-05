@@ -519,6 +519,10 @@ sync_combine(ContQueryCombinerState *state)
 	int natts;
 	Relation matrel;
 	ResultRelInfo *ri;
+	Size nbytes_inserted = 0;
+	Size nbytes_updated = 0;
+	int ntups_inserted = 0;
+	int ntups_updated = 0;
 
 	matrel = heap_openrv_extended(state->base.query->matrel, RowExclusiveLock, true);
 	if (matrel == NULL)
@@ -590,7 +594,9 @@ sync_combine(ContQueryCombinerState *state)
 					slot->tts_values, slot->tts_isnull, replace_all);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecCQMatRelUpdate(ri, slot, estate);
-			pgstat_increment_cq_update(1, HEAPTUPLESIZE + tup->t_len);
+
+			ntups_updated++;
+			nbytes_updated += HEAPTUPLESIZE + slot->tts_tuple->t_len;
 		}
 		else
 		{
@@ -601,13 +607,18 @@ sync_combine(ContQueryCombinerState *state)
 			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecCQMatRelInsert(ri, slot, estate);
-			pgstat_increment_cq_write(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
+
+			ntups_inserted++;
+			nbytes_inserted += HEAPTUPLESIZE + slot->tts_tuple->t_len;
 		}
 
 		ResetPerTupleExprContext(estate);
 	}
 
 	tuplestore_clear(state->combined);
+
+	pgstat_increment_cq_update(ntups_updated, nbytes_updated);
+	pgstat_increment_cq_write(ntups_inserted, nbytes_inserted);
 
 	CQMatRelClose(ri);
 	heap_close(matrel, NoLock);
@@ -836,6 +847,7 @@ read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
 {
 	PartialTupleState *pts;
 	int len;
+	Size nbytes = 0;
 	int count = 0;
 
 	while ((pts = (PartialTupleState *) ContExecutorYieldItem(cont_exec, &len)) != NULL)
@@ -848,13 +860,15 @@ read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
 
 		set_group_hash(state, count, pts->hash);
 
-		pgstat_increment_cq_read(1, len);
+		nbytes += len;
 		count++;
 
 	}
 
 	if (!TupIsNull(state->slot))
 		ExecClearTuple(state->slot);
+
+	pgstat_increment_cq_read(count, nbytes);
 
 	return count;
 }

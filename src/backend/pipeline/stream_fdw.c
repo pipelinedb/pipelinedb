@@ -260,6 +260,8 @@ EndStreamScan(ForeignScanState *node)
 	ss->pi->raweventdesc = NULL;
 
 	reset_record_type_cache();
+
+	pgstat_increment_cq_read(ss->ntuples, ss->nbytes);
 }
 
 /*
@@ -477,7 +479,8 @@ IterateStreamScan(ForeignScanState *node)
 	if (sts == NULL)
 		return NULL;
 
-	pgstat_increment_cq_read(1, len);
+	state->ntuples++;
+	state->nbytes += len;
 
 	/*
 	 * Check if the incoming event descriptor is different from the one we're

@@ -248,14 +248,14 @@ CombinerDestReceiverFlush(DestReceiver *self)
 				ninserted++;
 			}
 
-			pgstat_increment_cq_write(ninserted, size);
-
 			Assert(ipcq);
 			ipc_queue_unlock(ipcq);
 
 			list_free_deep(partials);
 			c->partials[i] = NIL;
 		}
+
+		pgstat_increment_cq_write(ninserted, size);
 	}
 
 	if (c->acks)

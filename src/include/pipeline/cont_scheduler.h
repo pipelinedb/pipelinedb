@@ -24,7 +24,7 @@
 
 typedef enum
 {
-	COMBINER,
+	COMBINER = 0,
 	WORKER,
 	ADHOC,
 	TRIG,
