@@ -248,7 +248,7 @@ CombinerDestReceiverFlush(DestReceiver *self)
 				ninserted++;
 			}
 
-			IncrementCQWrite(ninserted, size);
+			pgstat_increment_cq_write(ninserted, size);
 
 			Assert(ipcq);
 			ipc_queue_unlock(ipcq);

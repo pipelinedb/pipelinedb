@@ -437,7 +437,7 @@ cont_bgworker_main(Datum arg)
 
 	if (proc->type != TRIG)
 	{
-		cq_stat_init(&MyProcCQStats, 0, MyProcPid);
+		pgstat_init_cqstat(&MyProcStatCQEntry, 0, MyProcPid);
 		proc->queue = acquire_my_ipc_queue();
 	}
 
@@ -452,7 +452,7 @@ cont_bgworker_main(Datum arg)
 
 	if (proc->type != TRIG)
 	{
-		cq_stat_send_purge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+		pgstat_send_cqpurge(0, MyProcPid, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
 		release_my_ipc_queue();
 	}
 

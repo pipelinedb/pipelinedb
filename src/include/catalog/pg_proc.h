@@ -5579,10 +5579,10 @@ DESCR("count-min sketch estimate frequency");
 DATA(insert OID = 4386 ( cmsketch_frequency	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 25" _null_ _null_ _null_ _null_ _null_ cmsketch_frequency _null_ _null_ _null_ ));
 DESCR("count-min sketch estimate frequency");
 
-DATA(insert OID = 4355 ( cq_proc_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,23,1184,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o}" "{type,pid,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors}" _null_ _null_ cq_proc_stat_get _null_ _null_ _null_ ));
+DATA(insert OID = 4355 ( cq_proc_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,23,1184,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o}" "{type,pid,start_time,input_rows,output_rows,updated_rows,input_bytes,output_bytes,updated_bytes,executions,errors}" _null_ _null_ cq_proc_stat_get _null_ _null_ _null_ ));
 DESCR("get continuous query process stats");
 
-DATA(insert OID = 4356 ( cq_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o}" "{name,type,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,errors}" _null_ _null_ cq_stat_get _null_ _null_ _null_ ));
+DATA(insert OID = 4356 ( cq_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o}" "{name,type,input_rows,output_rows,updated_rows,input_bytes,output_bytes,updated_bytes,errors}" _null_ _null_ cq_stat_get _null_ _null_ _null_ ));
 DESCR("get continuous query stats");
 
 /* hyperloglog empty */
@@ -5690,7 +5690,7 @@ DATA(insert OID = 4388 ( finalize	PGNSP PGUID 12 1 0 2283 0 t f f f t f i 1 0 22
 DESCR("generic user finalize function");
 
 /* global PipelineDB stats */
-DATA(insert OID = 4389 ( pipeline_stat_get PGNSP PGUID 12 1 1 0 0 f f f f t t s 0 0 2249 "" "{25,1184,20,20,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o,o}" "{type,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors,cv_create,cv_drop}" _null_ _null_ pipeline_stat_get _null_ _null_ _null_ ));
+DATA(insert OID = 4389 ( pipeline_stat_get PGNSP PGUID 12 1 1 0 0 f f f f t t s 0 0 2249 "" "{25,1184,20,20,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o,o}" "{type,start_time,input_rows,output_rows,updated_rows,input_bytes,output_bytes,updated_bytes,executions,errors,cv_create,cv_drop}" _null_ _null_ pipeline_stat_get _null_ _null_ _null_ ));
 DESCR("global pipelinedb status");
 
 DATA(insert OID = 4390 ( pipeline_get_overlay_viewdef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ _null_ pipeline_get_overlay_viewdef _null_ _null_ _null_ ));

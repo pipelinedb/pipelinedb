@@ -244,7 +244,7 @@ ContinuousQueryWorkerMain(void)
 					UnsetEStateSnapshot(estate);
 
 				ContExecutorPurgeQuery(cont_exec);
-				IncrementCQErrors(1);
+				pgstat_increment_cq_error(1);
 
 				if (!continuous_query_crash_recovery)
 					proc_exit(1);
@@ -305,8 +305,8 @@ next:
 			ExecutorEnd(query_desc);
 			FreeQueryDesc(query_desc);
 
-			MyCQStats = &state->base.stats;
-			cq_stat_report(true);
+			MyStatCQEntry = &state->base.stats;
+			pgstat_report_cqstat(true);
 		}
 		PG_CATCH();
 		{

@@ -455,7 +455,7 @@ ContExecutorStartBatch(ContExecutor *exec)
 		{
 			char *proc_name = GetContQueryProcName(MyContQueryProc);
 
-			cq_stat_report(true);
+			pgstat_report_cqstat(true);
 
 			pgstat_report_activity(STATE_IDLE, proc_name);
 			ipc_queue_wait_non_empty(exec->ipcq, 0);
@@ -519,7 +519,7 @@ init_query_state(ContExecutor *exec, ContQueryState *state)
 	if (state->query == NULL)
 		return state;
 
-	cq_stat_init(&state->stats, state->query->id, 0);
+	pgstat_init_cqstat(&state->stats, state->query->id, 0);
 	state = exec->initfn(exec, state);
 
 	MemoryContextSwitchTo(old_cxt);
@@ -533,7 +533,7 @@ get_query_state(ContExecutor *exec)
 	ContQueryState *state = exec->states[exec->current_query_id];
 	HeapTuple tup;
 
-	MyCQStats = NULL;
+	MyStatCQEntry = NULL;
 
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
@@ -589,7 +589,7 @@ get_query_state(ContExecutor *exec)
 
 	PopActiveSnapshot();
 
-	MyCQStats = &state->stats;
+	MyStatCQEntry = &state->stats;
 
 	return state;
 }
@@ -766,7 +766,7 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 void
 ContExecutorEndQuery(ContExecutor *exec)
 {
-	IncrementCQExecutions(1);
+	pgstat_increment_cq_exec(1);
 
 	if (!exec->started)
 		return;
@@ -793,9 +793,9 @@ ContExecutorEndQuery(ContExecutor *exec)
 	exec->yielded = NIL;
 
 	if (exec->current_query)
-		cq_stat_report(false);
+		pgstat_report_cqstat(false);
 	else
-		cq_stat_send_purge(exec->current_query_id, 0, exec->ptype == WORKER ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+		pgstat_send_cqpurge(exec->current_query_id, 0, exec->ptype == WORKER ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
 
 	debug_query_string = NULL;
 }

@@ -131,8 +131,8 @@ PgStat_MsgBgWriter BgWriterStats;
 /*
  * If we're a CQ process, this tracks our various runtime stats
  */
-CQStatEntry MyProcCQStats;
-CQStatEntry *MyCQStats = NULL;
+PgStat_StatCQEntry MyProcStatCQEntry;
+PgStat_StatCQEntry *MyStatCQEntry = NULL;
 
 /* ----------
  * Local data
@@ -308,9 +308,10 @@ static void pgstat_recv_recoveryconflict(PgStat_MsgRecoveryConflict *msg, int le
 static void pgstat_recv_deadlock(PgStat_MsgDeadlock *msg, int len);
 static void pgstat_recv_tempfile(PgStat_MsgTempFile *msg, int len);
 
-static void cq_stat_recv(CQStatMsg *msg, int len);
-static void cq_stat_recv_purge(CQStatPurgeMsg *msg, int len);
-static void stream_stat_recv(StreamStatMsg *msg, int len);
+static void pgstat_recv_cqstat(PgStat_MsgCQstat *msg, int len);
+static void pgstat_recv_cqpurge(PgStat_MsgCQpurge *msg, int len);
+static void pgstat_recv_streamstat(PgStat_MsgStreamstat *msg, int len);
+static void pgstat_recv_streampurge(PgStat_MsgStreampurge *msg, int len);
 
 /* ------------------------------------------------------------
  * Public functions called from postmaster follow
@@ -846,7 +847,7 @@ pgstat_report_stat(bool force)
 	pgstat_send_funcstats();
 
 	/* PipelineDB stream statistics */
-	stream_stat_report(force);
+	pgstat_report_streamstat(force);
 }
 
 /*
@@ -964,6 +965,7 @@ pgstat_vacuum_stat(void)
 	HASH_SEQ_STATUS hstat;
 	PgStat_StatDBEntry *dbentry;
 	PgStat_StatTabEntry *tabentry;
+	PgStat_StatStreamEntry *streamentry;
 	PgStat_StatFuncEntry *funcentry;
 	int			len;
 
@@ -1063,6 +1065,55 @@ pgstat_vacuum_stat(void)
 			+msg.m_nentries * sizeof(Oid);
 
 		pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_TABPURGE);
+		msg.m_databaseid = MyDatabaseId;
+		pgstat_send(&msg, len);
+	}
+
+	/*
+	 * Check for all streams listed in stats hashtable if they still exist. We can
+	 * reuse the OIDs collected for relations above since all streams have a valid
+	 * relid associated with them.
+	 */
+	hash_seq_init(&hstat, dbentry->streams);
+	while ((streamentry = (PgStat_StatStreamEntry *) hash_seq_search(&hstat)) != NULL)
+	{
+		Oid			tabid = streamentry->relid;
+
+		CHECK_FOR_INTERRUPTS();
+
+		if (hash_search(htab, (void *) &tabid, HASH_FIND, NULL) != NULL)
+			continue;
+
+		/*
+		 * Not there, so add this table's Oid to the message
+		 */
+		msg.m_tableid[msg.m_nentries++] = tabid;
+
+		/*
+		 * If the message is full, send it out and reinitialize to empty
+		 */
+		if (msg.m_nentries >= PGSTAT_NUM_TABPURGE)
+		{
+			len = offsetof(PgStat_MsgStreampurge, m_tableid[0])
+				+msg.m_nentries * sizeof(Oid);
+
+			pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_STREAMPURGE);
+			msg.m_databaseid = MyDatabaseId;
+			pgstat_send(&msg, len);
+
+			msg.m_nentries = 0;
+		}
+	}
+
+	/*
+	 * Send the rest
+	 */
+	if (msg.m_nentries > 0)
+	{
+		len = offsetof(PgStat_MsgStreampurge, m_tableid[0])
+			+msg.m_nentries * sizeof(Oid);
+
+		pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_STREAMPURGE);
 		msg.m_databaseid = MyDatabaseId;
 		pgstat_send(&msg, len);
 	}
@@ -3536,16 +3587,20 @@ PgstatCollectorMain(int argc, char *argv[])
 					pgstat_recv_tempfile((PgStat_MsgTempFile *) &msg, len);
 					break;
 
-				case PGSTAT_MTYPE_CQ:
-					cq_stat_recv((CQStatMsg *) &msg, len);
+				case PGSTAT_MTYPE_CQSTAT:
+					pgstat_recv_cqstat((PgStat_MsgCQstat *) &msg, len);
 					break;
 
-				case PGSTAT_MTYPE_CQ_PURGE:
-					cq_stat_recv_purge((CQStatPurgeMsg *) &msg, len);
+				case PGSTAT_MTYPE_CQPURGE:
+					pgstat_recv_cqpurge((PgStat_MsgCQpurge *) &msg, len);
 					break;
 
-				case PGSTAT_MTYPE_STREAM:
-					stream_stat_recv((StreamStatMsg *) &msg, len);
+				case PGSTAT_MTYPE_STREAMSTAT:
+					pgstat_recv_streamstat((PgStat_MsgStreamstat *) &msg, len);
+					break;
+
+				case PGSTAT_MTYPE_STREAMPURGE:
+					pgstat_recv_streampurge((PgStat_MsgStreampurge *) &msg, len);
 					break;
 
 				default:
@@ -3680,13 +3735,13 @@ reset_dbentry_counters(PgStat_StatDBEntry *dbentry)
 									 HASH_ELEM | HASH_BLOBS);
 
 	hash_ctl.keysize = sizeof(int64);
-	hash_ctl.entrysize = sizeof(CQStatEntry);
+	hash_ctl.entrysize = sizeof(PgStat_StatCQEntry);
 	hash_ctl.hash = tag_hash;
 	dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
 					   HASH_ELEM | HASH_FUNCTION);
 
 	hash_ctl.keysize = sizeof(Oid);
-	hash_ctl.entrysize = sizeof(StreamStatEntry);
+	hash_ctl.entrysize = sizeof(PgStat_StatStreamEntry);
 	hash_ctl.hash = oid_hash;
 	dbentry->streams = hash_create("Per-stream", 256, &hash_ctl,
 						   HASH_ELEM | HASH_FUNCTION);
@@ -3966,8 +4021,8 @@ pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent)
 	HASH_SEQ_STATUS sstat;
 	PgStat_StatTabEntry *tabentry;
 	PgStat_StatFuncEntry *funcentry;
-	CQStatEntry *cqentry;
-	StreamStatEntry *streamentry;
+	PgStat_StatCQEntry *cqentry;
+	PgStat_StatStreamEntry *streamentry;
 	FILE	   *fpout;
 	int32		format_id;
 	Oid			dbid = dbentry->databaseid;
@@ -4026,10 +4081,10 @@ pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent)
 	 * Walk through the database's continuous query stats table.
 	 */
 	hash_seq_init(&qstat, dbentry->cont_queries);
-	while ((cqentry = (CQStatEntry *) hash_seq_search(&qstat)) != NULL)
+	while ((cqentry = (PgStat_StatCQEntry *) hash_seq_search(&qstat)) != NULL)
 	{
 		fputc('Q', fpout);
-		rc = fwrite(cqentry, sizeof(CQStatEntry), 1, fpout);
+		rc = fwrite(cqentry, sizeof(PgStat_StatCQEntry), 1, fpout);
 		(void) rc;				/* we'll check for error with ferror */
 	}
 
@@ -4037,10 +4092,10 @@ pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent)
 	 * Walk through the database's stream stats table.
 	 */
 	hash_seq_init(&sstat, dbentry->streams);
-	while ((streamentry = (StreamStatEntry *) hash_seq_search(&sstat)) != NULL)
+	while ((streamentry = (PgStat_StatStreamEntry *) hash_seq_search(&sstat)) != NULL)
 	{
 		fputc('S', fpout);
-		rc = fwrite(streamentry, sizeof(StreamStatEntry), 1, fpout);
+		rc = fwrite(streamentry, sizeof(PgStat_StatStreamEntry), 1, fpout);
 		(void) rc;				/* we'll check for error with ferror */
 	}
 
@@ -4260,14 +4315,14 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 									  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
 				hash_ctl.keysize = sizeof(int64);
-				hash_ctl.entrysize = sizeof(CQStatEntry);
+				hash_ctl.entrysize = sizeof(PgStat_StatCQEntry);
 				hash_ctl.hash = tag_hash;
 				hash_ctl.hcxt = pgStatLocalContext;
 				dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
 								   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
 
 				hash_ctl.keysize = sizeof(Oid);
-				hash_ctl.entrysize = sizeof(StreamStatEntry);
+				hash_ctl.entrysize = sizeof(PgStat_StatStreamEntry);
 				hash_ctl.hash = oid_hash;
 				dbentry->streams = hash_create("Per-stream", 256, &hash_ctl,
 									   HASH_ELEM | HASH_FUNCTION);
@@ -4331,10 +4386,10 @@ pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *co
 	PgStat_StatTabEntry tabbuf;
 	PgStat_StatFuncEntry funcbuf;
 	PgStat_StatFuncEntry *funcentry;
-	CQStatEntry cqbuf;
-	CQStatEntry *cqentry;
-	StreamStatEntry streambuf;
-	StreamStatEntry *streamentry;
+	PgStat_StatCQEntry cqbuf;
+	PgStat_StatCQEntry *cqentry;
+	PgStat_StatStreamEntry streambuf;
+	PgStat_StatStreamEntry *streamentry;
 
 	FILE	   *fpin;
 	int32		format_id;
@@ -4453,7 +4508,7 @@ pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *co
 				 * 'Q'	A CQStatEntry follows.
 				 */
 			case 'Q':
-				if (fread(&cqbuf, 1, sizeof(CQStatEntry), fpin) != sizeof(CQStatEntry))
+				if (fread(&cqbuf, 1, sizeof(PgStat_StatCQEntry), fpin) != sizeof(PgStat_StatCQEntry))
 				{
 					ereport(pgStatRunningInCollector ? LOG : WARNING,
 							(errmsg("corrupted statistics file \"%s\"",
@@ -4467,7 +4522,7 @@ pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *co
 				if (cont_queries == NULL)
 					break;
 
-				cqentry = (CQStatEntry *) hash_search(cont_queries,
+				cqentry = (PgStat_StatCQEntry *) hash_search(cont_queries,
 												(void *) &cqbuf.key, HASH_ENTER, &found);
 
 				if (found)
@@ -4485,7 +4540,7 @@ pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *co
 				 * 'S'	A StreamStatEntry follows.
 				 */
 			case 'S':
-				if (fread(&streambuf, 1, sizeof(StreamStatEntry), fpin) != sizeof(StreamStatEntry))
+				if (fread(&streambuf, 1, sizeof(PgStat_StatStreamEntry), fpin) != sizeof(PgStat_StatStreamEntry))
 				{
 					ereport(pgStatRunningInCollector ? LOG : WARNING,
 							(errmsg("corrupted statistics file \"%s\"",
@@ -4499,7 +4554,7 @@ pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *co
 				if (streams == NULL)
 					break;
 
-				streamentry = (StreamStatEntry *) hash_search(streams,
+				streamentry = (PgStat_StatStreamEntry *) hash_search(streams,
 												(void *) &streambuf.relid, HASH_ENTER, &found);
 
 				if (found)
@@ -5535,9 +5590,9 @@ pgstat_db_requested(Oid databaseid)
  * cq_stat_init
  */
 void
-cq_stat_init(CQStatEntry *entry, Oid viewid, pid_t pid)
+pgstat_init_cqstat(PgStat_StatCQEntry *entry, Oid viewid, pid_t pid)
 {
-	MemSet(entry, 0, sizeof(CQStatEntry));
+	MemSet(entry, 0, sizeof(PgStat_StatCQEntry));
 
 	entry->start_ts = GetCurrentTimestamp();
 	entry->last_report = GetCurrentTimestamp();
@@ -5553,7 +5608,7 @@ cq_stat_init(CQStatEntry *entry, Oid viewid, pid_t pid)
  * Get all stats, which includes proc-level CQ-level stats
  */
 HTAB *
-cq_stat_fetch_all(void)
+pgstat_fetch_cqstat_all(void)
 {
 	PgStat_StatDBEntry *dbentry;
 	/*
@@ -5570,9 +5625,9 @@ cq_stat_fetch_all(void)
 }
 
 static void
-cq_stat_report_entry(CQStatEntry *entry)
+cq_stat_report_entry(PgStat_StatCQEntry *entry)
 {
-	CQStatMsg msg;
+	PgStat_MsgCQstat msg;
 
 	/*
 	 * If we consumed no tuples, saw no errors, and dind't create/drop any CVs,
@@ -5582,17 +5637,17 @@ cq_stat_report_entry(CQStatEntry *entry)
 			entry->cv_create == 0 && entry->cv_drop == 0)
 		return;
 
-	MemSet(&msg, 0, sizeof(CQStatMsg));
+	MemSet(&msg, 0, sizeof(PgStat_MsgCQstat));
 	msg.m_entry = *entry;
 	msg.m_databaseid = MyDatabaseId;
 
-	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_CQ);
+	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_CQSTAT);
 	pgstat_send(&msg, sizeof(msg));
 
 	entry->last_report = GetCurrentTimestamp();
 	entry->input_rows = 0;
 	entry->output_rows = 0;
-	entry->updates = 0;
+	entry->updated_rows = 0;
 	entry->input_bytes = 0;
 	entry->output_bytes = 0;
 	entry->updated_bytes = 0;
@@ -5606,11 +5661,11 @@ cq_stat_report_entry(CQStatEntry *entry)
  * Report a continuous view creation or drop.
  */
 void
-cq_stat_report_create_drop_cv(bool create)
+pgstat_report_create_drop_cv(bool create)
 {
-	CQStatEntry stats;
+	PgStat_StatCQEntry stats;
 
-	MemSet(&stats, 0, sizeof(CQStatEntry));
+	MemSet(&stats, 0, sizeof(PgStat_StatCQEntry));
 
 	if (create)
 		stats.cv_create += 1;
@@ -5629,18 +5684,18 @@ cq_stat_report_create_drop_cv(bool create)
  * Send PipelineDB CQ stats
  */
 void
-cq_stat_report(bool force)
+pgstat_report_cqstat(bool force)
 {
 	/*
 	 * Don't send a message unless it's been at least PGSTAT_STAT_INTERVAL
 	 * msec since we last sent one, or the caller wants to force stats out.
 	 */
-	if (!force && MyCQStats && !TimestampDifferenceExceeds(MyCQStats->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
+	if (!force && MyStatCQEntry && !TimestampDifferenceExceeds(MyStatCQEntry->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
 		return;
 
-	cq_stat_report_entry(&MyProcCQStats);
-	if (MyCQStats)
-		cq_stat_report_entry(MyCQStats);
+	cq_stat_report_entry(&MyProcStatCQEntry);
+	if (MyStatCQEntry)
+		cq_stat_report_entry(MyStatCQEntry);
 }
 
 /*
@@ -5648,10 +5703,10 @@ cq_stat_report(bool force)
  *
  * Retrieve a CQ stats entry matching the given parameters
  */
-CQStatEntry *
-cq_stat_get_entry(HTAB *cont_queries, Oid viewoid, int pid, int ptype)
+PgStat_StatCQEntry *
+pgstat_fetch_stat_cqentry(HTAB *cont_queries, Oid viewoid, int pid, int ptype)
 {
-	CQStatEntry *result;
+	PgStat_StatCQEntry *result;
 	bool found;
 	int64 key = 0;
 
@@ -5659,10 +5714,10 @@ cq_stat_get_entry(HTAB *cont_queries, Oid viewoid, int pid, int ptype)
 	SetCQStatProcPid(key, pid);
 	SetCQStatProcType(key, ptype);
 
-	result = (CQStatEntry *) hash_search(cont_queries, (void *) &key, HASH_ENTER, &found);
+	result = (PgStat_StatCQEntry *) hash_search(cont_queries, (void *) &key, HASH_ENTER, &found);
 	if (!found)
 	{
-		MemSet(result, 0, sizeof(CQStatEntry));
+		MemSet(result, 0, sizeof(PgStat_StatCQEntry));
 		result->key = key;
 	}
 
@@ -5670,13 +5725,13 @@ cq_stat_get_entry(HTAB *cont_queries, Oid viewoid, int pid, int ptype)
 }
 
 static void
-cq_stat_aggregate(CQStatEntry *result, CQStatEntry *incoming)
+cq_stat_aggregate(PgStat_StatCQEntry *result, PgStat_StatCQEntry *incoming)
 {
 	result->input_rows += incoming->input_rows;
 	result->output_rows += incoming->output_rows;
 	result->input_bytes += incoming->input_bytes;
 	result->output_bytes += incoming->output_bytes;
-	result->updates += incoming->updates;
+	result->updated_rows += incoming->updated_rows;
 	result->updated_bytes += incoming->updated_bytes;
 	result->executions += incoming->executions;
 	result->errors += incoming->errors;
@@ -5685,9 +5740,9 @@ cq_stat_aggregate(CQStatEntry *result, CQStatEntry *incoming)
 }
 
 static void
-cq_stat_recv_global(HTAB *cont_queries, CQStatEntry *stats, CQStatsType ptype)
+cq_stat_recv_global(HTAB *cont_queries, PgStat_StatCQEntry *stats, CQStatsType ptype)
 {
-	CQStatEntry *global = cq_stat_get_global(cont_queries, ptype);
+	PgStat_StatCQEntry *global = pgstat_fetch_stat_global_cqentry(cont_queries, ptype);
 
 	/*
 	 * We want a unique global identifier for each database, so
@@ -5708,10 +5763,10 @@ cq_stat_recv_global(HTAB *cont_queries, CQStatEntry *stats, CQStatsType ptype)
  * Receive PipelineDB CQ stats
  */
 static void
-cq_stat_recv(CQStatMsg *msg, int len)
+pgstat_recv_cqstat(PgStat_MsgCQstat *msg, int len)
 {
-	CQStatEntry stats = msg->m_entry;
-	CQStatEntry *existing;
+	PgStat_StatCQEntry stats = msg->m_entry;
+	PgStat_StatCQEntry *existing;
 	PgStat_StatDBEntry *db;
 	Oid viewid = GetCQStatView(stats.key);
 	pid_t pid = GetCQStatProcPid(stats.key);
@@ -5725,7 +5780,7 @@ cq_stat_recv(CQStatMsg *msg, int len)
 		/*
 		 * Aggregate the process-level stats
 		 */
-		existing = cq_stat_get_entry(db->cont_queries, 0, pid, ptype);
+		existing = pgstat_fetch_stat_cqentry(db->cont_queries, 0, pid, ptype);
 		if (!existing->start_ts)
 			existing->start_ts = stats.start_ts;
 
@@ -5736,7 +5791,7 @@ cq_stat_recv(CQStatMsg *msg, int len)
 		/*
 		 * Now aggregate the CQ-level stats across all procs of this type
 		 */
-		existing = cq_stat_get_entry(db->cont_queries, viewid, 0, ptype);
+		existing = pgstat_fetch_stat_cqentry(db->cont_queries, viewid, 0, ptype);
 		cq_stat_aggregate(existing, &stats);
 	}
 }
@@ -5748,11 +5803,11 @@ cq_stat_recv(CQStatMsg *msg, int len)
  * stats can be discarded
  */
 void
-cq_stat_send_purge(Oid viewid, int pid, int64 ptype)
+pgstat_send_cqpurge(Oid viewid, int pid, int64 ptype)
 {
-	CQStatPurgeMsg msg;
+	PgStat_MsgCQpurge msg;
 
-	MemSet(&msg, 0, sizeof(CQStatPurgeMsg));
+	MemSet(&msg, 0, sizeof(PgStat_MsgCQpurge));
 
 	SetCQStatView(msg.m_key, viewid);
 	SetCQStatProcPid(msg.m_key, pid);
@@ -5760,7 +5815,7 @@ cq_stat_send_purge(Oid viewid, int pid, int64 ptype)
 
 	msg.m_databaseid = MyDatabaseId;
 
-	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_CQ_PURGE);
+	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_CQPURGE);
 	pgstat_send(&msg, sizeof(msg));
 }
 
@@ -5770,7 +5825,7 @@ cq_stat_send_purge(Oid viewid, int pid, int64 ptype)
  * Remove an obsolete CQ proc's stats
  */
 static void
-cq_stat_recv_purge(CQStatPurgeMsg *msg, int len)
+pgstat_recv_cqpurge(PgStat_MsgCQpurge *msg, int len)
 {
 	PgStat_StatDBEntry *dbentry;
 
@@ -5791,7 +5846,7 @@ cq_stat_recv_purge(CQStatPurgeMsg *msg, int len)
  * stream_stat_fetch_all
  */
 HTAB *
-stream_stat_fetch_all(void)
+pgstat_fetch_streamstat_all(void)
 {
 	PgStat_StatDBEntry *dbentry;
 	/*
@@ -5811,19 +5866,19 @@ stream_stat_fetch_all(void)
  * stream_stat_recv
  */
 static void
-stream_stat_recv(StreamStatMsg *msg, int len)
+pgstat_recv_streamstat(PgStat_MsgStreamstat *msg, int len)
 {
-	StreamStatEntry stats = msg->m_entry;
-	StreamStatEntry *existing;
+	PgStat_StatStreamEntry stats = msg->m_entry;
+	PgStat_StatStreamEntry *existing;
 	PgStat_StatDBEntry *db;
 	bool found;
 
 	db = pgstat_get_db_entry(msg->m_databaseid, true);
 
-	existing = (StreamStatEntry *) hash_search(db->streams, (void *) &stats.relid, HASH_ENTER, &found);
+	existing = (PgStat_StatStreamEntry *) hash_search(db->streams, (void *) &stats.relid, HASH_ENTER, &found);
 	if (!found)
 	{
-		MemSet(existing, 0, sizeof(StreamStatEntry));
+		MemSet(existing, 0, sizeof(PgStat_StatStreamEntry));
 		existing->relid = stats.relid;
 	}
 
@@ -5832,20 +5887,56 @@ stream_stat_recv(StreamStatMsg *msg, int len)
 	existing->input_bytes += stats.input_bytes;
 }
 
-static StreamStatEntry MyStreamStats = {0, 0, 0, 0, 0};
+static void
+pgstat_recv_streampurge(PgStat_MsgStreampurge *msg, int len)
+{
+	PgStat_StatDBEntry *db;
+	int i;
+
+	db = pgstat_get_db_entry(msg->m_databaseid, true);
+
+	/*
+	 * No need to purge if we don't even know the database.
+	 */
+	if (!db || !db->cont_queries)
+		return;
+
+	for (i = 0; i < msg->m_nentries; i++)
+	{
+		bool found;
+		hash_search(db->streams, (void *) &msg->m_tableid[i], HASH_REMOVE, &found);
+	}
+}
+
+void
+pgstat_send_streampurge(Oid relid)
+{
+	PgStat_MsgStreampurge msg;
+
+	MemSet(&msg, 0, sizeof(PgStat_MsgStreampurge));
+
+	msg.m_databaseid = MyDatabaseId;
+	msg.m_nentries = 1;
+	msg.m_tableid[0] = relid;
+
+	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_STREAMPURGE);
+	pgstat_send(&msg, sizeof(msg));
+}
+
+static PgStat_StatStreamEntry MyStreamStats = {0, 0, 0, 0, 0};
 
 /*
  * stream_stat_increment
  */
 void
-stream_stat_increment(Oid relid, int ntups, int nbatches, Size nbytes)
+pgstat_increment_stream_insert(Oid relid, int ntups, int nbatches, Size nbytes)
 {
 	if (!MyStreamStats.last_report)
 		MyStreamStats.last_report = GetCurrentTimestamp();
 
 	/* If the current counts are for a different stream, we just force flush them */
 	if (OidIsValid(MyStreamStats.relid) && MyStreamStats.relid != relid)
-		stream_stat_report(true);
+		pgstat_report_streamstat(true);
 
 	MyStreamStats.relid = relid;
 	MyStreamStats.input_rows += ntups;
@@ -5857,9 +5948,9 @@ stream_stat_increment(Oid relid, int ntups, int nbatches, Size nbytes)
  * stream_stat_report
  */
 void
-stream_stat_report(bool force)
+pgstat_report_streamstat(bool force)
 {
-	StreamStatMsg msg;
+	PgStat_MsgStreamstat msg;
 
 	/* Nothing to do */
 	if (!OidIsValid(MyStreamStats.relid))
@@ -5872,14 +5963,14 @@ stream_stat_report(bool force)
 	if (!force && !TimestampDifferenceExceeds(MyStreamStats.last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
 		return;
 
-	MemSet(&msg, 0, sizeof(StreamStatMsg));
+	MemSet(&msg, 0, sizeof(PgStat_MsgStreamstat));
 	msg.m_entry.relid = MyStreamStats.relid;
 	msg.m_entry.input_rows = MyStreamStats.input_rows;
 	msg.m_entry.input_batches = MyStreamStats.input_batches;
 	msg.m_entry.input_bytes = MyStreamStats.input_bytes;
 	msg.m_databaseid = MyDatabaseId;
 
-	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_STREAM);
+	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_STREAMSTAT);
 	pgstat_send(&msg, sizeof(msg));
 
 	MemSet(&MyStreamStats, 0, sizeof(MyStreamStats));

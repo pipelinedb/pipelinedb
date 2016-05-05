@@ -243,8 +243,8 @@ pipeline_stream_insert_batch(TransformState *t)
 
 		heap_close(rel, NoLock);
 
-		IncrementCQWrite(list_length(t->tups), size);
-		stream_stat_increment(relid, list_length(t->tups), nbatches, size);
+		pgstat_increment_cq_write(list_length(t->tups), size);
+		pgstat_increment_stream_insert(relid, list_length(t->tups), nbatches, size);
 	}
 
 	pfree(packed_desc);

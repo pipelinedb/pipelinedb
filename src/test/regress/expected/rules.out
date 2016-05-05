@@ -2120,28 +2120,28 @@ pipeline_proc_stats| SELECT cq_proc_stat_get.type,
     cq_proc_stat_get.start_time,
     cq_proc_stat_get.input_rows,
     cq_proc_stat_get.output_rows,
-    cq_proc_stat_get.updates,
+    cq_proc_stat_get.updated_rows,
     cq_proc_stat_get.input_bytes,
     cq_proc_stat_get.output_bytes,
     cq_proc_stat_get.updated_bytes,
     cq_proc_stat_get.executions,
     cq_proc_stat_get.errors
-   FROM cq_proc_stat_get() cq_proc_stat_get(type, pid, start_time, input_rows, output_rows, updates, input_bytes, output_bytes, updated_bytes, executions, errors);
+   FROM cq_proc_stat_get() cq_proc_stat_get(type, pid, start_time, input_rows, output_rows, updated_rows, input_bytes, output_bytes, updated_bytes, executions, errors);
 pipeline_query_stats| SELECT cq_stat_get.name,
     cq_stat_get.type,
     cq_stat_get.input_rows,
     cq_stat_get.output_rows,
-    cq_stat_get.updates,
+    cq_stat_get.updated_rows,
     cq_stat_get.input_bytes,
     cq_stat_get.output_bytes,
     cq_stat_get.updated_bytes,
     cq_stat_get.errors
-   FROM cq_stat_get() cq_stat_get(name, type, input_rows, output_rows, updates, input_bytes, output_bytes, updated_bytes, errors);
+   FROM cq_stat_get() cq_stat_get(name, type, input_rows, output_rows, updated_rows, input_bytes, output_bytes, updated_bytes, errors);
 pipeline_stats| SELECT pipeline_stat_get.type,
     pipeline_stat_get.start_time,
     pipeline_stat_get.input_rows,
     pipeline_stat_get.output_rows,
-    pipeline_stat_get.updates,
+    pipeline_stat_get.updated_rows,
     pipeline_stat_get.input_bytes,
     pipeline_stat_get.output_bytes,
     pipeline_stat_get.updated_bytes,
@@ -2149,7 +2149,7 @@ pipeline_stats| SELECT pipeline_stat_get.type,
     pipeline_stat_get.errors,
     pipeline_stat_get.cv_create,
     pipeline_stat_get.cv_drop
-   FROM pipeline_stat_get() pipeline_stat_get(type, start_time, input_rows, output_rows, updates, input_bytes, output_bytes, updated_bytes, executions, errors, cv_create, cv_drop);
+   FROM pipeline_stat_get() pipeline_stat_get(type, start_time, input_rows, output_rows, updated_rows, input_bytes, output_bytes, updated_bytes, executions, errors, cv_create, cv_drop);
 pipeline_stream_stats| SELECT stream_stat_get.schema,
     stream_stat_get.name,
     stream_stat_get.input_rows,

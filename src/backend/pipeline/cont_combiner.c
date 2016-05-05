@@ -590,7 +590,7 @@ sync_combine(ContQueryCombinerState *state)
 					slot->tts_values, slot->tts_isnull, replace_all);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecCQMatRelUpdate(ri, slot, estate);
-			IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
+			pgstat_increment_cq_update(1, HEAPTUPLESIZE + tup->t_len);
 		}
 		else
 		{
@@ -601,7 +601,7 @@ sync_combine(ContQueryCombinerState *state)
 			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecCQMatRelInsert(ri, slot, estate);
-			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
+			pgstat_increment_cq_write(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
 		ResetPerTupleExprContext(estate);
@@ -630,7 +630,7 @@ sync_all(ContExecutor *cont_exec)
 		if (!state)
 			continue;
 
-		MyCQStats = &state->base.stats;
+		MyStatCQEntry = &state->base.stats;
 
 		PG_TRY();
 		{
@@ -848,7 +848,7 @@ read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
 
 		set_group_hash(state, count, pts->hash);
 
-		IncrementCQRead(1, len);
+		pgstat_increment_cq_read(1, len);
 		count++;
 
 	}
@@ -939,7 +939,7 @@ ContinuousQueryCombinerMain(void)
 					PopActiveSnapshot();
 
 				ContExecutorPurgeQuery(cont_exec);
-				IncrementCQErrors(1);
+				pgstat_increment_cq_error(1);
 
 				if (!continuous_query_crash_recovery)
 					proc_exit(1);
@@ -974,8 +974,8 @@ next:
 		if (state == NULL)
 			continue;
 
-		MyCQStats = &state->base.stats;
-		cq_stat_report(true);
+		MyStatCQEntry = &state->base.stats;
+		pgstat_report_cqstat(true);
 	}
 
 	MemoryContextSwitchTo(TopMemoryContext);

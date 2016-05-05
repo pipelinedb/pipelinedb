@@ -65,9 +65,10 @@ typedef enum StatMsgType
 	PGSTAT_MTYPE_RECOVERYCONFLICT,
 	PGSTAT_MTYPE_TEMPFILE,
 	PGSTAT_MTYPE_DEADLOCK,
-	PGSTAT_MTYPE_CQ,
-	PGSTAT_MTYPE_CQ_PURGE,
-	PGSTAT_MTYPE_STREAM
+	PGSTAT_MTYPE_CQSTAT,
+	PGSTAT_MTYPE_CQPURGE,
+	PGSTAT_MTYPE_STREAMSTAT,
+	PGSTAT_MTYPE_STREAMPURGE
 } StatMsgType;
 
 /* ----------
@@ -1046,7 +1047,7 @@ typedef enum CQStatsType
 /*
  * The collector's data per continuous-query
  */
-typedef struct CQStatEntry
+typedef struct PgStat_StatCQEntry
 {
 	/*
 	 * Three values are packed into this key:
@@ -1069,7 +1070,7 @@ typedef struct CQStatEntry
 	TimestampTz start_ts;
 	PgStat_Counter input_rows;
 	PgStat_Counter output_rows;
-	PgStat_Counter updates;
+	PgStat_Counter updated_rows;
 	PgStat_Counter input_bytes;
 	PgStat_Counter output_bytes;
 	PgStat_Counter updated_bytes;
@@ -1078,30 +1079,30 @@ typedef struct CQStatEntry
 	PgStat_Counter cv_create;
 	PgStat_Counter cv_drop;
 	TimestampTz last_report;
-} CQStatEntry;
+} PgStat_StatCQEntry;
 
 /*
  * Message for procs to wrap stats data in
  */
-typedef struct CQStatMsg
+typedef struct PgStat_MsgCQstat
 {
 	PgStat_MsgHdr m_hdr;
 	Oid m_databaseid;
-	CQStatEntry m_entry;
-} CQStatMsg;
+	PgStat_StatCQEntry m_entry;
+} PgStat_MsgCQstat;
 
 /*
  * Message for dying CQ procs to send to the collector for cleanup
  */
-typedef struct CQStatPurgeMsg
+typedef struct PgStat_MsgCQpurge
 {
 	PgStat_MsgHdr m_hdr;
-	int64 m_key;
 	Oid m_databaseid;
-} CQStatPurgeMsg;
+	int64 m_key;
+} PgStat_MsgCQpurge;
 
-extern CQStatEntry MyProcCQStats;
-extern CQStatEntry *MyCQStats;
+extern PgStat_StatCQEntry MyProcStatCQEntry;
+extern PgStat_StatCQEntry *MyStatCQEntry;
 
 #define SetCQStatView(key, view) ((key) |= (int64) (view))
 #define SetCQStatProcPid(key, pid) ((key) |= ((int64 ) (pid) << 30L))
@@ -1111,80 +1112,83 @@ extern CQStatEntry *MyCQStats;
 #define GetCQStatProcPid(key) (0xFFFF & (key >> 30L))
 #define GetCQStatProcType(key) (0x1 & (key >> 63L))
 
-#define IncrementCQRead(rows, nbytes) \
+#define pgstat_increment_cq_read(rows, nbytes) \
 	do { \
-		MyProcCQStats.input_rows += (rows); \
-		MyProcCQStats.input_bytes += (nbytes); \
-		if (MyCQStats) \
+		MyProcStatCQEntry.input_rows += (rows); \
+		MyProcStatCQEntry.input_bytes += (nbytes); \
+		if (MyStatCQEntry) \
 		{ \
-			MyCQStats->input_rows += (rows); \
-			MyCQStats->input_bytes += (nbytes); \
+			MyStatCQEntry->input_rows += (rows); \
+			MyStatCQEntry->input_bytes += (nbytes); \
 		} \
 	} while(0)
 
-#define IncrementCQWrite(rows, nbytes) \
+#define pgstat_increment_cq_write(rows, nbytes) \
 	do { \
-		MyProcCQStats.output_rows += (rows); \
-		MyProcCQStats.output_bytes += (nbytes); \
-		if (MyCQStats) \
+		MyProcStatCQEntry.output_rows += (rows); \
+		MyProcStatCQEntry.output_bytes += (nbytes); \
+		if (MyStatCQEntry) \
 		{ \
-			MyCQStats->output_rows += (rows); \
-			MyCQStats->output_bytes += (nbytes); \
+			MyStatCQEntry->output_rows += (rows); \
+			MyStatCQEntry->output_bytes += (nbytes); \
 		} \
 	} while(0)
 
-#define IncrementCQUpdate(count, nbytes) \
+#define pgstat_increment_cq_update(count, nbytes) \
 	do { \
-		MyProcCQStats.updates += (count); \
-		MyProcCQStats.updated_bytes += (nbytes); \
-		if (MyCQStats) \
+		MyProcStatCQEntry.updated_rows += (count); \
+		MyProcStatCQEntry.updated_bytes += (nbytes); \
+		if (MyStatCQEntry) \
 		{ \
-			MyCQStats->updates += (count); \
-			MyCQStats->updated_bytes += (nbytes); \
+			MyStatCQEntry->updated_rows += (count); \
+			MyStatCQEntry->updated_bytes += (nbytes); \
 		} \
 	} while(0)
 
-#define IncrementCQExecutions(n) \
+#define pgstat_increment_cq_exec(n) \
 	do { \
-		MyProcCQStats.executions += (n); \
-		if (MyCQStats) \
-			MyCQStats->executions += (n); \
+		MyProcStatCQEntry.executions += (n); \
+		if (MyStatCQEntry) \
+			MyStatCQEntry->executions += (n); \
 	} while(0)
 
-#define IncrementCQErrors(n) \
+#define pgstat_increment_cq_error(n) \
 	do { \
-		MyProcCQStats.errors += (n); \
-		if (MyCQStats) \
-			MyCQStats->errors += (n); \
+		MyProcStatCQEntry.errors += (n); \
+		if (MyStatCQEntry) \
+			MyStatCQEntry->errors += (n); \
 	} while(0)
 
-#define cq_stat_get_global(cont_queries, ptype) (cq_stat_get_entry(cont_queries, 0, 0, ptype))
+extern void pgstat_init_cqstat(PgStat_StatCQEntry *entry, Oid viewid, pid_t pid);
+extern void pgstat_report_cqstat(bool force);
+extern void pgstat_report_create_drop_cv(bool create);
+extern void pgstat_send_cqpurge(Oid viewid, int pid, int64 ptype);
+extern PgStat_StatCQEntry *pgstat_fetch_stat_cqentry(HTAB *cont_queries, Oid viewoid, int pid, int ptype);
+extern HTAB *pgstat_fetch_cqstat_all(void);
+#define pgstat_fetch_stat_global_cqentry(cont_queries, ptype) \
+	pgstat_fetch_stat_cqentry(cont_queries, 0, 0, ptype)
 
-extern void cq_stat_init(CQStatEntry *entry, Oid viewid, pid_t pid);
-extern HTAB *cq_stat_fetch_all(void);
-extern void cq_stat_report(bool force);
-extern void cq_stat_report_create_drop_cv(bool create);
-extern void cq_stat_send_purge(Oid viewid, int pid, int64 ptype);
-extern CQStatEntry *cq_stat_get_entry(HTAB *cont_queries, Oid viewoid, int pid, int ptype);
-
-typedef struct StreamStatEntry
+typedef struct PgStat_StatStreamEntry
 {
 	Oid relid;
 	PgStat_Counter input_rows;
 	PgStat_Counter input_batches;
 	PgStat_Counter input_bytes;
 	TimestampTz last_report;
-} StreamStatEntry;
+} PgStat_StatStreamEntry;
 
-typedef struct StreamStatMsg
+typedef struct PgStat_MsgStreamstat
 {
 	PgStat_MsgHdr m_hdr;
 	Oid m_databaseid;
-	StreamStatEntry m_entry;
-} StreamStatMsg;
+	PgStat_StatStreamEntry m_entry;
+} PgStat_MsgStreamstat;
 
-extern HTAB *stream_stat_fetch_all(void);
-extern void stream_stat_increment(Oid relid, int ntups, int nbatches, Size nbytes);
-extern void stream_stat_report(bool force);
+typedef struct PgStat_MsgTabpurge PgStat_MsgStreampurge;
+
+extern HTAB *pgstat_fetch_streamstat_all(void);
+extern void pgstat_increment_stream_insert(Oid relid, int ntups, int nbatches, Size nbytes);
+extern void pgstat_report_streamstat(bool force);
+extern void pgstat_send_streampurge(Oid relid);
 
 #endif   /* PGSTAT_H */

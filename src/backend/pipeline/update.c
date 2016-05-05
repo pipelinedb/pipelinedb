@@ -172,7 +172,7 @@ get_stats(HTAB *all_dbs, bool startup, CQStatsType ptype)
 	HASH_SEQ_STATUS db_iter;
 	PgStat_StatDBEntry *db_entry;
 	HTAB *stats;
-	CQStatEntry *g;
+	PgStat_StatCQEntry *g;
 	StringInfoData payload;
 	struct utsname mname;
 	char name[64];
@@ -190,14 +190,14 @@ get_stats(HTAB *all_dbs, bool startup, CQStatsType ptype)
 	uname(&mname);
 	strncpy(name, mname.sysname, 64);
 
-	stats = cq_stat_fetch_all();
+	stats = pgstat_fetch_cqstat_all();
 	if (stats == NULL)
 		return NULL;
 
 	hash_seq_init(&db_iter, all_dbs);
 	while ((db_entry = (PgStat_StatDBEntry *) hash_seq_search(&db_iter)) != NULL)
 	{
-		g = cq_stat_get_global(db_entry->cont_queries, ptype);
+		g = pgstat_fetch_stat_global_cqentry(db_entry->cont_queries, ptype);
 		if (g == NULL || g->start_ts == 0)
 			continue;
 

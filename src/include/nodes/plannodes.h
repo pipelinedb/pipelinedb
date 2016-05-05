@@ -694,12 +694,6 @@ typedef struct HashJoin
 	List	   *hashclauses;
 } HashJoin;
 
-/* ----------------
- * stream-table join node
- * ----------------
- */
-typedef struct HashJoin StreamTableJoin;
-
 /* -----------------------------------------------------------
  * node for extracting physical tuples given a list of groups
  * -----------------------------------------------------------

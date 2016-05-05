@@ -650,7 +650,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	heap_close(pipeline_query, NoLock);
 
-	cq_stat_report_create_drop_cv(true);
+	pgstat_report_create_drop_cv(true);
 }
 
 /*

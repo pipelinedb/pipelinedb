@@ -941,12 +941,12 @@ AS 'jsonb_set';
 -- continuous query process stats
 CREATE VIEW pipeline_proc_stats AS
 	SELECT type, pid, start_time,
-		input_rows, output_rows, updates, input_bytes,
+		input_rows, output_rows, updated_rows, input_bytes,
 		output_bytes, updated_bytes, executions, errors FROM cq_proc_stat_get();
 
 -- continuous query stats
 CREATE VIEW pipeline_query_stats AS
-	SELECT name, type, input_rows, output_rows, updates, input_bytes,
+	SELECT name, type, input_rows, output_rows, updated_rows, input_bytes,
 		output_bytes, updated_bytes, errors FROM cq_stat_get();
 
 -- stream stats
@@ -957,6 +957,6 @@ CREATE VIEW pipeline_stream_stats AS
 -- global pipeline stats
 CREATE VIEW pipeline_stats AS
 	SELECT type, start_time, input_rows, output_rows,
-		updates, input_bytes, output_bytes, updated_bytes, executions,
+		updated_rows, input_bytes, output_bytes, updated_bytes, executions,
 		errors, cv_create, cv_drop FROM pipeline_stat_get();
 

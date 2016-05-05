@@ -107,7 +107,7 @@ typedef struct ContQueryState
 	ContQuery *query;
 	MemoryContext state_cxt;
 	MemoryContext tmp_cxt;
-	CQStatEntry stats;
+	PgStat_StatCQEntry stats;
 } ContQueryState;
 
 typedef struct ContExecutor ContExecutor;

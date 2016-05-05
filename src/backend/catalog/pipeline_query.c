@@ -709,7 +709,7 @@ RemovePipelineQueryById(Oid oid)
 	CommandCounterIncrement();
 	UpdatePipelineStreamCatalog();
 
-	cq_stat_report_create_drop_cv(false);
+	pgstat_report_create_drop_cv(false);
 
 	heap_close(pipeline_query, NoLock);
 }

@@ -120,7 +120,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 	pfree(packed_desc);
 
-	stream_stat_increment(RelationGetRelid(stream), ntuples, nbatches, size);
+	pgstat_increment_stream_insert(RelationGetRelid(stream), ntuples, nbatches, size);
 
 	if (batch)
 	{

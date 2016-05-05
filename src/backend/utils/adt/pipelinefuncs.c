@@ -57,7 +57,7 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 	HTAB *stats;
-	CQStatEntry *entry;
+	PgStat_StatCQEntry *entry;
 	HASH_SEQ_STATUS *iter;
 
 	if (SRF_IS_FIRSTCALL())
@@ -86,7 +86,7 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
-		stats = cq_stat_fetch_all();
+		stats = pgstat_fetch_cqstat_all();
 		if (!stats)
 			SRF_RETURN_DONE(funcctx);
 
@@ -101,7 +101,7 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 	funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
 	iter = (HASH_SEQ_STATUS *) funcctx->user_fctx;
 
-	while ((entry = (CQStatEntry *) hash_seq_search(iter)) != NULL)
+	while ((entry = (PgStat_StatCQEntry *) hash_seq_search(iter)) != NULL)
 	{
 		Datum values[11];
 		bool nulls[11];
@@ -120,7 +120,7 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 		if (kill(pid, 0) == -1 && errno == ESRCH)
 		{
 			/* stale proc, purge it */
-			cq_stat_send_purge(0, pid, GetCQStatProcType(entry->key));
+			pgstat_send_cqpurge(0, pid, GetCQStatProcType(entry->key));
 			continue;
 		}
 
@@ -132,7 +132,7 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 		values[2] = TimestampTzGetDatum(entry->start_ts);
 		values[3] = Int64GetDatum(entry->input_rows);
 		values[4] = Int64GetDatum(entry->output_rows);
-		values[5] = Int64GetDatum(entry->updates);
+		values[5] = Int64GetDatum(entry->updated_rows);
 		values[6] = Int64GetDatum(entry->input_bytes);
 		values[7] = Int64GetDatum(entry->output_bytes);
 		values[8] = Int64GetDatum(entry->updated_bytes);
@@ -159,7 +159,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 	HTAB *stats;
-	CQStatEntry *entry;
+	PgStat_StatCQEntry *entry;
 	HASH_SEQ_STATUS *iter;
 
 	if (SRF_IS_FIRSTCALL())
@@ -187,7 +187,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
-		stats = cq_stat_fetch_all();
+		stats = pgstat_fetch_cqstat_all();
 		if (!stats)
 			SRF_RETURN_DONE(funcctx);
 
@@ -202,7 +202,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 	funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
 	iter = (HASH_SEQ_STATUS *) funcctx->user_fctx;
 
-	while ((entry = (CQStatEntry *) hash_seq_search(iter)) != NULL)
+	while ((entry = (PgStat_StatCQEntry *) hash_seq_search(iter)) != NULL)
 	{
 		Datum values[9];
 		bool nulls[9];
@@ -230,7 +230,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		values[1] = CStringGetTextDatum((GetCQStatProcType(entry->key) == CQ_STAT_WORKER ? "worker" : "combiner"));
 		values[2] = Int64GetDatum(entry->input_rows);
 		values[3] = Int64GetDatum(entry->output_rows);
-		values[4] = Int64GetDatum(entry->updates);
+		values[4] = Int64GetDatum(entry->updated_rows);
 		values[5] = Int64GetDatum(entry->input_bytes);
 		values[6] = Int64GetDatum(entry->output_bytes);
 		values[7] = Int64GetDatum(entry->updated_bytes);
@@ -252,7 +252,7 @@ stream_stat_get(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 	HTAB *stats;
-	StreamStatEntry *entry;
+	PgStat_StatStreamEntry *entry;
 	HASH_SEQ_STATUS *iter;
 
 	if (SRF_IS_FIRSTCALL())
@@ -275,7 +275,7 @@ stream_stat_get(PG_FUNCTION_ARGS)
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
-		stats = stream_stat_fetch_all();
+		stats = pgstat_fetch_streamstat_all();
 		if (!stats)
 			SRF_RETURN_DONE(funcctx);
 
@@ -290,7 +290,7 @@ stream_stat_get(PG_FUNCTION_ARGS)
 	funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
 	iter = (HASH_SEQ_STATUS *) funcctx->user_fctx;
 
-	while ((entry = (StreamStatEntry *) hash_seq_search(iter)) != NULL)
+	while ((entry = (PgStat_StatStreamEntry *) hash_seq_search(iter)) != NULL)
 	{
 		Datum values[5];
 		bool nulls[5];
@@ -299,7 +299,7 @@ stream_stat_get(PG_FUNCTION_ARGS)
 
 		if (!IsStream(entry->relid))
 		{
-			/* TODO(usmanm): Purge the entry. */
+			pgstat_send_streampurge(entry->relid);
 			continue;
 		}
 
@@ -330,7 +330,7 @@ pipeline_stat_get(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 	HTAB *stats;
-	CQStatEntry *global;
+	PgStat_StatCQEntry *global;
 	TupleDesc	tupdesc;
 	MemoryContext oldcontext;
 	Datum values[12];
@@ -370,9 +370,9 @@ pipeline_stat_get(PG_FUNCTION_ARGS)
 	if (funcctx->call_cntr > 1)
 		SRF_RETURN_DONE(funcctx);
 
-	stats = cq_stat_fetch_all();
+	stats = pgstat_fetch_cqstat_all();
 	ptype = funcctx->call_cntr == 0 ? CQ_STAT_COMBINER : CQ_STAT_WORKER;
-	global = cq_stat_get_global(stats, ptype);
+	global = pgstat_fetch_stat_global_cqentry(stats, ptype);
 
 	if (!global->start_ts)
 		SRF_RETURN_DONE(funcctx);
@@ -384,7 +384,7 @@ pipeline_stat_get(PG_FUNCTION_ARGS)
 	values[1] = TimestampTzGetDatum(global->start_ts);
 	values[2] = Int64GetDatum(global->input_rows);
 	values[3] = Int64GetDatum(global->output_rows);
-	values[4] = Int64GetDatum(global->updates);
+	values[4] = Int64GetDatum(global->updated_rows);
 	values[5] = Int64GetDatum(global->input_bytes);
 	values[6] = Int64GetDatum(global->output_bytes);
 	values[7] = Int64GetDatum(global->updated_bytes);

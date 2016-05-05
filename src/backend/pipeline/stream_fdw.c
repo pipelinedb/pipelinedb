@@ -477,7 +477,7 @@ IterateStreamScan(ForeignScanState *node)
 	if (sts == NULL)
 		return NULL;
 
-	IncrementCQRead(1, len);
+	pgstat_increment_cq_read(1, len);
 
 	/*
 	 * Check if the incoming event descriptor is different from the one we're
@@ -610,7 +610,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 {
 	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
 
-	stream_stat_increment(RelationGetRelid(result_info->ri_RelationDesc), sis->count, sis->num_batches, sis->bytes);
+	pgstat_increment_stream_insert(RelationGetRelid(result_info->ri_RelationDesc), sis->count, sis->num_batches, sis->bytes);
 
 	if (sis->worker_queue)
 	{
