@@ -194,29 +194,3 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
 
   result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
   assert result['count'] == expected_combiners
-
-def test_activate_deactivate(pipeline, clean_db):
-  pipeline.create_cv('v', 'SELECT count(*) FROM stream')
-  pipeline.insert('stream', ('x', ), [(1, )])
-
-  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
-  conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-
-  cur = conn.cursor()
-  cur.execute('DEACTIVATE')
-  cur.close()
-
-  try:
-    pipeline.insert('stream', ('x', ), [(1, )])
-    assert False
-  except:
-    pass
-
-  cur = conn.cursor()
-  cur.execute('ACTIVATE')
-  cur.close()
-  conn.close()
-
-  pipeline.insert('stream', ('x', ), [(1, )])
-  count = pipeline.execute('SELECT * FROM v').first()['count']
-  assert count == 2

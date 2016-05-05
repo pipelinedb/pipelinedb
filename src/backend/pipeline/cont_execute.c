@@ -563,6 +563,11 @@ get_query_state(ContExecutor *exec)
 			exec->states[exec->current_query_id] = NULL;
 			state = NULL;
 		}
+		else
+		{
+			Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+			state->query->active = row->active;
+		}
 	}
 
 	ReleaseSysCache(tup);
@@ -578,7 +583,6 @@ get_query_state(ContExecutor *exec)
 		if (state->query == NULL)
 		{
 			PopActiveSnapshot();
-			ContExecutorPurgeQuery(exec);
 			return NULL;
 		}
 	}

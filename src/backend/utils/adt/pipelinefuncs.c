@@ -427,11 +427,12 @@ pipeline_views(PG_FUNCTION_ARGS)
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		/* build tupdesc for result tuples */
-		tupdesc = CreateTemplateTupleDesc(4, false);
+		tupdesc = CreateTemplateTupleDesc(5, false);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "id", OIDOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "schema", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "name", TEXTOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "query", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "active", BOOLOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "query", TEXTOID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -457,8 +458,8 @@ pipeline_views(PG_FUNCTION_ARGS)
 	while ((tup = heap_getnext(data->scan, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		Datum values[4];
-		bool nulls[4];
+		Datum values[5];
+		bool nulls[5];
 		HeapTuple rtup;
 		Datum result;
 		Datum tmp;
@@ -472,12 +473,13 @@ pipeline_views(PG_FUNCTION_ARGS)
 		values[0] = ObjectIdGetDatum(row->id);
 		values[1] = CStringGetTextDatum(get_namespace_name(row->namespace));
 		values[2] = CStringGetTextDatum(NameStr(row->name));
+		values[3] = BoolGetDatum(row->active);
 
 		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
 
 		Assert(!isnull);
 
-		values[3] = CStringGetTextDatum(deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp))));
+		values[4] = CStringGetTextDatum(deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp))));
 
 		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(rtup);
@@ -858,13 +860,14 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		/* build tupdesc for result tuples */
-		tupdesc = CreateTemplateTupleDesc(6, false);
+		tupdesc = CreateTemplateTupleDesc(7, false);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "id", OIDOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "schema", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "name", TEXTOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "tgfunc", TEXTOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "tgargs", TEXTARRAYOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 6, "query", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "active", BOOLOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "tgfunc", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 6, "tgargs", TEXTARRAYOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 7, "query", TEXTOID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -890,8 +893,8 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 	while ((tup = heap_getnext(data->scan, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		Datum values[6];
-		bool nulls[6];
+		Datum values[7];
+		bool nulls[7];
 		HeapTuple rtup;
 		Datum result;
 		Datum tmp;
@@ -906,17 +909,14 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 		values[0] = ObjectIdGetDatum(row->id);
 		values[1] = CStringGetTextDatum(get_namespace_name(row->namespace));
 		values[2] = CStringGetTextDatum(NameStr(row->name));
+		values[3] = BoolGetDatum(row->active);
 
 		if (!FunctionIsVisible(row->tgfn))
 			fn = quote_qualified_identifier(get_namespace_name(get_func_namespace(row->tgfn)), get_func_name(row->tgfn));
 		else
 			fn = quote_qualified_identifier(NULL, get_func_name(row->tgfn));
 
-		values[3] = CStringGetTextDatum(fn);
-
-		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
-		Assert(!isnull);
-		values[5] = CStringGetTextDatum(deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp))));
+		values[4] = CStringGetTextDatum(fn);
 
 		if (row->tgnargs > 0)
 		{
@@ -936,10 +936,14 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 				p += strlen(p) + 1;
 			}
 
-			values[4] = PointerGetDatum(construct_array(elems, row->tgnargs, TEXTOID, -1, false, 'i'));
+			values[5] = PointerGetDatum(construct_array(elems, row->tgnargs, TEXTOID, -1, false, 'i'));
 		}
 		else
-			nulls[4] = true;
+			nulls[5] = true;
+
+		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+		Assert(!isnull);
+		values[6] = CStringGetTextDatum(deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp))));
 
 		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(rtup);

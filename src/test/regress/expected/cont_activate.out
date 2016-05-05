@@ -1,0 +1,73 @@
+CREATE CONTINUOUS VIEW cont_activate_v0 AS SELECT count(*) FROM cont_activate_s;
+CREATE CONTINUOUS VIEW cont_activate_v1 AS SELECT count(*) FROM cont_activate_s;
+INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
+SELECT * FROM cont_activate_v0;
+ count 
+-------
+   100
+(1 row)
+
+SELECT * FROM cont_activate_v1;
+ count 
+-------
+   100
+(1 row)
+
+DEACTIVATE cont_activate_v0;
+INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
+SELECT * FROM cont_activate_v0;
+ count 
+-------
+   100
+(1 row)
+
+SELECT * FROM cont_activate_v1;
+ count 
+-------
+   200
+(1 row)
+
+DEACTIVATE cont_activate_v1;
+INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
+SELECT * FROM cont_activate_v0;
+ count 
+-------
+   100
+(1 row)
+
+SELECT * FROM cont_activate_v1;
+ count 
+-------
+   200
+(1 row)
+
+ACTIVATE cont_activate_v0;
+INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
+SELECT * FROM cont_activate_v0;
+ count 
+-------
+   200
+(1 row)
+
+SELECT * FROM cont_activate_v1;
+ count 
+-------
+   200
+(1 row)
+
+ACTIVATE cont_activate_v1;
+INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
+SELECT * FROM cont_activate_v0;
+ count 
+-------
+   300
+(1 row)
+
+SELECT * FROM cont_activate_v1;
+ count 
+-------
+   300
+(1 row)
+
+DROP CONTINUOUS VIEW cont_activate_v0;
+DROP CONTINUOUS VIEW cont_activate_v1;

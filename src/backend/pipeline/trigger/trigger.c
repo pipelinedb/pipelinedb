@@ -36,7 +36,6 @@
 #include "storage/ipc.h"
 #include "executor/executor.h"
 #include "catalog/pg_database.h"
-#include "catalog/pipeline_database.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/trigger/triggerfuncs.h"
 #include "catalog/pg_trigger.h"

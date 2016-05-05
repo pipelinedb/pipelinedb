@@ -67,7 +67,6 @@
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
 #include "catalog/pipeline_combine.h"
-#include "catalog/pipeline_database.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
 #include "catalog/pipeline_tstate.h"
@@ -666,17 +665,6 @@ static const struct cachedesc cacheinfo[] = {
 		1,
 		{
 			Anum_pipeline_tstate_id,
-			0,
-			0,
-			0
-		},
-		2048
-	},
-	{PipelineDatabaseRelationId,	/* PIPELINEDATABASEDBID */
-		PipelineDatabaseDbIdIndexId,
-		1,
-		{
-			Anum_pipeline_database_dbid,
 			0,
 			0,
 			0

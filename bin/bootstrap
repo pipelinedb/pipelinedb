@@ -41,7 +41,7 @@ def main(args):
       print 'It seems like PipelineDB failed to start up. Make sure nothing else is running on port 5432, maybe you have an instance of PostgreSQL or PipelineDB already running?'
       sys.exit(1)
 
-    subprocess.call(['pipeline', user, '-c', 'ACTIVATE'])
+    subprocess.call(['pipeline', user, '-c', 'DROP DATABASE pipeline'])
     time.sleep(0.1)
 
     # Cleanup daemons

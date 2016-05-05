@@ -913,11 +913,11 @@ standard_ProcessUtility(Node *parsetree,
 			}
 
 		case T_ActivateStmt:
-			ExecActivateStmt((ActivateStmt *) parsetree, context);
+			ExecActivateStmt((ActivateStmt *) parsetree);
 			break;
 
 		case T_DeactivateStmt:
-			ExecDeactivateStmt((DeactivateStmt *) parsetree, context);
+			ExecDeactivateStmt((DeactivateStmt *) parsetree);
 			break;
 
 		default:

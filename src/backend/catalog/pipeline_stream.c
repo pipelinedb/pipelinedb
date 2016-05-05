@@ -171,7 +171,7 @@ streams_to_meta(Relation pipeline_query)
 		SelectStmt *sel;
 		Datum tmp;
 		bool isnull;
-		Form_pipeline_query catrow = (Form_pipeline_query) GETSTRUCT(tup);
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
 		ContAnalyzeContext *context;
 
 		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
@@ -218,7 +218,8 @@ streams_to_meta(Relation pipeline_query)
 				add_coltypes(entry, context->types);
 			}
 
-			entry->queries = bms_add_member(entry->queries, catrow->id);
+			if (row->active)
+				entry->queries = bms_add_member(entry->queries, row->id);
 		}
 	}
 
@@ -368,8 +369,8 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 	while ((entry = (StreamTargetsEntry *) hash_seq_search(&scan)) != NULL)
 	{
 		Bitmapset *queries = entry->queries;
-		Size targetssize = queries->nwords * sizeof(bitmapword) + VARHDRSZ;
-		bytea *targetsbytes = palloc0(targetssize);
+		Size targetssize;
+		bytea *targetsbytes;
 		HeapTuple tup;
 		Datum values[Natts_pipeline_stream];
 		bool nulls[Natts_pipeline_stream];
@@ -379,10 +380,17 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		MemSet(nulls, false, Natts_pipeline_stream);
 		MemSet(replaces, false, sizeof(replaces));
 
-		memcpy(VARDATA(targetsbytes), queries->words, queries->nwords * sizeof(bitmapword));
-		SET_VARSIZE(targetsbytes, targetssize);
+		if (queries)
+		{
+			targetssize = queries->nwords * sizeof(bitmapword) + VARHDRSZ;
+			targetsbytes = palloc0(targetssize);
+			memcpy(VARDATA(targetsbytes), queries->words, queries->nwords * sizeof(bitmapword));
+			SET_VARSIZE(targetsbytes, targetssize);
+			values[Anum_pipeline_stream_queries - 1] = PointerGetDatum(targetsbytes);
+		}
+		else
+			nulls[Anum_pipeline_stream_queries - 1] = true;
 
-		values[Anum_pipeline_stream_queries - 1] = PointerGetDatum(targetsbytes);
 		replaces[Anum_pipeline_stream_queries - 1] = true;
 
 		tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(entry->relid));

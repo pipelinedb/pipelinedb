@@ -92,7 +92,6 @@ class PipelineDB(object):
           'continuous_query_num_workers': 2,
           'anonymous_update_checks': 'off',
           'continuous_query_max_wait': 5,
-          'continuous_queries_enabled': 'on',
           'wal_level': 'logical',
           'max_wal_senders': 1,
           'max_replication_slots': 1
@@ -134,19 +133,12 @@ class PipelineDB(object):
         # Wait to connect to PipelineDB
         for i in xrange(10):
           try:
-            conn = self.engine.connect()
+            self.conn = self.engine.connect()
             break
           except OperationalError:
             time.sleep(0.1)
         else:
           raise Exception('Failed to connect to PipelineDB')
-
-        # ACTVATE continuous queries
-        conn.execute('COMMIT')
-        conn.execute('ACTIVATE')
-
-        conn.close()
-        self.conn = self.engine.connect()
 
     def stop(self):
       """

@@ -188,7 +188,7 @@ pipeline_stream_insert_batch(TransformState *t)
 		int ninserted = 0;
 		int nbatches = 1;
 
-		targets = bms_difference(GetStreamReaders(relid), GetAdhocContinuousViewIds());
+		targets = bms_difference(GetLocalStreamReaders(relid), GetAdhocContinuousViewIds());
 
 		if (bms_num_members(targets) == 0)
 			continue;

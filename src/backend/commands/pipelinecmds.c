@@ -29,7 +29,6 @@
 #include "catalog/pg_class.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
-#include "catalog/pipeline_database.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
@@ -851,82 +850,64 @@ ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
 	}
 }
 
-static void
-set_cq_enabled(bool is_enabled, ProcessUtilityContext context)
+static Bitmapset *
+get_query_ids(List *queries)
 {
-	Relation pipeline_database;
-	HeapTuple tup;
-	Form_pipeline_database row;
-	bool changed = false;
-	bool success;
-	char *cmd = is_enabled ? "ACTIVATE" : "DEACTIVATE";
+	Bitmapset *ids = NULL;
+	ListCell *lc;
 
-	PreventTransactionChain(context == PROCESS_UTILITY_TOPLEVEL, cmd);
+	if (queries == NIL)
+		return GetContinuousQueryIds();
 
-	pipeline_database = heap_open(PipelineDatabaseRelationId, RowExclusiveLock);
-	tup = SearchSysCache1(PIPELINEDATABASEDBID, ObjectIdGetDatum(MyDatabaseId));
-
-	Assert(HeapTupleIsValid(tup));
-
-	row = (Form_pipeline_database) GETSTRUCT(tup);
-
-	if (row->cq_enabled != is_enabled)
+	foreach(lc, queries)
 	{
-		bool replace[Natts_pipeline_database];
-		bool nulls[Natts_pipeline_database];
-		Datum values[Natts_pipeline_database];
-		HeapTuple new;
+		RangeVar *rv = lfirst(lc);
+		Oid id = GetContQueryId(rv);
 
-		MemSet(replace, 0 , sizeof(replace));
-		MemSet(nulls, 0 , sizeof(nulls));
-		replace[Anum_pipeline_database_cq_enabled - 1] = true;
-		values[Anum_pipeline_database_cq_enabled - 1] = BoolGetDatum(is_enabled);
+		if (!OidIsValid(id))
+			ereport(ERROR,
+					(errmsg("continuous query \"%s\" does not exist", rv->relname)));
 
-		new = heap_modify_tuple(tup, pipeline_database->rd_att,	values, nulls, replace);
-
-		simple_heap_update(pipeline_database, &tup->t_self, new);
-		CatalogUpdateIndexes(pipeline_database, new);
-		CommandCounterIncrement();
-
-		changed = true;
+		ids = bms_add_member(ids, id);
 	}
 
-	ReleaseSysCache(tup);
-	heap_close(pipeline_database, NoLock);
+	return ids;
+}
 
-	/* If we didn't change the cq_enabled state, this is a noop. */
-	if (!changed)
-		return;
+static void
+set_cq_enabled(List *queries, bool activate)
+{
+	bool changed = false;
+	int query_id;
+	Bitmapset *query_ids;
+	Relation pipeline_query;
 
-	PopActiveSnapshot();
-	CommitTransactionCommand();
+	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
-	SignalContQuerySchedulerRefreshDBList();
+	query_ids = get_query_ids(queries);
 
-	if (is_enabled)
-		success = WaitForContQueryActivation();
-	else
-		success = WaitForContQueryDeactivation();
+	while ((query_id = bms_first_member(query_ids)) >= 0)
+	{
+		Assert(OidIsValid(query_id));
+		changed |= ContQuerySetActive(query_id, activate);
+	}
 
-	if (!success)
-		ereport(WARNING,
-				(errmsg("%s timed out", cmd),
-				errhint("Check the postmaster log to ensure nothing failed.")));
+	if (changed)
+		UpdatePipelineStreamCatalog();
 
-	StartTransactionCommand();
-	PushActiveSnapshot(GetTransactionSnapshot());
+	heap_close(pipeline_query, NoLock);
 }
 
 void
-ExecActivateStmt(ActivateStmt *stmt, ProcessUtilityContext context)
+ExecActivateStmt(ActivateStmt *stmt)
 {
-	set_cq_enabled(true, context);
+	set_cq_enabled(stmt->queries, true);
 }
 
 void
-ExecDeactivateStmt(DeactivateStmt *stmt, ProcessUtilityContext context)
+ExecDeactivateStmt(DeactivateStmt *stmt)
 {
-	set_cq_enabled(false, context);
+	set_cq_enabled(stmt->queries, false);
 }
 
 static void

@@ -247,12 +247,18 @@ DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool 
 	namestrcpy(&name_data, name->relname);
 	values[Anum_pipeline_query_id - 1] = Int32GetDatum(id);
 	values[Anum_pipeline_query_name - 1] = NameGetDatum(&name_data);
+	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
 	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(RangeVarGetCreationNamespace(name));
 	values[Anum_pipeline_query_matrel - 1] = ObjectIdGetDatum(matrel);
 	values[Anum_pipeline_query_seqrel - 1] = ObjectIdGetDatum(seqrel);
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
+
+	if (gc)
+		values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(query->swStepFactor);
+	else
+		values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);
 
 	/* unused */
 	values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(InvalidOid);
@@ -527,6 +533,7 @@ GetContQueryForId(Oid id)
 	cq->namespace = row->namespace;
 	cq->seqrel = row->seqrel;
 	cq->matrelid = row->matrel;
+	cq->active = row->active;
 
 	if (cq->type == CONT_VIEW)
 	{
@@ -615,7 +622,7 @@ GetContQueryForTransformId(Oid id)
 ContQuery *
 GetContQueryForView(RangeVar *cv_name)
 {
-	Oid id = GetContViewId(cv_name);
+	Oid id = GetContQueryId(cv_name);
 
 	if (!OidIsValid(id))
 		return NULL;
@@ -739,7 +746,7 @@ GetAdhocContinuousViewIds(void)
 }
 
 Oid
-GetContViewId(RangeVar *name)
+GetContQueryId(RangeVar *name)
 {
 	HeapTuple tuple = GetPipelineQueryTuple(name);
 	Form_pipeline_query row;
@@ -748,8 +755,7 @@ GetContViewId(RangeVar *name)
 	if (HeapTupleIsValid(tuple))
 	{
 		row = (Form_pipeline_query) GETSTRUCT(tuple);
-		if (row->type == PIPELINE_QUERY_VIEW)
-			row_id = row->id;
+		row_id = row->id;
 		ReleaseSysCache(tuple);
 	}
 
@@ -793,6 +799,7 @@ DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, L
 	namestrcpy(&name_data, name->relname);
 	values[Anum_pipeline_query_id - 1] = Int32GetDatum(id);
 	values[Anum_pipeline_query_name - 1] = NameGetDatum(&name_data);
+	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
 	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(RangeVarGetCreationNamespace(name));
 	values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(fnoid);
@@ -848,6 +855,7 @@ DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, L
 	values[Anum_pipeline_query_seqrel - 1] = ObjectIdGetDatum(InvalidOid);
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(false);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(false);
+	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);
 
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
 
@@ -862,4 +870,44 @@ DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, L
 	heap_close(pipeline_query, NoLock);
 
 	return result;
+}
+
+bool
+ContQuerySetActive(Oid id, bool active)
+{
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
+	Form_pipeline_query row;
+	bool changed = false;
+
+	if (!HeapTupleIsValid(tup))
+		return false;
+
+	row = (Form_pipeline_query) GETSTRUCT(tup);
+
+	if (row->active != active)
+	{
+		bool replace[Natts_pipeline_query];
+		bool nulls[Natts_pipeline_query];
+		Datum values[Natts_pipeline_query];
+		HeapTuple new;
+
+		MemSet(replace, 0 , sizeof(replace));
+		MemSet(nulls, 0 , sizeof(nulls));
+		replace[Anum_pipeline_query_active - 1] = true;
+		values[Anum_pipeline_query_active - 1] = BoolGetDatum(active);
+
+		new = heap_modify_tuple(tup, RelationGetDescr(pipeline_query), values, nulls, replace);
+
+		simple_heap_update(pipeline_query, &tup->t_self, new);
+		CatalogUpdateIndexes(pipeline_query, new);
+		CommandCounterIncrement();
+
+		changed = true;
+	}
+
+	ReleaseSysCache(tup);
+	heap_close(pipeline_query, NoLock);
+
+	return changed;
 }

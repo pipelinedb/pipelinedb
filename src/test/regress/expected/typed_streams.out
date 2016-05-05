@@ -29,12 +29,8 @@ SELECT x, COUNT(*) FROM test_typed_streams.s0 GROUP BY x;
 -- Nothing is reading from this stream
 CREATE STREAM no_readers (x integer);
 INSERT INTO no_readers (x) VALUES (0);
-ERROR:  no continuous views are currently reading from stream no_readers
-HINT:  Use CREATE CONTINUOUS VIEW to create a continuous view that includes no_readers in its FROM clause.
 PREPARE p AS INSERT INTO no_readers (x) VALUES ($1);
 EXECUTE p(0);
-ERROR:  no continuous views are currently reading from stream no_readers
-HINT:  Use CREATE CONTINUOUS VIEW to create a continuous view that includes no_readers in its FROM clause.
 -- Stream doesn't exist
 DROP STREAM IF EXISTS not_here;
 NOTICE:  stream "not_here" does not exist, skipping

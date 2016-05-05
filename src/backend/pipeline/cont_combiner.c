@@ -1126,7 +1126,7 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	RangeVar *cv_rv = makeRangeVarFromNameList(textToQualifiedNameList(cv_name));
 	text *relname = PG_GETARG_TEXT_P(1);
 	RangeVar *rel_rv = makeRangeVarFromNameList(textToQualifiedNameList(relname));
-	ContQuery *cv = GetContQueryForViewId(GetContViewId(cv_rv));
+	ContQuery *cv = GetContQueryForView(cv_rv);
 	Relation matrel;
 	Relation srcrel;
 	ContExecutor exec;
