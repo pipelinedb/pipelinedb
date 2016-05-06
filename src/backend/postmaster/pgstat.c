@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <sys/param.h>
 #include <sys/time.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -131,7 +132,8 @@ PgStat_MsgBgWriter BgWriterStats;
 /*
  * If we're a CQ process, this tracks our various runtime stats
  */
-PgStat_StatCQEntry MyProcStatCQEntry;
+static PgStat_StatCQEntryLocal MyProcStatCQEntryLocal;
+PgStat_StatCQEntry *MyProcStatCQEntry = (PgStat_StatCQEntry *) &MyProcStatCQEntryLocal;
 PgStat_StatCQEntry *MyStatCQEntry = NULL;
 
 /* ----------
@@ -5596,7 +5598,7 @@ pgstat_db_requested(Oid databaseid)
 void
 pgstat_init_cqstat(PgStat_StatCQEntry *entry, Oid viewid, pid_t pid)
 {
-	MemSet(entry, 0, sizeof(PgStat_StatCQEntry));
+	MemSet(entry, 0, sizeof(PgStat_StatCQEntryLocal));
 
 	entry->start_ts = GetCurrentTimestamp();
 	entry->last_report = GetCurrentTimestamp();
@@ -5697,7 +5699,7 @@ pgstat_report_cqstat(bool force)
 	if (!force && MyStatCQEntry && !TimestampDifferenceExceeds(MyStatCQEntry->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
 		return;
 
-	cq_stat_report_entry(&MyProcStatCQEntry);
+	cq_stat_report_entry(MyProcStatCQEntry);
 	if (MyStatCQEntry)
 		cq_stat_report_entry(MyStatCQEntry);
 }
@@ -5979,4 +5981,10 @@ pgstat_report_streamstat(bool force)
 
 	MemSet(&MyStreamStats, 0, sizeof(MyStreamStats));
 	MyStreamStats.last_report = GetCurrentTimestamp();
+}
+
+void
+pgstat_cqstat_snapshot_resources()
+{
+
 }

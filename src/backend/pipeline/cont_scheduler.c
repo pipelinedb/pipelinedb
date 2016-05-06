@@ -437,7 +437,7 @@ cont_bgworker_main(Datum arg)
 
 	if (proc->type != TRIG)
 	{
-		pgstat_init_cqstat(&MyProcStatCQEntry, 0, MyProcPid);
+		pgstat_init_cqstat(MyProcStatCQEntry, 0, MyProcPid);
 		proc->queue = acquire_my_ipc_queue();
 	}
 

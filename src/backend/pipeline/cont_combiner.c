@@ -641,7 +641,7 @@ sync_all(ContExecutor *cont_exec)
 		if (!state)
 			continue;
 
-		MyStatCQEntry = &state->base.stats;
+		MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
 
 		PG_TRY();
 		{
@@ -988,7 +988,7 @@ next:
 		if (state == NULL)
 			continue;
 
-		MyStatCQEntry = &state->base.stats;
+		MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
 		pgstat_report_cqstat(true);
 	}
 

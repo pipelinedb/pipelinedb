@@ -305,7 +305,7 @@ next:
 			ExecutorEnd(query_desc);
 			FreeQueryDesc(query_desc);
 
-			MyStatCQEntry = &state->base.stats;
+			MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
 			pgstat_report_cqstat(true);
 		}
 		PG_CATCH();

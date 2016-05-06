@@ -519,7 +519,7 @@ init_query_state(ContExecutor *exec, ContQueryState *state)
 	if (state->query == NULL)
 		return state;
 
-	pgstat_init_cqstat(&state->stats, state->query->id, 0);
+	pgstat_init_cqstat((PgStat_StatCQEntry *) &state->stats, state->query->id, 0);
 	state = exec->initfn(exec, state);
 
 	MemoryContextSwitchTo(old_cxt);
@@ -589,7 +589,7 @@ get_query_state(ContExecutor *exec)
 
 	PopActiveSnapshot();
 
-	MyStatCQEntry = &state->stats;
+	MyStatCQEntry = (PgStat_StatCQEntry *) &state->stats;
 
 	return state;
 }
@@ -809,6 +809,8 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	if (commit)
 		CommitTransactionCommand();
+
+	pgstat_cqstat_snapshot_resources();
 
 	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
 
