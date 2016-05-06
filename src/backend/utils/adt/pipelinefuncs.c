@@ -71,7 +71,7 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		/* build tupdesc for result tuples */
-		tupdesc = CreateTemplateTupleDesc(14, false);
+		tupdesc = CreateTemplateTupleDesc(16, false);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "type", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "pid", INT4OID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "start_time", TIMESTAMPTZOID, -1, 0);
@@ -83,9 +83,11 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 		TupleDescInitEntry(tupdesc, (AttrNumber) 9, "updated_bytes", INT8OID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 10, "tuples_ps", INT8OID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 11, "bytes_ps", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 12, "memory", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 13, "executions", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 14, "errors", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 12, "time_pb", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 13, "tuples_pb", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 14, "memory", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 15, "executions", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 16, "errors", INT8OID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -106,8 +108,8 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 
 	while ((entry = (PgStat_StatCQEntry *) hash_seq_search(iter)) != NULL)
 	{
-		Datum values[14];
-		bool nulls[14];
+		Datum values[16];
+		bool nulls[16];
 		HeapTuple tup;
 		Datum result;
 		pid_t pid = GetStatCQEntryProcPid(entry->key);
@@ -141,9 +143,11 @@ cq_proc_stat_get(PG_FUNCTION_ARGS)
 		values[8] = Int64GetDatum(entry->updated_bytes);
 		values[9] = Int64GetDatum(entry->tuples_ps);
 		values[10] = Int64GetDatum(entry->bytes_ps);
-		values[11] = Int64GetDatum(entry->memory);
-		values[12] = Int64GetDatum(entry->executions);
-		values[13] = Int64GetDatum(entry->errors);
+		values[11] = Int64GetDatum(entry->time_pb);
+		values[12] = Int64GetDatum(entry->tuples_pb);
+		values[13] = Int64GetDatum(entry->memory);
+		values[14] = Int64GetDatum(entry->executions);
+		values[15] = Int64GetDatum(entry->errors);
 
 		tup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(tup);
@@ -180,7 +184,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		/* build tupdesc for result tuples */
-		tupdesc = CreateTemplateTupleDesc(11, false);
+		tupdesc = CreateTemplateTupleDesc(13, false);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "name", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "type", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "input_rows", INT8OID, -1, 0);
@@ -191,7 +195,9 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		TupleDescInitEntry(tupdesc, (AttrNumber) 8, "updated_bytes", INT8OID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 9, "tuples_ps", INT8OID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 10, "bytes_ps", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 11, "errors", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 11, "time_pb", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 12, "tuples_pb", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 13, "errors", INT8OID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -212,8 +218,8 @@ cq_stat_get(PG_FUNCTION_ARGS)
 
 	while ((entry = (PgStat_StatCQEntry *) hash_seq_search(iter)) != NULL)
 	{
-		Datum values[11];
-		bool nulls[11];
+		Datum values[13];
+		bool nulls[13];
 		HeapTuple tup;
 		Datum result;
 		Oid viewid = GetStatCQEntryViewId(entry->key);
@@ -244,7 +250,9 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		values[7] = Int64GetDatum(entry->updated_bytes);
 		values[8] = Int64GetDatum(entry->tuples_ps);
 		values[9] = Int64GetDatum(entry->bytes_ps);
-		values[10] = Int64GetDatum(entry->errors);
+		values[10] = Int64GetDatum(entry->time_pb);
+		values[11] = Int64GetDatum(entry->tuples_pb);
+		values[12] = Int64GetDatum(entry->errors);
 
 		tup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(tup);

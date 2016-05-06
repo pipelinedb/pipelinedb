@@ -1087,10 +1087,12 @@ typedef struct PgStat_StatCQEntry
 	PgStat_Counter cv_create;
 	PgStat_Counter cv_drop;
 
-	/* over-time averages tracked via corresponding PgStat_Average in local entries */
+	/* over-time averages tracked PgStat_StatCQAverageEntry in local entry */
 	PgStat_Counter memory;
 	PgStat_Counter tuples_ps;
 	PgStat_Counter bytes_ps;
+	PgStat_Counter time_pb;
+	PgStat_Counter tuples_pb;
 
 	TimestampTz last_report;
 } PgStat_StatCQEntry;

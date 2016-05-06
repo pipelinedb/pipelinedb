@@ -30,13 +30,13 @@ def test_cq_stats(pipeline, clean_db):
     # Sleep a little so the stats collector flushes all the stats.
     time.sleep(0.5)
 
-    proc_result = pipeline.execute('SELECT * FROM pipeline_proc_stats')
-    cq_result = pipeline.execute('SELECT * FROM pipeline_query_stats')
+    proc_result = list(pipeline.execute('SELECT * FROM pipeline_proc_stats'))
+    cq_result = list(pipeline.execute('SELECT * FROM pipeline_query_stats'))
 
-    proc_rows = len(list(proc_result))
-    cq_rows = len(list(cq_result))
+    proc_rows = len(proc_result)
+    cq_rows = len(cq_result)
 
-    assert proc_rows == 1 + num_combiners + num_workers
+    assert proc_rows == num_combiners + num_workers
     assert cq_rows == 4
 
     # When sleeping, we only force the stats collection for the first CQ, so we're not guaranteed to have seen
