@@ -2127,9 +2127,11 @@ pipeline_proc_stats| SELECT cq_proc_stat_get.type,
     cq_proc_stat_get.executions,
     cq_proc_stat_get.tuples_ps,
     cq_proc_stat_get.bytes_ps,
+    cq_proc_stat_get.time_pb,
+    cq_proc_stat_get.tuples_pb,
     cq_proc_stat_get.memory,
     cq_proc_stat_get.errors
-   FROM cq_proc_stat_get() cq_proc_stat_get(type, pid, start_time, input_rows, output_rows, updated_rows, input_bytes, output_bytes, updated_bytes, tuples_ps, bytes_ps, memory, executions, errors)
+   FROM cq_proc_stat_get() cq_proc_stat_get(type, pid, start_time, input_rows, output_rows, updated_rows, input_bytes, output_bytes, updated_bytes, tuples_ps, bytes_ps, time_pb, tuples_pb, memory, executions, errors)
   ORDER BY cq_proc_stat_get.type, cq_proc_stat_get.pid;
 pipeline_query_stats| SELECT cq_stat_get.name,
     cq_stat_get.type,
@@ -2141,8 +2143,10 @@ pipeline_query_stats| SELECT cq_stat_get.name,
     cq_stat_get.updated_bytes,
     cq_stat_get.tuples_ps,
     cq_stat_get.bytes_ps,
+    cq_stat_get.time_pb,
+    cq_stat_get.tuples_pb,
     cq_stat_get.errors
-   FROM cq_stat_get() cq_stat_get(name, type, input_rows, output_rows, updated_rows, input_bytes, output_bytes, updated_bytes, tuples_ps, bytes_ps, errors)
+   FROM cq_stat_get() cq_stat_get(name, type, input_rows, output_rows, updated_rows, input_bytes, output_bytes, updated_bytes, tuples_ps, bytes_ps, time_pb, tuples_pb, errors)
   ORDER BY cq_stat_get.name, cq_stat_get.type;
 pipeline_stats| SELECT pipeline_stat_get.type,
     pipeline_stat_get.start_time,
