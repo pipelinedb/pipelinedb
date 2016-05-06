@@ -4086,7 +4086,7 @@ pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent)
 	while ((cqentry = (PgStat_StatCQEntry *) hash_seq_search(&qstat)) != NULL)
 	{
 		/* Don't dump process level stats to permanent stats file */
-		if (permanent && !OidIsValid(GetStatCQEntryViewId(cqentry->key)))
+		if (permanent && GetStatCQEntryProcPid(cqentry->key))
 			continue;
 
 		fputc('Q', fpout);
@@ -5724,19 +5724,20 @@ cq_stat_report_entry(PgStat_StatCQEntry *entry)
 void
 pgstat_report_create_drop_cv(bool create)
 {
-	PgStat_StatCQEntry stats;
+	PgStat_StatCQEntryLocal lstats;
+	PgStat_StatCQEntry *stats;
 
-	MemSet(&stats, 0, sizeof(PgStat_StatCQEntry));
+	MemSet(&lstats, 0, sizeof(PgStat_StatCQEntryLocal));
+	stats = (PgStat_StatCQEntry *) &lstats;
 
 	if (create)
-		stats.cv_create += 1;
+		stats->cv_create = 1;
 	else
-		stats.cv_drop += 1;
+		stats->cv_drop = 1;
 
 	/* we arbitrarily choose to report create/drop stats under the combiner */
-	SetStatCQEntryProcType(stats.key, COMBINER);
-	SetStatCQEntryProcPid(stats.key, MyProcPid);
-	cq_stat_report_entry(&stats);
+	SetStatCQEntryProcType(stats->key, COMBINER);
+	cq_stat_report_entry(stats);
 }
 
 /*
@@ -5843,18 +5844,14 @@ pgstat_recv_cqstat(PgStat_MsgCQstat *msg, int len)
 	{
 		cq_stat_recv_global(db->cont_queries, &stats, ptype);
 
-		/* start_ts is going to be 0 when reporting create/drop cv */
-		if (stats.start_ts)
-		{
-			/*
-			 * Aggregate the process-level stats
-			 */
-			existing = pgstat_fetch_stat_cqentry(db->cont_queries, 0, pid, ptype);
-			if (!existing->start_ts)
-				existing->start_ts = stats.start_ts;
+		/*
+		 * Aggregate the process-level stats
+		 */
+		existing = pgstat_fetch_stat_cqentry(db->cont_queries, 0, pid, ptype);
+		if (!existing->start_ts)
+			existing->start_ts = stats.start_ts;
 
-			cq_stat_aggregate(existing, &stats);
-		}
+		cq_stat_aggregate(existing, &stats);
 	}
 	else if (viewid)
 	{
@@ -5863,6 +5860,11 @@ pgstat_recv_cqstat(PgStat_MsgCQstat *msg, int len)
 		 */
 		existing = pgstat_fetch_stat_cqentry(db->cont_queries, viewid, 0, ptype);
 		cq_stat_aggregate(existing, &stats);
+	}
+	else
+	{
+		Assert(stats.cv_create || stats.cv_drop);
+		cq_stat_recv_global(db->cont_queries, &stats, ptype);
 	}
 }
 
