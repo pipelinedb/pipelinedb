@@ -493,6 +493,8 @@ ContExecutorStartBatch(ContExecutor *exec)
 
 	exec->exec_queries = bms_copy(exec->queries);
 	exec->update_queries = true;
+
+	pgstat_start_cq(MyProcStatCQEntry);
 }
 
 static ContQueryState *
@@ -633,6 +635,9 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 		else
 			debug_query_string = NameStr(exec->current_query->query->name);
 	}
+
+	if (exec->current_query)
+		pgstat_start_cq((PgStat_StatCQEntry *) &exec->current_query->stats);
 
 	return exec->current_query_id;
 }
@@ -793,7 +798,10 @@ ContExecutorEndQuery(ContExecutor *exec)
 	exec->yielded = NIL;
 
 	if (exec->current_query)
+	{
+		pgstat_end_cq((PgStat_StatCQEntry *) &exec->current_query->stats);
 		pgstat_report_cqstat(false);
+	}
 	else
 		pgstat_send_cqpurge(exec->current_query_id, 0, exec->ptype == WORKER);
 
@@ -810,7 +818,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	if (commit)
 		CommitTransactionCommand();
 
-	pgstat_cqstat_snapshot_resources();
+	pgstat_end_cq_batch(MyProcStatCQEntry, exec->nitems, pg_atomic_read_u64(&exec->ipcq->head) - exec->ipcq->cursor);
 
 	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
 

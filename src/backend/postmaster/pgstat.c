@@ -5630,18 +5630,73 @@ pgstat_fetch_cqstat_all(void)
 	return dbentry->cont_queries;
 }
 
+static PgStat_Counter
+calculate_average(PgStat_StatCQAverageEntry *entry, PgStat_Counter *values, bool per_second)
+{
+	int i;
+	PgStat_Counter sum = 0;
+	int count = 0;
+	TimestampTz now = GetCurrentTimestamp();
+
+	for (i = 0; i < PGSTAT_AVERAGE_BUFFER_SIZE; i++)
+	{
+		TimestampTz start_time = entry->start_time[i];
+		TimestampTz end_time = entry->end_time[i];
+		PgStat_Counter value = values[i];
+
+		if (!end_time)
+			continue;
+
+		if (TimestampDifferenceExceeds(end_time, now, PGSTAT_AVERAGE_BUFFER_INTERVAL))
+		{
+			entry->end_time[i] = 0;
+			continue;
+		}
+
+		count++;
+
+		if (per_second)
+		{
+			long sec;
+			int usec;
+			double duration;
+
+			TimestampDifference(start_time, end_time, &sec, &usec);
+
+			duration = sec;
+			duration += usec / (1000000.0);
+
+			sum += value / duration;
+		}
+		else
+			sum += value;
+	}
+
+	if (!count)
+		return 0;
+
+	return sum / count;
+}
+
 static void
 cq_stat_report_entry(PgStat_StatCQEntry *entry)
 {
 	PgStat_MsgCQstat msg;
+	PgStat_StatCQEntryLocal *lentry;
 
 	/*
-	 * If we consumed no tuples, saw no errors, and dind't create/drop any CVs,
+	 * If we consumed no tuples, saw no errors, and didn't create/drop any CVs,
 	 * there's no need to send a msg to the stats collector.
 	 */
 	if (entry->input_rows == 0 && entry->errors == 0 &&
 			entry->cv_create == 0 && entry->cv_drop == 0)
 		return;
+
+	/* Calculate all throughputs & averages */
+	lentry = (PgStat_StatCQEntryLocal *) entry;
+	entry->memory = calculate_average(&lentry->avgstat, lentry->avgstat.memory, false);
+	entry->tuples_ps = calculate_average(&lentry->avgstat, lentry->avgstat.tuples, true);
+	entry->bytes_ps = calculate_average(&lentry->avgstat, lentry->avgstat.bytes, true);
 
 	MemSet(&msg, 0, sizeof(PgStat_MsgCQstat));
 	msg.m_entry = *entry;
@@ -5743,6 +5798,10 @@ cq_stat_aggregate(PgStat_StatCQEntry *result, PgStat_StatCQEntry *incoming)
 	result->errors += incoming->errors;
 	result->cv_create += incoming->cv_create;
 	result->cv_drop += incoming->cv_drop;
+
+	result->memory = incoming->memory;
+	result->tuples_ps = incoming->tuples_ps;
+	result->bytes_ps = incoming->bytes_ps;
 }
 
 static void
@@ -5984,7 +6043,61 @@ pgstat_report_streamstat(bool force)
 }
 
 void
-pgstat_cqstat_snapshot_resources()
+pgstat_increment_cq_read(uint64 nrows, Size nbytes)
 {
+	MyProcStatCQEntry->input_rows += nrows;
+	MyProcStatCQEntry->input_bytes += nbytes;
 
+	if (MyStatCQEntry)
+	{
+		PgStat_StatCQEntryLocal *lentry;
+
+		MyStatCQEntry->input_rows += nrows;
+		MyStatCQEntry->input_bytes += nbytes;
+
+		lentry = (PgStat_StatCQEntryLocal *) MyStatCQEntry;
+		lentry->avgstat.tuples[lentry->avgstat.i] += nrows;
+		lentry->avgstat.bytes[lentry->avgstat.i] += nbytes;
+	}
+}
+
+void
+pgstat_end_cq_batch(PgStat_StatCQEntry *entry, uint64 nrows, Size nbytes)
+{
+	FILE *f = fopen("/proc/self/statm", "r");
+	uint64 mem = 0;
+	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
+
+	if (f)
+	{
+		uint64 dummy;
+		if (fscanf(f, "%ld %ld %ld %ld %ld %ld %ld", &dummy, &mem, &dummy, &dummy, &dummy, &dummy, &dummy) != 7)
+		  mem = 0;
+	}
+
+	lentry->avgstat.memory[lentry->avgstat.i] = mem;
+	lentry->avgstat.tuples[lentry->avgstat.i] += nrows;
+	lentry->avgstat.bytes[lentry->avgstat.i] += nbytes;
+
+	pgstat_end_cq(entry);
+}
+
+void
+pgstat_start_cq(PgStat_StatCQEntry *entry)
+{
+	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
+
+	lentry->avgstat.start_time[lentry->avgstat.i] = GetCurrentTimestamp();
+	lentry->avgstat.memory[lentry->avgstat.i] = 0;
+	lentry->avgstat.tuples[lentry->avgstat.i] = 0;
+	lentry->avgstat.bytes[lentry->avgstat.i] = 0;
+}
+
+void
+pgstat_end_cq(PgStat_StatCQEntry *entry)
+{
+	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
+
+	lentry->avgstat.end_time[lentry->avgstat.i] = GetCurrentTimestamp();
+	lentry->avgstat.i = (lentry->avgstat.i + 1) % PGSTAT_AVERAGE_BUFFER_SIZE;
 }
