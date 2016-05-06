@@ -5842,14 +5842,19 @@ pgstat_recv_cqstat(PgStat_MsgCQstat *msg, int len)
 	if (pid)
 	{
 		cq_stat_recv_global(db->cont_queries, &stats, ptype);
-		/*
-		 * Aggregate the process-level stats
-		 */
-		existing = pgstat_fetch_stat_cqentry(db->cont_queries, 0, pid, ptype);
-		if (!existing->start_ts)
-			existing->start_ts = stats.start_ts;
 
-		cq_stat_aggregate(existing, &stats);
+		/* start_ts is going to be 0 when reporting create/drop cv */
+		if (stats.start_ts)
+		{
+			/*
+			 * Aggregate the process-level stats
+			 */
+			existing = pgstat_fetch_stat_cqentry(db->cont_queries, 0, pid, ptype);
+			if (!existing->start_ts)
+				existing->start_ts = stats.start_ts;
+
+			cq_stat_aggregate(existing, &stats);
+		}
 	}
 	else if (viewid)
 	{
