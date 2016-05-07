@@ -803,7 +803,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 		pgstat_report_cqstat(false);
 	}
 	else
-		pgstat_send_cqpurge(exec->current_query_id, 0, exec->ptype == WORKER);
+		pgstat_send_cqpurge(exec->current_query_id, 0, exec->ptype);
 
 	debug_query_string = NULL;
 }
