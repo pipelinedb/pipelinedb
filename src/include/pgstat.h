@@ -1036,6 +1036,22 @@ extern PgStat_GlobalStats *pgstat_fetch_global(void);
 /*
  * PipelineDB stats for continuous queries
  */
+
+#define PGSTAT_AVERAGE_BUFFER_SIZE 10
+#define PGSTAT_AVERAGE_BUFFER_INTERVAL 2000 /* in ms */
+
+typedef struct PgStat_StatCQAverageEntry
+{
+	int i;
+
+	TimestampTz start_time[PGSTAT_AVERAGE_BUFFER_SIZE];
+	TimestampTz end_time[PGSTAT_AVERAGE_BUFFER_SIZE];
+
+	PgStat_Counter memory[PGSTAT_AVERAGE_BUFFER_SIZE];
+	PgStat_Counter tuples[PGSTAT_AVERAGE_BUFFER_SIZE];
+	PgStat_Counter bytes[PGSTAT_AVERAGE_BUFFER_SIZE];
+} PgStat_StatCQAverageEntry;
+
 /*
  * The collector's data per continuous-query
  */
@@ -1070,8 +1086,22 @@ typedef struct PgStat_StatCQEntry
 	PgStat_Counter errors;
 	PgStat_Counter cv_create;
 	PgStat_Counter cv_drop;
+
+	/* over-time averages tracked PgStat_StatCQAverageEntry in local entry */
+	PgStat_Counter memory;
+	PgStat_Counter tuples_ps;
+	PgStat_Counter bytes_ps;
+	PgStat_Counter time_pb;
+	PgStat_Counter tuples_pb;
+
 	TimestampTz last_report;
 } PgStat_StatCQEntry;
+
+typedef struct PgStat_StatCQEntryLocal
+{
+	PgStat_StatCQEntry cqstat;
+	PgStat_StatCQAverageEntry avgstat;
+} PgStat_StatCQEntryLocal;
 
 /*
  * Message for procs to wrap stats data in
@@ -1093,7 +1123,7 @@ typedef struct PgStat_MsgCQpurge
 	int64 m_key;
 } PgStat_MsgCQpurge;
 
-extern PgStat_StatCQEntry MyProcStatCQEntry;
+extern PgStat_StatCQEntry *MyProcStatCQEntry;
 extern PgStat_StatCQEntry *MyStatCQEntry;
 
 #define SetStatCQEntryViewId(key, view) ((key) |= (uint64) (view))
@@ -1104,21 +1134,12 @@ extern PgStat_StatCQEntry *MyStatCQEntry;
 #define GetStatCQEntryProcPid(key) (0xFFFF & (key >> 30L))
 #define GetStatCQEntryProcType(key) (0x1 & (key >> 63L))
 
-#define pgstat_increment_cq_read(rows, nbytes) \
-	do { \
-		MyProcStatCQEntry.input_rows += (rows); \
-		MyProcStatCQEntry.input_bytes += (nbytes); \
-		if (MyStatCQEntry) \
-		{ \
-			MyStatCQEntry->input_rows += (rows); \
-			MyStatCQEntry->input_bytes += (nbytes); \
-		} \
-	} while(0)
+extern void pgstat_increment_cq_read(uint64 nrows, Size nbytes);
 
 #define pgstat_increment_cq_write(rows, nbytes) \
 	do { \
-		MyProcStatCQEntry.output_rows += (rows); \
-		MyProcStatCQEntry.output_bytes += (nbytes); \
+		MyProcStatCQEntry->output_rows += (rows); \
+		MyProcStatCQEntry->output_bytes += (nbytes); \
 		if (MyStatCQEntry) \
 		{ \
 			MyStatCQEntry->output_rows += (rows); \
@@ -1128,8 +1149,8 @@ extern PgStat_StatCQEntry *MyStatCQEntry;
 
 #define pgstat_increment_cq_update(count, nbytes) \
 	do { \
-		MyProcStatCQEntry.updated_rows += (count); \
-		MyProcStatCQEntry.updated_bytes += (nbytes); \
+		MyProcStatCQEntry->updated_rows += (count); \
+		MyProcStatCQEntry->updated_bytes += (nbytes); \
 		if (MyStatCQEntry) \
 		{ \
 			MyStatCQEntry->updated_rows += (count); \
@@ -1139,14 +1160,14 @@ extern PgStat_StatCQEntry *MyStatCQEntry;
 
 #define pgstat_increment_cq_exec(n) \
 	do { \
-		MyProcStatCQEntry.executions += (n); \
+		MyProcStatCQEntry->executions += (n); \
 		if (MyStatCQEntry) \
 			MyStatCQEntry->executions += (n); \
 	} while(0)
 
 #define pgstat_increment_cq_error(n) \
 	do { \
-		MyProcStatCQEntry.errors += (n); \
+		MyProcStatCQEntry->errors += (n); \
 		if (MyStatCQEntry) \
 			MyStatCQEntry->errors += (n); \
 	} while(0)
@@ -1159,6 +1180,10 @@ extern PgStat_StatCQEntry *pgstat_fetch_stat_cqentry(HTAB *cont_queries, Oid vie
 extern HTAB *pgstat_fetch_cqstat_all(void);
 #define pgstat_fetch_stat_global_cqentry(cont_queries, ptype) \
 	pgstat_fetch_stat_cqentry(cont_queries, 0, 0, ptype)
+
+extern void pgstat_start_cq(PgStat_StatCQEntry *entry);
+extern void pgstat_end_cq(PgStat_StatCQEntry *entry);
+extern void pgstat_end_cq_batch(PgStat_StatCQEntry *entry, uint64 nrows, Size nbytes);
 
 typedef struct PgStat_StatStreamEntry
 {
