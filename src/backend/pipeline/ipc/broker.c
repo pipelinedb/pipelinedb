@@ -142,7 +142,13 @@ sigterm_handler(SIGNAL_ARGS)
 Size
 IPCMessageBrokerShmemSize(void)
 {
-	return sizeof(BrokerMeta) + (max_worker_processes * sizeof(lw_lock_slot));
+	Size		size;
+
+	size = MAXALIGN(sizeof(BrokerMeta));
+	size = add_size(size, max_worker_processes * MAXALIGN(sizeof(lw_lock_slot)));
+	size = add_size(size, hash_estimate_size(16, broker_db_meta_size));
+
+	return size;
 }
 
 /*
@@ -173,7 +179,7 @@ IPCMessageBrokerShmemInit(void)
 		ctl.entrysize = broker_db_meta_size;
 		ctl.hash = oid_hash;
 
-		broker_meta->db_meta_hash = ShmemInitHash("BrokerDBMetaHash", 4,	16, &ctl, HASH_ELEM | HASH_FUNCTION);
+		broker_meta->db_meta_hash = ShmemInitHash("BrokerDBMetaHash", 4, 16, &ctl, HASH_ELEM | HASH_FUNCTION);
 
 		/* Initialize LWLocks that we'll use for all IPC queues */
 		broker_meta->tranche_id = LWLockNewTrancheId();

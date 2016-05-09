@@ -130,7 +130,12 @@ ContQueryDatabaseMetadataSize(void)
 Size
 ContQuerySchedulerShmemSize(void)
 {
-	return MAXALIGN(sizeof(ContQuerySchedulerShmemStruct));
+	Size		size;
+
+	size = MAXALIGN(sizeof(ContQuerySchedulerShmemStruct));
+	size = add_size(size, hash_estimate_size(16, ContQueryDatabaseMetadataSize()));
+
+	return size;
 }
 
 void
