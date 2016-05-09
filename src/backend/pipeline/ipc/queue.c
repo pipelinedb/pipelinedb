@@ -301,7 +301,7 @@ ipc_queue_pop_peeked(ipc_queue *ipcq)
 }
 
 void
-ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms)
+ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms, volatile sig_atomic_t *got_sigterm)
 {
 	Latch *consumer_latch;
 	uint64_t head;
@@ -338,11 +338,11 @@ ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms)
 		if (r & WL_POSTMASTER_DEATH)
 			break;
 
-		if (ShouldTerminateContQueryProcess())
-			break;
-
 		ResetLatch(consumer_latch);
 		CHECK_FOR_INTERRUPTS();
+
+		if (got_sigterm && *got_sigterm)
+			break;
 	}
 
 	pg_atomic_write_u64(&ipcq->consumer_latch, (uint64) NULL);

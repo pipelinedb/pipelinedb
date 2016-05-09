@@ -418,7 +418,7 @@ exec_adhoc_worker(AdhocWorkerState *state)
 	EState *estate;
 	int num_processed = 0;
 
-	ipc_queue_wait_non_empty(state->exec.ipcq, ADHOC_TIMEOUT_MS);
+	ipc_queue_wait_non_empty(state->exec.ipcq, ADHOC_TIMEOUT_MS, NULL);
 
 	CHECK_FOR_INTERRUPTS();
 

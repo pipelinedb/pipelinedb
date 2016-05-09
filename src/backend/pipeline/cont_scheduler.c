@@ -308,10 +308,10 @@ sigint_handler(SIGNAL_ARGS)
 	errno = save_errno;
 }
 
-bool
-ShouldTerminateContQueryProcess(void)
+volatile sig_atomic_t *
+GetContProcSigTermPtr(void)
 {
-	return (bool) got_SIGTERM;
+	return &got_SIGTERM;
 }
 
 static void

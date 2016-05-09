@@ -124,7 +124,7 @@ extern pid_t StartContQueryScheduler(void);
 
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
-extern bool ShouldTerminateContQueryProcess(void);
+extern volatile sig_atomic_t *GetContProcSigTermPtr(void);
 
 extern void SignalContQuerySchedulerDropDB(Oid db_oid);
 extern void SignalContQuerySchedulerRefreshDBList(void);

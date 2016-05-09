@@ -192,7 +192,7 @@ ContinuousQueryWorkerMain(void)
 	{
 		CHECK_FOR_INTERRUPTS();
 
-		if (ShouldTerminateContQueryProcess())
+		if (*cont_exec->got_SIGTERM)
 			break;
 
 		ContExecutorStartBatch(cont_exec);
