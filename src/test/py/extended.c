@@ -8,9 +8,10 @@
  *
  *-------------------------------------------------------------------------
  */
+#include <libpq-fe.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <libpq-fe.h>
+#include <time.h>
 
 int
 main(int argc, char **argv)
