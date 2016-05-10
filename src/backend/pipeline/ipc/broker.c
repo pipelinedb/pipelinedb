@@ -261,7 +261,7 @@ get_database_oids(void)
 }
 
 static void
-free_unused_locks(List *db_oids)
+mark_unused_locks_as_free(List *db_oids)
 {
 	int i;
 
@@ -352,7 +352,7 @@ purge_dropped_db_segments(void)
 			Assert(found);
 		}
 
-		free_unused_locks(db_oids);
+		mark_unused_locks_as_free(db_oids);
 
 		LWLockRelease(IPCMessageBrokerIndexLock);
 	}
@@ -407,14 +407,12 @@ copy_messages(void)
 		for (i = 0; i < continuous_query_num_workers; i++)
 		{
 			ListCell *lc;
-			ipc_queue *dest;
-			ipc_queue *src;
+			ipc_queue *dest = (ipc_queue *) ptr;
+			ipc_queue *src = (ipc_queue *) (ptr + ipc_queue_size);
 			local_buffer *local_buf = &my_local_buffers[i];
-
-			dest = (ipc_queue *) ptr;
-			ptr += ipc_queue_size;
-			src = (ipc_queue *) ptr;
-			ptr += ipc_queue_size;
+			uint64 src_head = pg_atomic_read_u64(&src->head);
+			uint64 src_cur = src->cursor;
+			uint64 dest_tail = pg_atomic_read_u64(&dest->tail);
 
 			while (true)
 			{
@@ -826,7 +824,7 @@ get_db_meta(Oid dbid)
 		db_meta->handle = dsm_segment_handle(segment);
 
 		/* Pick a lock index for this database. */
-		free_unused_locks(get_database_oids());
+		mark_unused_locks_as_free(get_database_oids());
 		for (i = 0; i < max_worker_processes; i++)
 		{
 			lw_lock_slot *slot = &broker_meta->locks[i];
@@ -881,9 +879,6 @@ get_db_meta(Oid dbid)
 
 			lock_slot++;
 		}
-
-		LWLockRelease(IPCMessageBrokerIndexLock);
-		LWLockAcquire(IPCMessageBrokerIndexLock, LW_SHARED);
 	}
 
 	LWLockRelease(IPCMessageBrokerIndexLock);
