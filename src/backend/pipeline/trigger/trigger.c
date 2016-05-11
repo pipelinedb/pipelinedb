@@ -173,6 +173,7 @@ trigger_main()
 	TriggerProcessState *state;
 	WalStream *ws;
 	bool saw_catalog_changes = false;
+	volatile sig_atomic_t *got_SIGTERM = GetContProcSigTermPtr();
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -189,7 +190,7 @@ trigger_main()
 	{
 		CHECK_FOR_INTERRUPTS();
 
-		if (ShouldTerminateContQueryProcess())
+		if (*got_SIGTERM)
 			break;
 
 		check_syscache_dirty(state);

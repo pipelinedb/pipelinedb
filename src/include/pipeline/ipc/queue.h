@@ -51,7 +51,7 @@ extern void ipc_queue_unpeek_all(ipc_queue *ipcq);
 extern void ipc_queue_pop_peeked(ipc_queue *ipcq);
 extern bool ipc_queue_is_empty(ipc_queue *ipcq);
 extern bool ipc_queue_has_unread(ipc_queue *ipcq);
-extern void ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms);
+extern void ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms, volatile sig_atomic_t *got_sigterm);
 
 extern bool ipc_queue_lock(ipc_queue *ipcq, bool wait);
 extern void ipc_queue_unlock(ipc_queue *ipcq);

@@ -119,6 +119,7 @@ struct ContExecutor
 	MemoryContext exec_cxt;
 
 	ContQueryProcType ptype;
+	volatile sig_atomic_t *got_SIGTERM;
 
 	ipc_queue *ipcq;
 	Bitmapset *queries;

@@ -428,6 +428,7 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 			ALLOCSET_DEFAULT_MAXSIZE);
 
 	exec->ptype = type;
+	exec->got_SIGTERM = GetContProcSigTermPtr();
 	exec->current_query_id = InvalidOid;
 	exec->initfn = initfn;
 
@@ -458,7 +459,7 @@ ContExecutorStartBatch(ContExecutor *exec)
 			pgstat_report_cqstat(true);
 
 			pgstat_report_activity(STATE_IDLE, proc_name);
-			ipc_queue_wait_non_empty(exec->ipcq, 0);
+			ipc_queue_wait_non_empty(exec->ipcq, 0, exec->got_SIGTERM);
 			pgstat_report_activity(STATE_RUNNING, proc_name);
 
 			pfree(proc_name);
