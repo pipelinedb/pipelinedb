@@ -14,7 +14,15 @@
 #include "port/atomics.h"
 #include "storage/lwlock.h"
 
-typedef struct ipc_queue_slot ipc_queue_slot;
+typedef struct ipc_queue_slot
+{
+	uint64_t next;
+	bool     wraps;
+	bool     peeked;
+	int      len;
+	char     bytes[1]; /* dynamically allocated */
+} ipc_queue_slot;
+
 typedef void (*ipc_queue_peek_fn) (void *ptr, int len);
 typedef void (*ipc_queue_pop_fn) (void *ptr, int len);
 typedef void (*ipc_queue_copy_fn) (void *dest, void *src, int len);
@@ -58,5 +66,9 @@ extern void ipc_queue_unlock(ipc_queue *ipcq);
 
 extern bool ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait);
 extern bool ipc_queue_push(ipc_queue *ipcq, void *ptr, int len, bool wait);
+
+#define ipc_queue_offset(ipcq, ptr) ((ptr) % (ipcq)->size)
+#define ipc_queue_needs_wrap(ipcq, start, len) (((start) % (ipcq)->size) + (len) > (ipcq)->size)
+#define ipc_queue_slot_get(ipcq, ptr) ((ipc_queue_slot *) ((uintptr_t) (ipcq)->bytes + ipc_queue_offset((ipcq), (ptr))))
 
 #endif
