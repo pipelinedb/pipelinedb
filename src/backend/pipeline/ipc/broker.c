@@ -54,8 +54,6 @@ typedef struct local_buffer
 	List *slots;
 } local_buffer;
 
-static local_buffer *my_local_buffers = NULL;
-
 typedef struct dsm_segment_slot
 {
 	pg_atomic_flag used;
@@ -88,6 +86,9 @@ typedef struct broker_db_meta
 	/* segment for ipc queues of all database worker and combiner processes */
 	dsm_segment *segment;
 	dsm_handle handle;
+
+	/* in local memory */
+	local_buffer *local_buffers;
 
 	/* ephemeral segments used by adhoc query processes */
 	dsm_segment_slot ephemeral_seg_slots[1]; /* max_worker_processes total slots */
@@ -344,6 +345,20 @@ purge_dropped_db_segments(void)
 			if (db_meta->segment)
 				dsm_detach(db_meta->segment);
 
+			if (db_meta->local_buffers)
+			{
+				int i;
+
+				for (i = 0; i < continuous_query_num_workers; i++)
+				{
+					local_buffer *local_buf = &db_meta->local_buffers[i];
+					if (local_buf->slots)
+						list_free_deep(local_buf->slots);
+				}
+
+				pfree(db_meta->local_buffers);
+			}
+
 			hash_search(broker_meta->db_meta_hash, &dbid, HASH_REMOVE, &found);
 			Assert(found);
 		}
@@ -398,13 +413,17 @@ copy_messages(void)
 		if (db_meta->segment == NULL)
 			db_meta->segment = dsm_attach_and_pin(db_meta->handle);
 
+		if (db_meta->local_buffers == NULL)
+			db_meta->local_buffers = MemoryContextAllocZero(CacheMemoryContext,
+					sizeof(local_buffer) * continuous_query_num_workers);
+
 		ptr = dsm_segment_address(db_meta->segment);
 
 		for (i = 0; i < continuous_query_num_workers; i++)
 		{
 			ipc_queue *dest;
 			ipc_queue *src;
-			local_buffer *local_buf = &my_local_buffers[i];
+			local_buffer *local_buf = &db_meta->local_buffers[i];
 			uint64 last_dest_tail = UINT64_MAX;
 			int nloops = MAX_LOOPS_PER_QUEUE;
 			uint64 dest_head;
@@ -478,17 +497,6 @@ copy_messages(void)
 							memcpy(dest_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
 
 						dest_head += len_needed;
-
-						if (src_slot->next != dest_head)
-						{
-
-							elog(LOG, "FUCK src slot %ld, dest head %ld, len_needed %d, slots %d",
-									src_slot->next, dest_head, len_needed, list_length(local_buf->slots));
-
-							elog(LOG, "sleeping %d", MyProcPid);
-
-							pg_usleep(20 * 1000 * 1000);
-						}
 						Assert(src_slot->next == dest_head);
 						dest_slot->next = dest_head;
 
@@ -565,6 +573,7 @@ copy_messages(void)
 				Assert(dest_head);
 
 				pg_atomic_write_u64(&dest->head, dest_head);
+
 				consumer_latch = (Latch *) pg_atomic_read_u64(&dest->consumer_latch);
 				if (consumer_latch)
 					SetLatch(consumer_latch);
@@ -573,11 +582,12 @@ copy_messages(void)
 			/* Try to copy data from src ipc_queue into local buffers */
 			if (ipc_queue_has_unread(src))
 			{
+				MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+
 				while (local_buf->size < ipc_queue_size / 2)
 				{
 					ipc_queue_slot *src_slot = ipc_queue_slot_get(src, src_tail);
 					uint64 src_head = pg_atomic_read_u64(&src->head);
-					MemoryContext old =  MemoryContextSwitchTo(CacheMemoryContext);
 					ipc_queue_slot *local_slot;
 
 					/* No data in src buffer? */
@@ -592,7 +602,7 @@ copy_messages(void)
 						memcpy(local_slot->bytes, src->bytes, src_slot->len);
 					}
 					else
-						memcpy(local_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
+						memcpy(local_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len);
 
 					local_buf->slots = lappend(local_buf->slots, local_slot);
 					local_buf->size += local_slot->len;
@@ -600,9 +610,9 @@ copy_messages(void)
 					ncopied_from++;
 
 					src_tail = src_slot->next;
-
-					MemoryContextSwitchTo(old);
 				}
+
+				MemoryContextSwitchTo(old);
 			}
 
 			if (ncopied_from)
@@ -613,6 +623,7 @@ copy_messages(void)
 
 				pg_atomic_write_u64(&src->tail, src_tail);
 				src->cursor = src_tail;
+
 				producer_latch = (Latch *) pg_atomic_read_u64(&src->producer_latch);
 				if (producer_latch)
 					SetLatch(producer_latch);
@@ -645,9 +656,8 @@ have_pending_messages(void)
 		for (i = 0; i < continuous_query_num_workers; i++)
 		{
 			ipc_queue *src;
-			local_buffer *local_buf = &my_local_buffers[i];
 
-			if (list_length(local_buf->slots))
+			if (db_meta->local_buffers && list_length(db_meta->local_buffers[i].slots))
 			{
 				hash_seq_term(&status);
 				LWLockRelease(IPCMessageBrokerIndexLock);
@@ -699,7 +709,6 @@ ipc_msg_broker_main(int argc, char *argv[])
 {
 	sigjmp_buf local_sigjmp_buf;
 	MemoryContext work_ctx;
-	MemoryContext old;
 
 	IsUnderPostmaster = true;
 	am_ipc_msg_broker = true;
@@ -802,10 +811,6 @@ ipc_msg_broker_main(int argc, char *argv[])
 
 	broker_meta->pid = MyProcPid;
 	broker_meta->latch = MyLatch;
-
-	old = MemoryContextSwitchTo(CacheMemoryContext);
-	my_local_buffers = (local_buffer *) palloc0(sizeof(local_buffer) * continuous_query_num_workers);
-	MemoryContextSwitchTo(old);
 
 	/* Loop forever */
 	for (;;)
