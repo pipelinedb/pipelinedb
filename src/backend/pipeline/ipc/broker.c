@@ -50,7 +50,7 @@
 
 typedef struct local_buffer
 {
-	Size size;
+	uint64 size;
 	List *slots;
 } local_buffer;
 
@@ -500,10 +500,9 @@ copy_messages(void)
 						Assert(src_slot->next == dest_head);
 						dest_slot->next = dest_head;
 
-						pfree(src_slot);
-
 						local_buf->size -= src_slot->len;
 
+						pfree(src_slot);
 						nremoved++;
 					}
 
@@ -524,8 +523,8 @@ copy_messages(void)
 
 					while (true)
 					{
-						ipc_queue_slot *src_slot = ipc_queue_slot_get(src, src_tail);
-						ipc_queue_slot *dest_slot = ipc_queue_slot_get(dest, dest_head);
+						ipc_queue_slot *src_slot;
+						ipc_queue_slot *dest_slot;
 						int len_needed;
 
 						src_head = pg_atomic_read_u64(&src->head);
@@ -533,6 +532,9 @@ copy_messages(void)
 						/* No data in src buffer? */
 						if (src_tail == src_head)
 							break;
+
+						src_slot = ipc_queue_slot_get(src, src_tail);
+						dest_slot =  ipc_queue_slot_get(dest, dest_head);
 
 						len_needed = src_slot->next - src_tail;
 
