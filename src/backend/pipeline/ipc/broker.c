@@ -44,7 +44,7 @@
 
 #define num_bg_workers_per_db (continuous_query_num_workers + continuous_query_num_combiners)
 #define num_locks_per_db (num_bg_workers_per_db + 1) /* +1 for all ephemeral ipc queues */
-#define ipc_queue_size (continuous_query_ipc_shared_mem * 1024)
+#define ipc_queue_size (continuous_query_ipc_shared_mem * 1024 / 4)
 #define db_dsm_segment_size (ipc_queue_size * ((continuous_query_num_workers * 2) + continuous_query_num_combiners))
 #define broker_db_meta_size (sizeof(broker_db_meta) + (max_worker_processes * sizeof(dsm_segment_slot)))
 
@@ -630,6 +630,10 @@ copy_messages(void)
 				if (producer_latch)
 					SetLatch(producer_latch);
 			}
+
+			if (ncopied_to || ncopied_from || local_buf->size)
+				elog(LOG, "COPY DONE (%d) from %d, to %d, local %d [%ld]",
+						i, ncopied_from, ncopied_to, list_length(local_buf->slots), local_buf->size);
 		}
 	}
 
@@ -1003,16 +1007,25 @@ get_db_meta(Oid dbid)
 			ipc_queue_pop_fn popfn = synchronous_stream_insert ? StreamTupleStatePopFn : NULL;
 
 			/*
-			 * We have two queues per worker process, one is a multi producer queue which requires a LWLock,
-			 * the other one is a single producer queue and doesn't require a LWLock. The single producer
-			 * queue is used by the worker process to read messages being sent to it while the
-			 * multi producer queue is used other other processes to send messages to the worker process.
-			 * The IPC broker process moves messages between these two queues.
+			 * We have three queues per worker process, two are multi producer queues which requires a LWLock,
+			 * the other two are single producer queues and don't require a LWLock. The MP queue is used by the
+			 * insert processes to write tuples to the worker process. One SP queue is used by the worker process to
+			 * write data to itself (or by other worker processes to write data to it). The last SP queue is used
+			 * by the IPC broker to copy data from the first two queues so that the worker can read the data being
+			 * sent to it.
 			 */
+
+			/* Broker -> Worker */
 			ipc_queue_init(ptr, ipc_queue_size, NULL, false);
 			ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, popfn, NULL);
 			ptr += ipc_queue_size;
 
+			/* Worker -> Broker */
+			ipc_queue_init(ptr, ipc_queue_size, NULL, false);
+			ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, popfn, NULL);
+			ptr += ipc_queue_size;
+
+			/* INSERT -> Broker */
 			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, true);
 			ipc_queue_set_handlers((ipc_queue *) ptr, NULL, NULL, StreamTupleStateCopyFn);
 			ptr += ipc_queue_size;

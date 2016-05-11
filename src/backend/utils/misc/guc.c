@@ -2751,12 +2751,12 @@ static struct config_int ConfigureNamesInt[] =
 
 	{
 		{"continuous_query_ipc_shared_mem", PGC_BACKEND, RESOURCES_MEM,
-		 gettext_noop("Sets the shared memory to be used for IPC between different processes."),
+		 gettext_noop("Sets the shared memory per DB to be used for IPC between continuous query processes."),
 		 NULL,
 		 GUC_UNIT_KB
 		},
 		&continuous_query_ipc_shared_mem,
-		32768, 8192, MAX_KILOBYTES,
+		262144, 8192, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 
