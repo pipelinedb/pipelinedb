@@ -71,7 +71,7 @@ OBJS = $(SUBDIROBJS) $(LOCALOBJS) $(top_builddir)/src/port/libpgport_srv.a \
 LIBS := $(filter-out -lpgport -lpgcommon, $(LIBS)) $(LDAP_LIBS_BE)
 
 # TODO(usmanm): This is ghetto. Use something like autoconf -_-
-ifeq (, $(shell which pkg-config))
+ifeq (, $(shell which pkg-config)$(shell pkg-config --libs check))
 CHECK_LIBS = -lcheck -lpthread
 else
 CHECK_LIBS = $(shell pkg-config --libs check)
