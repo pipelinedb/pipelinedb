@@ -478,6 +478,17 @@ copy_messages(void)
 							memcpy(dest_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
 
 						dest_head += len_needed;
+
+						if (src_slot->next != dest_head)
+						{
+
+							elog(LOG, "FUCK src slot %ld, dest head %ld, len_needed %d, slots %d",
+									src_slot->next, dest_head, len_needed, list_length(local_buf->slots));
+
+							elog(LOG, "sleeping %d", MyProcPid);
+
+							pg_usleep(20 * 1000 * 1000);
+						}
 						Assert(src_slot->next == dest_head);
 						dest_slot->next = dest_head;
 
@@ -551,6 +562,8 @@ copy_messages(void)
 			{
 				Latch *consumer_latch;
 
+				Assert(dest_head);
+
 				pg_atomic_write_u64(&dest->head, dest_head);
 				consumer_latch = (Latch *) pg_atomic_read_u64(&dest->consumer_latch);
 				if (consumer_latch)
@@ -595,6 +608,8 @@ copy_messages(void)
 			if (ncopied_from)
 			{
 				Latch *producer_latch;
+
+				Assert(src_tail);
 
 				pg_atomic_write_u64(&src->tail, src_tail);
 				src->cursor = src_tail;
