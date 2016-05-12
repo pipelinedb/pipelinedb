@@ -32,7 +32,7 @@ typedef struct ipc_queue
 	int magic;
 
 	LWLock *lock;
-	bool used_by_router;
+	bool used_by_broker;
 
 	Size size; /* physical size of buffer */
 

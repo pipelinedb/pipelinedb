@@ -119,6 +119,9 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	}
 
 	pfree(packed_desc);
+	bms_free(all_targets);
+	bms_free(adhoc);
+	bms_free(targets);
 
 	pgstat_increment_stream_insert(RelationGetRelid(stream), ntuples, nbatches, size);
 
@@ -130,10 +133,6 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 	if (snap)
 		PushActiveSnapshot(GetTransactionSnapshot());
-
-	bms_free(all_targets);
-	bms_free(adhoc);
-	bms_free(targets);
 }
 
 extern

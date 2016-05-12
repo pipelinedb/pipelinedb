@@ -40,16 +40,24 @@
 #include "utils/snapmgr.h"
 #include "utils/timeout.h"
 
-#define MAX_LOOPS_PER_QUEUE 5
+#define COPY_LOOPS_PER_WORKER 5
 
 #define num_bg_workers_per_db (continuous_query_num_workers + continuous_query_num_combiners)
 #define num_queues_per_db (continuous_query_num_workers * 3 + continuous_query_num_combiners)
-#define num_locks_per_db (num_bg_workers_per_db * 2 + 1) /* +1 for all ephemeral ipc queues */
+#define num_locks_per_db \
+	((continuous_query_num_workers * 2) + continuous_query_num_combiners + 1) /* +1 for all ephemeral ipc queues */
 #define ipc_queue_size MAXALIGN(continuous_query_ipc_shared_mem * 1024 / num_queues_per_db)
 #define db_dsm_segment_size (ipc_queue_size * num_queues_per_db)
 #define broker_db_meta_size (sizeof(broker_db_meta) + (max_worker_processes * sizeof(dsm_segment_slot)))
 #define num_queues_per_worker 3
 #define num_queues_per_combiner 1
+#define max_locks (max_worker_processes * 2)
+
+typedef struct local_queue_slot
+{
+	int len;
+	char bytes[1];
+} local_queue_slot;
 
 typedef struct local_queue
 {
@@ -108,7 +116,7 @@ typedef struct BrokerMeta
 
 	int tranche_id;
 	LWLockTranche tranche;
-	lw_lock_slot locks[1]; /* max_worker_processes total slots */
+	lw_lock_slot locks[1]; /* num_locks total slots */
 } BrokerMeta;
 
 /* guc */
@@ -145,7 +153,7 @@ IPCMessageBrokerShmemSize(void)
 	Size		size;
 
 	size = MAXALIGN(sizeof(BrokerMeta));
-	size = add_size(size, max_worker_processes * MAXALIGN(sizeof(lw_lock_slot)));
+	size = add_size(size, max_locks * MAXALIGN(sizeof(lw_lock_slot)));
 	size = add_size(size, hash_estimate_size(16, broker_db_meta_size));
 
 	return size;
@@ -300,7 +308,7 @@ purge_dropped_db_segments(void)
 	HASH_SEQ_STATUS status;
 	broker_db_meta *db_meta;
 
-	if (!TimestampDifferenceExceeds(last_purge_time, GetCurrentTimestamp(), 30 * 1000)) /* 30s */
+	if (!TimestampDifferenceExceeds(last_purge_time, GetCurrentTimestamp(), 10 * 1000)) /* 10s */
 		return;
 
 	db_oids = get_database_oids();
@@ -398,25 +406,25 @@ dsm_attach_and_pin(dsm_handle handle)
 	return segment;
 }
 
-static uint64
-copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tail, bool *isfull)
+static int
+copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_tail, bool *isfull)
 {
 	ListCell *lc;
 	int nremoved = 0;
-	uint64 free = bwq->size - (bwq_head - bwq_tail);
+	uint64 head = *bwq_head;
+	uint64 free = bwq->size - (head - bwq_tail);
+	int copied = 0;
 
 	foreach(lc, local_buf->slots)
 	{
-		ipc_queue_slot *src_slot = lfirst(lc);
-		ipc_queue_slot *dest_slot = ipc_queue_slot_get(bwq, bwq_head);
-		int len_needed;
+		local_queue_slot *src_slot = lfirst(lc);
+		ipc_queue_slot *dest_slot = ipc_queue_slot_get(bwq, head);
+		int len_needed = sizeof(ipc_queue_slot) + src_slot->len;
+		bool needs_wrap = ipc_queue_needs_wrap(bwq, head, len_needed);
 
-		if (src_slot->wraps)
-			len_needed = src_slot->len + bwq->size - ipc_queue_offset(bwq, bwq_head);
-		else
-			len_needed = sizeof(ipc_queue_slot) + src_slot->len;
-
-		Assert(len_needed > 0);
+		/* Account for garbage space at the end, and no longer require space for ipc_queue_slot. */
+		if (needs_wrap)
+			len_needed = src_slot->len + bwq->size - ipc_queue_offset(bwq, head);
 
 		if (len_needed > free)
 		{
@@ -426,16 +434,17 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 bwq_head, uint64 b
 
 		free -= len_needed;
 
-		if (src_slot->wraps)
-		{
-			*dest_slot = *src_slot;
-			memcpy(bwq->bytes, src_slot->bytes, src_slot->len);
-		}
-		else
-			memcpy(dest_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
+		dest_slot->len = src_slot->len;
+		dest_slot->peeked = false;
+		dest_slot->wraps = needs_wrap;
 
-		bwq_head += len_needed;
-		dest_slot->next = bwq_head;
+		if (needs_wrap)
+			memcpy(bwq->bytes, src_slot->bytes, src_slot->len);
+		else
+			memcpy(dest_slot->bytes, src_slot->bytes, src_slot->len);
+
+		head += len_needed;
+		dest_slot->next = head;
 
 		local_buf->size -= src_slot->len;
 
@@ -443,18 +452,24 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 bwq_head, uint64 b
 		nremoved++;
 	}
 
+	copied = nremoved;
+
 	while (nremoved--)
 		local_buf->slots = list_delete_first(local_buf->slots);
 
-	return bwq_head;
+	*bwq_head = head;
+
+	return copied;
 }
 
 static uint64
-copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tail, bool *isfull)
+copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_tail, bool *isfull)
 {
 	uint64 src_head = pg_atomic_read_u64(&src->head);
 	uint64 src_tail = src->cursor;
-	uint64 free = bwq->size - (bwq_head - bwq_tail);
+	uint64 head = *bwq_head;
+	uint64 free = bwq->size - (head - bwq_tail);
+	int count = 0;
 
 	Assert(src_head >= src_tail);
 
@@ -463,6 +478,8 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tai
 		ipc_queue_slot *src_slot;
 		ipc_queue_slot *dest_slot;
 		int len_needed;
+		bool needs_wrap;
+		char *src_bytes;
 
 		/* no data in src queue? update head and recheck */
 		if (src_tail == src_head)
@@ -473,9 +490,14 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tai
 		}
 
 		src_slot = ipc_queue_slot_get(src, src_tail);
-		dest_slot =  ipc_queue_slot_get(bwq, bwq_head);
+		dest_slot =  ipc_queue_slot_get(bwq, head);
 
-		len_needed = src_slot->next - src_tail;
+		len_needed = sizeof(ipc_queue_slot) + src_slot->len;
+		needs_wrap = ipc_queue_needs_wrap(bwq, head, len_needed);
+
+		/* Account for garbage space at the end, and no longer require space for ipc_queue_slot. */
+		if (needs_wrap)
+			len_needed = src_slot->len + bwq->size - ipc_queue_offset(bwq, head);
 
 		if (len_needed > free)
 		{
@@ -485,36 +507,43 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tai
 
 		free -= len_needed;
 
-		if (src_slot->wraps)
-		{
-			*dest_slot = *src_slot;
-			memcpy(bwq->bytes, src->bytes, src_slot->len);
-		}
-		else
-			memcpy(dest_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
+		dest_slot->len = src_slot->len;
+		dest_slot->peeked = false;
+		dest_slot->wraps = needs_wrap;
 
-		bwq_head += len_needed;
-		dest_slot->next = bwq_head;
+		src_bytes = src_slot->wraps ? src->bytes : src_slot->bytes;
+
+		if (needs_wrap)
+			memcpy(bwq->bytes, src_bytes, src_slot->len);
+		else
+			memcpy(dest_slot->bytes, src_bytes, src_slot->len);
+
+		head += len_needed;
+		dest_slot->next = head;
 		src_tail = src_slot->next;
+
+		count++;
 	}
 
 	src->cursor = src_tail;
 
-	return bwq_head;
+	*bwq_head = head;
+
+	return count;
 }
 
-static void
+static int
 copy_wbq_to_lq(ipc_queue *wbq, local_queue *local_buf)
 {
 	uint64 tail = wbq->cursor;
 	uint64 head = pg_atomic_read_u64(&wbq->head);
-
 	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+	int count = 0;
 
 	while (local_buf->size < ipc_queue_size)
 	{
 		ipc_queue_slot *src_slot = ipc_queue_slot_get(wbq, tail);
-		ipc_queue_slot *local_slot;
+		local_queue_slot *local_slot;
 
 		/* is the wbq empty? */
 		if (tail == head)
@@ -524,25 +553,27 @@ copy_wbq_to_lq(ipc_queue *wbq, local_queue *local_buf)
 				break;
 		}
 
-		local_slot = palloc0(sizeof(ipc_queue_slot) + src_slot->len);
+		local_slot = palloc0(sizeof(local_queue_slot) + src_slot->len);
+		local_slot->len = src_slot->len;
 
 		if (src_slot->wraps)
-		{
-			*local_slot = *src_slot;
 			memcpy(local_slot->bytes, wbq->bytes, src_slot->len);
-		}
 		else
-			memcpy(local_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len);
+			memcpy(local_slot->bytes, src_slot->bytes, src_slot->len);
 
 		local_buf->slots = lappend(local_buf->slots, local_slot);
 		local_buf->size += local_slot->len;
 
 		tail = src_slot->next;
+
+		count++;
 	}
 
 	MemoryContextSwitchTo(old);
 
 	wbq->cursor = tail;
+
+	return count;
 }
 
 static int
@@ -578,10 +609,10 @@ copy_messages(void)
 			uint64 last_bwq_tail;
 			uint64 last_wbq_cur;
 			uint64 last_ibq_cur;
-			int nloops = MAX_LOOPS_PER_QUEUE;
+			int nloops = COPY_LOOPS_PER_WORKER;
 			uint64 bwq_head;
-			bool bwq_inserted = false;
 			bool bwq_is_full = false;
+			int bwq_inserted = 0;
 
 			bwq = (ipc_queue *) ptr;
 			ptr += ipc_queue_size;
@@ -605,7 +636,6 @@ copy_messages(void)
 
 			while (--nloops)
 			{
-				uint64 updated_bwq_head;
 				uint64 bwq_tail = pg_atomic_read_u64(&bwq->tail);
 
 				/* was bwq full and nothing's been read off it since? */
@@ -617,37 +647,20 @@ copy_messages(void)
 
 				/* locally cache slots? insert them first */
 				if (local_buf->slots)
-				{
-					updated_bwq_head = copy_lq_to_bwq(local_buf, bwq, bwq_head, bwq_tail, &bwq_is_full);
-					if (updated_bwq_head > bwq_head)
-					{
-						bwq_inserted = true;
-						bwq_head = updated_bwq_head;
-					}
-				}
+					bwq_inserted += copy_lq_to_bwq(local_buf, bwq, &bwq_head, bwq_tail, &bwq_is_full);
 
 				/* is bwq full or still more local data? retry */
 				if (bwq_is_full || local_buf->slots)
 					continue;
 
 				/* try copying from wbq to bwq */
-				updated_bwq_head = copy_ipcq_to_bwq(wbq, bwq, bwq_head, bwq_tail, &bwq_is_full);
-				if (updated_bwq_head > bwq_head)
-				{
-					bwq_inserted = true;
-					bwq_head = updated_bwq_head;
-				}
+				bwq_inserted += copy_ipcq_to_bwq(wbq, bwq, &bwq_head, bwq_tail, &bwq_is_full);
 
 				if (bwq_is_full)
 					continue;
 
 				/* try copying from ibq to bwq */
-				updated_bwq_head = copy_ipcq_to_bwq(ibq, bwq, bwq_head, bwq_tail, &bwq_is_full);
-				if (updated_bwq_head > bwq_head)
-				{
-					bwq_inserted = true;
-					bwq_head = updated_bwq_head;
-				}
+				bwq_inserted += copy_ipcq_to_bwq(ibq, bwq, &bwq_head, bwq_tail, &bwq_is_full);
 			}
 
 			if (bwq_inserted)
@@ -658,6 +671,8 @@ copy_messages(void)
 				latch = (Latch *) pg_atomic_read_u64(&bwq->consumer_latch);
 				if (latch)
 					SetLatch(latch);
+
+				num_copied += bwq_inserted;
 			}
 
 			if (ibq->cursor > last_ibq_cur)
@@ -669,7 +684,7 @@ copy_messages(void)
 					SetLatch(latch);
 			}
 
-			copy_wbq_to_lq(wbq, local_buf);
+			num_copied += copy_wbq_to_lq(wbq, local_buf);
 
 			if (wbq->cursor > last_wbq_cur)
 			{
@@ -708,12 +723,12 @@ have_pending_messages(void)
 		{
 			ipc_queue *ipcq;
 
+			ipcq = (ipc_queue *) ptr;
+			ptr += ipc_queue_size;
+
 			/* skip broker->worker queues */
 			if (i % num_queues_per_worker == 0)
 				continue;
-
-			ipcq = (ipc_queue *) ptr;
-			ptr += ipc_queue_size;
 
 			if (!ipc_queue_is_empty(ipcq))
 			{
@@ -864,6 +879,8 @@ ipc_msg_broker_main(int argc, char *argv[])
 	{
 		int num_copied;
 
+		CHECK_FOR_INTERRUPTS();
+
 		MemoryContextSwitchTo(work_ctx);
 		MemoryContextReset(work_ctx);
 
@@ -872,17 +889,15 @@ ipc_msg_broker_main(int argc, char *argv[])
 		num_copied = copy_messages();
 
 		/* If we didn't copy any messages, try to sleep and wait for new ones to arrive. */
-		if (num_copied == 0)
+		if (!num_copied)
 		{
-			int rc;
-
 			/* Mark as waiting */
 			pg_atomic_test_set_flag(&broker_meta->waiting);
 
 			/* If we have no pending messages, sleep till we get signaled. */
 			if (!have_pending_messages())
 			{
-				rc = WaitLatch(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 1000);
+				int rc = WaitLatch(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
 				ResetLatch(MyLatch);
 
 				/* Emergency bail out if postmaster has died */
@@ -1030,6 +1045,7 @@ get_db_meta(Oid dbid)
 
 		/* XXX(usmanm): Is this totally kosher? */
 		Assert(db_meta->lock_idx != -1);
+		Assert(db_meta->lock_idx + num_locks_per_db < max_locks);
 		lock_slot = &broker_meta->locks[db_meta->lock_idx];
 
 		for (i = 0; i < num_locks_per_db; i++)
@@ -1064,15 +1080,15 @@ get_db_meta(Oid dbid)
 			/* We use the same lock for these two producer queues */
 
 			/* worker->broker queue */
-			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, false);
+			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, true);
 			ipc_queue_set_handlers((ipc_queue *) ptr, NULL, NULL, StreamTupleStateCopyFn);
 			ptr += ipc_queue_size;
+			lock_slot++;
 
 			/* insert->broker queue */
 			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, true);
 			ipc_queue_set_handlers((ipc_queue *) ptr, NULL, NULL, StreamTupleStateCopyFn);
 			ptr += ipc_queue_size;
-
 			lock_slot++;
 		}
 
@@ -1084,7 +1100,6 @@ get_db_meta(Oid dbid)
 			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, false);
 			ipc_queue_set_handlers((ipc_queue *) ptr, PartialTupleStatePeekFn, popfn, PartialTupleStateCopyFn);
 			ptr += ipc_queue_size;
-
 			lock_slot++;
 		}
 	}
