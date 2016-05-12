@@ -43,9 +43,10 @@
 #define MAX_LOOPS_PER_QUEUE 5
 
 #define num_bg_workers_per_db (continuous_query_num_workers + continuous_query_num_combiners)
+#define num_queues_per_db (continuous_query_num_workers * 3 + continuous_query_num_combiners)
 #define num_locks_per_db (num_bg_workers_per_db * 2 + 1) /* +1 for all ephemeral ipc queues */
-#define ipc_queue_size (continuous_query_ipc_shared_mem * 1024 / 4)
-#define db_dsm_segment_size (ipc_queue_size * (num_queues_per_worker + num_queues_per_combiner))
+#define ipc_queue_size MAXALIGN(continuous_query_ipc_shared_mem * 1024 / num_queues_per_db)
+#define db_dsm_segment_size (ipc_queue_size * num_queues_per_db)
 #define broker_db_meta_size (sizeof(broker_db_meta) + (max_worker_processes * sizeof(dsm_segment_slot)))
 #define num_queues_per_worker 3
 #define num_queues_per_combiner 1
