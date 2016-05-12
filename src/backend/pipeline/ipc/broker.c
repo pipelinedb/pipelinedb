@@ -442,9 +442,6 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 bwq_head, uint64 b
 		nremoved++;
 	}
 
-	if (nremoved)
-		elog(LOG, "COPIED FROM LOCAL %d", nremoved);
-
 	while (nremoved--)
 		local_buf->slots = list_delete_first(local_buf->slots);
 
@@ -457,7 +454,6 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tai
 	uint64 src_head = pg_atomic_read_u64(&src->head);
 	uint64 src_tail = src->cursor;
 	uint64 free = bwq->size - (bwq_head - bwq_tail);
-	int count = 0;
 
 	Assert(src_head >= src_tail);
 
@@ -501,13 +497,9 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tai
 		dest_slot->next = bwq_head;
 
 		src_tail = src_slot->next;
-		count++;
 	}
 
 	src->cursor = src_tail;
-
-	if (count)
-		elog(LOG, "COPIED DIRECTLY %d", count);
 
 	return bwq_head;
 }
@@ -517,7 +509,6 @@ copy_wbq_to_lq(ipc_queue *wbq, local_queue *local_buf)
 {
 	uint64 tail = wbq->cursor;
 	uint64 head = pg_atomic_read_u64(&wbq->head);
-	int count = 0;
 
 	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
 
@@ -548,16 +539,11 @@ copy_wbq_to_lq(ipc_queue *wbq, local_queue *local_buf)
 		local_buf->size += local_slot->len;
 
 		tail = src_slot->next;
-
-		count++;
 	}
 
 	MemoryContextSwitchTo(old);
 
 	wbq->cursor = tail;
-
-	if (count)
-		elog(LOG, "COPIED TO LOCAL %d", count);
 }
 
 static int
