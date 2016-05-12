@@ -494,9 +494,7 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tai
 			memcpy(dest_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
 
 		bwq_head += len_needed;
-		Assert(bwq_head == src_slot->next);
 		dest_slot->next = bwq_head;
-
 		src_tail = src_slot->next;
 	}
 
@@ -665,7 +663,6 @@ copy_messages(void)
 			if (ibq->cursor > last_ibq_cur)
 			{
 				Latch *latch;
-				Assert(ibq->cursor);
 				pg_atomic_write_u64(&ibq->tail, ibq->cursor);
 				latch = (Latch *) pg_atomic_read_u64(&ibq->producer_latch);
 				if (latch)
@@ -677,7 +674,6 @@ copy_messages(void)
 			if (wbq->cursor > last_wbq_cur)
 			{
 				Latch *latch;
-				Assert(wbq->cursor);
 				pg_atomic_write_u64(&wbq->tail, wbq->cursor);
 				latch = (Latch *) pg_atomic_read_u64(&wbq->producer_latch);
 				if (latch)
