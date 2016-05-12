@@ -21,35 +21,6 @@
 #define WAIT_SLEEP_NS 250
 #define MAX_WAIT_SLEEP_NS 5000 /* 5ms */
 
-struct ipc_queue_slot
-{
-	uint64_t next;
-	bool     wraps;
-	bool     peeked;
-	int      len;
-	char     bytes[1]; /* dynamically allocated */
-};
-
-static inline uint64_t
-ipc_queue_offset(ipc_queue *ipcq, uint64_t ptr)
-{
-	Assert(ipcq->size > 0);
-	return ptr % ipcq->size;
-}
-
-static inline bool
-ipc_queue_needs_wrap(ipc_queue *ipcq, uint64_t start, int len)
-{
-	/* Is there enough space left or do we cross the physical boundary? */
-	return (start % ipcq->size) + len > ipcq->size;
-}
-
-static inline ipc_queue_slot *
-ipc_queue_slot_get(ipc_queue *ipcq, uint64_t ptr)
-{
-	return (ipc_queue_slot *) ((uintptr_t) ipcq->bytes + ipc_queue_offset(ipcq, ptr));
-}
-
 void
 ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router)
 {
@@ -61,7 +32,7 @@ ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router)
 
 	MemSet((char *) ipcq, 0, size);
 
-	ipcq->used_by_router = used_by_router;
+	ipcq->used_by_broker = used_by_router;
 
 	/* We leave enough space for a ipc_queue_slot to go at the end, so we never overflow the buffer. */
 	ipcq->size = size - sizeof(ipc_queue) - sizeof(ipc_queue_slot);
@@ -191,7 +162,7 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 	slot->next = head;
 	pg_atomic_write_u64(&ipcq->head, head);
 
-	if (ipcq->used_by_router)
+	if (ipcq->used_by_broker)
 		signal_ipc_broker_process();
 	else
 	{
