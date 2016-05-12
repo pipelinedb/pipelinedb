@@ -43,16 +43,18 @@
 #define MAX_LOOPS_PER_QUEUE 5
 
 #define num_bg_workers_per_db (continuous_query_num_workers + continuous_query_num_combiners)
-#define num_locks_per_db (num_bg_workers_per_db + 1) /* +1 for all ephemeral ipc queues */
+#define num_locks_per_db (num_bg_workers_per_db * 2 + 1) /* +1 for all ephemeral ipc queues */
 #define ipc_queue_size (continuous_query_ipc_shared_mem * 1024 / 4)
-#define db_dsm_segment_size (ipc_queue_size * ((continuous_query_num_workers * 2) + continuous_query_num_combiners))
+#define db_dsm_segment_size (ipc_queue_size * (num_queues_per_worker + num_queues_per_combiner))
 #define broker_db_meta_size (sizeof(broker_db_meta) + (max_worker_processes * sizeof(dsm_segment_slot)))
+#define num_queues_per_worker 3
+#define num_queues_per_combiner 1
 
-typedef struct local_buffer
+typedef struct local_queue
 {
 	uint64 size;
 	List *slots;
-} local_buffer;
+} local_queue;
 
 typedef struct dsm_segment_slot
 {
@@ -88,7 +90,7 @@ typedef struct broker_db_meta
 	dsm_handle handle;
 
 	/* in local memory */
-	local_buffer *local_buffers;
+	local_queue *lqueues;
 
 	/* ephemeral segments used by adhoc query processes */
 	dsm_segment_slot ephemeral_seg_slots[1]; /* max_worker_processes total slots */
@@ -345,18 +347,18 @@ purge_dropped_db_segments(void)
 			if (db_meta->segment)
 				dsm_detach(db_meta->segment);
 
-			if (db_meta->local_buffers)
+			if (db_meta->lqueues)
 			{
 				int i;
 
 				for (i = 0; i < continuous_query_num_workers; i++)
 				{
-					local_buffer *local_buf = &db_meta->local_buffers[i];
+					local_queue *local_buf = &db_meta->lqueues[i];
 					if (local_buf->slots)
 						list_free_deep(local_buf->slots);
 				}
 
-				pfree(db_meta->local_buffers);
+				pfree(db_meta->lqueues);
 			}
 
 			hash_search(broker_meta->db_meta_hash, &dbid, HASH_REMOVE, &found);
@@ -395,6 +397,169 @@ dsm_attach_and_pin(dsm_handle handle)
 	return segment;
 }
 
+static uint64
+copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tail, bool *isfull)
+{
+	ListCell *lc;
+	int nremoved = 0;
+	uint64 free = bwq->size - (bwq_head - bwq_tail);
+
+	foreach(lc, local_buf->slots)
+	{
+		ipc_queue_slot *src_slot = lfirst(lc);
+		ipc_queue_slot *dest_slot = ipc_queue_slot_get(bwq, bwq_head);
+		int len_needed;
+
+		if (src_slot->wraps)
+			len_needed = src_slot->len + bwq->size - ipc_queue_offset(bwq, bwq_head);
+		else
+			len_needed = sizeof(ipc_queue_slot) + src_slot->len;
+
+		Assert(len_needed > 0);
+
+		if (len_needed > free)
+		{
+			*isfull = true;
+			break;
+		}
+
+		free -= len_needed;
+
+		if (src_slot->wraps)
+		{
+			*dest_slot = *src_slot;
+			memcpy(bwq->bytes, src_slot->bytes, src_slot->len);
+		}
+		else
+			memcpy(dest_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
+
+		bwq_head += len_needed;
+		dest_slot->next = bwq_head;
+
+		local_buf->size -= src_slot->len;
+
+		pfree(src_slot);
+		nremoved++;
+	}
+
+	if (nremoved)
+		elog(LOG, "COPIED FROM LOCAL %d", nremoved);
+
+	while (nremoved--)
+		local_buf->slots = list_delete_first(local_buf->slots);
+
+	return bwq_head;
+}
+
+static uint64
+copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 bwq_head, uint64 bwq_tail, bool *isfull)
+{
+	uint64 src_head = pg_atomic_read_u64(&src->head);
+	uint64 src_tail = src->cursor;
+	uint64 free = bwq->size - (bwq_head - bwq_tail);
+	int count = 0;
+
+	Assert(src_head >= src_tail);
+
+	while (true)
+	{
+		ipc_queue_slot *src_slot;
+		ipc_queue_slot *dest_slot;
+		int len_needed;
+
+		/* no data in src queue? update head and recheck */
+		if (src_tail == src_head)
+		{
+			src_head = pg_atomic_read_u64(&src->head);
+			if (src_tail == src_head)
+				break;
+		}
+
+		src_slot = ipc_queue_slot_get(src, src_tail);
+		dest_slot =  ipc_queue_slot_get(bwq, bwq_head);
+
+		len_needed = src_slot->next - src_tail;
+
+		if (len_needed > free)
+		{
+			*isfull = true;
+			break;
+		}
+
+		free -= len_needed;
+
+		if (src_slot->wraps)
+		{
+			*dest_slot = *src_slot;
+			memcpy(bwq->bytes, src->bytes, src_slot->len);
+		}
+		else
+			memcpy(dest_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
+
+		bwq_head += len_needed;
+		Assert(bwq_head == src_slot->next);
+		dest_slot->next = bwq_head;
+
+		src_tail = src_slot->next;
+		count++;
+	}
+
+	src->cursor = src_tail;
+
+	if (count)
+		elog(LOG, "COPIED DIRECTLY %d", count);
+
+	return bwq_head;
+}
+
+static void
+copy_wbq_to_lq(ipc_queue *wbq, local_queue *local_buf)
+{
+	uint64 tail = wbq->cursor;
+	uint64 head = pg_atomic_read_u64(&wbq->head);
+	int count = 0;
+
+	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+
+	while (local_buf->size < ipc_queue_size)
+	{
+		ipc_queue_slot *src_slot = ipc_queue_slot_get(wbq, tail);
+		ipc_queue_slot *local_slot;
+
+		/* is the wbq empty? */
+		if (tail == head)
+		{
+			head = pg_atomic_read_u64(&wbq->head);
+			if (tail == head)
+				break;
+		}
+
+		local_slot = palloc0(sizeof(ipc_queue_slot) + src_slot->len);
+
+		if (src_slot->wraps)
+		{
+			*local_slot = *src_slot;
+			memcpy(local_slot->bytes, wbq->bytes, src_slot->len);
+		}
+		else
+			memcpy(local_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len);
+
+		local_buf->slots = lappend(local_buf->slots, local_slot);
+		local_buf->size += local_slot->len;
+
+		tail = src_slot->next;
+
+		count++;
+	}
+
+	MemoryContextSwitchTo(old);
+
+	wbq->cursor = tail;
+
+	if (count)
+		elog(LOG, "COPIED TO LOCAL %d", count);
+}
+
 static int
 copy_messages(void)
 {
@@ -413,227 +578,124 @@ copy_messages(void)
 		if (db_meta->segment == NULL)
 			db_meta->segment = dsm_attach_and_pin(db_meta->handle);
 
-		if (db_meta->local_buffers == NULL)
-			db_meta->local_buffers = MemoryContextAllocZero(CacheMemoryContext,
-					sizeof(local_buffer) * continuous_query_num_workers);
+		if (db_meta->lqueues == NULL)
+			db_meta->lqueues = MemoryContextAllocZero(CacheMemoryContext,
+					sizeof(local_queue) * continuous_query_num_workers);
 
 		ptr = dsm_segment_address(db_meta->segment);
 
 		for (i = 0; i < continuous_query_num_workers; i++)
 		{
-			ipc_queue *dest;
-			ipc_queue *src;
-			local_buffer *local_buf = &db_meta->local_buffers[i];
-			uint64 last_dest_tail = UINT64_MAX;
+			ipc_queue *bwq; /* broker->worker queue */
+			ipc_queue *wbq; /* worker->broker queue */
+			ipc_queue *ibq; /* insert->broker queue */
+			local_queue *local_buf = &db_meta->lqueues[i];
+			uint64 last_bwq_tail;
+			uint64 last_wbq_cur;
+			uint64 last_ibq_cur;
 			int nloops = MAX_LOOPS_PER_QUEUE;
-			uint64 dest_head;
-			int ncopied_to = 0;
-			int ncopied_from = 0;
-			bool not_enough_space = false;
-			uint64 src_tail;
+			uint64 bwq_head;
+			bool bwq_inserted = false;
+			bool bwq_is_full = false;
 
-			dest = (ipc_queue *) ptr;
+			bwq = (ipc_queue *) ptr;
 			ptr += ipc_queue_size;
-			src = (ipc_queue *) ptr;
+			wbq = (ipc_queue *) ptr;
+			ptr += ipc_queue_size;
+			ibq = (ipc_queue *) ptr;
 			ptr += ipc_queue_size;
 
-			Assert(src->peek_fn == NULL);
-			Assert(src->pop_fn == NULL);
+			/* check some invariants */
+			Assert(wbq->peek_fn == NULL);
+			Assert(ibq->pop_fn == NULL);
+			Assert(ibq->peek_fn == NULL);
+			Assert(ibq->pop_fn == NULL);
+			Assert(wbq->cursor == pg_atomic_read_u64(&wbq->tail));
+			Assert(ibq->cursor == pg_atomic_read_u64(&ibq->tail));
 
-			dest_head = pg_atomic_read_u64(&dest->head);
-			src_tail = src->cursor;
+			bwq_head = pg_atomic_read_u64(&bwq->head);
+			last_bwq_tail = UINT64_MAX; /* NULL */
+			last_wbq_cur = wbq->cursor;
+			last_ibq_cur = ibq->cursor;
 
-			Assert(src->cursor == pg_atomic_read_u64(&src->tail));
-
-			/* Try to copy data into dest ipc_queue */
 			while (--nloops)
 			{
-				uint64 dest_tail;
-				Size dest_free;
+				uint64 updated_bwq_head;
+				uint64 bwq_tail = pg_atomic_read_u64(&bwq->tail);
 
-				dest_tail = pg_atomic_read_u64(&dest->tail);
-
-				/* Has the reader not read anything since the last iteration? Skip. */
-				if (not_enough_space && dest_tail == last_dest_tail)
+				/* was bwq full and nothing's been read off it since? */
+				if (bwq_is_full && bwq_tail == last_bwq_tail)
 					continue;
 
-				not_enough_space = false;
-				last_dest_tail = dest_tail;
-				dest_free = dest->size - (dest_head - dest_tail);
+				bwq_is_full = false;
+				last_bwq_tail = bwq_tail;
 
-				/* If we have locally cached data, write that first so order remains same */
+				/* locally cache slots? insert them first */
 				if (local_buf->slots)
 				{
-					ListCell *lc;
-					int nremoved = 0;
-
-					foreach(lc, local_buf->slots)
+					updated_bwq_head = copy_lq_to_bwq(local_buf, bwq, bwq_head, bwq_tail, &bwq_is_full);
+					if (updated_bwq_head > bwq_head)
 					{
-						ipc_queue_slot *src_slot = lfirst(lc);
-						ipc_queue_slot *dest_slot = ipc_queue_slot_get(dest, dest_head);
-						int len_needed;
-
-						if (src_slot->wraps)
-							len_needed = src_slot->len + dest->size - ipc_queue_offset(dest, dest_head);
-						else
-							len_needed = sizeof(ipc_queue_slot) + src_slot->len;
-
-						Assert(len_needed > 0);
-
-						if (len_needed > dest_free)
-						{
-							not_enough_space = true;
-							break;
-						}
-
-						dest_free -= len_needed;
-
-						if (src_slot->wraps)
-						{
-							*dest_slot = *src_slot;
-							memcpy(dest->bytes, src_slot->bytes, src_slot->len);
-						}
-						else
-							memcpy(dest_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
-
-						dest_head += len_needed;
-						Assert(src_slot->next == dest_head);
-						dest_slot->next = dest_head;
-
-						local_buf->size -= src_slot->len;
-
-						pfree(src_slot);
-						nremoved++;
+						bwq_inserted = true;
+						bwq_head = updated_bwq_head;
 					}
-
-					ncopied_to += nremoved;
-
-					while (nremoved--)
-						local_buf->slots = list_delete_first(local_buf->slots);
 				}
 
-				/* Still locally cached slots, try again */
-				if (local_buf->slots)
+				/* is bwq full or still more local data? retry */
+				if (bwq_is_full || local_buf->slots)
 					continue;
-				/* Otherwise try to copy directly from src ipc_queue to dest ipc_queue */
-				else
+
+				/* try copying from wbq to bwq */
+				updated_bwq_head = copy_ipcq_to_bwq(wbq, bwq, bwq_head, bwq_tail, &bwq_is_full);
+				if (updated_bwq_head > bwq_head)
 				{
-					uint64 src_head;
-					int ncopied = 0;
+					bwq_inserted = true;
+					bwq_head = updated_bwq_head;
+				}
 
-					while (true)
-					{
-						ipc_queue_slot *src_slot;
-						ipc_queue_slot *dest_slot;
-						int len_needed;
+				if (bwq_is_full)
+					continue;
 
-						src_head = pg_atomic_read_u64(&src->head);
-
-						/* No data in src buffer? */
-						if (src_tail == src_head)
-							break;
-
-						src_slot = ipc_queue_slot_get(src, src_tail);
-						dest_slot =  ipc_queue_slot_get(dest, dest_head);
-
-						len_needed = src_slot->next - src_tail;
-
-						if (len_needed > dest_free)
-						{
-							not_enough_space = true;
-							break;
-						}
-
-						dest_free -= len_needed;
-
-						if (src_slot->wraps)
-						{
-							*dest_slot = *src_slot;
-							memcpy(dest->bytes, src->bytes, src_slot->len);
-						}
-						else
-							memcpy(dest_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len - 1);
-
-						dest_head += len_needed;
-						Assert(dest_head == src_slot->next);
-						dest_slot->next = dest_head;
-
-						src_tail = src_slot->next;
-
-						ncopied++;
-					}
-
-					ncopied_to += ncopied;
-					ncopied_from += ncopied;
+				/* try copying from ibq to bwq */
+				updated_bwq_head = copy_ipcq_to_bwq(ibq, bwq, bwq_head, bwq_tail, &bwq_is_full);
+				if (updated_bwq_head > bwq_head)
+				{
+					bwq_inserted = true;
+					bwq_head = updated_bwq_head;
 				}
 			}
 
-			if (ncopied_to)
+			if (bwq_inserted)
 			{
-				Latch *consumer_latch;
-
-				Assert(dest_head);
-
-				pg_atomic_write_u64(&dest->head, dest_head);
-
-				consumer_latch = (Latch *) pg_atomic_read_u64(&dest->consumer_latch);
-				if (consumer_latch)
-					SetLatch(consumer_latch);
+				Latch *latch;
+				Assert(bwq_head);
+				pg_atomic_write_u64(&bwq->head, bwq_head);
+				latch = (Latch *) pg_atomic_read_u64(&bwq->consumer_latch);
+				if (latch)
+					SetLatch(latch);
 			}
 
-			/* Try to copy data from src ipc_queue into local buffers */
-			if (ipc_queue_has_unread(src))
+			if (ibq->cursor > last_ibq_cur)
 			{
-				MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
-
-				while (local_buf->size < ipc_queue_size / 2)
-				{
-					ipc_queue_slot *src_slot = ipc_queue_slot_get(src, src_tail);
-					uint64 src_head = pg_atomic_read_u64(&src->head);
-					ipc_queue_slot *local_slot;
-
-					/* No data in src buffer? */
-					if (src_tail == src_head)
-						break;
-
-					local_slot = palloc0(sizeof(ipc_queue_slot) + src_slot->len);
-
-					if (src_slot->wraps)
-					{
-						*local_slot = *src_slot;
-						memcpy(local_slot->bytes, src->bytes, src_slot->len);
-					}
-					else
-						memcpy(local_slot, src_slot, sizeof(ipc_queue_slot) + src_slot->len);
-
-					local_buf->slots = lappend(local_buf->slots, local_slot);
-					local_buf->size += local_slot->len;
-
-					ncopied_from++;
-
-					src_tail = src_slot->next;
-				}
-
-				MemoryContextSwitchTo(old);
+				Latch *latch;
+				Assert(ibq->cursor);
+				pg_atomic_write_u64(&ibq->tail, ibq->cursor);
+				latch = (Latch *) pg_atomic_read_u64(&ibq->producer_latch);
+				if (latch)
+					SetLatch(latch);
 			}
 
-			if (ncopied_from)
+			copy_wbq_to_lq(wbq, local_buf);
+
+			if (wbq->cursor > last_wbq_cur)
 			{
-				Latch *producer_latch;
-
-				Assert(src_tail);
-
-				pg_atomic_write_u64(&src->tail, src_tail);
-				src->cursor = src_tail;
-
-				producer_latch = (Latch *) pg_atomic_read_u64(&src->producer_latch);
-				if (producer_latch)
-					SetLatch(producer_latch);
+				Latch *latch;
+				Assert(wbq->cursor);
+				pg_atomic_write_u64(&wbq->tail, wbq->cursor);
+				latch = (Latch *) pg_atomic_read_u64(&wbq->producer_latch);
+				if (latch)
+					SetLatch(latch);
 			}
-
-			if (ncopied_to || ncopied_from || local_buf->size)
-				elog(LOG, "COPY DONE (%d) from %d, to %d, local %d [%ld]",
-						i, ncopied_from, ncopied_to, list_length(local_buf->slots), local_buf->size);
 		}
 	}
 
@@ -659,22 +721,18 @@ have_pending_messages(void)
 		Assert(db_meta->segment);
 		ptr = dsm_segment_address(db_meta->segment);
 
-		for (i = 0; i < continuous_query_num_workers; i++)
+		for (i = 0; i < continuous_query_num_workers * num_queues_per_worker; i++)
 		{
-			ipc_queue *src;
+			ipc_queue *ipcq;
 
-			if (db_meta->local_buffers && list_length(db_meta->local_buffers[i].slots))
-			{
-				hash_seq_term(&status);
-				LWLockRelease(IPCMessageBrokerIndexLock);
-				return true;
-			}
+			/* skip broker->worker queues */
+			if (i % num_queues_per_worker == 0)
+				continue;
 
-			ptr += ipc_queue_size;
-			src = (ipc_queue *) ptr;
+			ipcq = (ipc_queue *) ptr;
 			ptr += ipc_queue_size;
 
-			if (!ipc_queue_is_empty(src))
+			if (!ipc_queue_is_empty(ipcq))
 			{
 				hash_seq_term(&status);
 				LWLockRelease(IPCMessageBrokerIndexLock);
@@ -1015,17 +1073,19 @@ get_db_meta(Oid dbid)
 			 * sent to it.
 			 */
 
-			/* Broker -> Worker */
+			/* broker->worker queue */
 			ipc_queue_init(ptr, ipc_queue_size, NULL, false);
 			ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, popfn, NULL);
 			ptr += ipc_queue_size;
 
-			/* Worker -> Broker */
-			ipc_queue_init(ptr, ipc_queue_size, NULL, false);
-			ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, popfn, NULL);
+			/* We use the same lock for these two producer queues */
+
+			/* worker->broker queue */
+			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, false);
+			ipc_queue_set_handlers((ipc_queue *) ptr, NULL, NULL, StreamTupleStateCopyFn);
 			ptr += ipc_queue_size;
 
-			/* INSERT -> Broker */
+			/* insert->broker queue */
 			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, true);
 			ipc_queue_set_handlers((ipc_queue *) ptr, NULL, NULL, StreamTupleStateCopyFn);
 			ptr += ipc_queue_size;
@@ -1037,6 +1097,7 @@ get_db_meta(Oid dbid)
 		{
 			ipc_queue_pop_fn popfn = synchronous_stream_insert ? PartialTupleStatePopFn : NULL;
 
+			/* worker->combiner queue */
 			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, false);
 			ipc_queue_set_handlers((ipc_queue *) ptr, PartialTupleStatePeekFn, popfn, PartialTupleStateCopyFn);
 			ptr += ipc_queue_size;
@@ -1051,21 +1112,25 @@ get_db_meta(Oid dbid)
 }
 
 static ipc_queue *
-get_bg_worker_queue(dsm_segment *segment, int group_id, bool is_worker, bool for_producers)
+get_bg_worker_queue(dsm_segment *segment, int group_id, bool for_worker, bool for_producers)
 {
 	char *ptr = dsm_segment_address(segment);
 	ipc_queue *ipcq;
 
-	if (is_worker)
+	if (for_worker)
 	{
-		ptr += ipc_queue_size * group_id * 2;
+		ptr += ipc_queue_size * group_id * num_queues_per_worker;
 		if (for_producers)
-			ptr += ipc_queue_size; /* skip over to the producer queue */
+		{
+			ptr += ipc_queue_size; /* skip over to the worker -> broker queue */
+			if (!IsContQueryWorkerProcess())
+				ptr += ipc_queue_size; /* skip over to the insert -> broker queue */
+		}
 	}
 	else
 	{
-		ptr += ipc_queue_size * continuous_query_num_workers * 2;
-		ptr += ipc_queue_size * group_id;
+		ptr += ipc_queue_size * continuous_query_num_workers * num_queues_per_worker;
+		ptr += ipc_queue_size * group_id * num_queues_per_combiner;
 	}
 
 	ipcq = (ipc_queue *) ptr;
@@ -1127,7 +1192,8 @@ acquire_my_ipc_queue(void)
 		 * and find the correct ipc_queue within that dsm_segment.
 		 */
 		my_ipc_meta->segment = dsm_attach_and_pin(db_meta->handle);
-		my_ipc_meta->queue = get_bg_worker_queue(my_ipc_meta->segment, MyContQueryProc->group_id, IsContQueryWorkerProcess(), false);
+		my_ipc_meta->queue = get_bg_worker_queue(my_ipc_meta->segment, MyContQueryProc->group_id,
+				IsContQueryWorkerProcess(), false);
 		my_ipc_meta->seg_slot = NULL;
 	}
 
