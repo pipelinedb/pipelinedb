@@ -29,7 +29,6 @@
 #include "parser/parse_collate.h"
 #include "parser/parse_target.h"
 #include "pgstat.h"
-#include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
 #include "storage/shm_alloc.h"
