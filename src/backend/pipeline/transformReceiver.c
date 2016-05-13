@@ -41,7 +41,9 @@ typedef struct TransformState
 	FunctionCallInfo trig_fcinfo;
 
 	/* only used by the optimized code path for pipeline_stream_insert */
-	List *tups;
+	HeapTuple *tups;
+	int nmaxtups;
+	int ntups;
 	int nacks;
 	InsertBatchAck *acks;
 } TransformState;
@@ -84,7 +86,23 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 	}
 	else
 	{
-		t->tups = lappend(t->tups, ExecCopySlotTuple(slot));
+		if (t->tups == NULL)
+		{
+			Assert(t->nmaxtups == 0);
+			Assert(t->ntups == 0);
+
+			t->nmaxtups = continuous_query_batch_size / 8;
+			t->tups = palloc(sizeof(HeapTuple) * t->nmaxtups);
+		}
+
+		if (t->ntups == t->nmaxtups)
+		{
+			t->nmaxtups *= 2;
+			t->tups = repalloc(t->tups, sizeof(HeapTuple) * t->nmaxtups);
+		}
+
+		t->tups[t->ntups] = ExecCopySlotTuple(slot);
+		t->ntups++;
 
 		if (synchronous_stream_insert && t->acks == NULL)
 			t->acks = InsertBatchAckCreate(t->cont_exec->yielded, &t->nacks);
@@ -168,22 +186,11 @@ static void
 pipeline_stream_insert_batch(TransformState *t)
 {
 	int i;
-	ListCell *lc;
-	HeapTuple *tups;
 
-	if (list_length(t->tups) == 0)
+	if (t->ntups == 0)
 		return;
 
 	Assert(t->tg_rel);
-
-	tups = palloc(sizeof(HeapTuple) * list_length(t->tups));
-
-	i = 0;
-	foreach(lc, t->tups)
-	{
-		tups[i] = (HeapTuple) lfirst(lc);
-		i++;
-	}
 
 	for (i = 0; i < t->cont_query->tgnargs; i++)
 	{
@@ -198,16 +205,16 @@ pipeline_stream_insert_batch(TransformState *t)
 			for (i = 0; i < t->nacks; i++)
 			{
 				InsertBatchAck *ack = &t->acks[i];
-				InsertBatchIncrementNumWTuples(ack->batch, list_length(t->tups));
+				InsertBatchIncrementNumWTuples(ack->batch, t->ntups);
 			}
 		}
 
-		size = SendTuplesToContWorkers(rel, RelationGetDescr(t->tg_rel), tups, list_length(t->tups), t->acks, t->nacks);
+		size = SendTuplesToContWorkers(rel, RelationGetDescr(t->tg_rel), t->tups, t->ntups, t->acks, t->nacks);
 
 		heap_close(rel, NoLock);
 
 		if (size)
-			pgstat_increment_cq_write(list_length(t->tups), size);
+			pgstat_increment_cq_write(t->ntups, size);
 	}
 
 	if (t->acks)
@@ -217,16 +224,16 @@ pipeline_stream_insert_batch(TransformState *t)
 		t->nacks = 0;
 	}
 
-	pfree(tups);
-
-	foreach(lc, t->tups)
+	for (i = 0; i < t->ntups; i++)
 	{
-		HeapTuple tup = (HeapTuple) lfirst(lc);
+		HeapTuple tup = (HeapTuple) t->tups[i];
 		heap_freetuple(tup);
 	}
 
-	list_free(t->tups);
-	t->tups = NIL;
+	pfree(t->tups);
+	t->tups = NULL;
+	t->ntups = 0;
+	t->nmaxtups = 0;
 }
 
 void
