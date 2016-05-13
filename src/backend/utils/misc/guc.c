@@ -2781,7 +2781,7 @@ static struct config_int ConfigureNamesInt[] =
 		 GUC_UNIT_MS
 		},
 		&continuous_query_max_wait,
-		10, 1, 60000,
+		50, 1, 60000,
 		NULL, NULL, NULL
 	},
 
