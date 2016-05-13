@@ -169,29 +169,27 @@ pipeline_stream_insert_batch(TransformState *t)
 {
 	int i;
 	ListCell *lc;
-	bytea *packed_desc;
+	HeapTuple *tups;
 
 	if (list_length(t->tups) == 0)
 		return;
 
 	Assert(t->tg_rel);
-	packed_desc = PackTupleDesc(RelationGetDescr(t->tg_rel));
+
+	tups = palloc(sizeof(HeapTuple) * list_length(t->tups));
+
+	i = 0;
+	foreach(lc, t->tups)
+	{
+		tups[i] = (HeapTuple) lfirst(lc);
+		i++;
+	}
 
 	for (i = 0; i < t->cont_query->tgnargs; i++)
 	{
 		RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(t->cont_query->tgargs[i]));
 		Relation rel = heap_openrv(rv, AccessShareLock);
-		Oid relid = RelationGetRelid(rel);
-		Bitmapset *targets;
-		Size size = 0;
-		ipc_queue *ipcq;
-		int ninserted = 0;
-		int nbatches = 1;
-
-		targets = bms_difference(GetLocalStreamReaders(relid), GetAdhocContinuousViewIds());
-
-		if (bms_num_members(targets) == 0)
-			continue;
+		Size size;
 
 		if (t->acks)
 		{
@@ -204,50 +202,13 @@ pipeline_stream_insert_batch(TransformState *t)
 			}
 		}
 
-		ipcq = get_worker_queue_with_lock();
-
-		foreach(lc, t->tups)
-		{
-			HeapTuple tup = (HeapTuple) lfirst(lc);
-			int len;
-			StreamTupleState *sts = StreamTupleStateCreate(tup, RelationGetDescr(t->tg_rel), packed_desc, targets,
-					t->acks, t->nacks, &len);
-
-			if (ninserted == continuous_query_batch_size)
-			{
-				ipc_queue_unlock(ipcq);
-				ipcq = get_worker_queue_with_lock();
-				ninserted = 0;
-				nbatches++;
-			}
-
-			if (!ipc_queue_push_nolock(ipcq, sts, len, false))
-			{
-				int ntries = 0;
-				nbatches++;
-
-				do
-				{
-					ntries++;
-					ipc_queue_unlock(ipcq);
-					ipcq = get_worker_queue_with_lock();
-				}
-				while (!ipc_queue_push_nolock(ipcq, sts, len, ntries == continuous_query_num_workers));
-			}
-
-			ninserted++;
-			size += len;
-		}
-
-		ipc_queue_unlock(ipcq);
+		size = SendTuplesToContWorkers(rel, RelationGetDescr(t->tg_rel), tups, list_length(t->tups), t->acks, t->nacks);
 
 		heap_close(rel, NoLock);
 
-		pgstat_increment_cq_write(list_length(t->tups), size);
-		pgstat_increment_stream_insert(relid, list_length(t->tups), nbatches, size);
+		if (size)
+			pgstat_increment_cq_write(list_length(t->tups), size);
 	}
-
-	pfree(packed_desc);
 
 	if (t->acks)
 	{
@@ -255,6 +216,8 @@ pipeline_stream_insert_batch(TransformState *t)
 		t->acks = NULL;
 		t->nacks = 0;
 	}
+
+	pfree(tups);
 
 	foreach(lc, t->tups)
 	{

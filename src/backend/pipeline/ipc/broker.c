@@ -665,13 +665,8 @@ copy_messages(void)
 
 			if (bwq_inserted)
 			{
-				Latch *latch;
 				Assert(bwq_head);
-				pg_atomic_write_u64(&bwq->head, bwq_head);
-				latch = (Latch *) pg_atomic_read_u64(&bwq->consumer_latch);
-				if (latch)
-					SetLatch(latch);
-
+				ipc_queue_update_head(bwq, bwq_head);
 				num_copied += bwq_inserted;
 			}
 

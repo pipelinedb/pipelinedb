@@ -69,7 +69,6 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 	uint64_t head;
 	uint64_t tail;
 	Latch *producer_latch = NULL;
-	Latch *consumer_latch;
 	ipc_queue_slot *slot;
 	int len_needed;
 	char *pos;
@@ -160,16 +159,8 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 
 	head += len_needed;
 	slot->next = head;
-	pg_atomic_write_u64(&ipcq->head, head);
 
-	if (ipcq->used_by_broker)
-		signal_ipc_broker_process();
-	else
-	{
-		consumer_latch = (Latch *) pg_atomic_read_u64(&ipcq->consumer_latch);
-		if (consumer_latch)
-			SetLatch(consumer_latch);
-	}
+	ipc_queue_update_head(ipcq, head);
 
 	return true;
 }
@@ -350,4 +341,21 @@ ipc_queue_unlock(ipc_queue *mpq)
 	Assert(mpq->lock);
 	Assert(LWLockHeldByMe(mpq->lock));
 	LWLockRelease(mpq->lock);
+}
+
+void
+ipc_queue_update_head(ipc_queue *ipcq, uint64 head)
+{
+	Latch *latch;
+
+	pg_atomic_write_u64(&ipcq->head, head);
+
+	if (ipcq->used_by_broker)
+		signal_ipc_broker_process();
+	else
+	{
+		latch = (Latch *) pg_atomic_read_u64(&ipcq->consumer_latch);
+		if (latch)
+			SetLatch(latch);
+	}
 }

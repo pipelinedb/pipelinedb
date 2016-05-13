@@ -66,6 +66,7 @@ extern void ipc_queue_unlock(ipc_queue *ipcq);
 
 extern bool ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait);
 extern bool ipc_queue_push(ipc_queue *ipcq, void *ptr, int len, bool wait);
+extern void ipc_queue_update_head(ipc_queue *ipcq, uint64 head);
 
 #define ipc_queue_offset(ipcq, ptr) ((ptr) % (ipcq)->size)
 #define ipc_queue_needs_wrap(ipcq, start, len) (((start) % (ipcq)->size) + (len) > (ipcq)->size)
