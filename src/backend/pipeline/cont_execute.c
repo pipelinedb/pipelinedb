@@ -657,6 +657,8 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 		exec->states[exec->current_query_id] = NULL;
 	}
 
+	exec->current_query = NULL;
+
 	MemoryContextSwitchTo(old);
 }
 
