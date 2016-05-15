@@ -59,12 +59,12 @@ def test_deadlock_regress(pipeline, clean_db):
         else:
           pipeline.execute('INSERT INTO s1 (n) %s' % query)
 
-        count = pipeline.execute('SELECT count FROM cv').first()
+        count = dict(pipeline.execute('SELECT count FROM cv').first())
         ntries = 5
-        while count is None or count['count'] != nitems:
+        while count.get('count') != nitems and ntries > 0:
           assert sync == 'off'
           time.sleep(1)
-          count = pipeline.execute('SELECT count FROM cv').first()
+          count = dict(pipeline.execute('SELECT count FROM cv').first())
           ntries -= 1
         assert count and count['count'] == nitems
 
