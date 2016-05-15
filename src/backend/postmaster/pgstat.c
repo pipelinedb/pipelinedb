@@ -5655,6 +5655,14 @@ calculate_averages(PgStat_StatCQEntry *entry)
 		if (!end_time)
 			continue;
 
+		/* This can happen if we try to flush the stats while in the middle of processing a batch */
+		if (end_time < start_time)
+		{
+			Assert(i == avg->i);
+			Assert(entry == MyProcStatCQEntry);
+			continue;
+		}
+
 		if (TimestampDifferenceExceeds(end_time, now, PGSTAT_AVERAGE_BUFFER_INTERVAL))
 		{
 			avg->end_time[i] = 0;
@@ -6103,18 +6111,20 @@ void
 pgstat_start_cq(PgStat_StatCQEntry *entry)
 {
 	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
+	int i = lentry->avgstat.i;
 
-	lentry->avgstat.start_time[lentry->avgstat.i] = GetCurrentTimestamp();
-	lentry->avgstat.memory[lentry->avgstat.i] = 0;
-	lentry->avgstat.tuples[lentry->avgstat.i] = 0;
-	lentry->avgstat.bytes[lentry->avgstat.i] = 0;
+	lentry->avgstat.start_time[i] = GetCurrentTimestamp();
+	lentry->avgstat.memory[i] = 0;
+	lentry->avgstat.tuples[i] = 0;
+	lentry->avgstat.bytes[i] = 0;
 }
 
 void
 pgstat_end_cq(PgStat_StatCQEntry *entry)
 {
 	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
+	int i = lentry->avgstat.i;
 
-	lentry->avgstat.end_time[lentry->avgstat.i] = GetCurrentTimestamp();
-	lentry->avgstat.i = (lentry->avgstat.i + 1) % PGSTAT_AVERAGE_BUFFER_SIZE;
+	lentry->avgstat.end_time[i] = GetCurrentTimestamp();
+	lentry->avgstat.i = (i + 1) % PGSTAT_AVERAGE_BUFFER_SIZE;
 }

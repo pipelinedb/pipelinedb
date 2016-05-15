@@ -1187,7 +1187,7 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	hashfcinfo->fncollation = state->hashfunc->funccollid;
 	hashfcinfo->nargs = list_length(state->hashfunc->args);
 
-	scan = heap_beginscan_catalog(srcrel, 0, NULL);
+	scan = heap_beginscan(srcrel, GetTransactionSnapshot(), 0, NULL);
 	state->pending_tuples = 0;
 
 	Assert(base->tmp_cxt);

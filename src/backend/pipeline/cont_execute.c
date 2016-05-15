@@ -591,8 +591,6 @@ get_query_state(ContExecutor *exec)
 
 	PopActiveSnapshot();
 
-	MyStatCQEntry = (PgStat_StatCQEntry *) &state->stats;
-
 	return state;
 }
 
@@ -637,7 +635,10 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 	}
 
 	if (exec->current_query)
-		pgstat_start_cq((PgStat_StatCQEntry *) &exec->current_query->stats);
+	{
+		MyStatCQEntry = (PgStat_StatCQEntry *) &exec->current_query->stats;
+		pgstat_start_cq(MyStatCQEntry);
+	}
 
 	return exec->current_query_id;
 }
@@ -801,7 +802,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 
 	if (exec->current_query)
 	{
-		pgstat_end_cq((PgStat_StatCQEntry *) &exec->current_query->stats);
+		pgstat_end_cq(MyStatCQEntry);
 		pgstat_report_cqstat(false);
 	}
 	else
