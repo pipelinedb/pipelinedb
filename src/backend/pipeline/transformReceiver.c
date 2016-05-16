@@ -224,16 +224,27 @@ pipeline_stream_insert_batch(TransformState *t)
 		t->nacks = 0;
 	}
 
-	for (i = 0; i < t->ntups; i++)
+
+
+	if (t->ntups)
 	{
-		HeapTuple tup = (HeapTuple) t->tups[i];
-		heap_freetuple(tup);
+		for (i = 0; i < t->ntups; i++)
+		{
+			HeapTuple tup = (HeapTuple) t->tups[i];
+			heap_freetuple(tup);
+		}
+
+		pfree(t->tups);
+		t->tups = NULL;
+		t->ntups = 0;
+		t->nmaxtups = 0;
+	}
+	else
+	{
+		Assert(t->tups == NULL);
+		Assert(t->nmaxtups == 0);
 	}
 
-	pfree(t->tups);
-	t->tups = NULL;
-	t->ntups = 0;
-	t->nmaxtups = 0;
 }
 
 void
