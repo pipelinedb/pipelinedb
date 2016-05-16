@@ -412,7 +412,7 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 *bwq_head, uint64 
 	ListCell *lc;
 	int nremoved = 0;
 	uint64 head = *bwq_head;
-	uint64 free = bwq->size - (head - bwq_tail);
+	int free = ipc_queue_free_size(bwq, head, bwq_tail);
 	int copied = 0;
 
 	foreach(lc, local_buf->slots)
@@ -468,10 +468,11 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 	uint64 src_head = pg_atomic_read_u64(&src->head);
 	uint64 src_tail = src->cursor;
 	uint64 head = *bwq_head;
-	uint64 free = bwq->size - (head - bwq_tail);
+	int free = ipc_queue_free_size(bwq, head, bwq_tail);
 	int count = 0;
 
-	Assert(src_head >= src_tail);
+	Assert(src->used_by_broker);
+	Assert(free >= 0);
 
 	while (true)
 	{
@@ -480,6 +481,8 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 		int len_needed;
 		bool needs_wrap;
 		char *src_bytes;
+
+		Assert(src_tail <= src_head);
 
 		/* no data in src queue? update head and recheck */
 		if (src_tail == src_head)
@@ -506,10 +509,12 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 		}
 
 		free -= len_needed;
+		head += len_needed;
 
 		dest_slot->len = src_slot->len;
 		dest_slot->peeked = false;
 		dest_slot->wraps = needs_wrap;
+		dest_slot->next = head;
 
 		src_bytes = src_slot->wraps ? src->bytes : src_slot->bytes;
 
@@ -518,8 +523,6 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 		else
 			memcpy(dest_slot->bytes, src_bytes, src_slot->len);
 
-		head += len_needed;
-		dest_slot->next = head;
 		src_tail = src_slot->next;
 
 		count++;

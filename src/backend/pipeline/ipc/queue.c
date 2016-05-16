@@ -112,13 +112,12 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 	{
 		int r;
 
-		int space_used;
-
 		tail = pg_atomic_read_u64(&ipcq->tail);
-		space_used = head - tail;
+
+		Assert(tail <= head);
 
 		/* Is there enough space in the buffer? */
-		if (ipcq->size - space_used >= len_needed)
+		if (ipc_queue_free_size(ipcq, head, tail) >= len_needed)
 			break;
 		else if (!wait)
 			return false;

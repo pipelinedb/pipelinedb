@@ -61,11 +61,11 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 	Bitmapset *targets = bms_difference(all_targets, adhoc);
 	bytea *packed_desc;
 	int i;
-	uint64 free;
+	int free;
 	uint64 tail;
 	uint64 head;
 	int nbatches = 1;
-	Size size = 0;
+	uint64 size = 0;
 	int ninserted;
 
 	bms_free(all_targets);
@@ -80,8 +80,10 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 	ipcq = get_worker_queue_with_lock();
 	head = pg_atomic_read_u64(&ipcq->head);
 	tail = pg_atomic_read_u64(&ipcq->tail);
-	free = ipcq->size - (head - tail);
+	free = ipc_queue_free_size(ipcq, head, tail);
 	ninserted = 0;
+
+	Assert(free >= 0);
 
 	for (i = 0; i < ntuples; i++)
 	{
@@ -93,6 +95,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 		bool needs_wrap = ipc_queue_needs_wrap(ipcq, head, len_needed);
 
 		Assert(ipcq->used_by_broker);
+		Assert(tail <= head);
 
 		if (needs_wrap)
 			len_needed = len + ipcq->size - ipc_queue_offset(ipcq, head);
@@ -100,7 +103,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 		if (free < len_needed)
 		{
 			tail = pg_atomic_read_u64(&ipcq->tail);
-			free = ipcq->size - (head - tail);
+			free = ipc_queue_free_size(ipcq, head, tail);
 		}
 
 		if (free < len_needed || ninserted >= continuous_query_batch_size)
@@ -112,7 +115,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 
 			head = pg_atomic_read_u64(&ipcq->head);
 			tail = pg_atomic_read_u64(&ipcq->tail);
-			free = ipcq->size - (head - tail);
+			free = ipc_queue_free_size(ipcq, head, tail);
 			ninserted = 0;
 
 			if (ninserted)
@@ -127,17 +130,18 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 		size += len;
 		ninserted++;
 
+		free -= len_needed;
+		head += len_needed;
+
 		slot->len = len;
 		slot->peeked = false;
 		slot->wraps = needs_wrap;
+		slot->next = head;
 
 		if (needs_wrap)
 			StreamTupleStateCopyFn(ipcq->bytes, sts, len);
 		else
 			StreamTupleStateCopyFn(slot->bytes, sts, len);
-
-		head += len_needed;
-		slot->next = head;
 
 		if (sts->record_descs)
 			pfree(sts->record_descs);
