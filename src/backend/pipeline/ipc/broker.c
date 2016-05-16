@@ -440,7 +440,7 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 *bwq_head, uint64 
 		dest_slot->wraps = needs_wrap;
 
 		dest_bytes = needs_wrap ? bwq->bytes : dest_slot->bytes;
-		Assert((uintptr_t) dest_bytes + src_slot->len < bwq->size);
+		ipc_queue_check_overflow(bwq, dest_bytes, src_slot->len);
 
 		memcpy(dest_bytes, src_slot->bytes, src_slot->len);
 
@@ -520,12 +520,11 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 
 		src_bytes = src_slot->wraps ? src->bytes : src_slot->bytes;
 		dest_bytes = needs_wrap ? bwq->bytes : dest_slot->bytes;
+		ipc_queue_check_overflow(bwq, dest_bytes, src_slot->len);
 
-		Assert((uintptr_t) dest_bytes + src_slot->len < bwq->size);
 		memcpy(dest_bytes, src_bytes, src_slot->len);
 
 		src_tail = src_slot->next;
-
 		count++;
 	}
 

@@ -144,7 +144,7 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 	 * ahead of this slot.
 	 */
 	pos = needs_wrap ? ipcq->bytes : slot->bytes;
-	Assert((uintptr_t) pos + len < ipcq->size);
+	ipc_queue_check_overflow(ipcq, pos, len);
 
 	/* Copy over data. */
 	if (ipcq->copy_fn)

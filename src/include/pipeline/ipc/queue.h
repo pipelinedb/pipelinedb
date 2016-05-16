@@ -69,6 +69,8 @@ extern bool ipc_queue_push(ipc_queue *ipcq, void *ptr, int len, bool wait);
 extern void ipc_queue_update_head(ipc_queue *ipcq, uint64 head);
 
 #define ipc_queue_offset(ipcq, ptr) ((ptr) % (ipcq)->size)
+#define ipc_queue_check_overflow(ipcq, pos, len) \
+	Assert((uintptr_t) (pos) + (len) < ((uintptr_t) (ipcq)->bytes + (ipcq)->size))
 #define ipc_queue_free_size(ipcq, head, tail) ((int64) ipcq->size - (int64) ((head) - (tail)))
 #define ipc_queue_needs_wrap(ipcq, start, len) (((start) % (ipcq)->size) + (len) > (ipcq)->size)
 #define ipc_queue_slot_get(ipcq, ptr) ((ipc_queue_slot *) ((uintptr_t) (ipcq)->bytes + ipc_queue_offset((ipcq), (ptr))))
