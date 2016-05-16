@@ -2887,6 +2887,9 @@ send_message_to_server_log(ErrorData *edata)
 				appendStringInfo(&buf, _("LOCATION:  %s:%d\n"),
 								 edata->filename, edata->lineno);
 			}
+
+			/* append process pid */
+			appendStringInfo(&buf, _("PID:  %d\n"), MyProcPid);
 		}
 	}
 
