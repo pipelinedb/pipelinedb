@@ -412,7 +412,7 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 *bwq_head, uint64 
 	ListCell *lc;
 	int nremoved = 0;
 	uint64 head = *bwq_head;
-	uint64 free = bwq->size - (head - bwq_tail);
+	int free = ipc_queue_free_size(bwq, head, bwq_tail);
 	int copied = 0;
 
 	foreach(lc, local_buf->slots)
@@ -421,6 +421,7 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 *bwq_head, uint64 
 		ipc_queue_slot *dest_slot = ipc_queue_slot_get(bwq, head);
 		int len_needed = sizeof(ipc_queue_slot) + src_slot->len;
 		bool needs_wrap = ipc_queue_needs_wrap(bwq, head, len_needed);
+		char *dest_bytes;
 
 		/* Account for garbage space at the end, and no longer require space for ipc_queue_slot. */
 		if (needs_wrap)
@@ -438,10 +439,10 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 *bwq_head, uint64 
 		dest_slot->peeked = false;
 		dest_slot->wraps = needs_wrap;
 
-		if (needs_wrap)
-			memcpy(bwq->bytes, src_slot->bytes, src_slot->len);
-		else
-			memcpy(dest_slot->bytes, src_slot->bytes, src_slot->len);
+		dest_bytes = needs_wrap ? bwq->bytes : dest_slot->bytes;
+		ipc_queue_check_overflow(bwq, dest_bytes, src_slot->len);
+
+		memcpy(dest_bytes, src_slot->bytes, src_slot->len);
 
 		head += len_needed;
 		dest_slot->next = head;
@@ -468,10 +469,11 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 	uint64 src_head = pg_atomic_read_u64(&src->head);
 	uint64 src_tail = src->cursor;
 	uint64 head = *bwq_head;
-	uint64 free = bwq->size - (head - bwq_tail);
+	int free = ipc_queue_free_size(bwq, head, bwq_tail);
 	int count = 0;
 
-	Assert(src_head >= src_tail);
+	Assert(src->used_by_broker);
+	Assert(free >= 0);
 
 	while (true)
 	{
@@ -480,6 +482,9 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 		int len_needed;
 		bool needs_wrap;
 		char *src_bytes;
+		char *dest_bytes;
+
+		Assert(src_tail <= src_head);
 
 		/* no data in src queue? update head and recheck */
 		if (src_tail == src_head)
@@ -506,22 +511,20 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 		}
 
 		free -= len_needed;
+		head += len_needed;
 
 		dest_slot->len = src_slot->len;
 		dest_slot->peeked = false;
 		dest_slot->wraps = needs_wrap;
+		dest_slot->next = head;
 
 		src_bytes = src_slot->wraps ? src->bytes : src_slot->bytes;
+		dest_bytes = needs_wrap ? bwq->bytes : dest_slot->bytes;
+		ipc_queue_check_overflow(bwq, dest_bytes, src_slot->len);
 
-		if (needs_wrap)
-			memcpy(bwq->bytes, src_bytes, src_slot->len);
-		else
-			memcpy(dest_slot->bytes, src_bytes, src_slot->len);
+		memcpy(dest_bytes, src_bytes, src_slot->len);
 
-		head += len_needed;
-		dest_slot->next = head;
 		src_tail = src_slot->next;
-
 		count++;
 	}
 
@@ -665,13 +668,8 @@ copy_messages(void)
 
 			if (bwq_inserted)
 			{
-				Latch *latch;
 				Assert(bwq_head);
-				pg_atomic_write_u64(&bwq->head, bwq_head);
-				latch = (Latch *) pg_atomic_read_u64(&bwq->consumer_latch);
-				if (latch)
-					SetLatch(latch);
-
+				ipc_queue_update_head(bwq, bwq_head);
 				num_copied += bwq_inserted;
 			}
 

@@ -16,11 +16,11 @@
 
 typedef struct ipc_queue_slot
 {
-	uint64_t next;
-	bool     wraps;
-	bool     peeked;
-	int      len;
-	char     bytes[1]; /* dynamically allocated */
+	uint64 next;
+	bool   wraps;
+	bool   peeked;
+	int    len;
+	char   bytes[1]; /* dynamically allocated */
 } ipc_queue_slot;
 
 typedef void (*ipc_queue_peek_fn) (void *ptr, int len);
@@ -34,7 +34,7 @@ typedef struct ipc_queue
 	LWLock *lock;
 	bool used_by_broker;
 
-	Size size; /* physical size of buffer */
+	uint64 size; /* physical size of buffer */
 
 	pg_atomic_uint64 head;
 	pg_atomic_uint64 tail;
@@ -66,8 +66,12 @@ extern void ipc_queue_unlock(ipc_queue *ipcq);
 
 extern bool ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait);
 extern bool ipc_queue_push(ipc_queue *ipcq, void *ptr, int len, bool wait);
+extern void ipc_queue_update_head(ipc_queue *ipcq, uint64 head);
 
 #define ipc_queue_offset(ipcq, ptr) ((ptr) % (ipcq)->size)
+#define ipc_queue_check_overflow(ipcq, pos, len) \
+	Assert((uintptr_t) (pos) + (len) < ((uintptr_t) (ipcq)->bytes + (ipcq)->size))
+#define ipc_queue_free_size(ipcq, head, tail) ((int64) ipcq->size - (int64) ((head) - (tail)))
 #define ipc_queue_needs_wrap(ipcq, start, len) (((start) % (ipcq)->size) + (len) > (ipcq)->size)
 #define ipc_queue_slot_get(ipcq, ptr) ((ipc_queue_slot *) ((uintptr_t) (ipcq)->bytes + ipc_queue_offset((ipcq), (ptr))))
 

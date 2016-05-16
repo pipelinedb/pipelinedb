@@ -13,6 +13,7 @@
 #ifndef STREAM_H
 #define STREAM_H
 
+#include "pipeline/cont_execute.h"
 #include "nodes/bitmapset.h"
 #include "nodes/params.h"
 #include "nodes/parsenodes.h"
@@ -36,6 +37,7 @@ extern void *copy_iter_arg;
 extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
+extern uint64 SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, InsertBatchAck *acks, int nacks);
 extern void CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 extern Datum pipeline_stream_insert(PG_FUNCTION_ARGS);

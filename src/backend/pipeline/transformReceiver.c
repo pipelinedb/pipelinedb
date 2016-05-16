@@ -41,7 +41,9 @@ typedef struct TransformState
 	FunctionCallInfo trig_fcinfo;
 
 	/* only used by the optimized code path for pipeline_stream_insert */
-	List *tups;
+	HeapTuple *tups;
+	int nmaxtups;
+	int ntups;
 	int nacks;
 	InsertBatchAck *acks;
 } TransformState;
@@ -84,7 +86,23 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 	}
 	else
 	{
-		t->tups = lappend(t->tups, ExecCopySlotTuple(slot));
+		if (t->tups == NULL)
+		{
+			Assert(t->nmaxtups == 0);
+			Assert(t->ntups == 0);
+
+			t->nmaxtups = continuous_query_batch_size / 8;
+			t->tups = palloc(sizeof(HeapTuple) * t->nmaxtups);
+		}
+
+		if (t->ntups == t->nmaxtups)
+		{
+			t->nmaxtups *= 2;
+			t->tups = repalloc(t->tups, sizeof(HeapTuple) * t->nmaxtups);
+		}
+
+		t->tups[t->ntups] = ExecCopySlotTuple(slot);
+		t->ntups++;
 
 		if (synchronous_stream_insert && t->acks == NULL)
 			t->acks = InsertBatchAckCreate(t->cont_exec->yielded, &t->nacks);
@@ -168,30 +186,17 @@ static void
 pipeline_stream_insert_batch(TransformState *t)
 {
 	int i;
-	ListCell *lc;
-	bytea *packed_desc;
 
-	if (list_length(t->tups) == 0)
+	if (t->ntups == 0)
 		return;
 
 	Assert(t->tg_rel);
-	packed_desc = PackTupleDesc(RelationGetDescr(t->tg_rel));
 
 	for (i = 0; i < t->cont_query->tgnargs; i++)
 	{
 		RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(t->cont_query->tgargs[i]));
 		Relation rel = heap_openrv(rv, AccessShareLock);
-		Oid relid = RelationGetRelid(rel);
-		Bitmapset *targets;
-		Size size = 0;
-		ipc_queue *ipcq;
-		int ninserted = 0;
-		int nbatches = 1;
-
-		targets = bms_difference(GetLocalStreamReaders(relid), GetAdhocContinuousViewIds());
-
-		if (bms_num_members(targets) == 0)
-			continue;
+		Size size;
 
 		if (t->acks)
 		{
@@ -200,54 +205,17 @@ pipeline_stream_insert_batch(TransformState *t)
 			for (i = 0; i < t->nacks; i++)
 			{
 				InsertBatchAck *ack = &t->acks[i];
-				InsertBatchIncrementNumWTuples(ack->batch, list_length(t->tups));
+				InsertBatchIncrementNumWTuples(ack->batch, t->ntups);
 			}
 		}
 
-		ipcq = get_worker_queue_with_lock();
-
-		foreach(lc, t->tups)
-		{
-			HeapTuple tup = (HeapTuple) lfirst(lc);
-			int len;
-			StreamTupleState *sts = StreamTupleStateCreate(tup, RelationGetDescr(t->tg_rel), packed_desc, targets,
-					t->acks, t->nacks, &len);
-
-			if (ninserted == continuous_query_batch_size)
-			{
-				ipc_queue_unlock(ipcq);
-				ipcq = get_worker_queue_with_lock();
-				ninserted = 0;
-				nbatches++;
-			}
-
-			if (!ipc_queue_push_nolock(ipcq, sts, len, false))
-			{
-				int ntries = 0;
-				nbatches++;
-
-				do
-				{
-					ntries++;
-					ipc_queue_unlock(ipcq);
-					ipcq = get_worker_queue_with_lock();
-				}
-				while (!ipc_queue_push_nolock(ipcq, sts, len, ntries == continuous_query_num_workers));
-			}
-
-			ninserted++;
-			size += len;
-		}
-
-		ipc_queue_unlock(ipcq);
+		size = SendTuplesToContWorkers(rel, RelationGetDescr(t->tg_rel), t->tups, t->ntups, t->acks, t->nacks);
 
 		heap_close(rel, NoLock);
 
-		pgstat_increment_cq_write(list_length(t->tups), size);
-		pgstat_increment_stream_insert(relid, list_length(t->tups), nbatches, size);
+		if (size)
+			pgstat_increment_cq_write(t->ntups, size);
 	}
-
-	pfree(packed_desc);
 
 	if (t->acks)
 	{
@@ -256,14 +224,27 @@ pipeline_stream_insert_batch(TransformState *t)
 		t->nacks = 0;
 	}
 
-	foreach(lc, t->tups)
+
+
+	if (t->ntups)
 	{
-		HeapTuple tup = (HeapTuple) lfirst(lc);
-		heap_freetuple(tup);
+		for (i = 0; i < t->ntups; i++)
+		{
+			HeapTuple tup = (HeapTuple) t->tups[i];
+			heap_freetuple(tup);
+		}
+
+		pfree(t->tups);
+		t->tups = NULL;
+		t->ntups = 0;
+		t->nmaxtups = 0;
+	}
+	else
+	{
+		Assert(t->tups == NULL);
+		Assert(t->nmaxtups == 0);
 	}
 
-	list_free(t->tups);
-	t->tups = NIL;
 }
 
 void
