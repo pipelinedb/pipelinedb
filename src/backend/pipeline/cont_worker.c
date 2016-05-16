@@ -286,7 +286,10 @@ next:
 			(*state->dest->rShutdown) (state->dest);
 
 			if (estate == NULL)
+			{
 				query_desc->estate = estate = CreateEState(state->query_desc);
+				SetEStateSnapshot(estate);
+			}
 
 			/* The cleanup functions below expect these things to be registered. */
 			RegisterSnapshotOnOwner(estate->es_snapshot, WorkerResOwner);
@@ -303,6 +306,8 @@ next:
 			/* Clean up. */
 			ExecutorFinish(query_desc);
 			ExecutorEnd(query_desc);
+			UnsetEStateSnapshot(estate);
+
 			FreeQueryDesc(query_desc);
 
 			MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
