@@ -440,8 +440,8 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 *bwq_head, uint64 
 		dest_slot->wraps = needs_wrap;
 
 		dest_bytes = needs_wrap ? bwq->bytes : dest_slot->bytes;
-
 		Assert((uintptr_t) dest_bytes + src_slot->len < bwq->size);
+
 		memcpy(dest_bytes, src_slot->bytes, src_slot->len);
 
 		head += len_needed;

@@ -143,12 +143,8 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 	 * If we're wrapping around, copy into the start of buffer, otherwise copy
 	 * ahead of this slot.
 	 */
-	if (needs_wrap)
-		pos = ipcq->bytes;
-	else
-		pos = slot->bytes;
-
-	MemSet(pos, 0, len);
+	pos = needs_wrap ? ipcq->bytes : slot->bytes;
+	Assert((uintptr_t) pos + len < ipcq->size);
 
 	/* Copy over data. */
 	if (ipcq->copy_fn)

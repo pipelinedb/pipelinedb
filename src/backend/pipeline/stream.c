@@ -140,8 +140,8 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 		slot->next = head;
 
 		dest_bytes = needs_wrap ? ipcq->bytes : slot->bytes;
-
 		Assert((uintptr_t) dest_bytes + len < ipcq->size);
+
 		StreamTupleStateCopyFn(dest_bytes, sts, len);
 
 		if (sts->record_descs)
