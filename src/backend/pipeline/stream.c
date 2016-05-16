@@ -93,6 +93,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 		ipc_queue_slot *slot = ipc_queue_slot_get(ipcq, head);
 		int len_needed = sizeof(ipc_queue_slot) + len;
 		bool needs_wrap = ipc_queue_needs_wrap(ipcq, head, len_needed);
+		char *dest_bytes;
 
 		Assert(ipcq->used_by_broker);
 		Assert(tail <= head);
@@ -138,10 +139,10 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 		slot->wraps = needs_wrap;
 		slot->next = head;
 
-		if (needs_wrap)
-			StreamTupleStateCopyFn(ipcq->bytes, sts, len);
-		else
-			StreamTupleStateCopyFn(slot->bytes, sts, len);
+		dest_bytes = needs_wrap ? ipcq->bytes : slot->bytes;
+
+		Assert((uintptr_t) dest_bytes + len < ipcq->size);
+		StreamTupleStateCopyFn(dest_bytes, sts, len);
 
 		if (sts->record_descs)
 			pfree(sts->record_descs);

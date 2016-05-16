@@ -421,6 +421,7 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 *bwq_head, uint64 
 		ipc_queue_slot *dest_slot = ipc_queue_slot_get(bwq, head);
 		int len_needed = sizeof(ipc_queue_slot) + src_slot->len;
 		bool needs_wrap = ipc_queue_needs_wrap(bwq, head, len_needed);
+		char *dest_bytes;
 
 		/* Account for garbage space at the end, and no longer require space for ipc_queue_slot. */
 		if (needs_wrap)
@@ -438,10 +439,10 @@ copy_lq_to_bwq(local_queue *local_buf, ipc_queue *bwq, uint64 *bwq_head, uint64 
 		dest_slot->peeked = false;
 		dest_slot->wraps = needs_wrap;
 
-		if (needs_wrap)
-			memcpy(bwq->bytes, src_slot->bytes, src_slot->len);
-		else
-			memcpy(dest_slot->bytes, src_slot->bytes, src_slot->len);
+		dest_bytes = needs_wrap ? bwq->bytes : dest_slot->bytes;
+
+		Assert((uintptr_t) dest_bytes + src_slot->len < bwq->size);
+		memcpy(dest_bytes, src_slot->bytes, src_slot->len);
 
 		head += len_needed;
 		dest_slot->next = head;
@@ -481,6 +482,7 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 		int len_needed;
 		bool needs_wrap;
 		char *src_bytes;
+		char *dest_bytes;
 
 		Assert(src_tail <= src_head);
 
@@ -517,11 +519,10 @@ copy_ipcq_to_bwq(ipc_queue *src, ipc_queue *bwq, uint64 *bwq_head, uint64 bwq_ta
 		dest_slot->next = head;
 
 		src_bytes = src_slot->wraps ? src->bytes : src_slot->bytes;
+		dest_bytes = needs_wrap ? bwq->bytes : dest_slot->bytes;
 
-		if (needs_wrap)
-			memcpy(bwq->bytes, src_bytes, src_slot->len);
-		else
-			memcpy(dest_slot->bytes, src_bytes, src_slot->len);
+		Assert((uintptr_t) dest_bytes + src_slot->len < bwq->size);
+		memcpy(dest_bytes, src_bytes, src_slot->len);
 
 		src_tail = src_slot->next;
 
