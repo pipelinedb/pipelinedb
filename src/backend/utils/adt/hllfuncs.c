@@ -221,9 +221,7 @@ hll_cache_cardinality(PG_FUNCTION_ARGS)
 Datum
 hll_empty(PG_FUNCTION_ARGS)
 {
-	HyperLogLog *hll = HLLCreate();
-	SET_VARSIZE(hll, HLLSize(hll));
-	PG_RETURN_POINTER(hll);
+	PG_RETURN_POINTER(HLLCreate());
 }
 
 
@@ -232,7 +230,6 @@ hll_emptyp(PG_FUNCTION_ARGS)
 {
 	int p = PG_GETARG_INT32(0);
 	HyperLogLog *hll = hll_create(p);
-	SET_VARSIZE(hll, HLLSize(hll));
 	PG_RETURN_POINTER(hll);
 }
 
@@ -246,13 +243,9 @@ hll_add(PG_FUNCTION_ARGS)
 	else
 		hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	/* Sparse representation can be repalloc'd so create a copy */
-	if (HLL_IS_SPARSE(hll))
-	{
-		HyperLogLog *cpy = palloc(HLLSize(hll));
-		memcpy(cpy, hll, HLLSize(hll));
-		hll = cpy;
-	}
+	/* Non-dense representations can be repalloc'd so create a copy */
+	if (!HLL_IS_DENSE(hll))
+		hll = HLLCopy(hll);
 
 	fcinfo->flinfo->fn_extra = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
 	hll = hll_add_datum(fcinfo, hll, PG_GETARG_DATUM(1));
