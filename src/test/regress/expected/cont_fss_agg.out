@@ -150,9 +150,8 @@ INSERT INTO test_fss_agg_stream (x) VALUES (null);
 SELECT fss_topk(fss_agg) FROM test_fss_agg5;
  fss_topk 
 ----------
- (,4)
  (0,2)
  (1,1)
-(3 rows)
+(2 rows)
 
 DROP CONTINUOUS VIEW test_fss_agg5;

@@ -97,7 +97,6 @@ tdigest_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	TDigest *state;
-	float8 incoming = PG_GETARG_FLOAT8(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "tdigest_agg_trans called in non-aggregate context");
@@ -109,7 +108,8 @@ tdigest_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (TDigest *) PG_GETARG_VARLENA_P(0);
 
-	state = TDigestAdd(state, incoming, 1);
+	if (!PG_ARGISNULL(1))
+		state = TDigestAdd(state, PG_GETARG_FLOAT8(1), 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -127,7 +127,6 @@ tdigest_agg_transp(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	TDigest *state;
-	float8 incoming = PG_GETARG_FLOAT8(1);
 	uint64_t k = PG_GETARG_INT32(2);
 
 	if (!AggCheckCallContext(fcinfo, &context))
@@ -140,7 +139,8 @@ tdigest_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (TDigest *) PG_GETARG_VARLENA_P(0);
 
-	state = TDigestAdd(state, incoming, 1);
+	if (!PG_ARGISNULL(1))
+		state = TDigestAdd(state, PG_GETARG_FLOAT8(1), 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -158,21 +158,29 @@ tdigest_merge_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	TDigest *state;
-	TDigest *incoming = (TDigest *) PG_GETARG_VARLENA_P(1);
+	TDigest *incoming;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "tdigest_merge_agg_trans called in non-aggregate context");
+
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+		PG_RETURN_NULL();
 
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
+		incoming = (TDigest *) PG_GETARG_VARLENA_P(1);
 		state = TDigestCopy(incoming);
-		PG_RETURN_POINTER(state);
 	}
-
-	state = (TDigest *) PG_GETARG_VARLENA_P(0);
-	state = TDigestMerge(state, incoming);
+	else if (PG_ARGISNULL(1))
+		state = (TDigest *) PG_GETARG_VARLENA_P(0);
+	else
+	{
+		state = (TDigest *) PG_GETARG_VARLENA_P(0);
+		incoming = (TDigest *) PG_GETARG_VARLENA_P(1);
+		state = TDigestMerge(state, incoming);
+	}
 
 	MemoryContextSwitchTo(old);
 

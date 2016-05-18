@@ -53,7 +53,6 @@ fss_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	FSS *state;
-	Datum incoming = PG_GETARG_DATUM(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "fss_agg_trans called in non-aggregate context");
@@ -71,7 +70,8 @@ fss_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = FSSFromBytes(PG_GETARG_VARLENA_P(0));
 
-	state = FSSIncrement(state, incoming, PG_ARGISNULL(1));
+	if (!PG_ARGISNULL(1))
+		state = FSSIncrement(state, PG_GETARG_DATUM(1), PG_ARGISNULL(1));
 
 	MemoryContextSwitchTo(old);
 
@@ -84,7 +84,6 @@ fss_agg_weighted_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	FSS *state;
-	Datum incoming = PG_GETARG_DATUM(1);
 	int64 weight = PG_GETARG_INT64(3);
 
 	if (!AggCheckCallContext(fcinfo, &context))
@@ -103,7 +102,8 @@ fss_agg_weighted_trans(PG_FUNCTION_ARGS)
 	else
 		state = FSSFromBytes(PG_GETARG_VARLENA_P(0));
 
-	state = FSSIncrementWeighted(state, incoming, PG_ARGISNULL(1), weight);
+	if (!PG_ARGISNULL(1))
+		state = FSSIncrementWeighted(state, PG_GETARG_DATUM(1), PG_ARGISNULL(1), weight);
 
 	MemoryContextSwitchTo(old);
 
@@ -116,7 +116,6 @@ fss_agg_transp(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	FSS *state;
-	Datum incoming = PG_GETARG_DATUM(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "fss_agg_transp called in non-aggregate context");
@@ -144,7 +143,8 @@ fss_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = FSSFromBytes(PG_GETARG_VARLENA_P(0));
 
-	state = FSSIncrement(state, incoming, PG_ARGISNULL(1));
+	if (!PG_ARGISNULL(1))
+		state = FSSIncrement(state, PG_GETARG_DATUM(1), PG_ARGISNULL(1));
 
 	MemoryContextSwitchTo(old);
 
@@ -157,21 +157,29 @@ fss_merge_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	FSS *state;
-	FSS *incoming = FSSFromBytes(PG_GETARG_VARLENA_P(1));
+	FSS *incoming;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "fss_merge_agg_trans called in non-aggregate context");
+
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+		PG_RETURN_NULL();
 
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
+		incoming = FSSFromBytes(PG_GETARG_VARLENA_P(1));
 		state = FSSCopy(incoming);
-		PG_RETURN_POINTER(state);
 	}
-
-	state = FSSFromBytes(PG_GETARG_VARLENA_P(0));
-	state = FSSMerge(state, incoming);
+	else if (PG_ARGISNULL(1))
+		state = FSSFromBytes(PG_GETARG_VARLENA_P(0));
+	else
+	{
+		state = FSSFromBytes(PG_GETARG_VARLENA_P(0));
+		incoming = FSSFromBytes(PG_GETARG_VARLENA_P(1));
+		state = FSSMerge(state, incoming);
+	}
 
 	MemoryContextSwitchTo(old);
 

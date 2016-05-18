@@ -56,15 +56,16 @@ hll_startup(FunctionCallInfo fcinfo, int p)
 {
 	HyperLogLog *hll;
 	Oid type = AggGetInitialArgType(fcinfo);
+	MemoryContext old;
 
+	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
+	MemoryContextSwitchTo(old);
 
 	if (p > 0)
 		hll = hll_create(p);
 	else
 		hll = HLLCreate();
-
-	SET_VARSIZE(hll, HLLSize(hll));
 
 	return hll;
 }
@@ -83,8 +84,6 @@ hll_add_datum(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 	pfree(buf->data);
 	pfree(buf);
 
-	SET_VARSIZE(hll, HLLSize(hll));
-
 	return hll;
 }
 
@@ -98,7 +97,6 @@ hll_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	HyperLogLog *state;
-	Datum incoming = PG_GETARG_DATUM(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "hll_agg_trans called in non-aggregate context");
@@ -110,7 +108,8 @@ hll_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	state = hll_add_datum(fcinfo, state, incoming);
+	if (!PG_ARGISNULL(1))
+		state = hll_add_datum(fcinfo, state, PG_GETARG_DATUM(1));
 
 	MemoryContextSwitchTo(old);
 
@@ -128,7 +127,6 @@ hll_agg_transp(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	HyperLogLog *state;
-	Datum incoming = PG_GETARG_DATUM(1);
 	int p = PG_GETARG_INT32(2);
 
 	if (!AggCheckCallContext(fcinfo, &context))
@@ -141,7 +139,8 @@ hll_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	state = hll_add_datum(fcinfo, state, incoming);
+	if (!PG_ARGISNULL(1))
+		state = hll_add_datum(fcinfo, state, PG_GETARG_DATUM(1));
 
 	MemoryContextSwitchTo(old);
 
@@ -159,23 +158,31 @@ hll_union_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	HyperLogLog *state;
-	HyperLogLog *incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
+	HyperLogLog *incoming;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "hll_union_agg_trans called in non-aggregate context");
 
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+		PG_RETURN_NULL();
+
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
-		state = hll_startup(fcinfo, incoming->p);
-	else
+	{
+		incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
+		state = HLLCopy(incoming);
+	}
+	else if (PG_ARGISNULL(1))
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
-
-	state = HLLUnion(state, incoming);
+	else
+	{
+		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
+		incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
+		state = HLLUnion(state, incoming);
+	}
 
 	MemoryContextSwitchTo(old);
-
-	SET_VARSIZE(state, HLLSize(state));
 
 	PG_RETURN_POINTER(state);
 }

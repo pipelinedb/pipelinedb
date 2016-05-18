@@ -96,7 +96,6 @@ cmsketch_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	CountMinSketch *state;
-	Datum incoming = PG_GETARG_DATUM(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "cmsketch_agg_trans called in non-aggregate context");
@@ -108,7 +107,8 @@ cmsketch_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
-	state = cmsketch_add_datum(fcinfo, state, incoming, 1);
+	if (!PG_ARGISNULL(1))
+		state = cmsketch_add_datum(fcinfo, state, PG_GETARG_DATUM(1), 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -126,7 +126,6 @@ cmsketch_agg_transp(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	CountMinSketch *state;
-	Datum incoming = PG_GETARG_DATUM(1);
 	float8 eps = PG_GETARG_FLOAT8(2);
 	float8 p = PG_GETARG_FLOAT8(3);
 
@@ -140,7 +139,8 @@ cmsketch_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
-	state = cmsketch_add_datum(fcinfo, state, incoming, 1);
+	if (!PG_ARGISNULL(1))
+		state = cmsketch_add_datum(fcinfo, state, PG_GETARG_DATUM(1), 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -158,21 +158,29 @@ cmsketch_merge_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	CountMinSketch *state;
-	CountMinSketch *incoming = (CountMinSketch *) PG_GETARG_VARLENA_P(1);
+	CountMinSketch *incoming;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "cmsketch_merge_agg_trans called in non-aggregate context");
+
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+		PG_RETURN_NULL();
 
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
+		incoming = (CountMinSketch *) PG_GETARG_VARLENA_P(1);
 		state = CountMinSketchCopy(incoming);
-		PG_RETURN_POINTER(state);
 	}
-
-	state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
-	state = CountMinSketchMerge(state, incoming);
+	else if (PG_ARGISNULL(1))
+		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
+	else
+	{
+		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
+		incoming = (CountMinSketch *) PG_GETARG_VARLENA_P(1);
+		state = CountMinSketchMerge(state, incoming);
+	}
 
 	MemoryContextSwitchTo(old);
 

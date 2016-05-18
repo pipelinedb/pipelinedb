@@ -1109,6 +1109,8 @@ HLLCreateWithP(int p)
 		}
 	}
 
+	SET_VARSIZE(hll, HLLSize(hll));
+
 	return hll;
 }
 
@@ -1158,6 +1160,8 @@ HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result)
 	if (*result)
 		ret->encoding =	HLL_IS_SPARSE(ret) ? HLL_SPARSE_DIRTY :
 				(HLL_IS_DENSE(ret) ? HLL_DENSE_DIRTY : HLL_EXPLICIT_DIRTY);
+
+	SET_VARSIZE(hll, HLLSize(hll));
 
 	return ret;
 }
@@ -1415,12 +1419,22 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 {
 	/* EXPLICIT + EXPLICIT */
 	if (HLL_IS_EXPLICIT(result) && HLL_IS_EXPLICIT(incoming))
-		return hll_explicit_union(result, incoming);
+	{
+		result = hll_explicit_union(result, incoming);
+		SET_VARSIZE(result, HLLSize(result));
+
+		return result;
+	}
 
 	/* SPARSE + EXPLICIT */
 	/* TODO(usmanm): Add SPARSE || SPARSE support */
 	if (HLL_IS_SPARSE(result) && HLL_IS_EXPLICIT(incoming))
-		return hll_sparse_union(result, incoming);
+	{
+		result = hll_sparse_union(result, incoming);
+		SET_VARSIZE(result, HLLSize(result));
+
+		return result;
+	}
 
 	/*
 	 * We don't support any other unions for now, so just upgrade result
@@ -1432,5 +1446,8 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 		result = hll_sparse_to_dense(result);
 
 	/* DENSE + (DENSE | SPARSE | EXPLICIT) */
-	return hll_dense_union(result, incoming);
+	result = hll_dense_union(result, incoming);
+	SET_VARSIZE(result, HLLSize(result));
+
+	return result;
 }

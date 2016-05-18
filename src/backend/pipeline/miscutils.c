@@ -198,9 +198,6 @@ MurmurHash3_64(const void *key, const Size len, const uint64_t seed)
 void
 DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf)
 {
-	if (!typ->typbyval && !d)
-		return;
-
 	if (typ->type_id != RECORDOID && typ->typtype != TYPTYPE_COMPOSITE)
 	{
 		Size size;

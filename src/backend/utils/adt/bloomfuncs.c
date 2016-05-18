@@ -100,7 +100,6 @@ bloom_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	BloomFilter *state;
-	Datum incoming = PG_GETARG_DATUM(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "bloom_agg_trans called in non-aggregate context");
@@ -112,7 +111,8 @@ bloom_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
-	state = bloom_add_datum(fcinfo, state, incoming);
+	if (!PG_ARGISNULL(1))
+		state = bloom_add_datum(fcinfo, state, PG_GETARG_DATUM(1));
 
 	MemoryContextSwitchTo(old);
 
@@ -130,7 +130,6 @@ bloom_agg_transp(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	BloomFilter *state;
-	Datum incoming = PG_GETARG_DATUM(1);
 	float8 p = PG_GETARG_FLOAT8(2);
 	uint64_t n = PG_GETARG_INT64(3);
 
@@ -144,7 +143,8 @@ bloom_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
-	state = bloom_add_datum(fcinfo, state, incoming);
+	if (!PG_ARGISNULL(1))
+		state = bloom_add_datum(fcinfo, state, PG_GETARG_DATUM(1));
 
 	MemoryContextSwitchTo(old);
 
@@ -162,21 +162,29 @@ bloom_union_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	BloomFilter *state;
-	BloomFilter *incoming = (BloomFilter *) PG_GETARG_VARLENA_P(1);
+	BloomFilter *incoming;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "bloom_union_agg_trans called in non-aggregate context");
+
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+		PG_RETURN_NULL();
 
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
+		incoming = (BloomFilter *) PG_GETARG_VARLENA_P(1);
 		state = BloomFilterCopy(incoming);
-		PG_RETURN_POINTER(state);
 	}
-
-	state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
-	state = BloomFilterUnion(state, incoming);
+	else if (PG_ARGISNULL(1))
+		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+	else
+	{
+		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+		incoming = (BloomFilter *) PG_GETARG_VARLENA_P(1);
+		state = BloomFilterUnion(state, incoming);
+	}
 
 	MemoryContextSwitchTo(old);
 

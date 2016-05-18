@@ -1545,13 +1545,12 @@ generate_series_step_int8(PG_FUNCTION_ARGS)
 static HyperLogLog *
 hll_count_distinct_startup(PG_FUNCTION_ARGS)
 {
-	if (fcinfo->flinfo->fn_extra == NULL)
-	{
-		MemoryContext old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
-		Oid type = AggGetInitialArgType(fcinfo);
-		fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
-		MemoryContextSwitchTo(old);
-	}
+	Oid type = AggGetInitialArgType(fcinfo);
+	MemoryContext old;
+
+	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
+	MemoryContextSwitchTo(old);
 
 	return HLLCreate();
 }
@@ -1566,9 +1565,6 @@ hll_count_distinct_transition(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	HyperLogLog *hll;
-	Datum incoming = PG_GETARG_DATUM(1);
-	StringInfo buf = makeStringInfo();
-	TypeCacheEntry *typ;
 	int result;
 
 	if (!AggCheckCallContext(fcinfo, &context))
@@ -1581,14 +1577,19 @@ hll_count_distinct_transition(PG_FUNCTION_ARGS)
 	else
 		hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
-	DatumToBytes(incoming, typ, buf);
+	if (!PG_ARGISNULL(1))
+	{
+		StringInfo buf = makeStringInfo();
+		TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 
-	hll = HLLAdd(hll, buf->data, buf->len, &result);
-	SET_VARSIZE(hll, sizeof(HyperLogLog) + hll->mlen);
+		DatumToBytes(PG_GETARG_DATUM(1), typ, buf);
 
-	pfree(buf->data);
-	pfree(buf);
+		hll = HLLAdd(hll, buf->data, buf->len, &result);
+		SET_VARSIZE(hll, HLLSize(hll));
+
+		pfree(buf->data);
+		pfree(buf);
+	}
 
 	MemoryContextSwitchTo(old);
 
