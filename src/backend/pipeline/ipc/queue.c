@@ -66,8 +66,8 @@ ipc_queue_has_unread(ipc_queue *ipcq)
 bool
 ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 {
-	uint64_t head;
-	uint64_t tail;
+	uint64 head;
+	uint64 tail;
 	Latch *producer_latch = NULL;
 	ipc_queue_slot *slot;
 	int len_needed;
@@ -217,8 +217,8 @@ void
 ipc_queue_pop_peeked(ipc_queue *ipcq)
 {
 	Latch *producer_latch;
-	uint64_t tail;
-	uint64_t cur;
+	uint64 tail;
+	uint64 cur;
 
 	Assert(ipcq->magic == MAGIC);
 
@@ -229,7 +229,7 @@ ipc_queue_pop_peeked(ipc_queue *ipcq)
 
 	if (ipcq->pop_fn)
 	{
-		uint64_t start = tail;
+		uint64 start = tail;
 
 		while (start < cur)
 		{
@@ -261,8 +261,8 @@ void
 ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms)
 {
 	Latch *consumer_latch;
-	uint64_t head;
-	uint64_t tail;
+	uint64 head;
+	uint64 tail;
 	int flags;
 
 	Assert(ipcq->magic == MAGIC);
@@ -352,5 +352,69 @@ ipc_queue_update_head(ipc_queue *ipcq, uint64 head)
 		latch = (Latch *) pg_atomic_read_u64(&ipcq->consumer_latch);
 		if (latch)
 			SetLatch(latch);
+	}
+}
+
+void ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms)
+{
+	Latch *consumer_latch;
+	uint64 tails[ipcmq->nqueues];
+	int flags;
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+	{
+		ipc_queue *ipcq = ipcmq->queues[i];
+		uint64 head;
+
+		Assert(ipcq->magic == MAGIC);
+
+		head = pg_atomic_read_u64(&ipcq->head);
+		tails[i] = pg_atomic_read_u64(&ipcq->tail);
+
+		if (tails[i] < head)
+			return;
+	}
+
+	consumer_latch = MyLatch;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+	{
+		ipc_queue *ipcq = ipcmq->queues[i];
+		pg_atomic_write_u64(&ipcq->consumer_latch, (uint64) consumer_latch);
+	}
+
+	flags = WL_LATCH_SET | WL_POSTMASTER_DEATH;
+	if (timeoutms > 0)
+		flags |= WL_TIMEOUT;
+
+	for (;;)
+	{
+		int r;
+
+		for (i = 0; i < ipcmq->nqueues; i++)
+		{
+			ipc_queue *ipcq = ipcmq->queues[i];
+			uint64 head = pg_atomic_read_u64(&ipcq->head);
+
+			if (head > tails[i])
+				break;
+		}
+
+		r = WaitLatch(consumer_latch, flags, timeoutms);
+		if (r & WL_POSTMASTER_DEATH)
+			break;
+
+		if (ShouldTerminateContQueryProcess())
+			break;
+
+		ResetLatch(consumer_latch);
+		CHECK_FOR_INTERRUPTS();
+	}
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+	{
+		ipc_queue *ipcq = ipcmq->queues[i];
+		pg_atomic_write_u64(&ipcq->consumer_latch, (uint64) NULL);
 	}
 }

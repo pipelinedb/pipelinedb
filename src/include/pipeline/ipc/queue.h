@@ -75,4 +75,17 @@ extern void ipc_queue_update_head(ipc_queue *ipcq, uint64 head);
 #define ipc_queue_needs_wrap(ipcq, start, len) (((start) % (ipcq)->size) + (len) > (ipcq)->size)
 #define ipc_queue_slot_get(ipcq, ptr) ((ipc_queue_slot *) ((uintptr_t) (ipcq)->bytes + ipc_queue_offset((ipcq), (ptr))))
 
+typedef struct ipc_multi_queue
+{
+	int nqueues;
+	ipc_queue **queues;
+} ipc_multi_queue;
+
+extern void ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms);
+extern void *ipc_multi_queue_peek_next(ipc_multi_queue *ipcmq, int *len);
+extern void ipc_multi_queue_unpeek_all(ipc_multi_queue *ipcmq);
+extern void ipc_multi_queue_pop_peeked(ipc_multi_queue *ipcmq);
+extern bool ipc_multi_queue_is_empty(ipc_multi_queue *ipcmq);
+extern bool ipc_multi_queue_has_unread(ipc_multi_queue *ipcmq);
+
 #endif
