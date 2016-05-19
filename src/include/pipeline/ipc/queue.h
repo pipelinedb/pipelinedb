@@ -81,6 +81,7 @@ typedef struct ipc_multi_queue
 	ipc_queue **queues;
 } ipc_multi_queue;
 
+extern ipc_multi_queue *ipc_multi_queue_init(ipc_queue *q1, ipc_queue *q2);
 extern void ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms);
 extern void *ipc_multi_queue_peek_next(ipc_multi_queue *ipcmq, int *len);
 extern void ipc_multi_queue_unpeek_all(ipc_multi_queue *ipcmq);

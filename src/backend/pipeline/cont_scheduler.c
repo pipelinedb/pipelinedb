@@ -443,7 +443,7 @@ cont_bgworker_main(Datum arg)
 	if (proc->type != TRIG)
 	{
 		pgstat_init_cqstat(MyProcStatCQEntry, 0, MyProcPid);
-		proc->queue = acquire_my_ipc_queue();
+		acquire_my_ipc_queue();
 	}
 
 	elog(LOG, "continuous query process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);

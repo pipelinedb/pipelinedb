@@ -607,11 +607,9 @@ copy_messages(void)
 		{
 			ipc_queue *bwq; /* broker->worker queue */
 			ipc_queue *wbq; /* worker->broker queue */
-			ipc_queue *ibq; /* insert->broker queue */
 			local_queue *local_buf = &db_meta->lqueues[i];
 			uint64 last_bwq_tail;
 			uint64 last_wbq_cur;
-			uint64 last_ibq_cur;
 			int nloops = COPY_LOOPS_PER_WORKER;
 			uint64 bwq_head;
 			bool bwq_is_full = false;
@@ -620,22 +618,16 @@ copy_messages(void)
 			bwq = (ipc_queue *) ptr;
 			ptr += ipc_queue_size;
 			wbq = (ipc_queue *) ptr;
-			ptr += ipc_queue_size;
-			ibq = (ipc_queue *) ptr;
-			ptr += ipc_queue_size;
+			ptr += 2 * ipc_queue_size;
 
 			/* check some invariants */
 			Assert(wbq->peek_fn == NULL);
-			Assert(ibq->pop_fn == NULL);
-			Assert(ibq->peek_fn == NULL);
-			Assert(ibq->pop_fn == NULL);
+			Assert(wbq->pop_fn == NULL);
 			Assert(wbq->cursor == pg_atomic_read_u64(&wbq->tail));
-			Assert(ibq->cursor == pg_atomic_read_u64(&ibq->tail));
 
 			bwq_head = pg_atomic_read_u64(&bwq->head);
 			last_bwq_tail = UINT64_MAX; /* NULL */
 			last_wbq_cur = wbq->cursor;
-			last_ibq_cur = ibq->cursor;
 
 			while (--nloops)
 			{
@@ -658,12 +650,6 @@ copy_messages(void)
 
 				/* try copying from wbq to bwq */
 				bwq_inserted += copy_ipcq_to_bwq(wbq, bwq, &bwq_head, bwq_tail, &bwq_is_full);
-
-				if (bwq_is_full)
-					continue;
-
-				/* try copying from ibq to bwq */
-				bwq_inserted += copy_ipcq_to_bwq(ibq, bwq, &bwq_head, bwq_tail, &bwq_is_full);
 			}
 
 			if (bwq_inserted)
@@ -671,15 +657,6 @@ copy_messages(void)
 				Assert(bwq_head);
 				ipc_queue_update_head(bwq, bwq_head);
 				num_copied += bwq_inserted;
-			}
-
-			if (ibq->cursor > last_ibq_cur)
-			{
-				Latch *latch;
-				pg_atomic_write_u64(&ibq->tail, ibq->cursor);
-				latch = (Latch *) pg_atomic_read_u64(&ibq->producer_latch);
-				if (latch)
-					SetLatch(latch);
 			}
 
 			num_copied += copy_wbq_to_lq(wbq, local_buf);
@@ -717,16 +694,11 @@ have_pending_messages(void)
 		Assert(db_meta->segment);
 		ptr = dsm_segment_address(db_meta->segment);
 
-		for (i = 0; i < continuous_query_num_workers * num_queues_per_worker; i++)
+		for (i = 1; i < continuous_query_num_workers * num_queues_per_worker; i += 3)
 		{
 			ipc_queue *ipcq;
 
-			ipcq = (ipc_queue *) ptr;
-			ptr += ipc_queue_size;
-
-			/* skip broker->worker queues */
-			if (i % num_queues_per_worker == 0)
-				continue;
+			ipcq = (ipc_queue *) (ptr + i * ipc_queue_size);
 
 			if (!ipc_queue_is_empty(ipcq))
 			{
@@ -1083,9 +1055,9 @@ get_db_meta(Oid dbid)
 			ptr += ipc_queue_size;
 			lock_slot++;
 
-			/* insert->broker queue */
-			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, true);
-			ipc_queue_set_handlers((ipc_queue *) ptr, NULL, NULL, StreamTupleStateCopyFn);
+			/* insert->worker queue */
+			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock, false);
+			ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, popfn, StreamTupleStateCopyFn);
 			ptr += ipc_queue_size;
 			lock_slot++;
 		}
@@ -1107,31 +1079,43 @@ get_db_meta(Oid dbid)
 	return db_meta;
 }
 
+
 static ipc_queue *
-get_bg_worker_queue(dsm_segment *segment, int group_id, bool for_worker, bool for_producers)
+get_combine_ipcq(dsm_segment *segment, int group_id)
 {
 	char *ptr = dsm_segment_address(segment);
 	ipc_queue *ipcq;
 
-	if (for_worker)
-	{
-		ptr += ipc_queue_size * group_id * num_queues_per_worker;
-		if (for_producers)
-		{
-			ptr += ipc_queue_size; /* skip over to the worker -> broker queue */
-			if (!IsContQueryWorkerProcess())
-				ptr += ipc_queue_size; /* skip over to the insert -> broker queue */
-		}
-	}
-	else
-	{
-		ptr += ipc_queue_size * continuous_query_num_workers * num_queues_per_worker;
-		ptr += ipc_queue_size * group_id * num_queues_per_combiner;
-	}
+	ptr += ipc_queue_size * continuous_query_num_workers * num_queues_per_worker;
+	ptr += ipc_queue_size * group_id * num_queues_per_combiner;
 
 	ipcq = (ipc_queue *) ptr;
 
 	return ipcq;
+}
+
+static ipc_queue *
+get_worker_ipcq(dsm_segment *segment, int group_id, bool for_producer, bool broker_handled)
+{
+	char *ptr = dsm_segment_address(segment);
+
+	ptr += ipc_queue_size * group_id * num_queues_per_worker;
+
+	if (!broker_handled)
+		ptr += 2 * ipc_queue_size; /* skip over to insert -> worker queue */
+	else if (for_producer)
+		ptr += ipc_queue_size; /* skip over to the worker -> broker queue */
+
+	return (ipc_queue *) ptr;
+}
+
+ipc_queue *
+acquire_my_broker_ipc_queue(void)
+{
+	Assert(my_ipc_meta);
+	Assert(IsContQueryWorkerProcess());
+
+	return get_worker_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id, false, true);
 }
 
 ipc_queue *
@@ -1185,12 +1169,16 @@ acquire_my_ipc_queue(void)
 	{
 		/*
 		 * For worker and combiner processes, we simply connect to the DB's primary dsm_segment
-		 * and find the correct ipc_queue within that dsm_segment.
+		 * and find the correct ipc_queue(s) within that dsm_segment.
 		 */
 		my_ipc_meta->segment = dsm_attach_and_pin(db_meta->handle);
-		my_ipc_meta->queue = get_bg_worker_queue(my_ipc_meta->segment, MyContQueryProc->group_id,
-				IsContQueryWorkerProcess(), false);
 		my_ipc_meta->seg_slot = NULL;
+
+		if (IsContQueryCombinerProcess())
+			my_ipc_meta->queue = get_combine_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id);
+		else
+			my_ipc_meta->queue = get_worker_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id, false, false);
+
 	}
 
 	MemoryContextSwitchTo(old);
@@ -1220,13 +1208,17 @@ ipc_queue *
 get_worker_queue_with_lock(void)
 {
 	static long idx = -1;
+	static bool broker_handled;
 	int ntries = 0;
 	ipc_queue *ipcq = NULL;
 	broker_db_meta *db_meta = get_db_meta(MyDatabaseId);
 	dsm_segment *segment = dsm_attach_and_pin(db_meta->handle);
 
 	if (idx == -1)
+	{
 		idx = rand() % continuous_query_num_workers;
+		broker_handled = IsContQueryWorkerProcess();
+	}
 
 	idx = (idx + 1) % continuous_query_num_workers;
 
@@ -1242,7 +1234,7 @@ get_worker_queue_with_lock(void)
 			idx = (idx + 1) % continuous_query_num_workers;
 		}
 
-		ipcq = get_bg_worker_queue(segment, idx, true, true);
+		ipcq = get_worker_ipcq(segment, idx, true, broker_handled);
 
 		/*
 		 * Try to lock dsm_cqueue of any worker that is not already locked in
@@ -1275,7 +1267,7 @@ get_combiner_queue_with_lock(int idx)
 {
 	broker_db_meta *db_meta = get_db_meta(MyDatabaseId);
 	dsm_segment *segment = dsm_attach_and_pin(db_meta->handle);
-	ipc_queue *ipcq = get_bg_worker_queue(segment, idx, false, true);
+	ipc_queue *ipcq = get_combine_ipcq(segment, idx);
 	ipc_queue_lock(ipcq, true);
 	return ipcq;
 }

@@ -16,6 +16,7 @@
 #include "port/atomics.h"
 #include "storage/latch.h"
 #include "storage/lwlock.h"
+#include "utils/memutils.h"
 
 #define MAGIC 0xDEADBABE /* x_x */
 #define WAIT_SLEEP_NS 250
@@ -351,7 +352,8 @@ ipc_queue_update_head(ipc_queue *ipcq, uint64 head)
 	}
 }
 
-void ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms)
+void
+ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms)
 {
 	Latch *consumer_latch;
 	uint64 tails[ipcmq->nqueues];
@@ -387,6 +389,7 @@ void ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms)
 	for (;;)
 	{
 		int r;
+		bool non_empty = false;
 
 		for (i = 0; i < ipcmq->nqueues; i++)
 		{
@@ -394,8 +397,14 @@ void ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms)
 			uint64 head = pg_atomic_read_u64(&ipcq->head);
 
 			if (head > tails[i])
+			{
+				non_empty = true;
 				break;
+			}
 		}
+
+		if (non_empty)
+			break;
 
 		r = WaitLatch(consumer_latch, flags, timeoutms);
 		if (r & WL_POSTMASTER_DEATH)
@@ -413,4 +422,79 @@ void ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms)
 		ipc_queue *ipcq = ipcmq->queues[i];
 		pg_atomic_write_u64(&ipcq->consumer_latch, (uint64) NULL);
 	}
+}
+
+void *
+ipc_multi_queue_peek_next(ipc_multi_queue *ipcmq, int *len)
+{
+	static int idx = 0;
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+	{
+		void *ptr = ipc_queue_peek_next(ipcmq->queues[idx], len);
+		idx = (idx + 1) % ipcmq->nqueues;
+		if (ptr)
+			return ptr;
+	}
+
+	return NULL;
+}
+
+void
+ipc_multi_queue_unpeek_all(ipc_multi_queue *ipcmq)
+{
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+		ipc_queue_unpeek_all(ipcmq->queues[i]);
+}
+
+void
+ipc_multi_queue_pop_peeked(ipc_multi_queue *ipcmq)
+{
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+		ipc_queue_pop_peeked(ipcmq->queues[i]);
+}
+
+bool
+ipc_multi_queue_is_empty(ipc_multi_queue *ipcmq)
+{
+	bool is_empty = true;
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues && is_empty; i++)
+		is_empty &= ipc_queue_is_empty(ipcmq->queues[i]);
+
+	return is_empty;
+}
+
+bool
+ipc_multi_queue_has_unread(ipc_multi_queue *ipcmq)
+{
+	bool has_unread = false;
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues && !has_unread; i++)
+		has_unread |= ipc_queue_has_unread(ipcmq->queues[i]);
+
+	return has_unread;
+}
+
+ipc_multi_queue *
+ipc_multi_queue_init(ipc_queue *q1, ipc_queue *q2)
+{
+	MemoryContext old = MemoryContextSwitchTo(TopMemoryContext);
+	ipc_multi_queue *ipcmq = palloc0(sizeof(ipc_multi_queue));
+
+	ipcmq->queues = palloc0(sizeof(ipc_queue *) * 2);
+	ipcmq->queues[0] = q1;
+	ipcmq->queues[1] = q2;
+	ipcmq->nqueues = 2;
+
+	MemoryContextSwitchTo(old);
+
+	return ipcmq;
 }

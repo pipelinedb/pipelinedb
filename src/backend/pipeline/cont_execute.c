@@ -431,10 +431,18 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 	exec->current_query_id = InvalidOid;
 	exec->initfn = initfn;
 
-	exec->ipcq = MyContQueryProc->queue;
-	ipc_queue_unpeek_all(exec->ipcq);
+	if (exec->ptype == WORKER)
+	{
+		exec->ipcmq = ipc_multi_queue_init(acquire_my_ipc_queue(), acquire_my_broker_ipc_queue());
+		ipc_multi_queue_unpeek_all(exec->ipcmq);
+	}
+	else
+	{
+		exec->ipcq = acquire_my_ipc_queue();
+		ipc_queue_unpeek_all(exec->ipcq);
+	}
 
-	exec->msgs = palloc0(sizeof(IPCMessage) * continuous_query_batch_size);
+	exec->msgs = palloc0(sizeof(ipc_message) * continuous_query_batch_size);
 	exec->max_msgs = continuous_query_batch_size;
 	exec->num_msgs = 0;
 
@@ -446,14 +454,25 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 void
 ContExecutorDestroy(ContExecutor *exec)
 {
-	ipc_queue_pop_peeked(exec->ipcq);
+	if (exec->ptype == WORKER)
+		ipc_multi_queue_pop_peeked(exec->ipcmq);
+	else
+		ipc_queue_pop_peeked(exec->ipcq);
+
 	MemoryContextDelete(exec->cxt);
 }
 
 void
 ContExecutorStartBatch(ContExecutor *exec)
 {
-	if (ipc_queue_is_empty(exec->ipcq))
+	bool is_empty;
+
+	if (exec->ptype == WORKER)
+		is_empty = ipc_multi_queue_is_empty(exec->ipcmq);
+	else
+		is_empty = ipc_queue_is_empty(exec->ipcq);
+
+	if (is_empty)
 	{
 		if (!IsTransactionState())
 		{
@@ -462,7 +481,13 @@ ContExecutorStartBatch(ContExecutor *exec)
 			pgstat_report_cqstat(true);
 
 			pgstat_report_activity(STATE_IDLE, proc_name);
-			ipc_queue_wait_non_empty(exec->ipcq, 0);
+
+			if (exec->ptype == WORKER)
+				ipc_multi_queue_wait_non_empty(exec->ipcmq, 0);
+			else
+				ipc_queue_wait_non_empty(exec->ipcq, 0);
+
+
 			pgstat_report_activity(STATE_RUNNING, proc_name);
 
 			pfree(proc_name);
@@ -693,7 +718,7 @@ should_yield_item(ContExecutor *exec, void *ptr)
 void *
 ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 {
-	ContQueryRunParams *params;
+	static ContQueryRunParams *params = NULL;
 
 	/* We've yielded all items belonging to the CQ in this batch? */
 	if (exec->depleted)
@@ -736,7 +761,8 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 		exec->start_time = GetCurrentTimestamp();
 	}
 
-	params = GetContQueryRunParams();
+	if (!params)
+		params = GetContQueryRunParams();
 
 	for (;;)
 	{
@@ -753,11 +779,14 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 			return NULL;
 		}
 
-		ptr = ipc_queue_peek_next(exec->ipcq, &mlen);
+		if (exec->ptype == WORKER)
+			ptr = ipc_multi_queue_peek_next(exec->ipcmq, &mlen);
+		else
+			ptr = ipc_queue_peek_next(exec->ipcq, &mlen);
 
 		if (ptr)
 		{
-			MemoryContext old = MemoryContextSwitchTo(exec->exec_cxt);
+			MemoryContext old;
 
 			exec->msgs[exec->curr_msg].msg = ptr;
 			exec->msgs[exec->curr_msg].len = mlen;
@@ -765,13 +794,16 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 			exec->curr_msg++;
 			exec->num_msgs++;
 
+			/* This can happen is continuous_query_batch_size was increased at runtime */
 			if (exec->num_msgs == exec->max_msgs)
 			{
 				exec->max_msgs *= 2;
-				exec->msgs = repalloc(exec->msgs, sizeof(IPCMessage) * exec->max_msgs);
+				exec->msgs = repalloc(exec->msgs, sizeof(ipc_message) * exec->max_msgs);
 			}
 
 			exec->nbytes += mlen;
+
+			old = MemoryContextSwitchTo(exec->exec_cxt);
 
 			if (exec->ptype == WORKER)
 			{
@@ -849,7 +881,10 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
 
-	ipc_queue_pop_peeked(exec->ipcq);
+	if (exec->ptype == WORKER)
+		ipc_multi_queue_pop_peeked(exec->ipcmq);
+	else
+		ipc_queue_pop_peeked(exec->ipcq);
 
 	exec->curr_msg = 0;
 	exec->num_msgs = 0;

@@ -113,11 +113,11 @@ typedef struct ContQueryState
 typedef struct ContExecutor ContExecutor;
 typedef ContQueryState *(*ContQueryStateInit) (ContExecutor *exec, ContQueryState *state);
 
-typedef struct IPCMessage
+typedef struct ipc_message
 {
 	void *msg;
 	int len;
-} IPCMessage;
+} ipc_message;
 
 struct ContExecutor
 {
@@ -127,6 +127,7 @@ struct ContExecutor
 	ContQueryProcType ptype;
 
 	ipc_queue *ipcq;
+	ipc_multi_queue *ipcmq;
 	Bitmapset *queries;
 	bool update_queries;
 
@@ -137,7 +138,7 @@ struct ContExecutor
 	bool timedout;
 	bool depleted;
 	List *yielded;
-	IPCMessage *msgs;
+	ipc_message *msgs;
 	int max_msgs;
 	int curr_msg;
 	int num_msgs;
