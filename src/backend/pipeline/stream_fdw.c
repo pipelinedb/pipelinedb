@@ -470,7 +470,7 @@ IterateStreamScan(ForeignScanState *node)
 	bytea *tupraw;
 
 	if (state->cont_executor)
-		sts = (StreamTupleState *) ContExecutorYieldItem(state->cont_executor, &len);
+		sts = (StreamTupleState *) ContExecutorYieldNextMessage(state->cont_executor, &len);
 	else if (state->adhoc_executor)
 		sts = AdhocExecutorYieldItem(state->adhoc_executor, &len);
 	else

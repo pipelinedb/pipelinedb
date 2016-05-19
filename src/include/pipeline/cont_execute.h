@@ -113,6 +113,12 @@ typedef struct ContQueryState
 typedef struct ContExecutor ContExecutor;
 typedef ContQueryState *(*ContQueryStateInit) (ContExecutor *exec, ContQueryState *state);
 
+typedef struct IPCMessage
+{
+	void *msg;
+	int len;
+} IPCMessage;
+
 struct ContExecutor
 {
 	MemoryContext cxt;
@@ -125,14 +131,17 @@ struct ContExecutor
 	bool update_queries;
 
 	Bitmapset *exec_queries;
-	void *cursor;
-	int nitems;
 
 	Timestamp start_time;
 	bool started;
 	bool timedout;
 	bool depleted;
 	List *yielded;
+	IPCMessage *msgs;
+	int max_msgs;
+	int curr_msg;
+	int num_msgs;
+	Size nbytes;
 
 	Bitmapset *queries_seen;
 
@@ -147,7 +156,7 @@ extern void ContExecutorDestroy(ContExecutor *exec);
 extern void ContExecutorStartBatch(ContExecutor *exec);
 extern Oid ContExecutorStartNextQuery(ContExecutor *exec);
 extern void ContExecutorPurgeQuery(ContExecutor *exec);
-extern void *ContExecutorYieldItem(ContExecutor *exec, int *len);
+extern void *ContExecutorYieldNextMessage(ContExecutor *exec, int *len);
 extern void ContExecutorEndQuery(ContExecutor *exec);
 extern void ContExecutorEndBatch(ContExecutor *exec, bool commit);
 
