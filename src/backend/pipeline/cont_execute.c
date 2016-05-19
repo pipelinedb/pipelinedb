@@ -434,6 +434,10 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 	exec->ipcq = MyContQueryProc->queue;
 	ipc_queue_unpeek_all(exec->ipcq);
 
+	exec->msgs = palloc0(sizeof(IPCMessage) * continuous_query_batch_size);
+	exec->max_msgs = continuous_query_batch_size;
+	exec->num_msgs = 0;
+
 	MemoryContextSwitchTo(old);
 
 	return exec;
@@ -687,7 +691,7 @@ should_yield_item(ContExecutor *exec, void *ptr)
 }
 
 void *
-ContExecutorYieldItem(ContExecutor *exec, int *len)
+ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 {
 	ContQueryRunParams *params;
 
@@ -697,24 +701,32 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 
 	if (exec->timedout)
 	{
-		if (exec->nitems == 0)
+		if (exec->num_msgs == 0)
+		{
+			exec->depleted = true;
 			return NULL;
+		}
 
 		for (;;)
 		{
 			void *ptr;
+			int mlen;
 
 			if (exec->depleted)
 				return NULL;
 
-			ptr = ipc_queue_peek_next(exec->ipcq, len);
-			Assert(ptr);
+			ptr = exec->msgs[exec->curr_msg].msg;
+			mlen = exec->msgs[exec->curr_msg].len;
+			exec->curr_msg++;
 
-			if (ptr == exec->cursor)
+			if (exec->curr_msg == exec->num_msgs)
 				exec->depleted = true;
 
 			if (should_yield_item(exec, ptr))
+			{
+				*len = mlen;
 				return ptr;
+			}
 		}
 	}
 
@@ -729,9 +741,10 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 	for (;;)
 	{
 		void *ptr;
+		int mlen;
 
 		/* We've read a full batch or waited long enough? */
-		if (exec->nitems == params->batch_size ||
+		if (exec->num_msgs == params->batch_size ||
 				TimestampDifferenceExceeds(exec->start_time, GetCurrentTimestamp(), params->max_wait) ||
 				MyContQueryProc->db_meta->terminate)
 		{
@@ -740,15 +753,25 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			return NULL;
 		}
 
-		ptr = ipc_queue_peek_next(exec->ipcq, len);
+		ptr = ipc_queue_peek_next(exec->ipcq, &mlen);
 
 		if (ptr)
 		{
-			MemoryContext old;
-			exec->cursor = ptr;
-			exec->nitems++;
+			MemoryContext old = MemoryContextSwitchTo(exec->exec_cxt);
 
-			old = MemoryContextSwitchTo(exec->exec_cxt);
+			exec->msgs[exec->curr_msg].msg = ptr;
+			exec->msgs[exec->curr_msg].len = mlen;
+
+			exec->curr_msg++;
+			exec->num_msgs++;
+
+			if (exec->num_msgs == exec->max_msgs)
+			{
+				exec->max_msgs *= 2;
+				exec->msgs = repalloc(exec->msgs, sizeof(IPCMessage) * exec->max_msgs);
+			}
+
+			exec->nbytes += mlen;
 
 			if (exec->ptype == WORKER)
 			{
@@ -764,7 +787,10 @@ ContExecutorYieldItem(ContExecutor *exec, int *len)
 			MemoryContextSwitchTo(old);
 
 			if (should_yield_item(exec, ptr))
+			{
+				*len = mlen;
 				return ptr;
+			}
 		}
 		else
 			pg_usleep(SLEEP_MS * 1000);
@@ -778,8 +804,6 @@ ContExecutorEndQuery(ContExecutor *exec)
 
 	if (!exec->started)
 		return;
-
-	ipc_queue_unpeek_all(exec->ipcq);
 
 	if (!bms_is_empty(exec->queries_seen) && exec->update_queries)
 	{
@@ -796,7 +820,9 @@ ContExecutorEndQuery(ContExecutor *exec)
 	}
 
 	exec->current_query_id = InvalidOid;
+	exec->curr_msg = 0;
 	exec->depleted = false;
+
 	list_free(exec->yielded);
 	exec->yielded = NIL;
 
@@ -814,29 +840,20 @@ ContExecutorEndQuery(ContExecutor *exec)
 void
 ContExecutorEndBatch(ContExecutor *exec, bool commit)
 {
-	void *ptr;
-
 	Assert(IsTransactionState());
 
 	if (commit)
 		CommitTransactionCommand();
 
-	pgstat_end_cq_batch(MyProcStatCQEntry, exec->nitems, pg_atomic_read_u64(&exec->ipcq->head) - exec->ipcq->cursor);
+	pgstat_end_cq_batch(MyProcStatCQEntry, exec->num_msgs, exec->nbytes);
 
 	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
 
-	while (exec->nitems--)
-	{
-		int len;
-		ptr = ipc_queue_peek_next(exec->ipcq, &len);
-	}
-
-	Assert(exec->cursor == NULL || exec->cursor == ptr);
-
 	ipc_queue_pop_peeked(exec->ipcq);
 
-	exec->cursor = NULL;
-	exec->nitems = 0;
+	exec->curr_msg = 0;
+	exec->num_msgs = 0;
+	exec->nbytes = 0;
 	exec->started = false;
 	exec->timedout = false;
 	exec->depleted = false;

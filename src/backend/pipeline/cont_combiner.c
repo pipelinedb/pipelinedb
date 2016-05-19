@@ -850,7 +850,7 @@ read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
 	Size nbytes = 0;
 	int count = 0;
 
-	while ((pts = (PartialTupleState *) ContExecutorYieldItem(cont_exec, &len)) != NULL)
+	while ((pts = (PartialTupleState *) ContExecutorYieldNextMessage(cont_exec, &len)) != NULL)
 	{
 		if (!TupIsNull(state->slot))
 			ExecClearTuple(state->slot);

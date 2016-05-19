@@ -217,19 +217,15 @@ void
 ipc_queue_pop_peeked(ipc_queue *ipcq)
 {
 	Latch *producer_latch;
-	uint64_t tail;
-	uint64_t cur;
+	uint64 cur = ipcq->cursor;
 
 	Assert(ipcq->magic == MAGIC);
 
-	tail = pg_atomic_read_u64(&ipcq->tail);
-	cur = ipcq->cursor;
-
-	Assert(tail <= cur);
-
 	if (ipcq->pop_fn)
 	{
-		uint64_t start = tail;
+		uint64 start = pg_atomic_read_u64(&ipcq->tail);
+
+		Assert(start <= cur);
 
 		while (start < cur)
 		{

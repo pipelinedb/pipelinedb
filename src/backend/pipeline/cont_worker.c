@@ -322,6 +322,9 @@ next:
 			 * harmless errors.
 			 */
 			FlushErrorState();
+
+			if (estate && ActiveSnapshotSet())
+				UnsetEStateSnapshot(estate);
 		}
 		PG_END_TRY();
 	}
