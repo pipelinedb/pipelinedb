@@ -51,18 +51,6 @@ ipc_queue_init(void *ptr, Size size, LWLock *lock)
 }
 
 bool
-ipc_queue_is_empty(ipc_queue *ipcq)
-{
-	return pg_atomic_read_u64(&ipcq->head) == pg_atomic_read_u64(&ipcq->tail);
-}
-
-bool
-ipc_queue_has_unread(ipc_queue *ipcq)
-{
-	return pg_atomic_read_u64(&ipcq->head) > ipcq->cursor;
-}
-
-bool
 ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 {
 	uint64 head;
