@@ -6089,16 +6089,18 @@ pgstat_increment_cq_read(uint64 nrows, Size nbytes)
 void
 pgstat_end_cq_batch(PgStat_StatCQEntry *entry, uint64 nrows, Size nbytes)
 {
-	FILE *f = fopen("/proc/self/statm", "r");
+	FILE *fp = fopen("/proc/self/statm", "r");
 	uint64 mem = 0;
 	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
 
-	if (f)
+	if (fp)
 	{
 		uint64 dummy;
-		if (fscanf(f, "%ld %ld %ld %ld %ld %ld %ld", &dummy, &mem, &dummy, &dummy, &dummy, &dummy, &dummy) != 7)
+		if (fscanf(fp, "%ld %ld %ld %ld %ld %ld %ld", &dummy, &mem, &dummy, &dummy, &dummy, &dummy, &dummy) != 7)
 		  mem = 0;
 	}
+
+	fclose(fp);
 
 	lentry->avgstat.memory[lentry->avgstat.i] = mem;
 	lentry->avgstat.tuples[lentry->avgstat.i] += nrows;
