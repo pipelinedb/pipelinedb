@@ -78,11 +78,13 @@ extern void ipc_queue_update_head(ipc_queue *ipcq, uint64 head);
 
 typedef struct ipc_multi_queue
 {
+	int pqueue;
 	int nqueues;
 	ipc_queue **queues;
 } ipc_multi_queue;
 
 extern ipc_multi_queue *ipc_multi_queue_init(ipc_queue *q1, ipc_queue *q2);
+extern void ipc_multi_queue_set_priority_queue(ipc_multi_queue *ipcmq, int nq);
 extern void ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms);
 extern void *ipc_multi_queue_peek_next(ipc_multi_queue *ipcmq, int *len);
 extern void ipc_multi_queue_unpeek_all(ipc_multi_queue *ipcmq);

@@ -433,7 +433,8 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 
 	if (exec->ptype == WORKER)
 	{
-		exec->ipcmq = ipc_multi_queue_init(acquire_my_ipc_queue(), acquire_my_broker_ipc_queue());
+		exec->ipcmq = ipc_multi_queue_init(acquire_my_broker_ipc_queue(), acquire_my_ipc_queue());
+		ipc_multi_queue_set_priority_queue(exec->ipcmq, 0);
 		ipc_multi_queue_unpeek_all(exec->ipcmq);
 	}
 	else

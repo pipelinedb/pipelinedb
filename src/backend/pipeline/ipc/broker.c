@@ -40,8 +40,6 @@
 #include "utils/snapmgr.h"
 #include "utils/timeout.h"
 
-#define COPY_LOOPS_PER_WORKER 3
-
 #define num_bg_workers_per_db (continuous_query_num_workers + continuous_query_num_combiners)
 #define num_queues_per_db (continuous_query_num_workers * 3 + continuous_query_num_combiners)
 #define num_locks_per_db \
@@ -568,7 +566,6 @@ copy_messages(void)
 	HASH_SEQ_STATUS status;
 	broker_db_meta *db_meta;
 	int num_copied = 0;
-	static int t = 0;
 
 	LWLockAcquire(IPCMessageBrokerIndexLock, LW_SHARED);
 
@@ -592,12 +589,11 @@ copy_messages(void)
 			ipc_queue *bwq; /* broker->worker queue */
 			ipc_queue *wbq; /* worker->broker queue */
 			local_queue *local_buf = &db_meta->lqueues[i];
-			uint64 last_bwq_tail;
 			uint64 last_wbq_cur;
-			int nloops = COPY_LOOPS_PER_WORKER;
 			uint64 bwq_head;
-			bool bwq_is_full = false;
 			int bwq_inserted = 0;
+			uint64 bwq_tail;
+			bool bwq_is_full = false;
 
 			bwq = (ipc_queue *) ptr;
 			ptr += ipc_queue_size;
@@ -605,45 +601,32 @@ copy_messages(void)
 			ptr += 2 * ipc_queue_size;
 
 			/* check some invariants */
+			Assert(bwq->produced_by_broker);
+			Assert(bwq->copy_fn == NULL);
 			Assert(wbq->consumed_by_broker);
 			Assert(wbq->peek_fn == NULL);
 			Assert(wbq->pop_fn == NULL);
 			Assert(wbq->cursor == pg_atomic_read_u64(&wbq->tail));
 
 			bwq_head = pg_atomic_read_u64(&bwq->head);
-			last_bwq_tail = UINT64_MAX; /* NULL */
 			last_wbq_cur = wbq->cursor;
 
-			while (--nloops)
-			{
-				uint64 bwq_tail = pg_atomic_read_u64(&bwq->tail);
+			bwq_tail = pg_atomic_read_u64(&bwq->tail);
 
-				/* was bwq full and nothing's been read off it since? */
-				if (bwq_is_full && bwq_tail == last_bwq_tail)
-					continue;
+			/* locally cache slots? insert them first */
+			if (local_buf->slots)
+				bwq_inserted += copy_lq_to_bwq(local_buf, bwq, &bwq_head, bwq_tail, &bwq_is_full);
 
-				bwq_is_full = false;
-				last_bwq_tail = bwq_tail;
-
-				/* locally cache slots? insert them first */
-				if (local_buf->slots)
-					bwq_inserted += copy_lq_to_bwq(local_buf, bwq, &bwq_head, bwq_tail, &bwq_is_full);
-
-				/* is bwq full or still more local data? retry */
-				if (bwq_is_full || local_buf->slots)
-					continue;
-
+			/* is there no more local data? */
+			if (!bwq_is_full && !local_buf->slots)
 				/* try copying from wbq to bwq */
 				bwq_inserted += copy_wbq_to_bwq(wbq, bwq, &bwq_head, bwq_tail, &bwq_is_full);
-			}
 
 			if (bwq_inserted)
 			{
 				Assert(bwq_head);
 				ipc_queue_update_head(bwq, bwq_head);
 				num_copied += bwq_inserted;
-
-				t += bwq_inserted;
 			}
 
 			num_copied += copy_wbq_to_lq(wbq, local_buf);

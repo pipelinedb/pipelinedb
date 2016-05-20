@@ -427,8 +427,6 @@ ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms)
 	}
 }
 
-static int read[2] = {0, 0};
-
 void *
 ipc_multi_queue_peek_next(ipc_multi_queue *ipcmq, int *len)
 {
@@ -449,13 +447,19 @@ ipc_multi_queue_peek_next(ipc_multi_queue *ipcmq, int *len)
 				break;
 		}
 	}
-
-	if (ptr)
-	{
-		read[idx] += 1;
-	}
+	else if (idx != ipcmq->pqueue)
+		idx = (idx + 1) % ipcmq->nqueues;
 
 	return ptr;
+}
+
+void
+ipc_multi_queue_set_priority_queue(ipc_multi_queue *ipcmq, int pq)
+{
+	if (pq >= ipcmq->nqueues || pq < -1)
+		elog(ERROR, "queue number must be in [0, nqueues) or -1 for no priority");
+
+	ipcmq->pqueue = pq;
 }
 
 void
@@ -510,6 +514,7 @@ ipc_multi_queue_init(ipc_queue *q1, ipc_queue *q2)
 	ipcmq->queues[0] = q1;
 	ipcmq->queues[1] = q2;
 	ipcmq->nqueues = 2;
+	ipcmq->pqueue = -1;
 
 	MemoryContextSwitchTo(old);
 
