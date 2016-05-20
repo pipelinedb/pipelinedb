@@ -43,8 +43,10 @@ def test_deadlock_regress(pipeline, clean_db):
   pipeline.create_cv('cv', 'SELECT count(*) FROM s2')
 
   for copy in [True, False]:
-    for nworkers in [1, 4]:
+    for nworkers in [4, 1]:
       for sync in ['off', 'on']:
+        print '===>', copy, nworkers, sync
+
         pipeline.stop()
         pipeline.run({
           'continuous_query_num_workers': nworkers,
@@ -61,7 +63,7 @@ def test_deadlock_regress(pipeline, clean_db):
 
         count = dict(pipeline.execute('SELECT count FROM cv').first() or {})
         ntries = 5
-        while count.get('count') != nitems and ntries > 0:
+        while count.get('count') != nitems:# and ntries > 0:
           assert sync == 'off'
           time.sleep(1)
           count = dict(pipeline.execute('SELECT count FROM cv').first() or {})

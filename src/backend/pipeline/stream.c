@@ -95,7 +95,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 		bool needs_wrap = ipc_queue_needs_wrap(ipcq, head, len_needed);
 		char *dest_bytes;
 
-		Assert(IsContQueryWorkerProcess() ? ipcq->used_by_broker : true);
+		Assert(IsContQueryWorkerProcess() ? ipcq->consumed_by_broker : true);
 		Assert(tail <= head);
 
 		if (needs_wrap)

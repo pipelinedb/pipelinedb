@@ -23,7 +23,7 @@
 #define MAX_WAIT_SLEEP_NS 5000 /* 5ms */
 
 void
-ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router)
+ipc_queue_init(void *ptr, Size size, LWLock *lock)
 {
 	ipc_queue *ipcq;
 
@@ -32,8 +32,6 @@ ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router)
 		elog(ERROR, "ipc_queue already initialized");
 
 	MemSet((char *) ipcq, 0, size);
-
-	ipcq->used_by_broker = used_by_router;
 
 	/* We leave enough space for a ipc_queue_slot to go at the end, so we never overflow the buffer. */
 	ipcq->size = size - sizeof(ipc_queue) - sizeof(ipc_queue_slot);
@@ -217,7 +215,6 @@ ipc_queue_unpeek_all(ipc_queue *ipcq)
 void
 ipc_queue_pop_peeked(ipc_queue *ipcq)
 {
-	Latch *producer_latch;
 	uint64 cur = ipcq->cursor;
 
 	Assert(ipcq->magic == MAGIC);
@@ -249,9 +246,15 @@ ipc_queue_pop_peeked(ipc_queue *ipcq)
 	 * miss a wake up.
 	 */
 	pg_atomic_write_u64(&ipcq->tail, cur);
-	producer_latch = (Latch *) pg_atomic_read_u64(&ipcq->producer_latch);
-	if (producer_latch != NULL)
-		SetLatch(producer_latch);
+
+	if (ipcq->produced_by_broker)
+		signal_ipc_broker_process();
+	else
+	{
+		Latch *producer_latch = (Latch *) pg_atomic_read_u64(&ipcq->producer_latch);
+		if (producer_latch != NULL)
+			SetLatch(producer_latch);
+	}
 }
 
 void
@@ -342,7 +345,7 @@ ipc_queue_update_head(ipc_queue *ipcq, uint64 head)
 
 	pg_atomic_write_u64(&ipcq->head, head);
 
-	if (ipcq->used_by_broker)
+	if (ipcq->consumed_by_broker)
 		signal_ipc_broker_process();
 	else
 	{
@@ -424,21 +427,35 @@ ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms)
 	}
 }
 
+static int read[2] = {0, 0};
+
 void *
 ipc_multi_queue_peek_next(ipc_multi_queue *ipcmq, int *len)
 {
 	static int idx = 0;
 	int i;
+	void *ptr;
 
-	for (i = 0; i < ipcmq->nqueues; i++)
+	ptr = ipc_queue_peek_next(ipcmq->queues[idx], len);
+
+	if (!ptr)
 	{
-		void *ptr = ipc_queue_peek_next(ipcmq->queues[idx], len);
-		idx = (idx + 1) % ipcmq->nqueues;
-		if (ptr)
-			return ptr;
+		for (i = 0; i < ipcmq->nqueues; i++)
+		{
+			idx = (idx + 1) % ipcmq->nqueues;
+			ptr = ipc_queue_peek_next(ipcmq->queues[idx], len);
+
+			if (ptr)
+				break;
+		}
 	}
 
-	return NULL;
+	if (ptr)
+	{
+		read[idx] += 1;
+	}
+
+	return ptr;
 }
 
 void
