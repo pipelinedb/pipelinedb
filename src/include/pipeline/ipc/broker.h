@@ -26,6 +26,7 @@ extern void signal_ipc_broker_process(void);
 
 extern ipc_queue *acquire_my_ipc_queue(void);
 extern void release_my_ipc_queue(void);
+extern ipc_queue *acquire_my_broker_ipc_queue(void);
 
 extern ipc_queue *get_worker_queue_with_lock(void);
 extern ipc_queue *get_combiner_queue_with_lock(int idx);

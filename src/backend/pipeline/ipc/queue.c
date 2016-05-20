@@ -16,13 +16,14 @@
 #include "port/atomics.h"
 #include "storage/latch.h"
 #include "storage/lwlock.h"
+#include "utils/memutils.h"
 
 #define MAGIC 0xDEADBABE /* x_x */
 #define WAIT_SLEEP_NS 250
 #define MAX_WAIT_SLEEP_NS 5000 /* 5ms */
 
 void
-ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router)
+ipc_queue_init(void *ptr, Size size, LWLock *lock)
 {
 	ipc_queue *ipcq;
 
@@ -31,8 +32,6 @@ ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router)
 		elog(ERROR, "ipc_queue already initialized");
 
 	MemSet((char *) ipcq, 0, size);
-
-	ipcq->used_by_broker = used_by_router;
 
 	/* We leave enough space for a ipc_queue_slot to go at the end, so we never overflow the buffer. */
 	ipcq->size = size - sizeof(ipc_queue) - sizeof(ipc_queue_slot);
@@ -52,22 +51,10 @@ ipc_queue_init(void *ptr, Size size, LWLock *lock, bool used_by_router)
 }
 
 bool
-ipc_queue_is_empty(ipc_queue *ipcq)
-{
-	return pg_atomic_read_u64(&ipcq->head) == pg_atomic_read_u64(&ipcq->tail);
-}
-
-bool
-ipc_queue_has_unread(ipc_queue *ipcq)
-{
-	return pg_atomic_read_u64(&ipcq->head) > ipcq->cursor;
-}
-
-bool
 ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 {
-	uint64_t head;
-	uint64_t tail;
+	uint64 head;
+	uint64 tail;
 	Latch *producer_latch = NULL;
 	ipc_queue_slot *slot;
 	int len_needed;
@@ -216,7 +203,6 @@ ipc_queue_unpeek_all(ipc_queue *ipcq)
 void
 ipc_queue_pop_peeked(ipc_queue *ipcq)
 {
-	Latch *producer_latch;
 	uint64 cur = ipcq->cursor;
 
 	Assert(ipcq->magic == MAGIC);
@@ -248,17 +234,23 @@ ipc_queue_pop_peeked(ipc_queue *ipcq)
 	 * miss a wake up.
 	 */
 	pg_atomic_write_u64(&ipcq->tail, cur);
-	producer_latch = (Latch *) pg_atomic_read_u64(&ipcq->producer_latch);
-	if (producer_latch != NULL)
-		SetLatch(producer_latch);
+
+	if (ipcq->produced_by_broker)
+		signal_ipc_broker_process();
+	else
+	{
+		Latch *producer_latch = (Latch *) pg_atomic_read_u64(&ipcq->producer_latch);
+		if (producer_latch != NULL)
+			SetLatch(producer_latch);
+	}
 }
 
 void
 ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms)
 {
 	Latch *consumer_latch;
-	uint64_t head;
-	uint64_t tail;
+	uint64 head;
+	uint64 tail;
 	int flags;
 
 	Assert(ipcq->magic == MAGIC);
@@ -341,7 +333,7 @@ ipc_queue_update_head(ipc_queue *ipcq, uint64 head)
 
 	pg_atomic_write_u64(&ipcq->head, head);
 
-	if (ipcq->used_by_broker)
+	if (ipcq->consumed_by_broker)
 		signal_ipc_broker_process();
 	else
 	{
@@ -349,4 +341,170 @@ ipc_queue_update_head(ipc_queue *ipcq, uint64 head)
 		if (latch)
 			SetLatch(latch);
 	}
+}
+
+void
+ipc_multi_queue_wait_non_empty(ipc_multi_queue *ipcmq, int timeoutms)
+{
+	Latch *consumer_latch;
+	uint64 tails[ipcmq->nqueues];
+	int flags;
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+	{
+		ipc_queue *ipcq = ipcmq->queues[i];
+		uint64 head;
+
+		Assert(ipcq->magic == MAGIC);
+
+		head = pg_atomic_read_u64(&ipcq->head);
+		tails[i] = pg_atomic_read_u64(&ipcq->tail);
+
+		if (tails[i] < head)
+			return;
+	}
+
+	consumer_latch = MyLatch;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+	{
+		ipc_queue *ipcq = ipcmq->queues[i];
+		pg_atomic_write_u64(&ipcq->consumer_latch, (uint64) consumer_latch);
+	}
+
+	flags = WL_LATCH_SET | WL_POSTMASTER_DEATH;
+	if (timeoutms > 0)
+		flags |= WL_TIMEOUT;
+
+	for (;;)
+	{
+		int r;
+		bool non_empty = false;
+
+		for (i = 0; i < ipcmq->nqueues; i++)
+		{
+			ipc_queue *ipcq = ipcmq->queues[i];
+			uint64 head = pg_atomic_read_u64(&ipcq->head);
+
+			if (head > tails[i])
+			{
+				non_empty = true;
+				break;
+			}
+		}
+
+		if (non_empty)
+			break;
+
+		r = WaitLatch(consumer_latch, flags, timeoutms);
+		if (r & WL_POSTMASTER_DEATH)
+			break;
+
+		if (ShouldTerminateContQueryProcess())
+			break;
+
+		ResetLatch(consumer_latch);
+		CHECK_FOR_INTERRUPTS();
+	}
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+	{
+		ipc_queue *ipcq = ipcmq->queues[i];
+		pg_atomic_write_u64(&ipcq->consumer_latch, (uint64) NULL);
+	}
+}
+
+void *
+ipc_multi_queue_peek_next(ipc_multi_queue *ipcmq, int *len)
+{
+	static int idx = 0;
+	int i;
+	void *ptr;
+
+	ptr = ipc_queue_peek_next(ipcmq->queues[idx], len);
+
+	if (!ptr)
+	{
+		for (i = 0; i < ipcmq->nqueues; i++)
+		{
+			idx = (idx + 1) % ipcmq->nqueues;
+			ptr = ipc_queue_peek_next(ipcmq->queues[idx], len);
+
+			if (ptr)
+				break;
+		}
+	}
+	else if (idx != ipcmq->pqueue)
+		idx = (idx + 1) % ipcmq->nqueues;
+
+	return ptr;
+}
+
+void
+ipc_multi_queue_set_priority_queue(ipc_multi_queue *ipcmq, int pq)
+{
+	if (pq >= ipcmq->nqueues || pq < -1)
+		elog(ERROR, "queue number must be in [0, nqueues) or -1 for no priority");
+
+	ipcmq->pqueue = pq;
+}
+
+void
+ipc_multi_queue_unpeek_all(ipc_multi_queue *ipcmq)
+{
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+		ipc_queue_unpeek_all(ipcmq->queues[i]);
+}
+
+void
+ipc_multi_queue_pop_peeked(ipc_multi_queue *ipcmq)
+{
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+		ipc_queue_pop_peeked(ipcmq->queues[i]);
+}
+
+bool
+ipc_multi_queue_is_empty(ipc_multi_queue *ipcmq)
+{
+	bool is_empty = true;
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues && is_empty; i++)
+		is_empty &= ipc_queue_is_empty(ipcmq->queues[i]);
+
+	return is_empty;
+}
+
+bool
+ipc_multi_queue_has_unread(ipc_multi_queue *ipcmq)
+{
+	bool has_unread = false;
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues && !has_unread; i++)
+		has_unread |= ipc_queue_has_unread(ipcmq->queues[i]);
+
+	return has_unread;
+}
+
+ipc_multi_queue *
+ipc_multi_queue_init(ipc_queue *q1, ipc_queue *q2)
+{
+	MemoryContext old = MemoryContextSwitchTo(TopMemoryContext);
+	ipc_multi_queue *ipcmq = palloc0(sizeof(ipc_multi_queue));
+
+	ipcmq->queues = palloc0(sizeof(ipc_queue *) * 2);
+	ipcmq->queues[0] = q1;
+	ipcmq->queues[1] = q2;
+	ipcmq->nqueues = 2;
+	ipcmq->pqueue = -1;
+
+	MemoryContextSwitchTo(old);
+
+	return ipcmq;
 }
