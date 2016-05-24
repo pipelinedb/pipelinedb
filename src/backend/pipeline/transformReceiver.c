@@ -214,7 +214,10 @@ pipeline_stream_insert_batch(TransformState *t)
 		heap_close(rel, NoLock);
 
 		if (size)
+		{
 			pgstat_increment_cq_write(t->ntups, size);
+			pgstat_report_streamstat(false);
+		}
 	}
 
 	if (t->acks)
@@ -224,15 +227,10 @@ pipeline_stream_insert_batch(TransformState *t)
 		t->nacks = 0;
 	}
 
-
-
 	if (t->ntups)
 	{
 		for (i = 0; i < t->ntups; i++)
-		{
-			HeapTuple tup = (HeapTuple) t->tups[i];
-			heap_freetuple(tup);
-		}
+			heap_freetuple(t->tups[i]);
 
 		pfree(t->tups);
 		t->tups = NULL;
@@ -244,7 +242,6 @@ pipeline_stream_insert_batch(TransformState *t)
 		Assert(t->tups == NULL);
 		Assert(t->nmaxtups == 0);
 	}
-
 }
 
 void
