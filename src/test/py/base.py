@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 
+from functools import wraps
 from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
 
@@ -347,3 +348,15 @@ def pipeline(request):
     pdb.run()
 
     return pdb
+
+def async_insert(f):
+  @wraps(f)
+  def wrapper(pipeline, clean_db):
+    pipeline.stop()
+    pipeline.run({'synchronous_stream_insert': 'off'})
+    try:
+      f(pipeline, clean_db)
+    finally:
+      pipeline.stop()
+      pipeline.run()
+  return wrapper
