@@ -1086,7 +1086,7 @@ get_db_meta(Oid dbid)
 
 
 static ipc_queue *
-get_combine_ipcq(dsm_segment *segment, int group_id)
+get_combiner_ipcq(dsm_segment *segment, int group_id)
 {
 	char *ptr = dsm_segment_address(segment);
 	ipc_queue *ipcq;
@@ -1180,7 +1180,7 @@ acquire_my_ipc_queue(void)
 		my_ipc_meta->seg_slot = NULL;
 
 		if (IsContQueryCombinerProcess())
-			my_ipc_meta->queue = get_combine_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id);
+			my_ipc_meta->queue = get_combiner_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id);
 		else
 			my_ipc_meta->queue = get_worker_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id, false, false);
 
@@ -1272,7 +1272,7 @@ get_combiner_queue_with_lock(int idx)
 {
 	broker_db_meta *db_meta = get_db_meta(MyDatabaseId);
 	dsm_segment *segment = dsm_attach_and_pin(db_meta->handle);
-	ipc_queue *ipcq = get_combine_ipcq(segment, idx);
+	ipc_queue *ipcq = get_combiner_ipcq(segment, idx);
 	ipc_queue_lock(ipcq, true);
 	return ipcq;
 }
