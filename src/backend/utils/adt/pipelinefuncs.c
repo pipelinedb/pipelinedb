@@ -233,7 +233,11 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		/* just ignore stale stats entries */
 		cv = GetContQueryForId(viewid);
 		if (!cv)
+		{
+			/* stale query, purge it */
+			pgstat_send_cqpurge(viewid, 0, GetStatCQEntryProcType(entry->key));
 			continue;
+		}
 
 		viewname = NameStr(cv->name);
 
