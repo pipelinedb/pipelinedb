@@ -1037,6 +1037,12 @@ extern PgStat_GlobalStats *pgstat_fetch_global(void);
  * PipelineDB stats for continuous queries
  */
 
+/*
+ * GUC parameters
+ */
+extern bool pgstat_track_continuous_queries;
+extern bool pgstat_track_streams;
+
 #define PGSTAT_AVERAGE_BUFFER_SIZE 10
 #define PGSTAT_AVERAGE_BUFFER_INTERVAL 2000 /* in ms */
 

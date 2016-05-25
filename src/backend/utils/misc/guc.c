@@ -1694,6 +1694,24 @@ static struct config_bool ConfigureNamesBool[] =
 		false,
 		NULL, NULL, NULL
 	},
+	{
+		{"track_continuous_queries", PGC_POSTMASTER, STATS_COLLECTOR,
+			gettext_noop("Collects statistics on continuous query activiy."),
+			NULL
+		},
+		&pgstat_track_continuous_queries,
+		true,
+		NULL, NULL, NULL
+	},
+	{
+		{"track_streams", PGC_POSTMASTER, STATS_COLLECTOR,
+			gettext_noop("Collects statistics on stream insertion activity."),
+			NULL
+		},
+		&pgstat_track_streams,
+		true,
+		NULL, NULL, NULL
+	},
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, false, NULL, NULL, NULL

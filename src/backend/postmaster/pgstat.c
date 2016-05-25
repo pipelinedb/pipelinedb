@@ -113,6 +113,8 @@ bool		pgstat_track_activities = false;
 bool		pgstat_track_counts = false;
 int			pgstat_track_functions = TRACK_FUNC_OFF;
 int			pgstat_track_activity_query_size = 1024;
+bool		pgstat_track_continuous_queries = true;
+bool		pgstat_track_streams = true;
 
 /* ----------
  * Built from GUC parameter
@@ -5764,11 +5766,15 @@ pgstat_report_create_drop_cv(bool create)
 void
 pgstat_report_cqstat(bool force)
 {
+	if (pgStatSock == PGINVALID_SOCKET || !pgstat_track_continuous_queries)
+		return;
+
 	/*
 	 * Don't send a message unless it's been at least PGSTAT_STAT_INTERVAL
 	 * msec since we last sent one, or the caller wants to force stats out.
 	 */
-	if (!force && MyStatCQEntry && !TimestampDifferenceExceeds(MyStatCQEntry->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
+	if (!force && MyStatCQEntry &&
+			!TimestampDifferenceExceeds(MyStatCQEntry->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
 		return;
 
 	cq_stat_report_entry(MyProcStatCQEntry);
@@ -6041,6 +6047,9 @@ void
 pgstat_report_streamstat(bool force)
 {
 	PgStat_MsgStreamstat msg;
+
+	if (pgStatSock == PGINVALID_SOCKET || !pgstat_track_streams)
+		return;
 
 	/* Nothing to do */
 	if (!OidIsValid(MyStreamStats.relid))

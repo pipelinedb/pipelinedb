@@ -600,7 +600,7 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 	pfree(sts);
 
 	sis->count++;
-	sis->bytes += tup->t_len + HEAPTUPLESIZE;
+	sis->bytes += len;
 
 	return slot;
 }
