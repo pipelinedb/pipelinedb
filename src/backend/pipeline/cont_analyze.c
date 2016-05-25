@@ -3185,8 +3185,8 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 
 	if (IsA(target->expr, Aggref) || IsA(target->expr, WindowFunc))
 	{
-		Oid fnoid;
-		Oid type;
+		Oid fnoid = InvalidOid;
+		Oid type = InvalidOid;
 		Oid finaltype = InvalidOid;
 		Oid aggtype;
 		Var *v;

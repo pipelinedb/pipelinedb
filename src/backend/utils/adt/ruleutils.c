@@ -5504,14 +5504,12 @@ get_insert_query_def(Query *query, deparse_context *context)
 			ListCell *lc;
 			TargetEntry *curr_tle = (TargetEntry *) lfirst(l);
 			Var *curr_var;
-			RangeTblEntry *rte;
 
 			Assert(IsA(curr_tle->expr, Var));
 			curr_var = (Var *) curr_tle->expr;
 
 			/* All these Vars must belong to the VALUES RTE. */
-			rte = (RangeTblEntry *) list_nth(query->rtable, curr_var->varno - 1);
-			Assert(rte == values_rte);
+			Assert((RangeTblEntry *) list_nth(query->rtable, curr_var->varno - 1) == values_rte);
 
 			foreach(lc, sorted_tlist)
 			{

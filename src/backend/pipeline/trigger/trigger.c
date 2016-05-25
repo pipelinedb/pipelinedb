@@ -530,7 +530,7 @@ trigger_check_catalog(void *data, const char *name)
 	Oid tgoid;
 	char *last;
 	char *first;
-	char *saveptr;
+	char *saveptr = NULL;
 
 	MemoryContext old;
 	TriggerProcessState *state = (TriggerProcessState *) (data);
