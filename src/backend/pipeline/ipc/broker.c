@@ -389,7 +389,8 @@ dsm_attach_and_pin(dsm_handle handle)
 	CurrentResourceOwner = ResourceOwnerCreate(NULL, "BrokerDBMeta dsm_segment ResourceOwner");
 
 	segment = dsm_attach(handle);
-	dsm_pin_mapping(segment);
+	if (segment)
+		dsm_pin_mapping(segment);
 
 	res = CurrentResourceOwner;
 	CurrentResourceOwner = old;
@@ -581,6 +582,9 @@ copy_messages(void)
 		if (db_meta->lqueues == NULL)
 			db_meta->lqueues = MemoryContextAllocZero(CacheMemoryContext,
 					sizeof(local_queue) * continuous_query_num_workers);
+
+		if (db_meta->segment == NULL)
+			continue;
 
 		ptr = dsm_segment_address(db_meta->segment);
 
