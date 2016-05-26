@@ -255,12 +255,7 @@ record_cv_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
 
 	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
 
-	/*
-	 * Record a dependency between the matrel and the view, so when we drop the view
-	 * the matrel is automatically dropped as well. The user will enter the view name
-	 * when dropping, so the alternative is to rewrite the drop target to the matrel.
-	 * This seems simpler.
-	 */
+	/* Record a dependency between matrel and view. */
 	dependent.classId = RelationRelationId;
 	dependent.objectId = matreloid;
 	dependent.objectSubId = 0;
@@ -271,7 +266,7 @@ record_cv_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
 
 	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
-	/* Record dependency between sequence relation and view */
+	/* Record dependency between sequence relation and view. */
 	if (OidIsValid(seqreloid))
 	{
 		dependent.classId = RelationRelationId;

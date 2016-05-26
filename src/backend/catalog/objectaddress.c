@@ -3162,10 +3162,25 @@ getObjectDescription(const ObjectAddress *object)
 				tup = SearchSysCache1(PIPELINEQUERYOID,
 									  ObjectIdGetDatum(object->objectId));
 				if (!HeapTupleIsValid(tup))
-					elog(ERROR, "cache lookup failed for continuous query %u",
+					elog(ERROR, "cache lookup failed for pipeline_query %u",
 						 object->objectId);
-				appendStringInfo(&buffer, _("continuous query %s"),
-				 NameStr(((Form_pipeline_query) GETSTRUCT(tup))->name));
+				appendStringInfo(&buffer, _("pipeline_query %s"),
+						NameStr(((Form_pipeline_query) GETSTRUCT(tup))->name));
+				ReleaseSysCache(tup);
+				break;
+			}
+
+		case OCLASS_STREAM:
+			{
+				HeapTuple	tup;
+
+				tup = SearchSysCache1(PIPELINESTREAMOID,
+									  ObjectIdGetDatum(object->objectId));
+				if (!HeapTupleIsValid(tup))
+					elog(ERROR, "cache lookup failed for pipeline_stream %u",
+						 object->objectId);
+				appendStringInfo(&buffer, _("pipeline_stream %s"),
+						get_rel_name(((Form_pipeline_stream) GETSTRUCT(tup))->relid));
 				ReleaseSysCache(tup);
 				break;
 			}
