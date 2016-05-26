@@ -100,7 +100,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	if (synchronous_stream_insert)
 	{
 		if (c->acks == NULL)
-			c->acks = InsertBatchAckCreate(c->cont_exec->yielded, &c->nacks);
+			c->acks = InsertBatchAckCreate(c->cont_exec->yielded_msgs, &c->nacks);
 
 		c->ntups++;
 		acks = c->acks;

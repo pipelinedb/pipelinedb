@@ -131,14 +131,15 @@ struct ContExecutor
 	Bitmapset *queries;
 	bool update_queries;
 
+	TimestampTz exec_batch_start;
 	Bitmapset *exec_queries;
 
-	Timestamp start_time;
+	Timestamp peek_start;
 	bool peeked_any;
-	bool timedout;
+	bool peek_timedout;
 	bool depleted;
-	List *yielded;
-	ipc_message *msgs;
+	List *yielded_msgs;
+	ipc_message *peeked_msgs;
 	int max_msgs;
 	int curr_msg;
 	int num_msgs;
