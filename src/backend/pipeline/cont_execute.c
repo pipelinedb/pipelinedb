@@ -756,9 +756,9 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 		}
 	}
 
-	if (!exec->started)
+	if (!exec->peeked_any)
 	{
-		exec->started = true;
+		exec->peeked_any = true;
 		exec->start_time = GetCurrentTimestamp();
 	}
 
@@ -835,7 +835,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 {
 	pgstat_increment_cq_exec(1);
 
-	if (!exec->started)
+	if (!exec->peeked_any)
 		return;
 
 	if (!bms_is_empty(exec->queries_seen) && exec->update_queries)
@@ -882,15 +882,25 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
 
-	if (exec->ptype == WORKER)
-		ipc_multi_queue_pop_peeked(exec->ipcmq);
+	if (exec->peeked_any)
+	{
+		if (exec->ptype == WORKER)
+			ipc_multi_queue_pop_peeked(exec->ipcmq);
+		else
+			ipc_queue_pop_peeked(exec->ipcq);
+	}
 	else
-		ipc_queue_pop_peeked(exec->ipcq);
+	{
+		if (exec->ptype == WORKER)
+			ipc_multi_queue_pop_all(exec->ipcmq);
+		else
+			ipc_queue_pop_all(exec->ipcq);
+	}
 
 	exec->curr_msg = 0;
 	exec->num_msgs = 0;
 	exec->nbytes = 0;
-	exec->started = false;
+	exec->peeked_any = false;
 	exec->timedout = false;
 	exec->depleted = false;
 	exec->queries_seen = NULL;

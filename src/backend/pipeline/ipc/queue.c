@@ -246,6 +246,15 @@ ipc_queue_pop_peeked(ipc_queue *ipcq)
 }
 
 void
+ipc_queue_pop_all(ipc_queue *ipcq)
+{
+	uint64 head = pg_atomic_read_u64(&ipcq->head);
+
+	ipcq->cursor = head;
+	pg_atomic_write_u64(&ipcq->tail, head);
+}
+
+void
 ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms)
 {
 	Latch *consumer_latch;
@@ -507,4 +516,13 @@ ipc_multi_queue_init(ipc_queue *q1, ipc_queue *q2)
 	MemoryContextSwitchTo(old);
 
 	return ipcmq;
+}
+
+void
+ipc_multi_queue_pop_all(ipc_multi_queue *ipcmq)
+{
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+		ipc_queue_pop_all(ipcmq->queues[i]);
 }

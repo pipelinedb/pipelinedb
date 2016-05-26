@@ -134,7 +134,7 @@ struct ContExecutor
 	Bitmapset *exec_queries;
 
 	Timestamp start_time;
-	bool started;
+	bool peeked_any;
 	bool timedout;
 	bool depleted;
 	List *yielded;
