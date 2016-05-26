@@ -893,6 +893,8 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	}
 	else
 	{
+		Assert(bms_num_members(exec->queries) == 0);
+
 		if (exec->ptype == WORKER)
 			ipc_multi_queue_pop_inserted_before(exec->ipcmq, exec->last_queries_load);
 		else
