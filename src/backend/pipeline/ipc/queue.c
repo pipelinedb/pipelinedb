@@ -226,8 +226,7 @@ ipc_queue_slot_pop(ipc_queue *ipcq, ipc_queue_slot *slot)
 {
 	char *pos;
 
-	if (!ipcq->pop_fn)
-		return;
+	Assert(ipcq->pop_fn);
 
 	if (slot->wraps)
 		pos = ipcq->bytes;
