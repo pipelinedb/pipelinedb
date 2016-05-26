@@ -131,7 +131,7 @@ struct ContExecutor
 	Bitmapset *queries;
 	bool update_queries;
 
-	TimestampTz exec_batch_start;
+	TimestampTz last_queries_load;
 	Bitmapset *exec_queries;
 
 	Timestamp peek_start;

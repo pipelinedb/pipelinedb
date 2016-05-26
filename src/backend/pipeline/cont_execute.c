@@ -510,7 +510,7 @@ ContExecutorStartBatch(ContExecutor *exec)
 		else
 			exec->queries = GetContinuousQueryIds();
 
-		exec->exec_batch_start = GetCurrentTransactionStartTimestamp();
+		exec->last_queries_load = GetCurrentTransactionStartTimestamp();
 
 		CommitTransactionCommand();
 
@@ -894,9 +894,9 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	else
 	{
 		if (exec->ptype == WORKER)
-			ipc_multi_queue_pop_inserted_before(exec->ipcmq, exec->exec_batch_start);
+			ipc_multi_queue_pop_inserted_before(exec->ipcmq, exec->last_queries_load);
 		else
-			ipc_queue_pop_inserted_before(exec->ipcq, exec->exec_batch_start);
+			ipc_queue_pop_inserted_before(exec->ipcq, exec->last_queries_load);
 	}
 
 	exec->curr_msg = 0;
