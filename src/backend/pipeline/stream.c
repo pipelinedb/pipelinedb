@@ -67,6 +67,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 	int nbatches = 1;
 	uint64 size = 0;
 	int ninserted;
+	TimestampTz now = GetCurrentTimestamp();
 
 	bms_free(all_targets);
 	bms_free(adhoc);
@@ -117,10 +118,12 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 			head = pg_atomic_read_u64(&ipcq->head);
 			tail = pg_atomic_read_u64(&ipcq->tail);
 			free = ipc_queue_free_size(ipcq, head, tail);
-			ninserted = 0;
 
 			if (ninserted)
 				nbatches++;
+
+			now = GetCurrentTimestamp();
+			ninserted = 0;
 
 			/* retry this tuple */
 			i--;
@@ -134,6 +137,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 		free -= len_needed;
 		head += len_needed;
 
+		slot->time = now;
 		slot->len = len;
 		slot->peeked = false;
 		slot->wraps = needs_wrap;

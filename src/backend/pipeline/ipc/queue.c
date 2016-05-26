@@ -122,6 +122,7 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 	pg_atomic_write_u64(&ipcq->producer_latch, (uint64) NULL);
 
 	slot = ipc_queue_slot_get(ipcq, head);
+	slot->time = GetCurrentTimestamp();
 	slot->len = len;
 	slot->wraps = needs_wrap;
 	slot->peeked = false;
@@ -201,6 +202,41 @@ ipc_queue_unpeek_all(ipc_queue *ipcq)
 }
 
 void
+ipc_queue_update_tail(ipc_queue *ipcq, uint64 tail)
+{
+	/*
+	 * We must update tail before setting the latch, because the producer will set its latch
+	 * before getting the new value for tail. This guarantees that we don't
+	 * miss a wake up.
+	 */
+	pg_atomic_write_u64(&ipcq->tail, tail);
+
+	if (ipcq->produced_by_broker)
+		signal_ipc_broker_process();
+	else
+	{
+		Latch *latch = (Latch *) pg_atomic_read_u64(&ipcq->producer_latch);
+		if (latch != NULL)
+			SetLatch(latch);
+	}
+}
+
+static inline void
+ipc_queue_slot_pop(ipc_queue *ipcq, ipc_queue_slot *slot)
+{
+	char *pos;
+
+	Assert(ipcq->pop_fn);
+
+	if (slot->wraps)
+		pos = ipcq->bytes;
+	else
+		pos = slot->bytes;
+
+	ipcq->pop_fn(pos, slot->len);
+}
+
+void
 ipc_queue_pop_peeked(ipc_queue *ipcq)
 {
 	uint64 cur = ipcq->cursor;
@@ -216,33 +252,41 @@ ipc_queue_pop_peeked(ipc_queue *ipcq)
 		while (start < cur)
 		{
 			ipc_queue_slot *slot = ipc_queue_slot_get(ipcq, start);
-			char *pos;
 
-			if (slot->wraps)
-				pos = ipcq->bytes;
-			else
-				pos = slot->bytes;
-
-			ipcq->pop_fn(pos, slot->len);
+			ipc_queue_slot_pop(ipcq, slot);
 			start = slot->next;
 		}
 	}
 
-	/*
-	 * We must update tail before setting the latch, because the producer will set its latch
-	 * before getting the new value for tail. This guarantees that we don't
-	 * miss a wake up.
-	 */
-	pg_atomic_write_u64(&ipcq->tail, cur);
+	ipc_queue_update_tail(ipcq, cur);
+}
 
-	if (ipcq->produced_by_broker)
-		signal_ipc_broker_process();
-	else
+void
+ipc_queue_pop_inserted_before(ipc_queue *ipcq, TimestampTz time)
+{
+	uint64 head;
+	uint64 start;
+
+	Assert(ipcq->magic == MAGIC);
+
+	head = pg_atomic_read_u64(&ipcq->head);
+	start = pg_atomic_read_u64(&ipcq->tail);
+
+	while (start < head)
 	{
-		Latch *producer_latch = (Latch *) pg_atomic_read_u64(&ipcq->producer_latch);
-		if (producer_latch != NULL)
-			SetLatch(producer_latch);
+		ipc_queue_slot *slot = ipc_queue_slot_get(ipcq, start);
+
+		if (slot->time >= time)
+			break;
+
+		if (ipcq->pop_fn)
+			ipc_queue_slot_pop(ipcq, slot);
+
+		start = slot->next;
 	}
+
+	ipcq->cursor = start;
+	ipc_queue_update_tail(ipcq, start);
 }
 
 void
@@ -329,15 +373,13 @@ ipc_queue_unlock(ipc_queue *mpq)
 void
 ipc_queue_update_head(ipc_queue *ipcq, uint64 head)
 {
-	Latch *latch;
-
 	pg_atomic_write_u64(&ipcq->head, head);
 
 	if (ipcq->consumed_by_broker)
 		signal_ipc_broker_process();
 	else
 	{
-		latch = (Latch *) pg_atomic_read_u64(&ipcq->consumer_latch);
+		Latch *latch = (Latch *) pg_atomic_read_u64(&ipcq->consumer_latch);
 		if (latch)
 			SetLatch(latch);
 	}
@@ -507,4 +549,13 @@ ipc_multi_queue_init(ipc_queue *q1, ipc_queue *q2)
 	MemoryContextSwitchTo(old);
 
 	return ipcmq;
+}
+
+void
+ipc_multi_queue_pop_inserted_before(ipc_multi_queue *ipcmq, TimestampTz time)
+{
+	int i;
+
+	for (i = 0; i < ipcmq->nqueues; i++)
+		ipc_queue_pop_inserted_before(ipcmq->queues[i], time);
 }

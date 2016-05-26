@@ -13,12 +13,17 @@
 
 #include "port/atomics.h"
 #include "storage/lwlock.h"
+#include "utils/timestamp.h"
 
 typedef struct ipc_queue_slot
 {
+	TimestampTz time;
+
 	uint64 next;
-	bool   wraps;
-	bool   peeked;
+
+	bool wraps;
+	bool peeked;
+
 	int    len;
 	char   bytes[1]; /* dynamically allocated */
 } ipc_queue_slot;
@@ -59,6 +64,7 @@ extern void *ipc_queue_peek_next(ipc_queue *ipcq, int *len);
 extern void ipc_queue_unpeek_all(ipc_queue *ipcq);
 extern void ipc_queue_pop_peeked(ipc_queue *ipcq);
 extern void ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms);
+extern void ipc_queue_pop_inserted_before(ipc_queue *ipcq, TimestampTz time);
 
 extern bool ipc_queue_lock(ipc_queue *ipcq, bool wait);
 extern void ipc_queue_unlock(ipc_queue *ipcq);
@@ -66,6 +72,7 @@ extern void ipc_queue_unlock(ipc_queue *ipcq);
 extern bool ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait);
 extern bool ipc_queue_push(ipc_queue *ipcq, void *ptr, int len, bool wait);
 extern void ipc_queue_update_head(ipc_queue *ipcq, uint64 head);
+extern void ipc_queue_update_tail(ipc_queue *ipcq, uint64 tail);
 
 #define ipc_queue_offset(ipcq, ptr) ((ptr) % (ipcq)->size)
 #define ipc_queue_check_overflow(ipcq, pos, len) \
@@ -91,5 +98,6 @@ extern void ipc_multi_queue_unpeek_all(ipc_multi_queue *ipcmq);
 extern void ipc_multi_queue_pop_peeked(ipc_multi_queue *ipcmq);
 extern bool ipc_multi_queue_is_empty(ipc_multi_queue *ipcmq);
 extern bool ipc_multi_queue_has_unread(ipc_multi_queue *ipcmq);
+extern void ipc_multi_queue_pop_inserted_before(ipc_multi_queue *ipcmq, TimestampTz time);
 
 #endif

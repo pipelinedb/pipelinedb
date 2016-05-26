@@ -105,7 +105,7 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 		t->ntups++;
 
 		if (synchronous_stream_insert && t->acks == NULL)
-			t->acks = InsertBatchAckCreate(t->cont_exec->yielded, &t->nacks);
+			t->acks = InsertBatchAckCreate(t->cont_exec->yielded_msgs, &t->nacks);
 	}
 
 	MemoryContextSwitchTo(old);

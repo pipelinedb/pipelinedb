@@ -443,7 +443,7 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 		ipc_queue_unpeek_all(exec->ipcq);
 	}
 
-	exec->msgs = palloc0(sizeof(ipc_message) * continuous_query_batch_size);
+	exec->peeked_msgs = palloc0(sizeof(ipc_message) * continuous_query_batch_size);
 	exec->max_msgs = continuous_query_batch_size;
 	exec->num_msgs = 0;
 
@@ -509,6 +509,8 @@ ContExecutorStartBatch(ContExecutor *exec)
 			exec->queries = GetContinuousViewIds();
 		else
 			exec->queries = GetContinuousQueryIds();
+
+		exec->last_queries_load = GetCurrentTransactionStartTimestamp();
 
 		CommitTransactionCommand();
 
@@ -641,7 +643,7 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 
 		exec->current_query_id = id;
 
-		if (!exec->timedout)
+		if (!exec->peek_timedout)
 			break;
 
 		if (bms_is_member(exec->current_query_id, exec->queries_seen))
@@ -703,7 +705,7 @@ should_yield_item(ContExecutor *exec, void *ptr)
 		if (synchronous_stream_insert && succ)
 		{
 			MemoryContext old = MemoryContextSwitchTo(exec->exec_cxt);
-			exec->yielded = lappend(exec->yielded, sts);
+			exec->yielded_msgs = lappend(exec->yielded_msgs, sts);
 			MemoryContextSwitchTo(old);
 		}
 
@@ -725,7 +727,7 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 	if (exec->depleted)
 		return NULL;
 
-	if (exec->timedout)
+	if (exec->peek_timedout)
 	{
 		if (exec->num_msgs == 0)
 		{
@@ -741,8 +743,8 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 			if (exec->depleted)
 				return NULL;
 
-			ptr = exec->msgs[exec->curr_msg].msg;
-			mlen = exec->msgs[exec->curr_msg].len;
+			ptr = exec->peeked_msgs[exec->curr_msg].msg;
+			mlen = exec->peeked_msgs[exec->curr_msg].len;
 			exec->curr_msg++;
 
 			if (exec->curr_msg == exec->num_msgs)
@@ -756,10 +758,10 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 		}
 	}
 
-	if (!exec->started)
+	if (!exec->peeked_any)
 	{
-		exec->started = true;
-		exec->start_time = GetCurrentTimestamp();
+		exec->peeked_any = true;
+		exec->peek_start = GetCurrentTimestamp();
 	}
 
 	if (!params)
@@ -772,10 +774,10 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 
 		/* We've read a full batch or waited long enough? */
 		if (exec->num_msgs == params->batch_size ||
-				TimestampDifferenceExceeds(exec->start_time, GetCurrentTimestamp(), params->max_wait) ||
+				TimestampDifferenceExceeds(exec->peek_start, GetCurrentTimestamp(), params->max_wait) ||
 				MyContQueryProc->db_meta->terminate)
 		{
-			exec->timedout = true;
+			exec->peek_timedout = true;
 			exec->depleted = true;
 			return NULL;
 		}
@@ -789,8 +791,8 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 		{
 			MemoryContext old;
 
-			exec->msgs[exec->curr_msg].msg = ptr;
-			exec->msgs[exec->curr_msg].len = mlen;
+			exec->peeked_msgs[exec->curr_msg].msg = ptr;
+			exec->peeked_msgs[exec->curr_msg].len = mlen;
 
 			exec->curr_msg++;
 			exec->num_msgs++;
@@ -799,7 +801,7 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 			if (exec->num_msgs == exec->max_msgs)
 			{
 				exec->max_msgs *= 2;
-				exec->msgs = repalloc(exec->msgs, sizeof(ipc_message) * exec->max_msgs);
+				exec->peeked_msgs = repalloc(exec->peeked_msgs, sizeof(ipc_message) * exec->max_msgs);
 			}
 
 			exec->nbytes += mlen;
@@ -835,7 +837,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 {
 	pgstat_increment_cq_exec(1);
 
-	if (!exec->started)
+	if (!exec->peeked_any)
 		return;
 
 	if (!bms_is_empty(exec->queries_seen) && exec->update_queries)
@@ -856,8 +858,8 @@ ContExecutorEndQuery(ContExecutor *exec)
 	exec->curr_msg = 0;
 	exec->depleted = false;
 
-	list_free(exec->yielded);
-	exec->yielded = NIL;
+	list_free(exec->yielded_msgs);
+	exec->yielded_msgs = NIL;
 
 	if (exec->current_query)
 	{
@@ -882,16 +884,28 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
 
-	if (exec->ptype == WORKER)
-		ipc_multi_queue_pop_peeked(exec->ipcmq);
+	if (exec->peeked_any)
+	{
+		if (exec->ptype == WORKER)
+			ipc_multi_queue_pop_peeked(exec->ipcmq);
+		else
+			ipc_queue_pop_peeked(exec->ipcq);
+	}
 	else
-		ipc_queue_pop_peeked(exec->ipcq);
+	{
+		Assert(bms_num_members(exec->queries) == 0);
+
+		if (exec->ptype == WORKER)
+			ipc_multi_queue_pop_inserted_before(exec->ipcmq, exec->last_queries_load);
+		else
+			ipc_queue_pop_inserted_before(exec->ipcq, exec->last_queries_load);
+	}
 
 	exec->curr_msg = 0;
 	exec->num_msgs = 0;
 	exec->nbytes = 0;
-	exec->started = false;
-	exec->timedout = false;
+	exec->peeked_any = false;
+	exec->peek_timedout = false;
 	exec->depleted = false;
 	exec->queries_seen = NULL;
 	exec->exec_queries = NULL;
