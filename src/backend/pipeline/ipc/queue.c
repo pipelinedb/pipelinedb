@@ -210,6 +210,7 @@ ipc_queue_update_tail(ipc_queue *ipcq, uint64 tail)
 	 * miss a wake up.
 	 */
 	pg_atomic_write_u64(&ipcq->tail, tail);
+	pg_write_barrier();
 
 	if (ipcq->produced_by_broker)
 		signal_ipc_broker_process();
@@ -374,6 +375,7 @@ void
 ipc_queue_update_head(ipc_queue *ipcq, uint64 head)
 {
 	pg_atomic_write_u64(&ipcq->head, head);
+	pg_write_barrier();
 
 	if (ipcq->consumed_by_broker)
 		signal_ipc_broker_process();
