@@ -4,7 +4,7 @@ AROPT = crs
 
 DLSUFFIX = .so
 
-PIPELINE_SERVER_BINARY = pipeline-server
+PIPELINE_SERVER_BINARY = pipelinedb
 
 ifdef PGXS
   BE_DLLLIBS = -bundle_loader $(bindir)/$(PIPELINE_SERVER_BINARY)

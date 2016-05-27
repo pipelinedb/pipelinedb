@@ -5291,7 +5291,7 @@ StartChildProcess(AuxProcType type)
 	/*
 	 * Set up command-line arguments for subprocess
 	 */
-	av[ac++] = "pipeline-server";
+	av[ac++] = "pipelinedb";
 
 #ifdef EXEC_BACKEND
 	av[ac++] = "--forkboot";

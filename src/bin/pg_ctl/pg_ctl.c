@@ -892,7 +892,7 @@ do_start(void)
 		pgdata_opt = "";
 
 	if (exec_path == NULL)
-		exec_path = find_other_exec_or_die(argv0, debug ? "pipeline-server-debug" : "pipeline-server", PG_BACKEND_VERSIONSTR);
+		exec_path = find_other_exec_or_die(argv0, debug ? "pipelinedb-debug" : "pipelinedb", PG_BACKEND_VERSIONSTR);
 
 #if defined(HAVE_GETRLIMIT) && defined(RLIMIT_CORE)
 	if (allow_core_files)
@@ -1392,11 +1392,11 @@ pgwin32_CommandLine(bool registration)
 	}
 	else
 	{
-		ret = find_other_exec(argv0, "pipeline-server", PG_BACKEND_VERSIONSTR,
+		ret = find_other_exec(argv0, "pipelinedb", PG_BACKEND_VERSIONSTR,
 							  cmdPath);
 		if (ret != 0)
 		{
-			write_stderr(_("%s: could not find pipeline-server program executable\n"), progname);
+			write_stderr(_("%s: could not find pipelinedb program executable\n"), progname);
 			exit(1);
 		}
 	}
@@ -2113,7 +2113,7 @@ adjust_data_dir(void)
 
 	/* we use a private my_exec_path to avoid interfering with later uses */
 	if (exec_path == NULL)
-		my_exec_path = find_other_exec_or_die(argv0, "pipeline-server", PG_BACKEND_VERSIONSTR);
+		my_exec_path = find_other_exec_or_die(argv0, "pipelinedb", PG_BACKEND_VERSIONSTR);
 	else
 		my_exec_path = pg_strdup(exec_path);
 

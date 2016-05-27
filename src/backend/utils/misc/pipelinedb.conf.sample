@@ -21,7 +21,7 @@
 # take effect.
 #
 # Any parameter can also be given as a command-line option to the server, e.g.,
-# "pipeline-server -c log_connections=on".  Some parameters can be changed at run time
+# "pipelinedb -c log_connections=on".  Some parameters can be changed at run time
 # with the "SET" SQL command.
 #
 # Memory units:  kB = kilobytes        Time units:  ms  = milliseconds

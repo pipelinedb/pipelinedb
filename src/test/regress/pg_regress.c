@@ -2318,7 +2318,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		 */
 		header(_("starting postmaster"));
 		snprintf(buf, sizeof(buf),
-				 "\"%s%spipeline-server\" -D \"%s/data\" -F%s "
+				 "\"%s%spipelinedb\" -D \"%s/data\" -F%s "
 				 "-c \"listen_addresses=%s\" "
 				 "-c \"synchronous_stream_insert=on\" "
 				 "-c \"continuous_query_num_combiners=2\" "

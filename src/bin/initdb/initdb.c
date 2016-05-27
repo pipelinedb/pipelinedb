@@ -21,7 +21,7 @@
  * by the basic bootstrap process.  After it is complete, template0 and
  * the default database, pipeline, are made just by copying template1.
  *
- * To create template1, we run the pipeline-server (backend) program in bootstrap
+ * To create template1, we run the pipelinedb (backend) program in bootstrap
  * mode and feed it data from the postgres.bki library file.  After this
  * initial bootstrap phase, some additional stuff is created by normal
  * SQL commands fed to a standalone backend.  Some of those commands are
@@ -2906,7 +2906,7 @@ setup_bin_paths(const char *argv0)
 {
 	int			ret;
 
-	if ((ret = find_other_exec(argv0, "pipeline-server", PG_BACKEND_VERSIONSTR,
+	if ((ret = find_other_exec(argv0, "pipelinedb", PG_BACKEND_VERSIONSTR,
 							   backend_exec)) < 0)
 	{
 		char		full_path[MAXPGPATH];
@@ -2916,14 +2916,14 @@ setup_bin_paths(const char *argv0)
 
 		if (ret == -1)
 			fprintf(stderr,
-					_("The program \"pipeline-server\" is needed by %s "
+					_("The program \"pipelinedb\" is needed by %s "
 					  "but was not found in the\n"
 					  "same directory as \"%s\".\n"
 					  "Check your installation.\n"),
 					progname, full_path);
 		else
 			fprintf(stderr,
-					_("The program \"pipeline-server\" was found by \"%s\"\n"
+					_("The program \"pipelinedb\" was found by \"%s\"\n"
 					  "but was not the same version as %s.\n"
 					  "Check your installation.\n"),
 					full_path, progname);

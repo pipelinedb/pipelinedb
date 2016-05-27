@@ -30,7 +30,7 @@ def main(args):
         print '    export PATH=%s/bin:$PATH' % root
         sys.exit(1)
 
-    proc = subprocess.Popen(['pipeline-server', '-D', data_dir])
+    proc = subprocess.Popen(['pipelinedb', '-D', data_dir])
     time.sleep(1)
 
     user = getpass.getuser()

@@ -268,7 +268,7 @@ init_ps_display(const char *username, const char *dbname,
 	 */
 #define PROGRAM_NAME_PREFIX ""
 #else
-#define PROGRAM_NAME_PREFIX "pipeline-server: "
+#define PROGRAM_NAME_PREFIX "pipelinedb: "
 #endif
 
 	if (*cluster_name == '\0')

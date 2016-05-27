@@ -18,7 +18,7 @@ subdir = src/backend
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 
-PIPELINE_SERVER_BINARY = pipeline-server
+PIPELINE_SERVER_BINARY = pipelinedb
 
 SUBDIRS = access bootstrap catalog parser commands executor foreign lib libpq \
 	main nodes optimizer pipeline port postmaster regex replication rewrite \
@@ -224,7 +224,7 @@ install-bin: $(PIPELINE_SERVER_BINARY) $(POSTGRES_IMP) installdirs
 	$(INSTALL_PROGRAM) $(PIPELINE_SERVER_BINARY)$(X) '$(DESTDIR)$(bindir)/$(PIPELINE_SERVER_BINARY)$(X)'
 ifneq ($(PORTNAME), win32)
 	@rm -f '$(DESTDIR)$(bindir)/postmaster$(X)'
-	ln -s pipeline-server$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
+	ln -s $(PIPELINE_SERVER_BINARY)$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
 else
 	$(INSTALL_PROGRAM) $(PIPELINE_SERVER_BINARY)$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
 endif

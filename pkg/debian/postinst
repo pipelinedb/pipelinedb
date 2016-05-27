@@ -6,8 +6,8 @@ INSTALL_PREFIX=/usr/lib/pipelinedb
 echo "$INSTALL_PREFIX/lib" > /etc/ld.so.conf.d/pipelinedb.conf
 ldconfig
 
-ln -s $INSTALL_PREFIX/bin/pipeline-server /usr/bin/pipeline-server
-ln -s $INSTALL_PREFIX/bin/pipeline-server-debug /usr/bin/pipeline-server-debug
+ln -s $INSTALL_PREFIX/bin/pipelinedb /usr/bin/pipelinedb
+ln -s $INSTALL_PREFIX/bin/pipelinedb-debug /usr/bin/pipelinedb-debug
 ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pipeline-ctl
 ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pg_ctl
 ln -s $INSTALL_PREFIX/bin/pipeline-init /usr/bin/pipeline-init

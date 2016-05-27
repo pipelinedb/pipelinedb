@@ -6,8 +6,8 @@ INSTALL_PREFIX=/usr/lib/pipelinedb
 rm /etc/ld.so.conf.d/pipelinedb.conf
 ldconfig
 
-rm -f /usr/bin/pipeline-server
-rm -f /usr/bin/pipeline-server-debug
+rm -f /usr/bin/pipelinedb
+rm -f /usr/bin/pipelinedb-debug
 rm -f /usr/bin/pipeline-ctl
 rm -f /usr/bin/pg_ctl
 rm -f /usr/bin/pipeline-init

@@ -20,4 +20,4 @@ if [ ! -d "/mnt/pipelinedb/data" ] || [ ! "$(ls -A /mnt/pipelinedb/data)" ]; the
     cp /scripts/conf/*.conf /mnt/pipelinedb/data/
 fi
 
-exec su - pipeline -c "pipeline-server -D /mnt/pipelinedb/data"
+exec su - pipeline -c "pipelinedb -D /mnt/pipelinedb/data"

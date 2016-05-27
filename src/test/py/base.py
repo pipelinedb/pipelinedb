@@ -16,7 +16,7 @@ from sqlalchemy.exc import OperationalError
 BOOTSTRAPPED_BASE = './.pdbbase'
 ROOT = '../../../'
 INSTALL_FORMAT = './.pdb-%d'
-SERVER = os.path.join(ROOT, 'src', 'backend', 'pipeline-server')
+SERVER = os.path.join(ROOT, 'src', 'backend', 'pipelinedb')
 CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/pipeline'
 TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_trigger_test.log'
 
