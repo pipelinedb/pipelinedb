@@ -2728,62 +2728,6 @@ ExecEndAgg(AggState *node)
 }
 
 void
-ExecEndBatchAgg(AggState *node)
-{
-	ExprContext *econtext = node->ss.ps.ps_ExprContext;
-	int	aggno;
-
-	node->table_filled = false;
-	node->agg_done = false;
-	ExecClearTuple(node->ss.ss_ScanTupleSlot);
-
-	/* Make sure we have closed any open tuplesorts */
-	for (aggno = 0; aggno < node->numaggs; aggno++)
-	{
-		AggStatePerAgg peraggstate = &node->peragg[aggno];
-
-		if (peraggstate->sortstates[node->current_set])
-			tuplesort_end(peraggstate->sortstates[node->current_set]);
-		peraggstate->sortstates[node->current_set] = NULL;
-	}
-
-	/* Release first tuple of group, if we have made a copy */
-	if (node->grp_firstTuple != NULL)
-	{
-		heap_freetuple(node->grp_firstTuple);
-		node->grp_firstTuple = NULL;
-	}
-
-	/* Forget current agg values */
-	MemSet(econtext->ecxt_aggvalues, 0, sizeof(Datum) * node->numaggs);
-	MemSet(econtext->ecxt_aggnulls, 0, sizeof(bool) * node->numaggs);
-
-	/*
-	 * Release all temp storage. Note that with AGG_HASHED, the hash table is
-	 * allocated in a sub-context of the aggcontext. We're going to rebuild
-	 * the hash table from scratch, so we need to use
-	 * MemoryContextResetAndDeleteChildren() to avoid leaking the old hash
-	 * table's memory context header.
-	 */
-
-	if (((Agg *) node->ss.ps.plan)->aggstrategy == AGG_HASHED)
-	{
-		/* Rebuild an empty hash table */
-		build_hash_table(node);
-	}
-	else
-	{
-		/*
-		 * Reset the per-group state (in particular, mark transvalues null)
-		 */
-		MemSet(node->pergroup, 0,
-			   sizeof(AggStatePerGroupData) * node->numaggs);
-	}
-
-	ExecEndBatch(outerPlanState(node));
-}
-
-void
 ExecReScanAgg(AggState *node)
 {
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;

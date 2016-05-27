@@ -378,32 +378,6 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 }
 
 /* ----------------------------------------------------------------
- *		ExecEndBatch
- *
- *		Clean up a node after finishing a batch
- * ----------------------------------------------------------------
- */
-TupleTableSlot *
-ExecEndBatch(PlanState *node)
-{
-	switch (nodeTag(node))
-	{
-		case T_AggState:
-			ExecEndBatchAgg((AggState *) node);
-			break;
-
-		case T_ContinuousUniqueState:
-			ExecEndBatchContinuousUnique((ContinuousUniqueState *) node);
-			break;
-
-		default:
-			break;
-	}
-
-	return NULL;
-}
-
-/* ----------------------------------------------------------------
  *		ExecProcNode
  *
  *		Execute the given node to return a(nother) tuple.
@@ -586,9 +560,6 @@ ExecProcNode(PlanState *node)
 
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);
-
-	if (IsContinuous(node) && TupIsNull(result))
-		result = ExecEndBatch(node);
 
 	return result;
 }

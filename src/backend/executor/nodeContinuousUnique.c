@@ -161,7 +161,7 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 void
 ExecEndContinuousUnique(ContinuousUniqueState *node)
 {
-	if (IsContQueryCombinerProcess() && node->dirty)
+	if (node->dirty && IsContQueryCombinerProcess())
 	{
 		UpdateDistinctBloomFilter(node->cq_id, node->distinct);
 		node->dirty = false;
@@ -171,21 +171,6 @@ ExecEndContinuousUnique(ContinuousUniqueState *node)
 	MemoryContextDelete(node->tmpContext);
 
 	ExecEndNode(outerPlanState(node));
-}
-
-void
-ExecEndBatchContinuousUnique(ContinuousUniqueState *node)
-{
-	MemoryContext oldcontext;
-
-	ExecClearTuple(node->ps.ps_ResultTupleSlot);
-	MemoryContextReset(node->tmpContext);
-
-	oldcontext = MemoryContextSwitchTo(node->tmpContext);
-	node->distinct = GetDistinctBloomFilter(node->cq_id);
-	MemoryContextSwitchTo(oldcontext);
-
-	ExecEndBatch(outerPlanState(node));
 }
 
 void
