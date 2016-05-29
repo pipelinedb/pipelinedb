@@ -37,6 +37,7 @@
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
+#include "pipeline/stream.h"
 #include "pipeline/sw_vacuum.h"
 #include "storage/ipc.h"
 #include "tcop/dest.h"

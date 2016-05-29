@@ -29,6 +29,7 @@
 #include "catalog/pg_type.h"
 #include "commands/dbcommands.h"
 #include "commands/defrem.h"
+#include "commands/pipelinecmds.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "miscadmin.h"

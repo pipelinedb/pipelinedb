@@ -750,7 +750,7 @@ ReplicationSlotsCountDBSlots(Oid dboid, int *nslots, int *nactive)
 
 		/* pipeline_trigger slot, skip */
 		if (strlen((const char *) NameStr(s->data.plugin)) == 0)
-			continue;
+			 continue;
 
 		/* count slots with spinlock held */
 		SpinLockAcquire(&s->mutex);
@@ -1048,7 +1048,7 @@ SaveSlotToPath(ReplicationSlot *slot, const char *dir, int elevel)
 	START_CRIT_SECTION();
 
 	fsync_fname(path, false);
-	fsync_fname((char *) dir, true);
+	fsync_fname(dir, true);
 	fsync_fname("pg_replslot", true);
 
 	END_CRIT_SECTION();

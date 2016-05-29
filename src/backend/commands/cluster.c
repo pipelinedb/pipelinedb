@@ -6,9 +6,8 @@
  * There is hardly anything left of Paul Brown's original implementation...
  *
  *
- * Portions Copyright (c) 1996-2015 PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994-5, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -37,7 +36,6 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "optimizer/planner.h"
-#include "pipeline/sw_vacuum.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "storage/predicate.h"

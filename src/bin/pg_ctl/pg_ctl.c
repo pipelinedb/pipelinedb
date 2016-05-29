@@ -3,7 +3,6 @@
  * pg_ctl --- start/stops/restarts the PostgreSQL server
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/bin/pg_ctl/pg_ctl.c
  *
@@ -80,6 +79,7 @@ typedef enum
 static bool do_wait = false;
 static bool wait_set = false;
 static int	wait_seconds = DEFAULT_WAIT;
+static bool wait_seconds_arg = false;
 static bool silent_mode = false;
 static ShutdownMode shutdown_mode = FAST_MODE;
 static int	sig = SIGINT;		/* default */
@@ -151,6 +151,10 @@ static void WINAPI pgwin32_ServiceHandler(DWORD);
 static void WINAPI pgwin32_ServiceMain(DWORD, LPTSTR *);
 static void pgwin32_doRunAsService(void);
 static int	CreateRestrictedProcess(char *cmd, PROCESS_INFORMATION *processInfo, bool as_service);
+static bool pgwin32_get_dynamic_tokeninfo(HANDLE token,
+							  TOKEN_INFORMATION_CLASS class,
+							  char **InfoBuffer, char *errbuf, int errsize);
+static int pgwin32_is_service(void);
 #endif
 
 static pgpid_t get_pgpid(bool is_status_request);
@@ -218,7 +222,7 @@ write_stderr(const char *fmt,...)
 	 * On Win32, we print to stderr if running on a console, or write to
 	 * eventlog if running as a service
 	 */
-	if (!isatty(fileno(stderr)))	/* Running as a service */
+	if (pgwin32_is_service())	/* Running as a service */
 	{
 		char		errbuf[2048];		/* Arbitrary size? */
 
@@ -1454,7 +1458,8 @@ pgwin32_CommandLine(bool registration)
 	if (registration && do_wait)
 		appendPQExpBuffer(cmdLine, " -w");
 
-	if (registration && wait_seconds != DEFAULT_WAIT)
+	/* Don't propagate a value from an environment variable. */
+	if (registration && wait_seconds_arg && wait_seconds != DEFAULT_WAIT)
 		appendPQExpBuffer(cmdLine, " -t %d", wait_seconds);
 
 	if (registration && silent_mode)
@@ -1689,6 +1694,160 @@ pgwin32_doRunAsService(void)
 					 (unsigned long) GetLastError());
 		exit(1);
 	}
+}
+
+/*
+ * Call GetTokenInformation() on a token and return a dynamically sized
+ * buffer with the information in it. This buffer must be free():d by
+ * the calling function!
+ */
+static bool
+pgwin32_get_dynamic_tokeninfo(HANDLE token, TOKEN_INFORMATION_CLASS class,
+							  char **InfoBuffer, char *errbuf, int errsize)
+{
+	DWORD		InfoBufferSize;
+
+	if (GetTokenInformation(token, class, NULL, 0, &InfoBufferSize))
+	{
+		snprintf(errbuf, errsize, "could not get token information: got zero size\n");
+		return false;
+	}
+
+	if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+	{
+		snprintf(errbuf, errsize, "could not get token information: error code %lu\n",
+				 GetLastError());
+		return false;
+	}
+
+	*InfoBuffer = malloc(InfoBufferSize);
+	if (*InfoBuffer == NULL)
+	{
+		snprintf(errbuf, errsize, "could not allocate %d bytes for token information\n",
+				 (int) InfoBufferSize);
+		return false;
+	}
+
+	if (!GetTokenInformation(token, class, *InfoBuffer,
+							 InfoBufferSize, &InfoBufferSize))
+	{
+		snprintf(errbuf, errsize, "could not get token information: error code %lu\n",
+				 GetLastError());
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * We consider ourselves running as a service if one of the following is
+ * true:
+ *
+ * 1) We are running as Local System (only used by services)
+ * 2) Our token contains SECURITY_SERVICE_RID (automatically added to the
+ *	  process token by the SCM when starting a service)
+ *
+ * Return values:
+ *	 0 = Not service
+ *	 1 = Service
+ *	-1 = Error
+ *
+ * Note: we can't report errors via write_stderr (because that calls this)
+ * We are therefore reduced to writing directly on stderr, which sucks, but
+ * we have few alternatives.
+ */
+int
+pgwin32_is_service(void)
+{
+	static int	_is_service = -1;
+	HANDLE		AccessToken;
+	char	   *InfoBuffer = NULL;
+	char		errbuf[256];
+	PTOKEN_GROUPS Groups;
+	PTOKEN_USER User;
+	PSID		ServiceSid;
+	PSID		LocalSystemSid;
+	SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
+	UINT		x;
+
+	/* Only check the first time */
+	if (_is_service != -1)
+		return _is_service;
+
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_READ, &AccessToken))
+	{
+		fprintf(stderr, "could not open process token: error code %lu\n",
+				GetLastError());
+		return -1;
+	}
+
+	/* First check for local system */
+	if (!pgwin32_get_dynamic_tokeninfo(AccessToken, TokenUser, &InfoBuffer,
+									   errbuf, sizeof(errbuf)))
+	{
+		fprintf(stderr, "%s", errbuf);
+		return -1;
+	}
+
+	User = (PTOKEN_USER) InfoBuffer;
+
+	if (!AllocateAndInitializeSid(&NtAuthority, 1,
+							  SECURITY_LOCAL_SYSTEM_RID, 0, 0, 0, 0, 0, 0, 0,
+								  &LocalSystemSid))
+	{
+		fprintf(stderr, "could not get SID for local system account\n");
+		CloseHandle(AccessToken);
+		return -1;
+	}
+
+	if (EqualSid(LocalSystemSid, User->User.Sid))
+	{
+		FreeSid(LocalSystemSid);
+		free(InfoBuffer);
+		CloseHandle(AccessToken);
+		_is_service = 1;
+		return _is_service;
+	}
+
+	FreeSid(LocalSystemSid);
+	free(InfoBuffer);
+
+	/* Now check for group SID */
+	if (!pgwin32_get_dynamic_tokeninfo(AccessToken, TokenGroups, &InfoBuffer,
+									   errbuf, sizeof(errbuf)))
+	{
+		fprintf(stderr, "%s", errbuf);
+		return -1;
+	}
+
+	Groups = (PTOKEN_GROUPS) InfoBuffer;
+
+	if (!AllocateAndInitializeSid(&NtAuthority, 1,
+								  SECURITY_SERVICE_RID, 0, 0, 0, 0, 0, 0, 0,
+								  &ServiceSid))
+	{
+		fprintf(stderr, "could not get SID for service group\n");
+		free(InfoBuffer);
+		CloseHandle(AccessToken);
+		return -1;
+	}
+
+	_is_service = 0;
+	for (x = 0; x < Groups->GroupCount; x++)
+	{
+		if (EqualSid(ServiceSid, Groups->Groups[x].Sid))
+		{
+			_is_service = 1;
+			break;
+		}
+	}
+
+	free(InfoBuffer);
+	FreeSid(ServiceSid);
+
+	CloseHandle(AccessToken);
+
+	return _is_service;
 }
 
 
@@ -2154,10 +2313,10 @@ main(int argc, char **argv)
 		{"silent", no_argument, NULL, 's'},
 		{"timeout", required_argument, NULL, 't'},
 		{"core-files", no_argument, NULL, 'c'},
-		{"debug", no_argument, NULL, 'd'},
 		{NULL, 0, NULL, 0}
 	};
 
+	char	   *env_wait;
 	int			option_index;
 	int			c;
 	pgpid_t		killproc = 0;
@@ -2207,6 +2366,10 @@ main(int argc, char **argv)
 		exit(1);
 	}
 #endif
+
+	env_wait = getenv("PGCTLTIMEOUT");
+	if (env_wait != NULL)
+		wait_seconds = atoi(env_wait);
 
 	/*
 	 * 'Action' can be before or after args so loop over both. Some
@@ -2285,6 +2448,7 @@ main(int argc, char **argv)
 					break;
 				case 't':
 					wait_seconds = atoi(optarg);
+					wait_seconds_arg = true;
 					break;
 				case 'U':
 					if (strchr(optarg, '\\'))

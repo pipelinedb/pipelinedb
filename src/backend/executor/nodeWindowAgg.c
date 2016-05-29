@@ -877,7 +877,11 @@ eval_windowaggregates(WindowAggState *winstate)
 		}
 		else if (!peraggstate->resultValueIsNull)
 		{
-			if (!peraggstate->resulttypeByVal)
+			/*
+			 * XXX: We should always be able to pfree here if a combine() transition
+			 * state has been properly copied into this aggregate's context.
+			 */
+			if (peraggstate->finalize && !peraggstate->resulttypeByVal)
 				pfree(DatumGetPointer(peraggstate->resultValue));
 			peraggstate->resultValue = (Datum) 0;
 			peraggstate->resultValueIsNull = true;
@@ -977,8 +981,13 @@ eval_windowaggregates(WindowAggState *winstate)
 		 * advance that the next row can't possibly share the same frame. Is
 		 * it worth detecting that and skipping this code?
 		 */
-		if (!peraggstate->resulttypeByVal && !*isnull)
+		if (peraggstate->finalize && !peraggstate->resulttypeByVal && !*isnull)
 		{
+			/*
+			 * XXX combine() transition states should be cleanly copied here,
+			 * but they're not always Datums so we just leave it up to the combine function
+			 * to put its return value in the correct context.
+			 */
 			oldContext = MemoryContextSwitchTo(peraggstate->aggcontext);
 			peraggstate->resultValue =
 				datumCopy(*result,

@@ -5,7 +5,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -754,7 +753,7 @@ LockAcquireExtended(const LOCKTAG *locktag,
 		locallock->numLockOwners = 0;
 		locallock->maxLockOwners = 8;
 		locallock->holdsStrongLockCount = FALSE;
-		locallock->lockOwners = NULL; /* in case next line fails */
+		locallock->lockOwners = NULL;	/* in case next line fails */
 		locallock->lockOwners = (LOCALLOCKOWNER *)
 			MemoryContextAlloc(TopMemoryContext,
 						  locallock->maxLockOwners * sizeof(LOCALLOCKOWNER));

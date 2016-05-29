@@ -1,11 +1,11 @@
 # Begina Felicysym <begina.felicysym@wp.eu>, 2011, 2012, 2013.
-# grzegorz <begina.felicysym@wp.eu>, 2014, 2015.
+# grzegorz <begina.felicysym@wp.eu>, 2014, 2015, 2016.
 msgid ""
 msgstr ""
 "Project-Id-Version: PostgreSQL 9.5\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@postgresql.org\n"
-"POT-Creation-Date: 2015-12-24 17:10+0000\n"
-"PO-Revision-Date: 2016-01-03 23:00-0500\n"
+"POT-Creation-Date: 2016-02-13 23:10+0000\n"
+"PO-Revision-Date: 2016-02-14 01:05+0200\n"
 "Last-Translator: grzegorz <begina.felicysym@wp.eu>\n"
 "Language-Team: begina.felicysym@wp.eu\n"
 "Language: pl\n"
@@ -82,19 +82,19 @@ msgstr "nie można zamknąć katalogu \"%s\": %s\n"
 
 #: ../common/psprintf.c:179 ../port/path.c:596 ../port/path.c:634
 #: ../port/path.c:651 access/transam/xlog.c:6041 lib/stringinfo.c:258
-#: libpq/auth.c:820 libpq/auth.c:1181 libpq/auth.c:1249 libpq/auth.c:1658
+#: libpq/auth.c:820 libpq/auth.c:1181 libpq/auth.c:1249 libpq/auth.c:1660
 #: postmaster/bgworker.c:289 postmaster/bgworker.c:797
 #: postmaster/postmaster.c:2317 postmaster/postmaster.c:2348
-#: postmaster/postmaster.c:3867 postmaster/postmaster.c:4555
-#: postmaster/postmaster.c:4623 postmaster/postmaster.c:5313
-#: postmaster/postmaster.c:5566 replication/logical/logical.c:167
+#: postmaster/postmaster.c:3867 postmaster/postmaster.c:4557
+#: postmaster/postmaster.c:4625 postmaster/postmaster.c:5315
+#: postmaster/postmaster.c:5568 replication/logical/logical.c:167
 #: storage/buffer/localbuf.c:396 storage/file/fd.c:481 storage/file/fd.c:878
 #: storage/file/fd.c:996 storage/file/fd.c:1609 storage/ipc/procarray.c:907
 #: storage/ipc/procarray.c:1393 storage/ipc/procarray.c:1400
 #: storage/ipc/procarray.c:1793 storage/ipc/procarray.c:2377
 #: utils/adt/formatting.c:1523 utils/adt/formatting.c:1643
 #: utils/adt/formatting.c:1764 utils/adt/regexp.c:219 utils/adt/varlena.c:4199
-#: utils/adt/varlena.c:4220 utils/fmgr/dfmgr.c:220 utils/hash/dynahash.c:411
+#: utils/adt/varlena.c:4220 utils/fmgr/dfmgr.c:216 utils/hash/dynahash.c:411
 #: utils/hash/dynahash.c:488 utils/hash/dynahash.c:1002 utils/mb/mbutils.c:376
 #: utils/mb/mbutils.c:709 utils/misc/guc.c:3723 utils/misc/guc.c:3739
 #: utils/misc/guc.c:3752 utils/misc/guc.c:6686 utils/misc/tzparser.c:470
@@ -166,7 +166,7 @@ msgstr "nie można usunąć pliku lub katalogu \"%s\": %s\n"
 msgid "could not look up effective user ID %ld: %s"
 msgstr "nie udało się odnaleźć efektywnego ID użytkownika %ld: %s"
 
-#: ../common/username.c:47 libpq/auth.c:1605
+#: ../common/username.c:47 libpq/auth.c:1607
 msgid "user does not exist"
 msgstr "użytkownik nie istnieje"
 
@@ -216,7 +216,7 @@ msgid "could not determine encoding for codeset \"%s\""
 msgstr "nie udało się określić kodowania dla zestawu znaków \"%s\""
 
 #: ../port/chklocale.c:260 ../port/chklocale.c:389
-#: postmaster/postmaster.c:4855
+#: postmaster/postmaster.c:4857
 #, c-format
 msgid "Please report this to <pgsql-bugs@postgresql.org>."
 msgstr "Proszę zgłosić to na adres <pgsql-bugs@postgresql.org>."
@@ -278,6 +278,16 @@ msgstr "nie można zidentyfikować aktualnego folderu roboczego: %s\n"
 #, c-format
 msgid "unrecognized error %d"
 msgstr "nierozpoznany błąd %d"
+
+#: access/brin/brin.c:814
+#, c-format
+msgid "\"%s\" is not a BRIN index"
+msgstr "\"%s\" nie jest indeksem BRIN"
+
+#: access/brin/brin.c:830
+#, c-format
+msgid "could not open parent table of index %s"
+msgstr "nie można otworzyć tabeli nadrzędnej indeksu %s"
 
 #: access/brin/brin_pageops.c:76 access/brin/brin_pageops.c:362
 #: access/brin/brin_pageops.c:828
@@ -386,7 +396,7 @@ msgstr "Atrybut \"%s\" typu %s nie pasuje do odpowiedniego atrybutu typu %s."
 msgid "Attribute \"%s\" of type %s does not exist in type %s."
 msgstr "Atrybut \"%s\" typu %s nie istnieje w typie %s."
 
-#: access/common/tupdesc.c:635 parser/parse_relation.c:1514
+#: access/common/tupdesc.c:635 parser/parse_relation.c:1517
 #, c-format
 msgid "column \"%s\" cannot be declared SETOF"
 msgstr "kolumna \"%s\" nie może być zadeklarowana jako SETOF"
@@ -570,7 +580,7 @@ msgstr "nie udało się fsync na pliku \"%s\": %m"
 #: access/transam/timeline.c:315 access/transam/timeline.c:475
 #: access/transam/xlog.c:2967 access/transam/xlog.c:3116
 #: access/transam/xlog.c:10105 access/transam/xlog.c:10141
-#: access/transam/xlog.c:10463 postmaster/postmaster.c:4330
+#: access/transam/xlog.c:10463 postmaster/postmaster.c:4332
 #: replication/logical/origin.c:542 replication/slot.c:983
 #: storage/file/copydir.c:162 storage/smgr/md.c:320 utils/time/snapmgr.c:1071
 #, c-format
@@ -591,13 +601,13 @@ msgstr "nie można pozycjonować do końca w pliku \"%s\": %m"
 #: access/heap/rewriteheap.c:1167 access/transam/timeline.c:367
 #: access/transam/timeline.c:401 access/transam/timeline.c:491
 #: access/transam/xlog.c:3002 access/transam/xlog.c:3166
-#: postmaster/postmaster.c:4340 postmaster/postmaster.c:4350
+#: postmaster/postmaster.c:4342 postmaster/postmaster.c:4352
 #: replication/logical/origin.c:551 replication/logical/origin.c:587
 #: replication/logical/origin.c:603 replication/logical/snapbuild.c:1576
 #: replication/slot.c:1012 storage/file/copydir.c:187
 #: utils/init/miscinit.c:1199 utils/init/miscinit.c:1208
 #: utils/init/miscinit.c:1215 utils/misc/guc.c:6669 utils/misc/guc.c:6700
-#: utils/misc/guc.c:8487 utils/misc/guc.c:8501 utils/time/snapmgr.c:1076
+#: utils/misc/guc.c:8498 utils/misc/guc.c:8512 utils/time/snapmgr.c:1076
 #: utils/time/snapmgr.c:1083
 #, c-format
 msgid "could not write to file \"%s\": %m"
@@ -714,11 +724,8 @@ msgstr "nie można uzyskać znacznika czasowego zatwierdzenia"
 
 #: access/transam/commit_ts.c:387
 #, c-format
-#| msgid "Make sure the configuration parameter \"%s\" is set."
 msgid "Make sure the configuration parameter \"%s\" is set on the master server."
-msgstr ""
-"Należy sprawdzić, czy ustawiono parametr konfiguracyjny \"%s\" na serwerze "
-"głównym."
+msgstr "Należy sprawdzić, czy ustawiono parametr konfiguracyjny \"%s\" na serwerze głównym."
 
 #: access/transam/commit_ts.c:389 libpq/hba.c:1424
 #, c-format
@@ -781,18 +788,11 @@ msgstr "Wykonaj VACUUM dla całej bazy danych na bazie o OID %u ze zmniejszonymi
 
 #: access/transam/multixact.c:1143
 #, c-format
-#| msgid "database with OID %u must be vacuumed before %d more multixact members are used"
 msgid "database with OID %u must be vacuumed before %d more multixact member is used"
 msgid_plural "database with OID %u must be vacuumed before %d more multixact members are used"
-msgstr[0] ""
-"baza danych o OID %u musi być odkurzona zanim użyje się %d dodatkowego "
-"członka multixact"
-msgstr[1] ""
-"baza danych o OID %u musi być odkurzona zanim użyje się %d dodatkowych "
-"członków multixact"
-msgstr[2] ""
-"baza danych o OID %u musi być odkurzona zanim użyje się %d dodatkowych "
-"członków multixact"
+msgstr[0] "baza danych o OID %u musi być odkurzona zanim użyje się %d dodatkowego członka multixact"
+msgstr[1] "baza danych o OID %u musi być odkurzona zanim użyje się %d dodatkowych członków multixact"
+msgstr[2] "baza danych o OID %u musi być odkurzona zanim użyje się %d dodatkowych członków multixact"
 
 #: access/transam/multixact.c:1148
 #, c-format
@@ -872,20 +872,16 @@ msgstr "brak połączenia z równoległym procesem roboczym"
 
 #: access/transam/parallel.c:845
 #, c-format
-#| msgid "unable to map dynamic shared memory segment"
 msgid "could not map dynamic shared memory segment"
 msgstr "nie można zmapować dynamicznego segmentu pamięci współdzielonej"
 
 #: access/transam/parallel.c:850
 #, c-format
-#| msgid "bad magic number in dynamic shared memory segment"
 msgid "invalid magic number in dynamic shared memory segment"
-msgstr ""
-"niepoprawna magiczna liczba w dynamicznym segmencie pamięci współdzielonej"
+msgstr "niepoprawna magiczna liczba w dynamicznym segmencie pamięci współdzielonej"
 
 #: access/transam/parallel.c:1001
 #, c-format
-#| msgid "parallel worker, pid %d"
 msgid "parallel worker, PID %d"
 msgstr "równoległy proces roboczy, PID %d"
 
@@ -1608,13 +1604,11 @@ msgstr "nie można otworzyć pliku polecenia odtworzenia \"%s\": %m"
 
 #: access/transam/xlog.c:4979 access/transam/xlog.c:5062
 #, c-format
-#| msgid "invalid value for recovery parameter \"%s\""
 msgid "invalid value for recovery parameter \"%s\": \"%s\""
 msgstr "nieprawidłowa wartość dla parametru odzyskiwania \"%s\": \"%s\""
 
 #: access/transam/xlog.c:4982
 #, c-format
-#| msgid "The allowed values are \"pause\", \"promote\", and \"shutdown\"."
 msgid "Valid values are \"pause\", \"promote\", and \"shutdown\"."
 msgstr "Poprawne wartości to \"pause\", \"promote\" i \"shutdown\"."
 
@@ -1656,8 +1650,8 @@ msgstr "parametr \"%s\" wymaga wartości czasowej"
 #: commands/tablecmds.c:9415 commands/user.c:1027 commands/view.c:482
 #: libpq/auth.c:285 port/win32/security.c:51 storage/lmgr/deadlock.c:955
 #: storage/lmgr/proc.c:1177 utils/misc/guc.c:5486 utils/misc/guc.c:5579
-#: utils/misc/guc.c:9458 utils/misc/guc.c:9492 utils/misc/guc.c:9526
-#: utils/misc/guc.c:9560 utils/misc/guc.c:9595
+#: utils/misc/guc.c:9469 utils/misc/guc.c:9503 utils/misc/guc.c:9537
+#: utils/misc/guc.c:9571 utils/misc/guc.c:9606
 #, c-format
 msgid "%s"
 msgstr "%s"
@@ -1864,7 +1858,6 @@ msgstr "nie można utworzyć linku symbolicznego \"%s\": %m"
 
 #: access/transam/xlog.c:6148
 #, c-format
-#| msgid "ignoring \"%s\" file because no \"%s\" file exists"
 msgid "ignoring file \"%s\" because no file \"%s\" exists"
 msgstr "pominięcie piku \"%s\" ponieważ plik \"%s\" nie istnieje"
 
@@ -1880,7 +1873,6 @@ msgstr "pominięcie piku \"%s\" ponieważ plik \"%s\" nie istnieje"
 
 #: access/transam/xlog.c:6156
 #, c-format
-#| msgid "could not rename file \"%s\" to \"%s\": %m"
 msgid "Could not rename file \"%s\" to \"%s\": %m."
 msgstr "Nie można zmienić nazwy pliku \"%s\" na \"%s\": %m."
 
@@ -2779,8 +2771,8 @@ msgstr "uprawnienia domyślne nie mogą być ustawione dla kolumn"
 #: commands/tablecmds.c:5597 commands/tablecmds.c:5693
 #: commands/tablecmds.c:7845 commands/tablecmds.c:8050
 #: commands/tablecmds.c:8470 commands/trigger.c:643 parser/analyze.c:2160
-#: parser/parse_relation.c:2539 parser/parse_relation.c:2601
-#: parser/parse_target.c:940 parser/parse_type.c:128 utils/adt/acl.c:2839
+#: parser/parse_relation.c:2542 parser/parse_relation.c:2604
+#: parser/parse_target.c:940 parser/parse_type.c:127 utils/adt/acl.c:2839
 #: utils/adt/ruleutils.c:1856
 #, c-format
 msgid "column \"%s\" of relation \"%s\" does not exist"
@@ -3224,7 +3216,6 @@ msgstr[2] "kasuje kaskadowo %d innych obiektów"
 
 #: catalog/dependency.c:1622
 #, c-format
-#| msgid "constant of the type 'regrole' cannot be used here"
 msgid "constant of the type \"regrole\" cannot be used here"
 msgstr "stała typu \"regrole\" nie może być tu użyta"
 
@@ -3466,13 +3457,13 @@ msgstr "nie można nałożyć blokady na relację \"%s.%s\""
 msgid "could not obtain lock on relation \"%s\""
 msgstr "nie można nałożyć blokady na relację \"%s\""
 
-#: catalog/namespace.c:414 parser/parse_relation.c:1134
+#: catalog/namespace.c:414 parser/parse_relation.c:1137
 #, c-format
 msgid "relation \"%s.%s\" does not exist"
 msgstr "relacja \"%s.%s\" nie istnieje"
 
-#: catalog/namespace.c:419 parser/parse_relation.c:1147
-#: parser/parse_relation.c:1155 utils/adt/regproc.c:1035
+#: catalog/namespace.c:419 parser/parse_relation.c:1150
+#: parser/parse_relation.c:1158 utils/adt/regproc.c:1034
 #, c-format
 msgid "relation \"%s\" does not exist"
 msgstr "relacja \"%s\" nie istnieje"
@@ -3582,7 +3573,7 @@ msgid "cannot create temporary tables in parallel mode"
 msgstr "nie można utworzyć tabel tymczasowych w czasie trwania równoległym"
 
 #: catalog/namespace.c:3898 commands/tablespace.c:1159 commands/variable.c:63
-#: replication/syncrep.c:700 utils/misc/guc.c:9625
+#: replication/syncrep.c:700 utils/misc/guc.c:9636
 #, c-format
 msgid "List syntax is invalid."
 msgstr "Składnia listy jest niepoprawna."
@@ -3625,7 +3616,7 @@ msgid "event trigger name cannot be qualified"
 msgstr "nazwa wyzwalacza zdarzeniowego nie może być kwalifikowana"
 
 #: catalog/objectaddress.c:1158 commands/lockcmds.c:94 commands/policy.c:94
-#: commands/policy.c:381 commands/policy.c:470 commands/tablecmds.c:215
+#: commands/policy.c:384 commands/policy.c:473 commands/tablecmds.c:215
 #: commands/tablecmds.c:1295 commands/tablecmds.c:4338
 #: commands/tablecmds.c:7947
 #, c-format
@@ -3661,9 +3652,9 @@ msgid "default value for column \"%s\" of relation \"%s\" does not exist"
 msgstr "wartość domyślna kolumny \"%s\" relacji \"%s\" nie istnieje"
 
 #: catalog/objectaddress.c:1460 commands/functioncmds.c:128
-#: commands/tablecmds.c:243 commands/typecmds.c:3210 parser/parse_type.c:227
-#: parser/parse_type.c:256 parser/parse_type.c:824 utils/adt/acl.c:4373
-#: utils/adt/regproc.c:1226
+#: commands/tablecmds.c:243 commands/typecmds.c:3210 parser/parse_type.c:226
+#: parser/parse_type.c:255 parser/parse_type.c:795 utils/adt/acl.c:4373
+#: utils/adt/regproc.c:1225
 #, c-format
 msgid "type \"%s\" does not exist"
 msgstr "typ \"%s\" nie istnieje"
@@ -3680,10 +3671,8 @@ msgstr "funkcja %d (%s, %s) dla %s nie istnieje"
 
 #: catalog/objectaddress.c:1655 catalog/objectaddress.c:1681
 #, c-format
-#| msgid "user mapping for user \"%s\" in server \"%s\" does not exist"
 msgid "user mapping for user \"%s\" on server \"%s\" does not exist"
-msgstr ""
-"mapowanie użytkownika dla użytkownika \"%s\" na serwerze \"%s\" nie istnieje"
+msgstr "mapowanie użytkownika dla użytkownika \"%s\" na serwerze \"%s\" nie istnieje"
 
 #: catalog/objectaddress.c:1670 commands/foreigncmds.c:430
 #: commands/foreigncmds.c:997 commands/foreigncmds.c:1359
@@ -3699,7 +3688,6 @@ msgstr "nierozpoznany domyślny typ obiektu ACL %c"
 
 #: catalog/objectaddress.c:1743
 #, c-format
-#| msgid "Valid object types are 'r', 'S', 'f', and 'T'."
 msgid "Valid object types are \"r\", \"S\", \"f\", and \"T\"."
 msgstr "Poprawne typy obiektów to \"r\", \"S\", \"f\" i \"T\"."
 
@@ -4221,62 +4209,62 @@ msgstr "ALTER TYPE ADD BEFORE/AFTER nie jest zgodna z aktualizacją binarną"
 msgid "schema \"%s\" already exists"
 msgstr "schemat \"%s\" już istnieje"
 
-#: catalog/pg_operator.c:222 catalog/pg_operator.c:363
+#: catalog/pg_operator.c:223 catalog/pg_operator.c:364
 #, c-format
 msgid "\"%s\" is not a valid operator name"
 msgstr "\"%s\" nie jest prawidłową nazwą operatora"
 
-#: catalog/pg_operator.c:372
+#: catalog/pg_operator.c:373
 #, c-format
 msgid "only binary operators can have commutators"
 msgstr "tylko operatory binarne mogą mieć komutatory"
 
-#: catalog/pg_operator.c:376
+#: catalog/pg_operator.c:377
 #, c-format
 msgid "only binary operators can have join selectivity"
 msgstr "tylko operatory binarne mogą mieć selektywność ograniczenia"
 
-#: catalog/pg_operator.c:380
+#: catalog/pg_operator.c:381
 #, c-format
 msgid "only binary operators can merge join"
 msgstr "tylko operatory binarne mogą łączyć przez scalenie"
 
-#: catalog/pg_operator.c:384
+#: catalog/pg_operator.c:385
 #, c-format
 msgid "only binary operators can hash"
 msgstr "tylko operatory binarne mogą haszować"
 
-#: catalog/pg_operator.c:395
+#: catalog/pg_operator.c:396
 #, c-format
 msgid "only boolean operators can have negators"
 msgstr "tylko operatory logiczne mogą mieć negatory"
 
-#: catalog/pg_operator.c:399
+#: catalog/pg_operator.c:400
 #, c-format
 msgid "only boolean operators can have restriction selectivity"
 msgstr "tylko operatory logiczne mogą mieć selektywność ograniczenia"
 
-#: catalog/pg_operator.c:403
+#: catalog/pg_operator.c:404
 #, c-format
 msgid "only boolean operators can have join selectivity"
 msgstr "tylko operatory logiczne mogą mieć selektywność przyłączania"
 
-#: catalog/pg_operator.c:407
+#: catalog/pg_operator.c:408
 #, c-format
 msgid "only boolean operators can merge join"
 msgstr "tylko operatory logiczne mogą łączyć przez scalenie"
 
-#: catalog/pg_operator.c:411
+#: catalog/pg_operator.c:412
 #, c-format
 msgid "only boolean operators can hash"
 msgstr "tylko operatory logiczne mogą haszować"
 
-#: catalog/pg_operator.c:423
+#: catalog/pg_operator.c:424
 #, c-format
 msgid "operator %s already exists"
 msgstr "operator %s już istnieje"
 
-#: catalog/pg_operator.c:616
+#: catalog/pg_operator.c:617
 #, c-format
 msgid "operator cannot be its own negator or sort operator"
 msgstr "operator nie może być własnym negatorem ani operatorem sortowania"
@@ -4925,13 +4913,11 @@ msgstr "musisz być superużytkownikiem by wykonywać COPY z pliku"
 
 #: commands/copy.c:880
 #, c-format
-#| msgid "COPY FROM not supported with row level security."
 msgid "COPY FROM not supported with row-level security"
 msgstr "COPY FROM nie jest obsługiwane przy bezpieczeństwie na poziomie wierszy"
 
 #: commands/copy.c:881
 #, c-format
-#| msgid "Use direct INSERT statements instead."
 msgid "Use INSERT statements instead."
 msgstr "Zamiast tego używaj poleceń INSERT."
 
@@ -5347,8 +5333,8 @@ msgid "incorrect binary data format"
 msgstr "nieprawidłowy binarny format danych"
 
 #: commands/copy.c:4388 commands/indexcmds.c:1008 commands/tablecmds.c:1459
-#: commands/tablecmds.c:2282 parser/parse_relation.c:3081
-#: parser/parse_relation.c:3101 utils/adt/tsvector_op.c:1417
+#: commands/tablecmds.c:2282 parser/parse_relation.c:3084
+#: parser/parse_relation.c:3104 utils/adt/tsvector_op.c:1417
 #, c-format
 msgid "column \"%s\" does not exist"
 msgstr "kolumna \"%s\" nie istnieje"
@@ -5829,12 +5815,12 @@ msgstr "%s może być wywołane tylko w funkcji wyzwalacza zdarzeniowego sql_dro
 #: commands/extension.c:1947 commands/prepare.c:701 executor/execQual.c:1735
 #: executor/execQual.c:1760 executor/execQual.c:2135 executor/execQual.c:5376
 #: executor/functions.c:1021 foreign/foreign.c:491
-#: replication/logical/logicalfuncs.c:312 replication/logical/origin.c:1410
+#: replication/logical/logicalfuncs.c:324 replication/logical/origin.c:1410
 #: replication/slotfuncs.c:173 replication/walsender.c:2762
 #: utils/adt/jsonfuncs.c:1474 utils/adt/jsonfuncs.c:1606
 #: utils/adt/jsonfuncs.c:1796 utils/adt/jsonfuncs.c:1925
 #: utils/adt/jsonfuncs.c:2693 utils/adt/pgstatfuncs.c:547
-#: utils/fmgr/funcapi.c:61 utils/misc/guc.c:8196 utils/mmgr/portalmem.c:1052
+#: utils/fmgr/funcapi.c:61 utils/misc/guc.c:8207 utils/mmgr/portalmem.c:1052
 #, c-format
 msgid "set-valued function called in context that cannot accept a set"
 msgstr "funkcja zwracająca zbiór rekordów wywołana w kontekście, w którym nie jest to dopuszczalne"
@@ -5842,9 +5828,9 @@ msgstr "funkcja zwracająca zbiór rekordów wywołana w kontekście, w którym 
 #: commands/event_trigger.c:1450 commands/event_trigger.c:2001
 #: commands/extension.c:1649 commands/extension.c:1758
 #: commands/extension.c:1951 commands/prepare.c:705 foreign/foreign.c:496
-#: replication/logical/logicalfuncs.c:316 replication/logical/origin.c:1414
+#: replication/logical/logicalfuncs.c:328 replication/logical/origin.c:1414
 #: replication/slotfuncs.c:177 replication/walsender.c:2766
-#: utils/adt/pgstatfuncs.c:551 utils/misc/guc.c:8200
+#: utils/adt/pgstatfuncs.c:551 utils/misc/guc.c:8211
 #: utils/mmgr/portalmem.c:1056
 #, c-format
 msgid "materialize mode required, but it is not allowed in this context"
@@ -6089,7 +6075,6 @@ msgstr "%s nie jest składnikiem rozszerzenia \"%s\""
 
 #: commands/extension.c:3031
 #, c-format
-#| msgid "file too large"
 msgid "file \"%s\" is too large"
 msgstr "plik \"%s\" jest za duży"
 
@@ -6203,7 +6188,7 @@ msgstr "funkcja SQL nie może zwracać typu powłoki %s"
 msgid "return type %s is only a shell"
 msgstr "zwrócony typ %s jest jedynie powłoką"
 
-#: commands/functioncmds.c:134 parser/parse_type.c:338
+#: commands/functioncmds.c:134 parser/parse_type.c:337
 #, c-format
 msgid "type modifier cannot be specified for shell type \"%s\""
 msgstr "modyfikator typu nie może być określony dla typu powłoki \"%s\""
@@ -6607,7 +6592,7 @@ msgid "could not determine which collation to use for index expression"
 msgstr "nie można określić, jakiego porównania użyć dla wyrażenia indeksu"
 
 #: commands/indexcmds.c:1094 commands/typecmds.c:825 parser/parse_expr.c:2559
-#: parser/parse_type.c:551 parser/parse_utilcmd.c:2736 utils/adt/misc.c:546
+#: parser/parse_type.c:550 parser/parse_utilcmd.c:2736 utils/adt/misc.c:546
 #, c-format
 msgid "collations are not supported by type %s"
 msgstr "rzutowania nie są obsługiwane przez typ %s"
@@ -6695,11 +6680,8 @@ msgstr "opcje CONCURRENTLY i WITH NO DATA nie mogą być używane jednocześnie"
 
 #: commands/matview.c:611
 #, c-format
-#| msgid "new data for \"%s\" contains duplicate rows without any null columns"
 msgid "new data for materialized view \"%s\" contains duplicate rows without any null columns"
-msgstr ""
-"nowe dane dla widoku zmaterializowanego \"%s\" zawierają wielokrotne wiersze "
-"bez żadnej pustej kolumny"
+msgstr "nowe dane dla widoku zmaterializowanego \"%s\" zawierają wielokrotne wiersze bez żadnej pustej kolumny"
 
 #: commands/matview.c:613
 #, c-format
@@ -6883,37 +6865,37 @@ msgstr "klasa operatora \"%s\" dla metody dostępu \"%s\" już istnieje w schema
 msgid "operator family \"%s\" for access method \"%s\" already exists in schema \"%s\""
 msgstr "rodzina operatora \"%s\" dla metody dostępu \"%s\" już istnieje w schemacie \"%s\""
 
-#: commands/operatorcmds.c:109 commands/operatorcmds.c:117
+#: commands/operatorcmds.c:110 commands/operatorcmds.c:118
 #, c-format
 msgid "SETOF type not allowed for operator argument"
 msgstr "typ SETOF niedozwolony jako argument operatora"
 
-#: commands/operatorcmds.c:145
+#: commands/operatorcmds.c:146
 #, c-format
 msgid "operator attribute \"%s\" not recognized"
 msgstr "atrybut operatora \"%s\" nie rozpoznany"
 
-#: commands/operatorcmds.c:155
+#: commands/operatorcmds.c:156
 #, c-format
 msgid "operator procedure must be specified"
 msgstr "musi być wskazana procedura operatora"
 
-#: commands/operatorcmds.c:166
+#: commands/operatorcmds.c:167
 #, c-format
 msgid "at least one of leftarg or rightarg must be specified"
 msgstr "musi być wskazany co najmniej jeden lewyarg lub prawyarg"
 
-#: commands/operatorcmds.c:234
+#: commands/operatorcmds.c:235
 #, c-format
 msgid "restriction estimator function %s must return type \"float8\""
 msgstr "funkcja estymatora ograniczenia %s musi zwracać typ \"float8\""
 
-#: commands/operatorcmds.c:273
+#: commands/operatorcmds.c:274
 #, c-format
 msgid "join estimator function %s must return type \"float8\""
 msgstr "funkcja estymatora złączenia %s musi zwracać typ \"float8\""
 
-#: commands/policy.c:87 commands/policy.c:387 commands/policy.c:476
+#: commands/policy.c:87 commands/policy.c:390 commands/policy.c:479
 #: commands/tablecmds.c:966 commands/tablecmds.c:1308
 #: commands/tablecmds.c:2176 commands/tablecmds.c:4320
 #: commands/tablecmds.c:6249 commands/tablecmds.c:11886
@@ -6926,43 +6908,40 @@ msgstr "odmowa dostępu: \"%s\" jest katalogiem systemowym"
 
 #: commands/policy.c:170
 #, c-format
-#| msgid "ignoring roles specified other than public"
 msgid "ignoring specified roles other than PUBLIC"
 msgstr "ignorowanie ról określonych inaczej niż PUBLIC"
 
 #: commands/policy.c:171
 #, c-format
-#| msgid "All roles are members of the public role."
 msgid "All roles are members of the PUBLIC role."
 msgstr "Wszystkie role są członkami roli PUBLIC."
 
-#: commands/policy.c:500
+#: commands/policy.c:503
 #, c-format
-#| msgid "File \"%s\" could not be renamed to \"%s\": %m."
 msgid "role \"%s\" could not be removed from policy \"%s\" on \"%s\""
 msgstr "rola \"%s\" nie mogła zostać usunięta z polityki \"%s\" na \"%s\""
 
-#: commands/policy.c:707
+#: commands/policy.c:712
 #, c-format
 msgid "WITH CHECK cannot be applied to SELECT or DELETE"
 msgstr "WITH CHECK nie może być stosowane do SELECT ani DELETE"
 
-#: commands/policy.c:716 commands/policy.c:1016
+#: commands/policy.c:721 commands/policy.c:1021
 #, c-format
 msgid "only WITH CHECK expression allowed for INSERT"
 msgstr "wyrażenie WITH CHECK dostępne tylko w INSERT"
 
-#: commands/policy.c:789 commands/policy.c:1239
+#: commands/policy.c:794 commands/policy.c:1244
 #, c-format
 msgid "policy \"%s\" for table \"%s\" already exists"
 msgstr "polityka \"%s\" dla tabeli \"%s\" już istnieje"
 
-#: commands/policy.c:988 commands/policy.c:1267 commands/policy.c:1342
+#: commands/policy.c:993 commands/policy.c:1272 commands/policy.c:1347
 #, c-format
 msgid "policy \"%s\" for table \"%s\" does not exist"
 msgstr "polityka \"%s\" dla tabeli \"%s\" nie istnieje"
 
-#: commands/policy.c:1006
+#: commands/policy.c:1011
 #, c-format
 msgid "only USING expression allowed for SELECT, DELETE"
 msgstr "tylko wyrażenie USING dozwolone w SELECT, DELETE"
@@ -7340,9 +7319,9 @@ msgstr "kolumna dziedziczona \"%s\" jest w konflikcie typów"
 
 #: commands/tablecmds.c:1613 commands/tablecmds.c:1634
 #: commands/tablecmds.c:1832 commands/tablecmds.c:1854
-#: parser/parse_coerce.c:1592 parser/parse_coerce.c:1612
-#: parser/parse_coerce.c:1632 parser/parse_coerce.c:1677
-#: parser/parse_coerce.c:1714 parser/parse_param.c:218
+#: parser/parse_coerce.c:1630 parser/parse_coerce.c:1650
+#: parser/parse_coerce.c:1670 parser/parse_coerce.c:1715
+#: parser/parse_coerce.c:1752 parser/parse_param.c:218
 #, c-format
 msgid "%s versus %s"
 msgstr "%s kontra %s"
@@ -7920,7 +7899,6 @@ msgstr "nie można przenosić relacji do lub poza przestrzeń tabel pg_global"
 
 #: commands/tablecmds.c:9816
 #, c-format
-#| msgid "aborting because lock on relation \"%s\".\"%s\" is not available"
 msgid "aborting because lock on relation \"%s.%s\" is not available"
 msgstr "przerwano ponieważ blokada na relacji \"%s.%s\" nie jest dostępna"
 
@@ -8051,26 +8029,18 @@ msgstr "indeks \"%s\" nie może być użyty jako identyczność repliki poniewa�
 
 #: commands/tablecmds.c:11228
 #, c-format
-#| msgid "cannot change logged status of table %s"
 msgid "cannot change logged status of table \"%s\" because it is temporary"
-msgstr ""
-"nie można zmienić stanu logowania tabeli \"%s\" ponieważ jest ona tymczasowa"
+msgstr "nie można zmienić stanu logowania tabeli \"%s\" ponieważ jest ona tymczasowa"
 
 #: commands/tablecmds.c:11287
 #, c-format
-#| msgid "could not convert table \"%s\" to a view because it has child tables"
 msgid "could not change table \"%s\" to logged because it references unlogged table \"%s\""
-msgstr ""
-"nie udało zmienić tabeli \"%s\" na logowaną ponieważ wskazuje na nielogowaną "
-"tabelę \"%s\""
+msgstr "nie udało zmienić tabeli \"%s\" na logowaną ponieważ wskazuje na nielogowaną tabelę \"%s\""
 
 #: commands/tablecmds.c:11297
 #, c-format
-#| msgid "could not convert table \"%s\" to a view because it has child tables"
 msgid "could not change table \"%s\" to unlogged because it references logged table \"%s\""
-msgstr ""
-"nie udało się zmienić tabeli \"%s\" na nielogowaną ponieważ wskazuje na "
-"logowaną tabelę \"%s\""
+msgstr "nie udało się zmienić tabeli \"%s\" na nielogowaną ponieważ wskazuje na logowaną tabelę \"%s\""
 
 #: commands/tablecmds.c:11354
 #, c-format
@@ -8204,7 +8174,6 @@ msgstr "nie można usunąć linku symbolicznego \"%s\": %m"
 
 #: commands/tablespace.c:803 commands/tablespace.c:889
 #, c-format
-#| msgid "not a directory or symbolic link: \"%s\""
 msgid "\"%s\" is not a directory or symbolic link"
 msgstr "\"%s\" nie jest folderem ani linkiem symbolicznym"
 
@@ -8366,22 +8335,22 @@ msgstr "funkcja wyzwalacza %u zwróciła pustą wartość"
 msgid "BEFORE STATEMENT trigger cannot return a value"
 msgstr "wyzwalacz BEFORE STATEMENT nie może zwracać wartości"
 
-#: commands/trigger.c:2727 executor/nodeModifyTable.c:631
-#: executor/nodeModifyTable.c:919
+#: commands/trigger.c:2727 executor/nodeModifyTable.c:648
+#: executor/nodeModifyTable.c:942
 #, c-format
 msgid "tuple to be updated was already modified by an operation triggered by the current command"
 msgstr "krotka do aktualizacji została już zmieniona przez operację wyzwoloną przez bieżące polecenie"
 
-#: commands/trigger.c:2728 executor/nodeModifyTable.c:632
-#: executor/nodeModifyTable.c:920
+#: commands/trigger.c:2728 executor/nodeModifyTable.c:649
+#: executor/nodeModifyTable.c:943
 #, c-format
 msgid "Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows."
 msgstr "Rozważ użycie wyzwalacza AFTER zamiast BEFORE by rozprzestrzenić zmiany na inne wiersze."
 
 #: commands/trigger.c:2742 executor/execMain.c:2344
 #: executor/nodeLockRows.c:216 executor/nodeModifyTable.c:183
-#: executor/nodeModifyTable.c:644 executor/nodeModifyTable.c:932
-#: executor/nodeModifyTable.c:1099
+#: executor/nodeModifyTable.c:661 executor/nodeModifyTable.c:955
+#: executor/nodeModifyTable.c:1122
 #, c-format
 msgid "could not serialize access due to concurrent update"
 msgstr "nie może serializować dostępu z powodu równoczesnej aktualizacji"
@@ -8844,7 +8813,6 @@ msgstr "odmowa dostępu do skasowania roli"
 
 #: commands/user.c:962
 #, c-format
-#| msgid "cannot use special role specifier in \"%s\""
 msgid "cannot use special role specifier in DROP ROLE"
 msgstr "nie można użyć szczególnego specyfikatora roli w DROP ROLE"
 
@@ -9065,7 +9033,6 @@ msgstr[2] "Pominięto %u stronę ze względu na przypięcia buforów.\n"
 
 #: commands/vacuumlazy.c:1131
 #, c-format
-#| msgid "%u pages are entirely empty.\n"
 msgid "%u page is entirely empty.\n"
 msgid_plural "%u pages are entirely empty.\n"
 msgstr[0] "%u strona jest zupełnie pusta.\n"
@@ -9118,7 +9085,7 @@ msgstr "\"%s\": obcięto %u na %u stronach"
 msgid "\"%s\": suspending truncate due to conflicting lock request"
 msgstr "\"%s\": zawieszenie obcinania ze względu na sprzeczne żądania blokad"
 
-#: commands/variable.c:164 utils/misc/guc.c:9649
+#: commands/variable.c:164 utils/misc/guc.c:9660
 #, c-format
 msgid "Unrecognized key word: \"%s\"."
 msgstr "Nierozpoznane słowo kluczowe: \"%s\"."
@@ -9476,40 +9443,28 @@ msgstr "nowy rekord dla relacji \"%s\" narusza ograniczenie sprawdzające \"%s\"
 
 #: executor/execMain.c:1811
 #, c-format
-#| msgid "new row violates row level security policy for \"%s\""
 msgid "new row violates check option for view \"%s\""
 msgstr "nowy wiersz narusza opcję sprawdzającą widoku \"%s\""
 
 #: executor/execMain.c:1821
 #, c-format
-#| msgid "new row violates row level security policy \"%s\" for \"%s\""
 msgid "new row violates row-level security policy \"%s\" for table \"%s\""
-msgstr ""
-"nowy wiersz narusza politykę bezpieczeństwa na poziomie wierszy \"%s\" tabeli "
-"\"%s\""
+msgstr "nowy wiersz narusza politykę bezpieczeństwa na poziomie wierszy \"%s\" tabeli \"%s\""
 
 #: executor/execMain.c:1826
 #, c-format
-#| msgid "new row violates row level security policy for \"%s\""
 msgid "new row violates row-level security policy for table \"%s\""
-msgstr ""
-"nowy wiersz narusza politykę bezpieczeństwa na poziomie wierszy tabeli \"%s\""
+msgstr "nowy wiersz narusza politykę bezpieczeństwa na poziomie wierszy tabeli \"%s\""
 
 #: executor/execMain.c:1833
 #, c-format
-#| msgid "new row violates row level security policy \"%s\" (USING expression) for \"%s\""
 msgid "new row violates row-level security policy \"%s\" (USING expression) for table \"%s\""
-msgstr ""
-"nowy wiersz narusza politykę bezpieczeństwa na poziomie wierszy \"%s\" "
-"(wyrażenie USING) tabeli \"%s\""
+msgstr "nowy wiersz narusza politykę bezpieczeństwa na poziomie wierszy \"%s\" (wyrażenie USING) tabeli \"%s\""
 
 #: executor/execMain.c:1838
 #, c-format
-#| msgid "new row violates row level security policy (USING expression) for \"%s\""
 msgid "new row violates row-level security policy (USING expression) for table \"%s\""
-msgstr ""
-"nowy wiersz narusza politykę bezpieczeństwa na poziomie wierszy (wyrażenie "
-"USING) tabeli \"%s\""
+msgstr "nowy wiersz narusza politykę bezpieczeństwa na poziomie wierszy (wyrażenie USING) tabeli \"%s\""
 
 #: executor/execQual.c:300 executor/execQual.c:328 executor/execQual.c:3191
 #: utils/adt/array_userfuncs.c:472 utils/adt/arrayfuncs.c:263
@@ -9779,7 +9734,6 @@ msgstr "agregat %u wymaga zgodnego typu wejścia i typu przekształcenia"
 
 #: executor/nodeCustom.c:147 executor/nodeCustom.c:158
 #, c-format
-#| msgid "custom-scan \"%s\" does not support MarkPos"
 msgid "custom scan \"%s\" does not support MarkPos"
 msgstr "niestandardowy skan \"%s\" nie obsługuje MarkPos"
 
@@ -9800,11 +9754,8 @@ msgstr "nie można czytać z pliku tymczasowego hash-join: %m"
 
 #: executor/nodeIndexonlyscan.c:179
 #, c-format
-#| msgid "window functions are not allowed in index predicates"
 msgid "lossy distance functions are not supported in index-only scans"
-msgstr ""
-"stratne funkcje odległości nie są obsługiwane w skanach wyłącznie po "
-"indeksie"
+msgstr "stratne funkcje odległości nie są obsługiwane w skanach wyłącznie po indeksie"
 
 #: executor/nodeLimit.c:253
 #, c-format
@@ -9841,12 +9792,12 @@ msgstr "Kwerenda przewiduje wartość dla skasowanej kolumny na pozycji porządk
 msgid "Query has too few columns."
 msgstr "Zapytanie posiada zbyt mało kolumn."
 
-#: executor/nodeModifyTable.c:1080
+#: executor/nodeModifyTable.c:1103
 #, c-format
 msgid "ON CONFLICT DO UPDATE command cannot affect row a second time"
 msgstr "polecenie ON CONFLICT DO UPDATE nie może działać drugi raz na wierszu"
 
-#: executor/nodeModifyTable.c:1081
+#: executor/nodeModifyTable.c:1104
 #, c-format
 msgid "Ensure that no rows proposed for insertion within the same command have duplicate constrained values."
 msgstr "Zapewnij by żaden wiersz podany do wstawienia w tym samym poleceniu nie mógł mieć powielonych wartości objętych ograniczeniami."
@@ -10177,8 +10128,8 @@ msgstr "%s nie może być tu zastosowane jako nazwa roli"
 msgid "improper use of \"*\""
 msgstr "niepoprawne użycie \"*\""
 
-#: gram.y:14253 gram.y:14270 tsearch/spell.c:518 tsearch/spell.c:535
-#: tsearch/spell.c:552 tsearch/spell.c:569 tsearch/spell.c:591
+#: gram.y:14253 gram.y:14270 tsearch/spell.c:654 tsearch/spell.c:671
+#: tsearch/spell.c:688 tsearch/spell.c:705 tsearch/spell.c:727
 #, c-format
 msgid "syntax error"
 msgstr "błąd składni"
@@ -10511,162 +10462,162 @@ msgstr "nie można pobrać kontekstu zabezpieczeń SSPI"
 msgid "could not get token from SSPI security context"
 msgstr "nie można pobrać tokenu z kontekstu zabezpieczeń SSPI"
 
-#: libpq/auth.c:1474
+#: libpq/auth.c:1476
 #, c-format
 msgid "could not create socket for Ident connection: %m"
 msgstr "nie można utworzyć gniazda dla połączenia Ident: %m"
 
-#: libpq/auth.c:1489
+#: libpq/auth.c:1491
 #, c-format
 msgid "could not bind to local address \"%s\": %m"
 msgstr "nie można dowiązać do adresu lokalnego \"%s\": %m"
 
-#: libpq/auth.c:1501
+#: libpq/auth.c:1503
 #, c-format
 msgid "could not connect to Ident server at address \"%s\", port %s: %m"
 msgstr "nie można połączyć z serwerem Ident pod adresem \"%s\", port %s: %m"
 
-#: libpq/auth.c:1523
+#: libpq/auth.c:1525
 #, c-format
 msgid "could not send query to Ident server at address \"%s\", port %s: %m"
 msgstr "nie można wysłać zapytania do serwera Ident pod adres \"%s\", port %s: %m"
 
-#: libpq/auth.c:1540
+#: libpq/auth.c:1542
 #, c-format
 msgid "could not receive response from Ident server at address \"%s\", port %s: %m"
 msgstr "nie można otrzymać odpowiedzi z serwera Ident pod adresem \"%s\", port %s: %m"
 
-#: libpq/auth.c:1550
+#: libpq/auth.c:1552
 #, c-format
 msgid "invalidly formatted response from Ident server: \"%s\""
 msgstr "niepoprawnie sformatowana odpowiedź z serwera Ident: \"%s\""
 
-#: libpq/auth.c:1590
+#: libpq/auth.c:1592
 #, c-format
 msgid "peer authentication is not supported on this platform"
 msgstr "autentykacja wzajemna nie jest obsługiwana na tej platformie"
 
-#: libpq/auth.c:1594
+#: libpq/auth.c:1596
 #, c-format
 msgid "could not get peer credentials: %m"
 msgstr "nie można pobrać poświadczeń wzajemnych: %m"
 
-#: libpq/auth.c:1603
+#: libpq/auth.c:1605
 #, c-format
 msgid "could not look up local user ID %ld: %s"
 msgstr "nie udało się odnaleźć lokalnego ID użytkownika %ld: %s"
 
-#: libpq/auth.c:1687 libpq/auth.c:1958 libpq/auth.c:2314
+#: libpq/auth.c:1689 libpq/auth.c:1960 libpq/auth.c:2316
 #, c-format
 msgid "empty password returned by client"
 msgstr "puste hasło zwrócone przez klienta"
 
-#: libpq/auth.c:1697
+#: libpq/auth.c:1699
 #, c-format
 msgid "error from underlying PAM layer: %s"
 msgstr "błąd z podstawowej warstwy PAM: %s"
 
-#: libpq/auth.c:1766
+#: libpq/auth.c:1768
 #, c-format
 msgid "could not create PAM authenticator: %s"
 msgstr "nie można utworzyć identyfikatora PAM: %s"
 
-#: libpq/auth.c:1777
+#: libpq/auth.c:1779
 #, c-format
 msgid "pam_set_item(PAM_USER) failed: %s"
 msgstr "niepowodzenie pam_set_item(PAM_USER): %s"
 
-#: libpq/auth.c:1788
+#: libpq/auth.c:1790
 #, c-format
 msgid "pam_set_item(PAM_CONV) failed: %s"
 msgstr "niepowodzenie pam_set_item(PAM_CONV): %s"
 
-#: libpq/auth.c:1799
+#: libpq/auth.c:1801
 #, c-format
 msgid "pam_authenticate failed: %s"
 msgstr "niepowodzenie pam_authenticate: %s"
 
-#: libpq/auth.c:1810
+#: libpq/auth.c:1812
 #, c-format
 msgid "pam_acct_mgmt failed: %s"
 msgstr "niepowodzenie pam_acct_mgmt: %s"
 
-#: libpq/auth.c:1821
+#: libpq/auth.c:1823
 #, c-format
 msgid "could not release PAM authenticator: %s"
 msgstr "nie można opublikować uwierzytelnienia PAM: %s"
 
-#: libpq/auth.c:1854
+#: libpq/auth.c:1856
 #, c-format
 msgid "could not initialize LDAP: %m"
 msgstr "nie można zainicjować LDAP: %m"
 
-#: libpq/auth.c:1857
+#: libpq/auth.c:1859
 #, c-format
 msgid "could not initialize LDAP: error code %d"
 msgstr "nie można zainicjować LDAP: kod błędu %d"
 
-#: libpq/auth.c:1867
+#: libpq/auth.c:1869
 #, c-format
 msgid "could not set LDAP protocol version: %s"
 msgstr "nie można ustawić wersji protokołu LDAP: %s"
 
-#: libpq/auth.c:1896
+#: libpq/auth.c:1898
 #, c-format
 msgid "could not load wldap32.dll"
 msgstr "nie można załadować wldap32.dll"
 
-#: libpq/auth.c:1904
+#: libpq/auth.c:1906
 #, c-format
 msgid "could not load function _ldap_start_tls_sA in wldap32.dll"
 msgstr "nie można załadować funkcji _ldap_start_tls_sA z wldap32.dll"
 
-#: libpq/auth.c:1905
+#: libpq/auth.c:1907
 #, c-format
 msgid "LDAP over SSL is not supported on this platform."
 msgstr "LDAP po SSL nie jest wspierany dla tej platformy."
 
-#: libpq/auth.c:1920
+#: libpq/auth.c:1922
 #, c-format
 msgid "could not start LDAP TLS session: %s"
 msgstr "nie można rozpocząć sesji TLS LDAP: %s"
 
-#: libpq/auth.c:1942
+#: libpq/auth.c:1944
 #, c-format
 msgid "LDAP server not specified"
 msgstr "nie określono serwera LDAP"
 
-#: libpq/auth.c:1995
+#: libpq/auth.c:1997
 #, c-format
 msgid "invalid character in user name for LDAP authentication"
 msgstr "niepoprawny znak w nazwie użytkownika podczas autoryzacji LDAP"
 
-#: libpq/auth.c:2010
+#: libpq/auth.c:2012
 #, c-format
 msgid "could not perform initial LDAP bind for ldapbinddn \"%s\" on server \"%s\": %s"
 msgstr "nie można wykonać początkowego połączenia z LDAP dla ldapbinddn \"%s\" na serwerze \"%s\": %s"
 
-#: libpq/auth.c:2034
+#: libpq/auth.c:2036
 #, c-format
 msgid "could not search LDAP for filter \"%s\" on server \"%s\": %s"
 msgstr "nie można wyszukać w LDAP z filtrem \"%s\" na serwerze \"%s\": %s"
 
-#: libpq/auth.c:2045
+#: libpq/auth.c:2047
 #, c-format
 msgid "LDAP user \"%s\" does not exist"
 msgstr "użytkownik LDAP \"%s\" nie istnieje"
 
-#: libpq/auth.c:2046
+#: libpq/auth.c:2048
 #, c-format
 msgid "LDAP search for filter \"%s\" on server \"%s\" returned no entries."
 msgstr "Wyszukiwanie LDAP z filtrem \"%s\" na serwerze \"%s\" nie zwróciło wpisów."
 
-#: libpq/auth.c:2050
+#: libpq/auth.c:2052
 #, c-format
 msgid "LDAP user \"%s\" is not unique"
 msgstr "użytkownik LDAP \"%s\" nie jest unikalny"
 
-#: libpq/auth.c:2051
+#: libpq/auth.c:2053
 #, c-format
 msgid "LDAP search for filter \"%s\" on server \"%s\" returned %d entry."
 msgid_plural "LDAP search for filter \"%s\" on server \"%s\" returned %d entries."
@@ -10674,117 +10625,117 @@ msgstr[0] "Wyszukiwanie LDAP z filtrem \"%s\" na serwerze \"%s\" zwróciło %d w
 msgstr[1] "Wyszukiwanie LDAP z filtrem \"%s\" na serwerze \"%s\" zwróciło %d wpisy."
 msgstr[2] "Wyszukiwanie LDAP z filtrem \"%s\" na serwerze \"%s\" zwróciło %d wpisów."
 
-#: libpq/auth.c:2069
+#: libpq/auth.c:2071
 #, c-format
 msgid "could not get dn for the first entry matching \"%s\" on server \"%s\": %s"
 msgstr "nie można pobrać nazwy wyróżniającej z pierwszego wpisu pasującego do \"%s\" na serwerze \"%s\": %s"
 
-#: libpq/auth.c:2089
+#: libpq/auth.c:2091
 #, c-format
 msgid "could not unbind after searching for user \"%s\" on server \"%s\": %s"
 msgstr "nie można odłączyć się po wyszukiwaniu użytkownika \"%s\" na serwerze \"%s\": %s"
 
-#: libpq/auth.c:2119
+#: libpq/auth.c:2121
 #, c-format
 msgid "LDAP login failed for user \"%s\" on server \"%s\": %s"
 msgstr "logowanie LDAP użytkownika \"%s\" na serwerze \"%s\" nie powiodło się: %s"
 
-#: libpq/auth.c:2147
+#: libpq/auth.c:2149
 #, c-format
 msgid "certificate authentication failed for user \"%s\": client certificate contains no user name"
 msgstr "autoryzacja certyfikatem nie powiodła się dla użytkownika \"%s\": certyfikat klienta nie zawiera nazwy użytkownika"
 
-#: libpq/auth.c:2270
+#: libpq/auth.c:2272
 #, c-format
 msgid "RADIUS server not specified"
 msgstr "nie określono serwera RADIUS"
 
-#: libpq/auth.c:2277
+#: libpq/auth.c:2279
 #, c-format
 msgid "RADIUS secret not specified"
 msgstr "nie określono szyfrowanego hasła RADIUS"
 
-#: libpq/auth.c:2293 libpq/hba.c:1590
+#: libpq/auth.c:2295 libpq/hba.c:1590
 #, c-format
 msgid "could not translate RADIUS server name \"%s\" to address: %s"
 msgstr "nie można przetłumaczyć nazwy serwera RADIUS \"%s\" na adres: %s"
 
-#: libpq/auth.c:2321
+#: libpq/auth.c:2323
 #, c-format
 msgid "RADIUS authentication does not support passwords longer than 16 characters"
 msgstr "autoryzacja RADIUS nie obsługuje haseł dłuższych niż 16 znaków"
 
-#: libpq/auth.c:2332
+#: libpq/auth.c:2334
 #, c-format
 msgid "could not generate random encryption vector"
 msgstr "nie można wygenerować wektora losowego szyfrowania"
 
-#: libpq/auth.c:2355
+#: libpq/auth.c:2357
 #, c-format
 msgid "could not perform MD5 encryption of password"
 msgstr "nie można wykonać szyfrowania hasła skrótem MD5"
 
-#: libpq/auth.c:2377
+#: libpq/auth.c:2379
 #, c-format
 msgid "could not create RADIUS socket: %m"
 msgstr "nie można utworzyć gniazda RADIUS: %m"
 
-#: libpq/auth.c:2398
+#: libpq/auth.c:2400
 #, c-format
 msgid "could not bind local RADIUS socket: %m"
 msgstr "nie można połączyć do gniazda RADIUS: %m"
 
-#: libpq/auth.c:2408
+#: libpq/auth.c:2410
 #, c-format
 msgid "could not send RADIUS packet: %m"
 msgstr "nie można wysłać pakietu RADIUS: %m"
 
-#: libpq/auth.c:2441 libpq/auth.c:2466
+#: libpq/auth.c:2443 libpq/auth.c:2468
 #, c-format
 msgid "timeout waiting for RADIUS response"
 msgstr "limit czasu oczekiwania na odpowiedź RADIUS"
 
-#: libpq/auth.c:2459
+#: libpq/auth.c:2461
 #, c-format
 msgid "could not check status on RADIUS socket: %m"
 msgstr "nie można sprawdzić stanu gniazda RADIUS: %m"
 
-#: libpq/auth.c:2488
+#: libpq/auth.c:2490
 #, c-format
 msgid "could not read RADIUS response: %m"
 msgstr "nie można odczytać odpowiedzi RADIUS: %m"
 
-#: libpq/auth.c:2500 libpq/auth.c:2504
+#: libpq/auth.c:2502 libpq/auth.c:2506
 #, c-format
 msgid "RADIUS response was sent from incorrect port: %d"
 msgstr "odpowiedź RADIUS została wysłana z niepoprawnego portu: %d"
 
-#: libpq/auth.c:2513
+#: libpq/auth.c:2515
 #, c-format
 msgid "RADIUS response too short: %d"
 msgstr "odpowiedź RADIUS zbyt krótka: %d"
 
-#: libpq/auth.c:2520
+#: libpq/auth.c:2522
 #, c-format
 msgid "RADIUS response has corrupt length: %d (actual length %d)"
 msgstr "odpowiedź RADIUS ma uszkodzoną długość: %d (aktualna długość %d)"
 
-#: libpq/auth.c:2528
+#: libpq/auth.c:2530
 #, c-format
 msgid "RADIUS response is to a different request: %d (should be %d)"
 msgstr "odpowiedź RADIUS dotyczy innego żądania: %d (powinna być %d)"
 
-#: libpq/auth.c:2553
+#: libpq/auth.c:2555
 #, c-format
 msgid "could not perform MD5 encryption of received packet"
 msgstr "nie można wykonać szyfrowania otrzymanego pakietu skrótem MD5"
 
-#: libpq/auth.c:2562
+#: libpq/auth.c:2564
 #, c-format
 msgid "RADIUS response has incorrect MD5 signature"
 msgstr "odpowiedź RADIUS ma niepoprawny podpis MD5"
 
-#: libpq/auth.c:2579
+#: libpq/auth.c:2581
 #, c-format
 msgid "RADIUS response has invalid code (%d) for user \"%s\""
 msgstr "odpowiedź RADIUS ma niepoprawny kod (%d) dla użytkownika \"%s\""
@@ -11412,7 +11363,6 @@ msgstr "nie można otrzymać danych od klienta: %m"
 
 #: libpq/pqcomm.c:1139 tcop/postgres.c:3902
 #, c-format
-#| msgid "terminating connection because protocol sync was lost"
 msgid "terminating connection because protocol synchronization was lost"
 msgstr "zakończenie połączenia spowodowane zgubieniem synchronizacji protokołu"
 
@@ -11744,8 +11694,8 @@ msgstr ""
 "aby zapobiec możliwemu złamaniu zabezpieczeń systemu.  Przejrzyj dokumentację\n"
 "by uzyskać więcej informacji jak poprawnie uruchomić serwer.\n"
 
-#: nodes/nodeFuncs.c:118 nodes/nodeFuncs.c:149 parser/parse_coerce.c:1782
-#: parser/parse_coerce.c:1810 parser/parse_coerce.c:1886
+#: nodes/nodeFuncs.c:118 nodes/nodeFuncs.c:149 parser/parse_coerce.c:1820
+#: parser/parse_coerce.c:1848 parser/parse_coerce.c:1924
 #: parser/parse_expr.c:1981 parser/parse_func.c:597 parser/parse_oper.c:952
 #, c-format
 msgid "could not find array type for data type %s"
@@ -11778,44 +11728,44 @@ msgid "%s cannot be applied to the nullable side of an outer join"
 msgstr "%s nie może być zastosowane do niewymaganej strony złączenia zewnętrznego"
 
 #. translator: %s is a SQL row locking clause such as FOR UPDATE
-#: optimizer/plan/planner.c:1323 parser/analyze.c:1481 parser/analyze.c:1679
+#: optimizer/plan/planner.c:1330 parser/analyze.c:1481 parser/analyze.c:1679
 #: parser/analyze.c:2460
 #, c-format
 msgid "%s is not allowed with UNION/INTERSECT/EXCEPT"
 msgstr "%s nie jest dopuszczalne z UNION/INTERSECT/EXCEPT"
 
-#: optimizer/plan/planner.c:3580
+#: optimizer/plan/planner.c:3587
 #, c-format
 msgid "could not implement GROUP BY"
 msgstr "nie udało się zaimplementować GROUP BY"
 
-#: optimizer/plan/planner.c:3581 optimizer/plan/planner.c:3749
+#: optimizer/plan/planner.c:3588 optimizer/plan/planner.c:3756
 #: optimizer/prep/prepunion.c:828
 #, c-format
 msgid "Some of the datatypes only support hashing, while others only support sorting."
 msgstr "Niektóre z typów danych obsługują tylko haszowania, podczas gdy inne obsługują tylko sortowanie."
 
-#: optimizer/plan/planner.c:3748
+#: optimizer/plan/planner.c:3755
 #, c-format
 msgid "could not implement DISTINCT"
 msgstr "nie udało się zaimplementować DISTINCT"
 
-#: optimizer/plan/planner.c:4354
+#: optimizer/plan/planner.c:4361
 #, c-format
 msgid "could not implement window PARTITION BY"
 msgstr "nie udało się zaimplementować okna PARTITION BY"
 
-#: optimizer/plan/planner.c:4355
+#: optimizer/plan/planner.c:4362
 #, c-format
 msgid "Window partitioning columns must be of sortable datatypes."
 msgstr "Kolumny podziału okna muszą być typów sortowalnych."
 
-#: optimizer/plan/planner.c:4359
+#: optimizer/plan/planner.c:4366
 #, c-format
 msgid "could not implement window ORDER BY"
 msgstr "nie udało się zaimplementować okna ORDER BY"
 
-#: optimizer/plan/planner.c:4360
+#: optimizer/plan/planner.c:4367
 #, c-format
 msgid "Window ordering columns must be of sortable datatypes."
 msgstr "Kolumny porządkujące okno muszą być typów sortowalnych."
@@ -12264,7 +12214,6 @@ msgstr "okno \"%s\" nie istnieje"
 
 #: parser/parse_agg.c:982
 #, c-format
-#| msgid "too many grouping sets present (max 4096)"
 msgid "too many grouping sets present (maximum 4096)"
 msgstr "jest zbyt wiele zbiorów grupowania (maksimum 4096)"
 
@@ -12482,19 +12431,16 @@ msgstr "ON CONFLICT DO UPDATE wymaga specyfikacji wnioskowania lub nazwy ogranic
 
 #: parser/parse_clause.c:2859
 #, c-format
-#| msgid "For example, ON CONFLICT (<column>)."
 msgid "For example, ON CONFLICT (column_name)."
 msgstr "Na przykład, ON CONFLICT (nazwa_kolumny)."
 
 #: parser/parse_clause.c:2870
 #, c-format
-#| msgid "ON CONFLICT not supported with system catalog tables"
 msgid "ON CONFLICT is not supported with system catalog tables"
 msgstr "ON CONFLICT nieobsługiwane na systemowych tabelach katalogowych"
 
 #: parser/parse_clause.c:2878
 #, c-format
-#| msgid "ON CONFLICT not supported on table \"%s\" used as a catalog table"
 msgid "ON CONFLICT is not supported on table \"%s\" used as a catalog table"
 msgstr "ON CONFLICT nieobsługiwane na tabeli \"%s\" używanej jako tabela katalogu"
 
@@ -12508,111 +12454,111 @@ msgstr "operator %s nie jest prawidłowym operatorem porządkującym"
 msgid "Ordering operators must be \"<\" or \">\" members of btree operator families."
 msgstr "Operatory porządkujące muszą być składnikami \"<\" lub \">\" rodzin operatora btree."
 
-#: parser/parse_coerce.c:933 parser/parse_coerce.c:963
-#: parser/parse_coerce.c:981 parser/parse_coerce.c:996
+#: parser/parse_coerce.c:971 parser/parse_coerce.c:1001
+#: parser/parse_coerce.c:1019 parser/parse_coerce.c:1034
 #: parser/parse_expr.c:2015 parser/parse_expr.c:2528 parser/parse_target.c:874
 #, c-format
 msgid "cannot cast type %s to %s"
 msgstr "nie można rzutować typu %s na %s"
 
-#: parser/parse_coerce.c:966
+#: parser/parse_coerce.c:1004
 #, c-format
 msgid "Input has too few columns."
 msgstr "Wejście posiada zbyt mało kolumn."
 
-#: parser/parse_coerce.c:984
+#: parser/parse_coerce.c:1022
 #, c-format
 msgid "Cannot cast type %s to %s in column %d."
 msgstr "Nie można rzutować typu %s na %s w kolumnie %d."
 
-#: parser/parse_coerce.c:999
+#: parser/parse_coerce.c:1037
 #, c-format
 msgid "Input has too many columns."
 msgstr "Wejście posiada zbyt wiele kolumn."
 
 #. translator: first %s is name of a SQL construct, eg WHERE
-#: parser/parse_coerce.c:1042
+#: parser/parse_coerce.c:1080
 #, c-format
 msgid "argument of %s must be type boolean, not type %s"
 msgstr "argument %s musi być typu logicznego, nie typu %s"
 
 #. translator: %s is name of a SQL construct, eg WHERE
 #. translator: %s is name of a SQL construct, eg LIMIT
-#: parser/parse_coerce.c:1052 parser/parse_coerce.c:1101
+#: parser/parse_coerce.c:1090 parser/parse_coerce.c:1139
 #, c-format
 msgid "argument of %s must not return a set"
 msgstr "argument %s nie może zwracać zbioru"
 
 #. translator: first %s is name of a SQL construct, eg LIMIT
-#: parser/parse_coerce.c:1089
+#: parser/parse_coerce.c:1127
 #, c-format
 msgid "argument of %s must be type %s, not type %s"
 msgstr "argument %s musi być typu %s, nie typu %s"
 
 #. translator: first %s is name of a SQL construct, eg CASE
-#: parser/parse_coerce.c:1222
+#: parser/parse_coerce.c:1260
 #, c-format
 msgid "%s types %s and %s cannot be matched"
 msgstr "%s typy %s i %s nie mogą być dopasowane"
 
 #. translator: first %s is name of a SQL construct, eg CASE
-#: parser/parse_coerce.c:1289
+#: parser/parse_coerce.c:1327
 #, c-format
 msgid "%s could not convert type %s to %s"
 msgstr "%s nie może przekształcić typu %s do %s"
 
-#: parser/parse_coerce.c:1591
+#: parser/parse_coerce.c:1629
 #, c-format
 msgid "arguments declared \"anyelement\" are not all alike"
 msgstr "argumenty zadeklarowane jako \"anyelement\" nie wszystkie są do siebie podobne"
 
-#: parser/parse_coerce.c:1611
+#: parser/parse_coerce.c:1649
 #, c-format
 msgid "arguments declared \"anyarray\" are not all alike"
 msgstr "argumenty zadeklarowane jako \"anyarray\" nie wszystkie są do siebie podobne"
 
-#: parser/parse_coerce.c:1631
+#: parser/parse_coerce.c:1669
 #, c-format
 msgid "arguments declared \"anyrange\" are not all alike"
 msgstr "argumenty zadeklarowane jako \"anyrange\" nie wszystkie są do siebie podobne"
 
-#: parser/parse_coerce.c:1660 parser/parse_coerce.c:1871
-#: parser/parse_coerce.c:1905
+#: parser/parse_coerce.c:1698 parser/parse_coerce.c:1909
+#: parser/parse_coerce.c:1943
 #, c-format
 msgid "argument declared \"anyarray\" is not an array but type %s"
 msgstr "argument zadeklarowany jako \"anyarray\" nie jest tablicą ale jest typu %s"
 
-#: parser/parse_coerce.c:1676
+#: parser/parse_coerce.c:1714
 #, c-format
 msgid "argument declared \"anyarray\" is not consistent with argument declared \"anyelement\""
 msgstr "argument zadeklarowany jako \"anyarray\" nie jest zgodny z argumentem zadeklarowanym jako \"anyelement\""
 
-#: parser/parse_coerce.c:1697 parser/parse_coerce.c:1918
+#: parser/parse_coerce.c:1735 parser/parse_coerce.c:1956
 #, c-format
 msgid "argument declared \"anyrange\" is not a range type but type %s"
 msgstr "argument zadeklarowany jako \"anyrange\" nie jest zakresem ale jest typu %s"
 
-#: parser/parse_coerce.c:1713
+#: parser/parse_coerce.c:1751
 #, c-format
 msgid "argument declared \"anyrange\" is not consistent with argument declared \"anyelement\""
 msgstr "argument zadeklarowany jako \"anyrange\" nie jest zgodny z argumentem zadeklarowanym jako \"anyelement\""
 
-#: parser/parse_coerce.c:1733
+#: parser/parse_coerce.c:1771
 #, c-format
 msgid "could not determine polymorphic type because input has type \"unknown\""
 msgstr "nie można ustalić typu polimorficznego ponieważ wejście ma typ \"unknown\""
 
-#: parser/parse_coerce.c:1743
+#: parser/parse_coerce.c:1781
 #, c-format
 msgid "type matched to anynonarray is an array type: %s"
 msgstr "typ dopasowany do anynonarray jest typem tablicowym: %s"
 
-#: parser/parse_coerce.c:1753
+#: parser/parse_coerce.c:1791
 #, c-format
 msgid "type matched to anyenum is not an enum type: %s"
 msgstr "typ dopasowany do anyenum nie jest typem enumeracji: %s"
 
-#: parser/parse_coerce.c:1793 parser/parse_coerce.c:1823
+#: parser/parse_coerce.c:1831 parser/parse_coerce.c:1861
 #, c-format
 msgid "could not find range type for data type %s"
 msgstr "nie znaleziono typu przedziału dla typu danych %s"
@@ -12734,8 +12680,8 @@ msgstr "FOR UPDATE/SHARE w zapytaniu rekurencyjnym nie jest realizowana"
 msgid "recursive reference to query \"%s\" must not appear more than once"
 msgstr "rekurencyjne odwołanie do zapytania \"%s\" nie może pojawiać się więcej niż raz"
 
-#: parser/parse_expr.c:387 parser/parse_relation.c:3080
-#: parser/parse_relation.c:3100
+#: parser/parse_expr.c:387 parser/parse_relation.c:3083
+#: parser/parse_relation.c:3103
 #, c-format
 msgid "column %s.%s does not exist"
 msgstr "kolumna %s.%s nie istnieje"
@@ -12760,8 +12706,8 @@ msgstr "zapis kolumny .%s zastosowany do typu %s, który nie jest typem złożon
 msgid "row expansion via \"*\" is not supported here"
 msgstr "wyrażenie wierszowe przez \"*\" nie jest tu dostępne"
 
-#: parser/parse_expr.c:767 parser/parse_relation.c:666
-#: parser/parse_relation.c:766 parser/parse_target.c:1109
+#: parser/parse_expr.c:767 parser/parse_relation.c:667
+#: parser/parse_relation.c:767 parser/parse_target.c:1109
 #, c-format
 msgid "column reference \"%s\" is ambiguous"
 msgstr "odnośnik kolumny \"%s\" jest niejednoznaczny"
@@ -13154,12 +13100,12 @@ msgstr "wskazanie tabeli %u jest niejednoznaczne"
 msgid "table name \"%s\" specified more than once"
 msgstr "nazwa tabeli \"%s\" określona więcej niż raz"
 
-#: parser/parse_relation.c:424 parser/parse_relation.c:3020
+#: parser/parse_relation.c:424 parser/parse_relation.c:3023
 #, c-format
 msgid "invalid reference to FROM-clause entry for table \"%s\""
 msgstr "nieprawidłowe wskazanie na pozycję w klauzuli FROM dla tabeli \"%s\""
 
-#: parser/parse_relation.c:427 parser/parse_relation.c:3025
+#: parser/parse_relation.c:427 parser/parse_relation.c:3028
 #, c-format
 msgid "There is an entry for table \"%s\", but it cannot be referenced from this part of the query."
 msgstr "Występuje wpis dla tabeli \"%s\", ale nie może mieć odniesień z tej części zapytania."
@@ -13169,89 +13115,86 @@ msgstr "Występuje wpis dla tabeli \"%s\", ale nie może mieć odniesień z tej 
 msgid "The combining JOIN type must be INNER or LEFT for a LATERAL reference."
 msgstr "Łączenia typu JOIN muszą być INNER lub LEFT dla referencji LATERAL."
 
-#: parser/parse_relation.c:704
+#: parser/parse_relation.c:705
 #, c-format
 msgid "system column \"%s\" reference in check constraint is invalid"
 msgstr "wskazanie kolumny systemowej \"%s\" w ograniczeniu sprawdzającym jest niepoprawne"
 
-#: parser/parse_relation.c:1062 parser/parse_relation.c:1342
-#: parser/parse_relation.c:1844
+#: parser/parse_relation.c:1065 parser/parse_relation.c:1345
+#: parser/parse_relation.c:1847
 #, c-format
 msgid "table \"%s\" has %d columns available but %d columns specified"
 msgstr "tabela \"%s\" posiada %d dostępnych kolumn ale %d kolumn określonych"
 
-#: parser/parse_relation.c:1149
+#: parser/parse_relation.c:1152
 #, c-format
 msgid "There is a WITH item named \"%s\", but it cannot be referenced from this part of the query."
 msgstr "Występuje element WITH o nazwie \"%s\", ale nie może mieć odniesień z tej części zapytania."
 
-#: parser/parse_relation.c:1151
+#: parser/parse_relation.c:1154
 #, c-format
 msgid "Use WITH RECURSIVE, or re-order the WITH items to remove forward references."
 msgstr "Użyj WITH RECURSIVE, lub zmień porządek elementów WITH by usunąć odwołania wyprzedzające."
 
-#: parser/parse_relation.c:1462
+#: parser/parse_relation.c:1465
 #, c-format
 msgid "a column definition list is only allowed for functions returning \"record\""
 msgstr "definicja listy kolumn jest dozwolona jedynie dla funkcji zwracających \"record\""
 
-#: parser/parse_relation.c:1471
+#: parser/parse_relation.c:1474
 #, c-format
 msgid "a column definition list is required for functions returning \"record\""
 msgstr "definicja listy kolumn jest wymagana dla funkcji zwracających \"record\""
 
-#: parser/parse_relation.c:1550
+#: parser/parse_relation.c:1553
 #, c-format
 msgid "function \"%s\" in FROM has unsupported return type %s"
 msgstr "funkcja \"%s\" w klauzuli FROM posiada niewspierany typ zwracany %s"
 
-#: parser/parse_relation.c:1672
+#: parser/parse_relation.c:1675
 #, c-format
 msgid "VALUES lists \"%s\" have %d columns available but %d columns specified"
 msgstr "lista VALUES \"%s\" posiada %d kolumn dostępnych ale %d kolumn określonych"
 
-#: parser/parse_relation.c:1727
+#: parser/parse_relation.c:1730
 #, c-format
 msgid "joins can have at most %d columns"
 msgstr "złączenia mogą mieć maksymalnie do %d kolumn"
 
-#: parser/parse_relation.c:1817
+#: parser/parse_relation.c:1820
 #, c-format
 msgid "WITH query \"%s\" does not have a RETURNING clause"
 msgstr "kwerenda WITH \"%s\" nie posiada klauzuli RETURNING"
 
-#: parser/parse_relation.c:2649 parser/parse_relation.c:2804
+#: parser/parse_relation.c:2652 parser/parse_relation.c:2807
 #, c-format
 msgid "column %d of relation \"%s\" does not exist"
 msgstr "kolumna %d relacji \"%s\" nie istnieje"
 
-#: parser/parse_relation.c:3023
+#: parser/parse_relation.c:3026
 #, c-format
 msgid "Perhaps you meant to reference the table alias \"%s\"."
 msgstr "Być może chodziło ci o wskazanie aliasu tabeli \"%s\"."
 
-#: parser/parse_relation.c:3031
+#: parser/parse_relation.c:3034
 #, c-format
 msgid "missing FROM-clause entry for table \"%s\""
 msgstr "brakująca klauzula FROM dla tabeli \"%s\""
 
-#: parser/parse_relation.c:3083
+#: parser/parse_relation.c:3086
 #, c-format
-#| msgid "Perhaps you meant to reference the column \"%s\".\"%s\"."
 msgid "Perhaps you meant to reference the column \"%s.%s\"."
 msgstr "Być może chodziło ci o wskazanie kolumny \"%s.%s\"."
 
-#: parser/parse_relation.c:3085
+#: parser/parse_relation.c:3088
 #, c-format
 msgid "There is a column named \"%s\" in table \"%s\", but it cannot be referenced from this part of the query."
 msgstr "Występuje kolumna o nazwie \"%s\" w tabeli \"%s\", ale nie może mieć odniesień z tej części zapytania."
 
-#: parser/parse_relation.c:3102
+#: parser/parse_relation.c:3105
 #, c-format
-#| msgid "Perhaps you meant to reference the column \"%s\".\"%s\" or the column \"%s\".\"%s\"."
 msgid "Perhaps you meant to reference the column \"%s.%s\" or the column \"%s.%s\"."
-msgstr ""
-"Być może chodziło ci o wskazanie aliasu kolumny \"%s.%s\" lub kolumny \"%s.%s\"."
+msgstr "Być może chodziło ci o wskazanie aliasu kolumny \"%s.%s\" lub kolumny \"%s.%s\"."
 
 #: parser/parse_target.c:421 parser/parse_target.c:713
 #, c-format
@@ -13298,37 +13241,37 @@ msgstr "pole podrzędne \"%s\" jest typu %s ale wyrażenie jest typu %s"
 msgid "SELECT * with no tables specified is not valid"
 msgstr "SELECT * bez określonych tabel nie jest poprawne"
 
-#: parser/parse_type.c:84
+#: parser/parse_type.c:83
 #, c-format
 msgid "improper %%TYPE reference (too few dotted names): %s"
 msgstr "niepoprawne wskazanie %%TYPE (za mało nazw oddzielonych kropkami): %s"
 
-#: parser/parse_type.c:106
+#: parser/parse_type.c:105
 #, c-format
 msgid "improper %%TYPE reference (too many dotted names): %s"
 msgstr "niepoprawne wskazanie %%TYPE (za wiele nazw oddzielonych kropkami): %s"
 
-#: parser/parse_type.c:141
+#: parser/parse_type.c:140
 #, c-format
 msgid "type reference %s converted to %s"
 msgstr "wskazanie typu %s przekształcone do %s"
 
-#: parser/parse_type.c:262 parser/parse_type.c:834 utils/cache/typcache.c:238
+#: parser/parse_type.c:261 parser/parse_type.c:805 utils/cache/typcache.c:238
 #, c-format
 msgid "type \"%s\" is only a shell"
 msgstr "typ \"%s\" jest jedynie powłoką"
 
-#: parser/parse_type.c:347
+#: parser/parse_type.c:346
 #, c-format
 msgid "type modifier is not allowed for type \"%s\""
 msgstr "modyfikator typu nie jest dopuszczalny dla typu \"%s\""
 
-#: parser/parse_type.c:389
+#: parser/parse_type.c:388
 #, c-format
 msgid "type modifiers must be simple constants or identifiers"
 msgstr "modyfikatory typów muszą być prostymi stałymi lub identyfikatorami"
 
-#: parser/parse_type.c:700 parser/parse_type.c:799
+#: parser/parse_type.c:671 parser/parse_type.c:770
 #, c-format
 msgid "invalid type name \"%s\""
 msgstr "nieprawidłowa nazwa typu \"%s\""
@@ -14297,14 +14240,13 @@ msgid "unsupported frontend protocol %u.%u: server supports %u.0 to %u.%u"
 msgstr "nieobsługiwany protokół frontendu %u.%u: serwer obsługuje %u.0 do %u.%u"
 
 #: postmaster/postmaster.c:2050 utils/misc/guc.c:5484 utils/misc/guc.c:5577
-#: utils/misc/guc.c:6869 utils/misc/guc.c:9555 utils/misc/guc.c:9589
+#: utils/misc/guc.c:6869 utils/misc/guc.c:9566 utils/misc/guc.c:9600
 #, c-format
 msgid "invalid value for parameter \"%s\": \"%s\""
 msgstr "nieprawidłowa wartość dla parametru \"%s\": \"%s\""
 
 #: postmaster/postmaster.c:2053
 #, c-format
-#| msgid "Valid values are: false, 0, true, 1, database."
 msgid "Valid values are: \"false\", 0, \"true\", 1, \"database\"."
 msgstr "Poprawne wartości to: \"false\", 0, \"true\", 1, \"database\"."
 
@@ -14510,122 +14452,122 @@ msgstr "nie można rozwidlić procesu połączenia: %m"
 msgid "could not fork new process for connection: "
 msgstr "nie można rozwidlić nowego procesu połączenia: "
 
-#: postmaster/postmaster.c:4075
+#: postmaster/postmaster.c:4083
 #, c-format
 msgid "connection received: host=%s port=%s"
 msgstr "odebrano połączenie: host=%s port=%s"
 
-#: postmaster/postmaster.c:4080
+#: postmaster/postmaster.c:4088
 #, c-format
 msgid "connection received: host=%s"
 msgstr "odebrano połączenie: host=%s"
 
-#: postmaster/postmaster.c:4369
+#: postmaster/postmaster.c:4371
 #, c-format
 msgid "could not execute server process \"%s\": %m"
 msgstr "nie można wykonać procesu serwera \"%s\": %m"
 
-#: postmaster/postmaster.c:4929
+#: postmaster/postmaster.c:4931
 #, c-format
 msgid "database system is ready to accept read only connections"
 msgstr "system bazy danych jest gotowy do przyjmowania połączeń tylko do odczytu"
 
-#: postmaster/postmaster.c:5212
+#: postmaster/postmaster.c:5214
 #, c-format
 msgid "could not fork startup process: %m"
 msgstr "nie można rozwidlić procesu uruchamiającego: %m"
 
-#: postmaster/postmaster.c:5216
+#: postmaster/postmaster.c:5218
 #, c-format
 msgid "could not fork background writer process: %m"
 msgstr "nie udało się rozwidlenie procesu zapisu w tle: %m"
 
-#: postmaster/postmaster.c:5220
+#: postmaster/postmaster.c:5222
 #, c-format
 msgid "could not fork checkpointer process: %m"
 msgstr "nie można rozwidlić procesu punktów kontrolnych %m"
 
-#: postmaster/postmaster.c:5224
+#: postmaster/postmaster.c:5226
 #, c-format
 msgid "could not fork WAL writer process: %m"
 msgstr "nie można rozwidlić procesu zapisu WAL: %m"
 
-#: postmaster/postmaster.c:5228
+#: postmaster/postmaster.c:5230
 #, c-format
 msgid "could not fork WAL receiver process: %m"
 msgstr "nie można rozwidlić procesu odbioru WAL: %m"
 
-#: postmaster/postmaster.c:5232
+#: postmaster/postmaster.c:5234
 #, c-format
 msgid "could not fork process: %m"
 msgstr "nie można rozwidlić procesu: %m"
 
-#: postmaster/postmaster.c:5394 postmaster/postmaster.c:5417
+#: postmaster/postmaster.c:5396 postmaster/postmaster.c:5419
 #, c-format
 msgid "database connection requirement not indicated during registration"
 msgstr "wymaganie połączenia do bazy danych nie wyspecyfikowane podczas rejestracji"
 
-#: postmaster/postmaster.c:5401 postmaster/postmaster.c:5424
+#: postmaster/postmaster.c:5403 postmaster/postmaster.c:5426
 #, c-format
 msgid "invalid processing mode in background worker"
 msgstr "niepoprawny tryb przetwarzania pracownika tła"
 
-#: postmaster/postmaster.c:5476
+#: postmaster/postmaster.c:5478
 #, c-format
 msgid "starting background worker process \"%s\""
 msgstr "uruchomienie pracownika w tle \"%s\""
 
-#: postmaster/postmaster.c:5487
+#: postmaster/postmaster.c:5489
 #, c-format
 msgid "could not fork worker process: %m"
 msgstr "nie można rozwidlić procesu tła: %m"
 
-#: postmaster/postmaster.c:5863
+#: postmaster/postmaster.c:5865
 #, c-format
 msgid "could not duplicate socket %d for use in backend: error code %d"
 msgstr "nie można powielić gniazda %d do użycia w backendzie: kod błędu %d"
 
-#: postmaster/postmaster.c:5895
+#: postmaster/postmaster.c:5897
 #, c-format
 msgid "could not create inherited socket: error code %d\n"
 msgstr "nie można utworzyć dziedziczonego gniazda: kod błędu %d\n"
 
-#: postmaster/postmaster.c:5924
+#: postmaster/postmaster.c:5926
 #, c-format
 msgid "could not open backend variables file \"%s\": %s\n"
 msgstr "nie można otworzyć pliku zmiennych backendu \"%s\": %s\n"
 
-#: postmaster/postmaster.c:5931
+#: postmaster/postmaster.c:5933
 #, c-format
 msgid "could not read from backend variables file \"%s\": %s\n"
 msgstr "nie można czytać z pliku zmiennych backendu \"%s\": %s\n"
 
-#: postmaster/postmaster.c:5940
+#: postmaster/postmaster.c:5942
 #, c-format
 msgid "could not remove file \"%s\": %s\n"
 msgstr "nie można usunąć pliku \"%s\": %s\n"
 
-#: postmaster/postmaster.c:5957
+#: postmaster/postmaster.c:5959
 #, c-format
 msgid "could not map view of backend variables: error code %lu\n"
 msgstr "nie można zmapować widoku zmiennych backendu: kod błędu %lu\n"
 
-#: postmaster/postmaster.c:5966
+#: postmaster/postmaster.c:5968
 #, c-format
 msgid "could not unmap view of backend variables: error code %lu\n"
 msgstr "nie można odmapować widoku zmiennych backendu: kod błędu %lu\n"
 
-#: postmaster/postmaster.c:5973
+#: postmaster/postmaster.c:5975
 #, c-format
 msgid "could not close handle to backend parameter variables: error code %lu\n"
 msgstr "nie można zamknąć uchwytu do zmiennych parametryzujących backendu: kod błędu %lu\n"
 
-#: postmaster/postmaster.c:6132
+#: postmaster/postmaster.c:6134
 #, c-format
 msgid "could not read exit code for process\n"
 msgstr "nie można odczytać kodu wyjścia procesu\n"
 
-#: postmaster/postmaster.c:6137
+#: postmaster/postmaster.c:6139
 #, c-format
 msgid "could not post child completion status\n"
 msgstr "nie można wysłać statusu zakończenia potomka\n"
@@ -14910,29 +14852,38 @@ msgstr "nie można czytać z segmentu dziennika %s, przesunięcie %u, długość
 msgid "must be superuser or replication role to use replication slots"
 msgstr "musisz być superużytkownikiem lub mieć rolę replikacji by używać gniazd replikacji"
 
-#: replication/logical/logicalfuncs.c:341
+#: replication/logical/logicalfuncs.c:301
+#, c-format
+#| msgid "field name must not be null"
+msgid "slot name must not be null"
+msgstr "nazwa gniazda nie może być pusta"
+
+#: replication/logical/logicalfuncs.c:317
+#, c-format
+#| msgid "typmod array must not contain nulls"
+msgid "options array must not be null"
+msgstr "tablica opcji nie może być pusta"
+
+#: replication/logical/logicalfuncs.c:348
 #, c-format
 msgid "array must be one-dimensional"
 msgstr "tablica musi być jednowymiarowa"
 
-#: replication/logical/logicalfuncs.c:347
+#: replication/logical/logicalfuncs.c:354
 #, c-format
 msgid "array must not contain nulls"
 msgstr "tablica nie może zawierać wartości pustych"
 
-#: replication/logical/logicalfuncs.c:363 utils/adt/json.c:2263
-#: utils/adt/jsonb.c:1362
+#: replication/logical/logicalfuncs.c:370 utils/adt/json.c:2277
+#: utils/adt/jsonb.c:1356
 #, c-format
 msgid "array must have even number of elements"
 msgstr "tablica musi mieć parzystą liczbę kolumn"
 
-#: replication/logical/logicalfuncs.c:406
+#: replication/logical/logicalfuncs.c:412
 #, c-format
-#| msgid "logical decoding output plugin \"%s\" produces binary output, but \"%s\" expects textual data"
 msgid "logical decoding output plugin \"%s\" produces binary output, but function \"%s\" expects textual data"
-msgstr ""
-"wtyczka wyjścia dekodowania logicznego \"%s\" tworzy wyjście binarne, zaś "
-"funkcja \"%s\" oczekuje danych tekstowych"
+msgstr "wtyczka wyjścia dekodowania logicznego \"%s\" tworzy wyjście binarne, zaś funkcja \"%s\" oczekuje danych tekstowych"
 
 #: replication/logical/origin.c:181
 #, c-format
@@ -14951,13 +14902,11 @@ msgstr "nie można manipulować źródłami replikacji podczas odzyskiwania"
 
 #: replication/logical/origin.c:316
 #, c-format
-#| msgid "could not find parent extension for %s\n"
 msgid "could not find free replication origin OID"
 msgstr "nie można odnaleźć wolnego OID źródła replikacji"
 
 #: replication/logical/origin.c:353
 #, c-format
-#| msgid "cannot drop replication origin with oid %d, in use by pid %d"
 msgid "could not drop replication origin with OID %d, in use by PID %d"
 msgstr "nie można skasować źródła replikacji o OID %d, używane przez PID %d"
 
@@ -14973,32 +14922,23 @@ msgstr "nie można czytać z pliku \"%s\": odczyt %d z %zu"
 
 #: replication/logical/origin.c:731
 #, c-format
-#| msgid "no free replication state could be found, increase max_replication_slots"
 msgid "could not find free replication state, increase max_replication_slots"
-msgstr ""
-"nie znaleziono wolnego gniazda replikacji, zwiększ max_replication_slots"
+msgstr "nie znaleziono wolnego gniazda replikacji, zwiększ max_replication_slots"
 
 #: replication/logical/origin.c:749
 #, c-format
-#| msgid "replication_slot_checkpoint has wrong checksum %u, expected %u"
 msgid "replication slot checkpoint has wrong checksum %u, expected %u"
-msgstr ""
-"punkt sprawdzenia gniazda replikacji ma niepoprawną sumę kontrolną %u, "
-"oczekiwano %u"
+msgstr "punkt sprawdzenia gniazda replikacji ma niepoprawną sumę kontrolną %u, oczekiwano %u"
 
 #: replication/logical/origin.c:873
 #, c-format
-#| msgid "replication origin with oid %d is already active for pid %d"
 msgid "replication origin with OID %d is already active for PID %d"
 msgstr "źródło replikacji z OID %d jest już aktywne dla PID %d"
 
 #: replication/logical/origin.c:884 replication/logical/origin.c:1064
 #, c-format
-#| msgid "no free replication state slot could be found for replication origin with oid %u"
 msgid "could not find free replication state slot for replication origin with OID %u"
-msgstr ""
-"nie udało się znaleźć gniazda stanu replikacji dla źródła replikacji o OID %"
-"u"
+msgstr "nie udało się znaleźć gniazda stanu replikacji dla źródła replikacji o OID %u"
 
 #: replication/logical/origin.c:886 replication/logical/origin.c:1066
 #: replication/slot.c:1241
@@ -15013,7 +14953,6 @@ msgstr "nie można ustawić źródła replikacji gdy jakieś jest już ustawione
 
 #: replication/logical/origin.c:1052
 #, c-format
-#| msgid "replication identifier %d is already active for pid %d"
 msgid "replication identifier %d is already active for PID %d"
 msgstr "identyfikator replikacji %d jest już aktywny dla PID %d"
 
@@ -15031,18 +14970,14 @@ msgstr "nie można pisać do pliku danych dla XID %u: %m"
 #: replication/logical/reorderbuffer.c:2266
 #: replication/logical/reorderbuffer.c:2286
 #, c-format
-#| msgid "could not read from control file: %m"
 msgid "could not read from reorderbuffer spill file: %m"
 msgstr "nie można czytać z pliku wycieku zmiany kolejności buforów: %m"
 
 #: replication/logical/reorderbuffer.c:2270
 #: replication/logical/reorderbuffer.c:2290
 #, c-format
-#| msgid "could not read block %u in file \"%s\": read only %d of %d bytes"
 msgid "could not read from reorderbuffer spill file: read %d instead of %u bytes"
-msgstr ""
-"nie można odczytać pliku wycieku zmiany kolejności buforów: odczytano %d "
-"zamiast %u bajtów"
+msgstr "nie można odczytać pliku wycieku zmiany kolejności buforów: odczytano %d zamiast %u bajtów"
 
 #: replication/logical/reorderbuffer.c:2894
 #, c-format
@@ -15094,26 +15029,18 @@ msgstr "nie można czytać z pliku \"%s\", odczyt %d z %d: %m"
 
 #: replication/logical/snapbuild.c:1680
 #, c-format
-#| msgid "archive file \"%s\" has wrong size: %lu instead of %lu"
 msgid "snapbuild state file \"%s\" has wrong magic number: %u instead of %u"
-msgstr ""
-"plik stanu tworzenia migawek \"%s\" ma niepoprawny magiczny numer: %u zamiast "
-"%u"
+msgstr "plik stanu tworzenia migawek \"%s\" ma niepoprawny magiczny numer: %u zamiast %u"
 
 #: replication/logical/snapbuild.c:1685
 #, c-format
-#| msgid "archive file \"%s\" has wrong size: %lu instead of %lu"
 msgid "snapbuild state file \"%s\" has unsupported version: %u instead of %u"
-msgstr ""
-"plik stanu tworzenia migawek \"%s\" ma nieobsługiwaną wersję: %u zamiast %u"
+msgstr "plik stanu tworzenia migawek \"%s\" ma nieobsługiwaną wersję: %u zamiast %u"
 
 #: replication/logical/snapbuild.c:1741
 #, c-format
-#| msgid "snapbuild state file %s: checksum mismatch, is %u, should be %u"
 msgid "checksum mismatch for snapbuild state file \"%s\": is %u, should be %u"
-msgstr ""
-"niezgodność sumy kontrolnej pliku stanu tworzenia migawek \"%s\": jest %u, "
-"powinna być %u"
+msgstr "niezgodność sumy kontrolnej pliku stanu tworzenia migawek \"%s\": jest %u, powinna być %u"
 
 #: replication/logical/snapbuild.c:1802
 #, c-format
@@ -15167,7 +15094,6 @@ msgstr "gniazdo replikacji \"%s\" nie istnieje"
 
 #: replication/slot.c:352
 #, c-format
-#| msgid "replication slot \"%s\" is already active for pid %d"
 msgid "replication slot \"%s\" is already active for PID %d"
 msgstr "gniazdo replikacji \"%s\" jest już aktywne dla PID %d"
 
@@ -15193,10 +15119,8 @@ msgstr "nie można czytać z pliku \"%s\": odczyt %d z %u: %m"
 
 #: replication/slot.c:1143
 #, c-format
-#| msgid "replication slot file \"%s\" has wrong magic %u instead of %u"
 msgid "replication slot file \"%s\" has wrong magic number: %u instead of %u"
-msgstr ""
-"plik gniazda replikacji \"%s\" ma niepoprawny magiczny numer: %u zamiast %u"
+msgstr "plik gniazda replikacji \"%s\" ma niepoprawny magiczny numer: %u zamiast %u"
 
 #: replication/slot.c:1150
 #, c-format
@@ -15210,11 +15134,8 @@ msgstr "plik gniazda replikacji \"%s\" ma uszkodzoną długość %u"
 
 #: replication/slot.c:1187
 #, c-format
-#| msgid "replication slot file %s: checksum mismatch, is %u, should be %u"
 msgid "checksum mismatch for replication slot file \"%s\": is %u, should be %u"
-msgstr ""
-"niezgodność sumy kontrolnej pliku gniazda replikacji \"%s\": jest %u, powinna "
-"być %u"
+msgstr "niezgodność sumy kontrolnej pliku gniazda replikacji \"%s\": jest %u, powinna być %u"
 
 #: replication/slot.c:1240
 #, c-format
@@ -15582,7 +15503,7 @@ msgstr "nie można mieć list RETURNING w wielu regułach"
 msgid "multiple assignments to same column \"%s\""
 msgstr "wiele przypisań do tej samej kolumny \"%s\""
 
-#: rewrite/rewriteHandler.c:1714 rewrite/rewriteHandler.c:3317
+#: rewrite/rewriteHandler.c:1714 rewrite/rewriteHandler.c:3324
 #, c-format
 msgid "infinite recursion detected in rules for relation \"%s\""
 msgstr "wykryto nieskończoną rekurencję w regułach dla relacji \"%s\""
@@ -15667,62 +15588,62 @@ msgstr "nie można wstawiać do kolumny \"%s\" widoku \"%s\""
 msgid "cannot update column \"%s\" of view \"%s\""
 msgstr "nie można modyfikować kolumny \"%s\" widoku \"%s\""
 
-#: rewrite/rewriteHandler.c:3116
+#: rewrite/rewriteHandler.c:3123
 #, c-format
 msgid "DO INSTEAD NOTHING rules are not supported for data-modifying statements in WITH"
 msgstr "reguły DO INSTEAD NOTHING nie są obsługiwane dla wyrażeń modyfikujących dane w WITH"
 
-#: rewrite/rewriteHandler.c:3130
+#: rewrite/rewriteHandler.c:3137
 #, c-format
 msgid "conditional DO INSTEAD rules are not supported for data-modifying statements in WITH"
 msgstr "reguły warunkowe DO INSTEAD nie są obsługiwane dla wyrażeń modyfikujących dane w WITH"
 
-#: rewrite/rewriteHandler.c:3134
+#: rewrite/rewriteHandler.c:3141
 #, c-format
 msgid "DO ALSO rules are not supported for data-modifying statements in WITH"
 msgstr "reguły DO ALSO nie są obsługiwane dla wyrażeń modyfikujących dane w WITH"
 
-#: rewrite/rewriteHandler.c:3139
+#: rewrite/rewriteHandler.c:3146
 #, c-format
 msgid "multi-statement DO INSTEAD rules are not supported for data-modifying statements in WITH"
 msgstr "reguły wielowyrażeniowe DO INSTEAD nie są obsługiwane dla wyrażeń modyfikujących dane w WITH"
 
-#: rewrite/rewriteHandler.c:3354
+#: rewrite/rewriteHandler.c:3361
 #, c-format
 msgid "cannot perform INSERT RETURNING on relation \"%s\""
 msgstr "nie można wykonać INSERT RETURNING na relacji \"%s\""
 
-#: rewrite/rewriteHandler.c:3356
+#: rewrite/rewriteHandler.c:3363
 #, c-format
 msgid "You need an unconditional ON INSERT DO INSTEAD rule with a RETURNING clause."
 msgstr "Potrzebujesz bezwarunkowej reguły ON INSERT DO INSTEAD z klauzulą RETURNING."
 
-#: rewrite/rewriteHandler.c:3361
+#: rewrite/rewriteHandler.c:3368
 #, c-format
 msgid "cannot perform UPDATE RETURNING on relation \"%s\""
 msgstr "nie można wykonać UPDATE RETURNING na relacji \"%s\""
 
-#: rewrite/rewriteHandler.c:3363
+#: rewrite/rewriteHandler.c:3370
 #, c-format
 msgid "You need an unconditional ON UPDATE DO INSTEAD rule with a RETURNING clause."
 msgstr "Potrzebujesz bezwarunkowej reguły ON UPDATE DO INSTEAD z klauzulą RETURNING."
 
-#: rewrite/rewriteHandler.c:3368
+#: rewrite/rewriteHandler.c:3375
 #, c-format
 msgid "cannot perform DELETE RETURNING on relation \"%s\""
 msgstr "nie można wykonać DELETE RETURNING na relacji \"%s\""
 
-#: rewrite/rewriteHandler.c:3370
+#: rewrite/rewriteHandler.c:3377
 #, c-format
 msgid "You need an unconditional ON DELETE DO INSTEAD rule with a RETURNING clause."
 msgstr "Potrzebujesz bezwarunkowej reguły ON DELETE DO INSTEAD z klauzulą RETURNING."
 
-#: rewrite/rewriteHandler.c:3388
+#: rewrite/rewriteHandler.c:3395
 #, c-format
 msgid "INSERT with ON CONFLICT clause cannot be used with table that has INSERT or UPDATE rules"
 msgstr "INSERT z klauzulą ON CONFLICT nie może być użyte na tabeli posiadającej reguły INSERT lub UPDATE"
 
-#: rewrite/rewriteHandler.c:3445
+#: rewrite/rewriteHandler.c:3452
 #, c-format
 msgid "WITH cannot be used in a query that is rewritten by rules into multiple queries"
 msgstr "WITH nie może być użyte w zapytaniu które zostało rozpisane przez reguły na wiele zapytań"
@@ -16978,22 +16899,22 @@ msgstr "nie można otworzyć pliku słownika \"%s\": %m"
 msgid "invalid regular expression: %s"
 msgstr "nieprawidłowe wyrażenie regularne: %s"
 
-#: tsearch/spell.c:596
+#: tsearch/spell.c:732
 #, c-format
 msgid "multibyte flag character is not allowed"
 msgstr "wielobajtowy znak flagi nie jest dozwolony"
 
-#: tsearch/spell.c:632 tsearch/spell.c:690 tsearch/spell.c:787
+#: tsearch/spell.c:766 tsearch/spell.c:822 tsearch/spell.c:926
 #, c-format
 msgid "could not open affix file \"%s\": %m"
 msgstr "nie można otworzyć pliku affix \"%s\": %m"
 
-#: tsearch/spell.c:678
+#: tsearch/spell.c:812
 #, c-format
 msgid "Ispell dictionary supports only default flag value"
 msgstr "Słownik Ispell obsługuje tylko domyślną wartość flagi"
 
-#: tsearch/spell.c:901
+#: tsearch/spell.c:1041
 #, c-format
 msgid "affix file contains both old-style and new-style commands"
 msgstr "plik affix zawiera polecenia zarówno w starym i nowym stylu"
@@ -17186,9 +17107,9 @@ msgid "array size exceeds the maximum allowed (%d)"
 msgstr "rozmiar tablicy przekracza dozwolone maksimum (%d)"
 
 #: utils/adt/array_userfuncs.c:67 utils/adt/array_userfuncs.c:529
-#: utils/adt/array_userfuncs.c:609 utils/adt/json.c:1745 utils/adt/json.c:1840
-#: utils/adt/json.c:1878 utils/adt/jsonb.c:1126 utils/adt/jsonb.c:1155
-#: utils/adt/jsonb.c:1596 utils/adt/jsonb.c:1760 utils/adt/jsonb.c:1770
+#: utils/adt/array_userfuncs.c:609 utils/adt/json.c:1759 utils/adt/json.c:1854
+#: utils/adt/json.c:1892 utils/adt/jsonb.c:1126 utils/adt/jsonb.c:1155
+#: utils/adt/jsonb.c:1590 utils/adt/jsonb.c:1754 utils/adt/jsonb.c:1764
 #, c-format
 msgid "could not determine input data type"
 msgstr "nie można określić typu danych wejściowych"
@@ -17257,7 +17178,6 @@ msgstr "szukanie elementów z wielowymiarowych tablic nie jest obsługiwane"
 
 #: utils/adt/array_userfuncs.c:749
 #, c-format
-#| msgid "initial position should not be NULL"
 msgid "initial position must not be null"
 msgstr "pozycja startowa nie może być pusta"
 
@@ -17382,8 +17302,8 @@ msgstr "wycinki tablic o stałej długości nie są realizowane"
 #: utils/adt/arrayfuncs.c:2297 utils/adt/arrayfuncs.c:2533
 #: utils/adt/arrayfuncs.c:2830 utils/adt/arrayfuncs.c:5718
 #: utils/adt/arrayfuncs.c:5750 utils/adt/arrayfuncs.c:5767
-#: utils/adt/json.c:2276 utils/adt/json.c:2351 utils/adt/jsonb.c:1375
-#: utils/adt/jsonb.c:1461 utils/adt/jsonfuncs.c:3528
+#: utils/adt/json.c:2290 utils/adt/json.c:2365 utils/adt/jsonb.c:1369
+#: utils/adt/jsonb.c:1455 utils/adt/jsonfuncs.c:3528
 #: utils/adt/jsonfuncs.c:3573
 #, c-format
 msgid "wrong number of array subscripts"
@@ -17593,7 +17513,7 @@ msgstr "data poza zakresem dla znacznika czasu"
 #: utils/adt/date.c:970 utils/adt/date.c:1016 utils/adt/date.c:1616
 #: utils/adt/date.c:1652 utils/adt/date.c:2524 utils/adt/formatting.c:3399
 #: utils/adt/formatting.c:3431 utils/adt/formatting.c:3499
-#: utils/adt/json.c:1520 utils/adt/json.c:1542 utils/adt/jsonb.c:823
+#: utils/adt/json.c:1534 utils/adt/json.c:1556 utils/adt/jsonb.c:823
 #: utils/adt/jsonb.c:847 utils/adt/nabstime.c:455 utils/adt/nabstime.c:498
 #: utils/adt/nabstime.c:528 utils/adt/nabstime.c:571 utils/adt/timestamp.c:224
 #: utils/adt/timestamp.c:267 utils/adt/timestamp.c:716
@@ -17734,7 +17654,6 @@ msgstr "nieoczekiwane \"=\" podczas dekodowania sekwencji base64"
 
 #: utils/adt/encode.c:307
 #, c-format
-#| msgid "invalid symbol '%c' while decoding base64 sequence"
 msgid "invalid symbol \"%c\" while decoding base64 sequence"
 msgstr "nieprawidłowy symbol \"%c\" podczas dekodowania sekwencji base64"
 
@@ -17745,11 +17664,8 @@ msgstr "niepoprawny koniec sekwencji base64"
 
 #: utils/adt/encode.c:328
 #, c-format
-#| msgid "Input data is missing padding, truncated, or otherwise corrupted."
 msgid "Input data is missing padding, is truncated, or is otherwise corrupted."
-msgstr ""
-"Danym wejściowym brakuje dopełnienia, są obcięte lub w inny sposób "
-"uszkodzone."
+msgstr "Danym wejściowym brakuje dopełnienia, są obcięte lub w inny sposób uszkodzone."
 
 #: utils/adt/encode.c:442 utils/adt/encode.c:507 utils/adt/varlena.c:287
 #: utils/adt/varlena.c:328
@@ -18301,170 +18217,170 @@ msgstr "bigint poza zakresem"
 msgid "OID out of range"
 msgstr "OID poza zakresem"
 
-#: utils/adt/json.c:777 utils/adt/json.c:817 utils/adt/json.c:832
-#: utils/adt/json.c:843 utils/adt/json.c:853 utils/adt/json.c:904
-#: utils/adt/json.c:935 utils/adt/json.c:953 utils/adt/json.c:965
-#: utils/adt/json.c:977 utils/adt/json.c:1116 utils/adt/json.c:1130
-#: utils/adt/json.c:1141 utils/adt/json.c:1149 utils/adt/json.c:1157
-#: utils/adt/json.c:1165 utils/adt/json.c:1173 utils/adt/json.c:1181
-#: utils/adt/json.c:1189 utils/adt/json.c:1197 utils/adt/json.c:1227
+#: utils/adt/json.c:785 utils/adt/json.c:825 utils/adt/json.c:840
+#: utils/adt/json.c:851 utils/adt/json.c:861 utils/adt/json.c:912
+#: utils/adt/json.c:943 utils/adt/json.c:961 utils/adt/json.c:973
+#: utils/adt/json.c:985 utils/adt/json.c:1130 utils/adt/json.c:1144
+#: utils/adt/json.c:1155 utils/adt/json.c:1163 utils/adt/json.c:1171
+#: utils/adt/json.c:1179 utils/adt/json.c:1187 utils/adt/json.c:1195
+#: utils/adt/json.c:1203 utils/adt/json.c:1211 utils/adt/json.c:1241
 #, c-format
 msgid "invalid input syntax for type json"
 msgstr "nieprawidłowa składnia wejścia dla typu json"
 
-#: utils/adt/json.c:778
+#: utils/adt/json.c:786
 #, c-format
 msgid "Character with value 0x%02x must be escaped."
 msgstr "Znak o wartości 0x%02x należy poprzedzić znakiem ucieczki."
 
-#: utils/adt/json.c:818
+#: utils/adt/json.c:826
 #, c-format
 msgid "\"\\u\" must be followed by four hexadecimal digits."
 msgstr "\"\\u\" musi wystąpić przed czterema cyframi szesnastkowymi."
 
-#: utils/adt/json.c:833
+#: utils/adt/json.c:841
 #, c-format
 msgid "Unicode high surrogate must not follow a high surrogate."
 msgstr "Starszy surogat Unikodu nie może następować po starszym surogacie."
 
-#: utils/adt/json.c:844 utils/adt/json.c:854 utils/adt/json.c:905
-#: utils/adt/json.c:966 utils/adt/json.c:978
+#: utils/adt/json.c:852 utils/adt/json.c:862 utils/adt/json.c:913
+#: utils/adt/json.c:974 utils/adt/json.c:986
 #, c-format
 msgid "Unicode low surrogate must follow a high surrogate."
 msgstr "Młodszy surogat Unikodu musi następować po starszym surogacie."
 
-#: utils/adt/json.c:869 utils/adt/json.c:892
+#: utils/adt/json.c:877 utils/adt/json.c:900
 #, c-format
 msgid "unsupported Unicode escape sequence"
 msgstr "błędna wartość ucieczki Unikodowej"
 
-#: utils/adt/json.c:870
+#: utils/adt/json.c:878
 #, c-format
 msgid "\\u0000 cannot be converted to text."
 msgstr "\\u0000 nie może być zmieniona na tekst."
 
-#: utils/adt/json.c:893
+#: utils/adt/json.c:901
 #, c-format
 msgid "Unicode escape values cannot be used for code point values above 007F when the server encoding is not UTF8."
 msgstr "Wartości ucieczki Unikodowej nie mogą być używane dla wartości punktu kodowego powyżej 007F, gdy kodowanie serwera to nie UTF8."
 
-#: utils/adt/json.c:936 utils/adt/json.c:954
+#: utils/adt/json.c:944 utils/adt/json.c:962
 #, c-format
 msgid "Escape sequence \"\\%s\" is invalid."
 msgstr "Sekwencja ucieczki \"\\%s\" nie jest poprawna."
 
-#: utils/adt/json.c:1117
+#: utils/adt/json.c:1131
 #, c-format
 msgid "The input string ended unexpectedly."
 msgstr "Niespodziewanie zakończony ciąg znaków na wejściu."
 
-#: utils/adt/json.c:1131
+#: utils/adt/json.c:1145
 #, c-format
 msgid "Expected end of input, but found \"%s\"."
 msgstr "Oczekiwano zakończenia na wejściu, znaleziono \"%s\"."
 
-#: utils/adt/json.c:1142
+#: utils/adt/json.c:1156
 #, c-format
 msgid "Expected JSON value, but found \"%s\"."
 msgstr "Oczekiwano wartości JSON, znaleziono \"%s\"."
 
-#: utils/adt/json.c:1150 utils/adt/json.c:1198
+#: utils/adt/json.c:1164 utils/adt/json.c:1212
 #, c-format
 msgid "Expected string, but found \"%s\"."
 msgstr "Oczekiwano ciągu znaków, znaleziono \"%s\"."
 
-#: utils/adt/json.c:1158
+#: utils/adt/json.c:1172
 #, c-format
 msgid "Expected array element or \"]\", but found \"%s\"."
 msgstr "Oczekiwano elementu tablicy lub \"]\", znaleziono \"%s\"."
 
-#: utils/adt/json.c:1166
+#: utils/adt/json.c:1180
 #, c-format
 msgid "Expected \",\" or \"]\", but found \"%s\"."
 msgstr "Oczekiwano \",\" lub \"]\", znaleziono \"%s\"."
 
-#: utils/adt/json.c:1174
+#: utils/adt/json.c:1188
 #, c-format
 msgid "Expected string or \"}\", but found \"%s\"."
 msgstr "Oczekiwano ciągu znaków lub \"}\", znaleziono \"%s\"."
 
-#: utils/adt/json.c:1182
+#: utils/adt/json.c:1196
 #, c-format
 msgid "Expected \":\", but found \"%s\"."
 msgstr "Oczekiwano \":\", znaleziono \"%s\"."
 
-#: utils/adt/json.c:1190
+#: utils/adt/json.c:1204
 #, c-format
 msgid "Expected \",\" or \"}\", but found \"%s\"."
 msgstr "Oczekiwano \",\" lub \"}\", znaleziono \"%s\"."
 
-#: utils/adt/json.c:1228
+#: utils/adt/json.c:1242
 #, c-format
 msgid "Token \"%s\" is invalid."
 msgstr "Token \"%s\" jest niepoprawny."
 
-#: utils/adt/json.c:1300
+#: utils/adt/json.c:1314
 #, c-format
 msgid "JSON data, line %d: %s%s%s"
 msgstr "Dane JSON, linia %d: %s%s%s"
 
-#: utils/adt/json.c:1455 utils/adt/jsonb.c:724
+#: utils/adt/json.c:1469 utils/adt/jsonb.c:724
 #, c-format
 msgid "key value must be scalar, not array, composite, or json"
 msgstr "wartość klucza musi być skalarem, nie tablicą, typem złożonym ani jsonem"
 
-#: utils/adt/json.c:1992
+#: utils/adt/json.c:2006
 #, c-format
 msgid "could not determine data type for argument 1"
 msgstr "nie można określić typu danych argumentu 1"
 
-#: utils/adt/json.c:2002
+#: utils/adt/json.c:2016
 #, c-format
 msgid "could not determine data type for argument 2"
 msgstr "nie można określić typu danych argumentu 2"
 
-#: utils/adt/json.c:2026 utils/adt/jsonb.c:1786
+#: utils/adt/json.c:2040 utils/adt/jsonb.c:1780
 #, c-format
 msgid "field name must not be null"
 msgstr "nazwa pola nie może być pusta"
 
-#: utils/adt/json.c:2103
+#: utils/adt/json.c:2117
 #, c-format
 msgid "argument list must have even number of elements"
 msgstr "lista argumentów musi mieć parzystą liczbę elementów"
 
-#: utils/adt/json.c:2104
+#: utils/adt/json.c:2118
 #, c-format
 msgid "The arguments of json_build_object() must consist of alternating keys and values."
 msgstr "Argumenty json_build_object() muszą naprzemiennie wskazywać klucze i wartości."
 
-#: utils/adt/json.c:2128 utils/adt/json.c:2149 utils/adt/json.c:2208
+#: utils/adt/json.c:2142 utils/adt/json.c:2163 utils/adt/json.c:2222
 #, c-format
 msgid "could not determine data type for argument %d"
 msgstr "nie można określić typu danych argumentu %d"
 
-#: utils/adt/json.c:2134
+#: utils/adt/json.c:2148
 #, c-format
 msgid "argument %d cannot be null"
 msgstr "argument %d nie może być pusty"
 
-#: utils/adt/json.c:2135
+#: utils/adt/json.c:2149
 #, c-format
 msgid "Object keys should be text."
 msgstr "Klucze obiektu powinny być tekstem."
 
-#: utils/adt/json.c:2270 utils/adt/jsonb.c:1369
+#: utils/adt/json.c:2284 utils/adt/jsonb.c:1363
 #, c-format
 msgid "array must have two columns"
 msgstr "tablica musi posiadać przynajmniej dwie kolumny"
 
-#: utils/adt/json.c:2294 utils/adt/json.c:2378 utils/adt/jsonb.c:1393
-#: utils/adt/jsonb.c:1488
+#: utils/adt/json.c:2308 utils/adt/json.c:2392 utils/adt/jsonb.c:1387
+#: utils/adt/jsonb.c:1482
 #, c-format
 msgid "null value not allowed for object key"
 msgstr "pusta wartość jest niedopuszczalna dla klucza obiektu"
 
-#: utils/adt/json.c:2367 utils/adt/jsonb.c:1477
+#: utils/adt/json.c:2381 utils/adt/jsonb.c:1471
 #, c-format
 msgid "mismatched array dimensions"
 msgstr "niepasujące wymiary tablicy"
@@ -18481,23 +18397,20 @@ msgstr "Ze względu na ograniczenia implementacji, ciągi znaków jsonb nie mog�
 
 #: utils/adt/jsonb.c:1182
 #, c-format
-#| msgid "invalid number or arguments: object must be matched key value pairs"
 msgid "invalid number of arguments: object must be matched key value pairs"
 msgstr "niepoprawna liczba argumentów: obiekt musi stanowić pary klucz wartość"
 
-#: utils/adt/jsonb.c:1196
+#: utils/adt/jsonb.c:1195
 #, c-format
-#| msgid "argument %d cannot be null"
 msgid "argument %d: key must not be null"
 msgstr "argument %d: klucz nie może być pusty"
 
-#: utils/adt/jsonb.c:1218 utils/adt/jsonb.c:1241 utils/adt/jsonb.c:1303
+#: utils/adt/jsonb.c:1214 utils/adt/jsonb.c:1237 utils/adt/jsonb.c:1297
 #, c-format
-#| msgid "arg %d: could not determine data type"
 msgid "argument %d: could not determine data type"
 msgstr "argument %d: nie można określić typu danych"
 
-#: utils/adt/jsonb.c:1839
+#: utils/adt/jsonb.c:1833
 #, c-format
 msgid "object keys must be strings"
 msgstr "klucze obiektu powinny być tekstem"
@@ -18609,7 +18522,6 @@ msgstr "nie można usuwać z typu prostego"
 
 #: utils/adt/jsonfuncs.c:3467
 #, c-format
-#| msgid "cannot delete from object using integer subscript"
 msgid "cannot delete from object using integer index"
 msgstr "nie można usuwać z obiektu używając indeksu całkowitego"
 
@@ -18628,10 +18540,11 @@ msgstr "nie można usunąć ścieżki z typu prostego"
 msgid "invalid concatenation of jsonb objects"
 msgstr "nieprawidłowe połączenie obiektów jsonb"
 
-#: utils/adt/levenshtein.c:127
+#: utils/adt/levenshtein.c:133
 #, c-format
-msgid "argument exceeds the maximum length of %d bytes"
-msgstr "argument przekracza maksymalną długość %d bajtów"
+#| msgid "argument exceeds the maximum length of %d bytes"
+msgid "levenshtein argument exceeds maximum length of %d characters"
+msgstr "argument levenshteina przekracza maksymalną długość %d znaków"
 
 #: utils/adt/like.c:212 utils/adt/selfuncs.c:5275
 #, c-format
@@ -18680,7 +18593,6 @@ msgstr "musisz być superużytkownikiem aby anulować zapytania superużytkownik
 
 #: utils/adt/misc.c:171
 #, c-format
-#| msgid "must be a member of the role whose query is being cancelled"
 msgid "must be a member of the role whose query is being canceled"
 msgstr "musisz być członkiem roli, której zapytanie jest właśnie anulowane"
 
@@ -19257,8 +19169,8 @@ msgstr "więcej niż jedna funkcja o nazwie \"%s\""
 msgid "more than one operator named %s"
 msgstr "więcej niż jeden operator o nazwie %s"
 
-#: utils/adt/regproc.c:779 utils/adt/regproc.c:820 utils/adt/regproc.c:1962
-#: utils/adt/ruleutils.c:8154 utils/adt/ruleutils.c:8279
+#: utils/adt/regproc.c:779 utils/adt/regproc.c:820 utils/adt/regproc.c:2006
+#: utils/adt/ruleutils.c:8167 utils/adt/ruleutils.c:8292
 #, c-format
 msgid "too many arguments"
 msgstr "zbyt wiele argumentów"
@@ -19268,28 +19180,29 @@ msgstr "zbyt wiele argumentów"
 msgid "Provide two argument types for operator."
 msgstr "Podaj dwa typy argumentów dla operatora."
 
-#: utils/adt/regproc.c:1797 utils/adt/regproc.c:1802 utils/adt/varlena.c:2859
-#: utils/adt/varlena.c:2864
+#: utils/adt/regproc.c:1594 utils/adt/regproc.c:1618 utils/adt/regproc.c:1715
+#: utils/adt/regproc.c:1739 utils/adt/regproc.c:1841 utils/adt/regproc.c:1846
+#: utils/adt/varlena.c:2859 utils/adt/varlena.c:2864
 #, c-format
 msgid "invalid name syntax"
 msgstr "niepoprawna składnia nazwy"
 
-#: utils/adt/regproc.c:1860
+#: utils/adt/regproc.c:1904
 #, c-format
 msgid "expected a left parenthesis"
 msgstr "oczekiwano lewego nawiasu"
 
-#: utils/adt/regproc.c:1876
+#: utils/adt/regproc.c:1920
 #, c-format
 msgid "expected a right parenthesis"
 msgstr "oczekiwano prawego nawiasu"
 
-#: utils/adt/regproc.c:1895
+#: utils/adt/regproc.c:1939
 #, c-format
 msgid "expected a type name"
 msgstr "oczekiwano nazwy typu"
 
-#: utils/adt/regproc.c:1927
+#: utils/adt/regproc.c:1971
 #, c-format
 msgid "improper type name"
 msgstr "niepoprawna nazwa typu"
@@ -20231,91 +20144,91 @@ msgstr "KATASTROFALNY"
 msgid "PANIC"
 msgstr "PANIKA"
 
-#: utils/fmgr/dfmgr.c:121
+#: utils/fmgr/dfmgr.c:117
 #, c-format
 msgid "could not find function \"%s\" in file \"%s\""
 msgstr "nie można odnaleźć funkcji \"%s\" w pliku \"%s\""
 
-#: utils/fmgr/dfmgr.c:200 utils/fmgr/dfmgr.c:409 utils/fmgr/dfmgr.c:457
+#: utils/fmgr/dfmgr.c:196 utils/fmgr/dfmgr.c:405 utils/fmgr/dfmgr.c:453
 #, c-format
 msgid "could not access file \"%s\": %m"
 msgstr "nie można uzyskać dostępu do pliku \"%s\": %m"
 
-#: utils/fmgr/dfmgr.c:238
+#: utils/fmgr/dfmgr.c:234
 #, c-format
 msgid "could not load library \"%s\": %s"
 msgstr "nie można załadować biblioteki \"%s\": %s"
 
-#: utils/fmgr/dfmgr.c:270
+#: utils/fmgr/dfmgr.c:266
 #, c-format
 msgid "incompatible library \"%s\": missing magic block"
 msgstr "niezgodna biblioteka \"%s\": brak magicznego bloku"
 
-#: utils/fmgr/dfmgr.c:272
+#: utils/fmgr/dfmgr.c:268
 #, c-format
 msgid "Extension libraries are required to use the PG_MODULE_MAGIC macro."
 msgstr "Biblioteki rozszerzenia są wymagane by użyć makra PG_MODULE_MAGIC."
 
-#: utils/fmgr/dfmgr.c:308
+#: utils/fmgr/dfmgr.c:304
 #, c-format
 msgid "incompatible library \"%s\": version mismatch"
 msgstr "niezgodna biblioteka \"%s\": niezgodność wersji"
 
-#: utils/fmgr/dfmgr.c:310
+#: utils/fmgr/dfmgr.c:306
 #, c-format
 msgid "Server is version %d.%d, library is version %d.%d."
 msgstr "Serwer jest w wersji %d.%d, biblioteka jest w wersji %d.%d."
 
-#: utils/fmgr/dfmgr.c:329
+#: utils/fmgr/dfmgr.c:325
 #, c-format
 msgid "Server has FUNC_MAX_ARGS = %d, library has %d."
 msgstr "Serwer posiada FUNC_MAX_ARGS = %d, biblioteka ma %d."
 
-#: utils/fmgr/dfmgr.c:338
+#: utils/fmgr/dfmgr.c:334
 #, c-format
 msgid "Server has INDEX_MAX_KEYS = %d, library has %d."
 msgstr "Serwer posiada INDEX_MAX_KEYS = %d, biblioteka ma %d."
 
-#: utils/fmgr/dfmgr.c:347
+#: utils/fmgr/dfmgr.c:343
 #, c-format
 msgid "Server has NAMEDATALEN = %d, library has %d."
 msgstr "Serwer posiada NAMEDATALEN = %d, biblioteka ma %d."
 
-#: utils/fmgr/dfmgr.c:356
+#: utils/fmgr/dfmgr.c:352
 #, c-format
 msgid "Server has FLOAT4PASSBYVAL = %s, library has %s."
 msgstr "Serwer posiada FLOAT4PASSBYVAL = %s, biblioteka ma %s."
 
-#: utils/fmgr/dfmgr.c:365
+#: utils/fmgr/dfmgr.c:361
 #, c-format
 msgid "Server has FLOAT8PASSBYVAL = %s, library has %s."
 msgstr "Serwer posiada FLOAT8PASSBYVAL = %s, biblioteka ma %s."
 
-#: utils/fmgr/dfmgr.c:372
+#: utils/fmgr/dfmgr.c:368
 msgid "Magic block has unexpected length or padding difference."
 msgstr "Magiczny blok ma nieoczekiwaną długość lub różnicę dopełnienia."
 
-#: utils/fmgr/dfmgr.c:375
+#: utils/fmgr/dfmgr.c:371
 #, c-format
 msgid "incompatible library \"%s\": magic block mismatch"
 msgstr "niezgodna biblioteka \"%s\": niezgodność magicznego bloku"
 
-#: utils/fmgr/dfmgr.c:539
+#: utils/fmgr/dfmgr.c:535
 #, c-format
 msgid "access to library \"%s\" is not allowed"
 msgstr "dostęp do biblioteki \"%s\" jest niedozwolony"
 
-#: utils/fmgr/dfmgr.c:565
+#: utils/fmgr/dfmgr.c:561
 #, c-format
 msgid "invalid macro name in dynamic library path: %s"
 msgstr "niepoprawna nazwa makra w dynamicznej ścieżce biblioteki: %s"
 
-#: utils/fmgr/dfmgr.c:605
+#: utils/fmgr/dfmgr.c:601
 #, c-format
 msgid "zero-length component in parameter \"dynamic_library_path\""
 msgstr "komponent o zerowej długości w parametrze \"dynamic_library_path\""
 
-#: utils/fmgr/dfmgr.c:624
+#: utils/fmgr/dfmgr.c:620
 #, c-format
 msgid "component in parameter \"dynamic_library_path\" is not an absolute path"
 msgstr "komponent w parametrze \"dynamic_library_path\" nie jest ścieżką absolutną"
@@ -20466,7 +20379,7 @@ msgstr "Plik wydaje się pozostawiony przypadkowo, ale nie mógł zostać usuni�
 msgid "could not write lock file \"%s\": %m"
 msgstr "nie można zapisać pliku blokady \"%s\": %m"
 
-#: utils/init/miscinit.c:1143 utils/init/miscinit.c:1272 utils/misc/guc.c:8578
+#: utils/init/miscinit.c:1143 utils/init/miscinit.c:1272 utils/misc/guc.c:8589
 #, c-format
 msgid "could not read from file \"%s\": %m"
 msgstr "nie można czytać z pliku \"%s\": %m"
@@ -21668,10 +21581,8 @@ msgid "Shows the block size in the write ahead log."
 msgstr "Pokazuje rozmiar bloku w dzienniku zapisu z wyprzedzeniem."
 
 #: utils/misc/guc.c:2465
-#| msgid "Sets the time to wait before retrying to retrieve WALafter a failed attempt."
 msgid "Sets the time to wait before retrying to retrieve WAL after a failed attempt."
-msgstr ""
-"Ustawia czas oczekiwania na ponowienie odzyskania WAL po nieudanej próbie."
+msgstr "Ustawia czas oczekiwania na ponowienie odzyskania WAL po nieudanej próbie."
 
 #: utils/misc/guc.c:2477
 msgid "Shows the number of pages per write ahead log segment."
@@ -21718,7 +21629,6 @@ msgid "Time between TCP keepalive retransmits."
 msgstr "Czas pomiędzy retransmisjami sygnalizowania aktywności TCP."
 
 #: utils/misc/guc.c:2583
-#| msgid "SSL regenotiation is no longer supported; this can only be 0"
 msgid "SSL regenotiation is no longer supported; this can only be 0."
 msgstr "Renegocjacja SSL nie jest już obsługiwana; tu może być tylko 0."
 
@@ -22043,7 +21953,6 @@ msgid "Sets the application name to be reported in statistics and logs."
 msgstr "Ustawia nazwę aplikacji jaką należy podać w statystykach i dziennikach."
 
 #: utils/misc/guc.c:3391
-#| msgid "Sets the name of the cluster which is included in the process title."
 msgid "Sets the name of the cluster, which is included in the process title."
 msgstr "Ustawia nawę klastra zawartą w tytule procesu."
 
@@ -22205,8 +22114,8 @@ msgid "cannot set parameters during a parallel operation"
 msgstr "nie można ustawić parametrów podczas operacji równoległej"
 
 #: utils/misc/guc.c:5682 utils/misc/guc.c:6432 utils/misc/guc.c:6484
-#: utils/misc/guc.c:6845 utils/misc/guc.c:7581 utils/misc/guc.c:7740
-#: utils/misc/guc.c:9375
+#: utils/misc/guc.c:6845 utils/misc/guc.c:7592 utils/misc/guc.c:7751
+#: utils/misc/guc.c:9386
 #, c-format
 msgid "unrecognized configuration parameter \"%s\""
 msgstr "nierozpoznany parametr konfiguracyjny \"%s\""
@@ -22221,7 +22130,7 @@ msgstr "parametr \"%s\" nie może być zmieniony"
 msgid "parameter \"%s\" cannot be changed now"
 msgstr "parametr \"%s\" nie może być teraz zmieniony"
 
-#: utils/misc/guc.c:5748 utils/misc/guc.c:5793 utils/misc/guc.c:9391
+#: utils/misc/guc.c:5748 utils/misc/guc.c:5793 utils/misc/guc.c:9402
 #, c-format
 msgid "permission denied to set parameter \"%s\""
 msgstr "odmowa dostępu do ustawienia parametru \"%s\""
@@ -22236,7 +22145,7 @@ msgstr "parametr \"%s\" nie może być ustawiony po rozpoczęciu połączenia"
 msgid "cannot set parameter \"%s\" within security-definer function"
 msgstr "nie można ustawić parametru \"%s\" w funkcji definiującej bezpieczeństwo"
 
-#: utils/misc/guc.c:6440 utils/misc/guc.c:6488 utils/misc/guc.c:7744
+#: utils/misc/guc.c:6440 utils/misc/guc.c:6488 utils/misc/guc.c:7755
 #, c-format
 msgid "must be superuser to examine \"%s\""
 msgstr "musisz być superużytkownikiem by skontrolować \"%s\""
@@ -22266,52 +22175,52 @@ msgstr "SET LOCAL TRANSACTION SNAPSHOT jeszcze nie zaimplementowano"
 msgid "SET requires parameter name"
 msgstr "SET wymaga nazwy parametru"
 
-#: utils/misc/guc.c:7278
+#: utils/misc/guc.c:7289
 #, c-format
 msgid "attempt to redefine parameter \"%s\""
 msgstr "próba przedefiniowania parametru \"%s\""
 
-#: utils/misc/guc.c:9008
+#: utils/misc/guc.c:9019
 #, c-format
 msgid "parameter \"%s\" could not be set"
 msgstr "parametr \"%s\" nie może być ustawiony"
 
-#: utils/misc/guc.c:9095
+#: utils/misc/guc.c:9106
 #, c-format
 msgid "could not parse setting for parameter \"%s\""
 msgstr "nie można zanalizować ustawienia parametru \"%s\""
 
-#: utils/misc/guc.c:9453 utils/misc/guc.c:9487
+#: utils/misc/guc.c:9464 utils/misc/guc.c:9498
 #, c-format
 msgid "invalid value for parameter \"%s\": %d"
 msgstr "nieprawidłowa wartość dla parametru \"%s\": %d"
 
-#: utils/misc/guc.c:9521
+#: utils/misc/guc.c:9532
 #, c-format
 msgid "invalid value for parameter \"%s\": %g"
 msgstr "nieprawidłowa wartość dla parametru \"%s\": %g"
 
-#: utils/misc/guc.c:9711
+#: utils/misc/guc.c:9722
 #, c-format
 msgid "\"temp_buffers\" cannot be changed after any temporary tables have been accessed in the session."
 msgstr "\"temp_buffers\" nie mogą być zmienione po uzyskaniu dostępu do tabel tymczasowych w sesji."
 
-#: utils/misc/guc.c:9723
+#: utils/misc/guc.c:9734
 #, c-format
 msgid "Bonjour is not supported by this build"
 msgstr "Bonjour nie jest obsługiwany przez tą kompilację"
 
-#: utils/misc/guc.c:9736
+#: utils/misc/guc.c:9747
 #, c-format
 msgid "SSL is not supported by this build"
 msgstr "SSL nie jest obsługiwany przez tą kompilację"
 
-#: utils/misc/guc.c:9748
+#: utils/misc/guc.c:9759
 #, c-format
 msgid "Cannot enable parameter when \"log_statement_stats\" is true."
 msgstr "Nie można włączyć parametru gdy \"log_statement_stats\" jest prawdą."
 
-#: utils/misc/guc.c:9760
+#: utils/misc/guc.c:9771
 #, c-format
 msgid "Cannot enable \"log_statement_stats\" when \"log_parser_stats\", \"log_planner_stats\", or \"log_executor_stats\" is true."
 msgstr "Nie można włączyć \"log_statement_stats\" gdy \"log_parser_stats\", \"log_planner_stats\", lub \"log_executor_stats\" jest prawdą."
@@ -22321,12 +22230,15 @@ msgstr "Nie można włączyć \"log_statement_stats\" gdy \"log_parser_stats\", 
 msgid "internal error: unrecognized run-time parameter type\n"
 msgstr "błąd wewnętrzny: nierozpoznany typ parametru czasu wykonania\n"
 
-#: utils/misc/rls.c:125
+#: utils/misc/rls.c:127
 #, c-format
-#| msgid "insufficient privilege to bypass row security."
-msgid "insufficient privilege to bypass row-level security"
-msgstr ""
-"niewystarczające uprawnienia by obejść zabezpieczenia na poziomie wiersza"
+msgid "query would be affected by row-level security policy for table \"%s\""
+msgstr "polityka bezpieczeństwa na poziomie wierszy tabeli \"%s\" wpłynie na kwerendę"
+
+#: utils/misc/rls.c:129
+#, c-format
+msgid "To disable the policy for the table's owner, use ALTER TABLE NO FORCE ROW LEVEL SECURITY."
+msgstr "By wyłączyć politykę dla właściciela tabeli użyj ALTER TABLE NO FORCE ROW LEVEL SECURITY."
 
 #: utils/misc/timeout.c:388
 #, c-format

@@ -95,6 +95,7 @@
 #include "utils/hsearch.h"
 #endif
 
+
 /* We use the ShmemLock spinlock to protect LWLockAssign */
 extern slock_t *ShmemLock;
 

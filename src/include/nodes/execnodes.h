@@ -1786,8 +1786,6 @@ typedef struct HashJoinState
 	bool		hj_OuterNotEmpty;
 } HashJoinState;
 
-typedef HashJoinState StreamTableJoinState;
-
 
 /* ----------------------------------------------------------------
  *				 Materialization State Information

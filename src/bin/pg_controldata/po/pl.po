@@ -2,13 +2,13 @@
 # Copyright (c) 2005 toczek, xxxtoczekxxx@wp.pl
 # Distributed under the same licensing terms as PostgreSQL itself.
 # Begina Felicysym <begina.felicysym@wp.eu>, 2011, 2012, 2013.
-# grzegorz <begina.felicysym@wp.eu>, 2014, 2015.
+# grzegorz <begina.felicysym@wp.eu>, 2014, 2015, 2016.
 msgid ""
 msgstr ""
 "Project-Id-Version: pg_controldata (PostgreSQL 9.1)\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@postgresql.org\n"
-"POT-Creation-Date: 2015-10-29 01:44+0000\n"
-"PO-Revision-Date: 2015-10-29 20:53+0200\n"
+"POT-Creation-Date: 2016-01-05 23:13+0000\n"
+"PO-Revision-Date: 2016-01-06 09:13+0200\n"
 "Last-Translator: grzegorz <begina.felicysym@wp.eu>\n"
 "Language-Team: begina.felicysym@wp.eu\n"
 "Language: pl\n"
@@ -49,7 +49,6 @@ msgstr ""
 
 #: pg_controldata.c:39
 #, c-format
-#| msgid "  -D DATADIR         database directory\n"
 msgid " [-D] DATADIR    data directory\n"
 msgstr " [-D] DATADIR    folder bazy danych\n"
 
@@ -283,15 +282,15 @@ msgstr "DB oldestMulti'u najnowszego punktu kontrolnego: %u\n"
 
 #: pg_controldata.c:274
 #, c-format
-#| msgid "Latest checkpoint's oldest CommitTs:  %u\n"
-msgid "Latest checkpoint's oldestCommitTs:   %u\n"
-msgstr "oldestCommitTs najnowszego punktu kontrolnego:   %u\n"
+#| msgid "Latest checkpoint's oldestCommitTs:   %u\n"
+msgid "Latest checkpoint's oldestCommitTsXid:%u\n"
+msgstr "oldestCommitTsXid najnowszego punktu kontrolnego: %u\n"
 
 #: pg_controldata.c:276
 #, c-format
-#| msgid "Latest checkpoint's newest CommitTs:  %u\n"
-msgid "Latest checkpoint's newestCommitTs:   %u\n"
-msgstr "newestCommitTs najnowszego punktu kontrolnego:   %u\n"
+#| msgid "Latest checkpoint's newestCommitTs:   %u\n"
+msgid "Latest checkpoint's newestCommitTsXid:%u\n"
+msgstr "newestCommitTsXid najnowszego punktu kontrolnego: %u\n"
 
 #: pg_controldata.c:278
 #, c-format
@@ -338,43 +337,36 @@ msgstr "tak"
 
 #: pg_controldata.c:296
 #, c-format
-#| msgid "Current wal_level setting:            %s\n"
 msgid "wal_level setting:                    %s\n"
 msgstr "ustawienie wal_level:                            %s\n"
 
 #: pg_controldata.c:298
 #, c-format
-#| msgid "Current wal_log_hints setting:        %s\n"
 msgid "wal_log_hints setting:                %s\n"
 msgstr "ustawienie wal_log_hints:                        %s\n"
 
 #: pg_controldata.c:300
 #, c-format
-#| msgid "Current max_connections setting:      %d\n"
 msgid "max_connections setting:              %d\n"
 msgstr "ustawienie max_connections:                      %d\n"
 
 #: pg_controldata.c:302
 #, c-format
-#| msgid "Current max_worker_processes setting: %d\n"
 msgid "max_worker_processes setting:         %d\n"
 msgstr "ustawienie max_worker_processes:                 %d\n"
 
 #: pg_controldata.c:304
 #, c-format
-#| msgid "Current max_prepared_xacts setting:   %d\n"
 msgid "max_prepared_xacts setting:           %d\n"
 msgstr "ustawienie max_prepared_xacts:                   %d\n"
 
 #: pg_controldata.c:306
 #, c-format
-#| msgid "Current max_locks_per_xact setting:   %d\n"
 msgid "max_locks_per_xact setting:           %d\n"
 msgstr "ustawienie max_locks_per_xact:                   %d\n"
 
 #: pg_controldata.c:308
 #, c-format
-#| msgid "Current wal_log_hints setting:        %s\n"
 msgid "track_commit_timestamp setting:       %s\n"
 msgstr "ustawienie wal_log_hints:                        %s\n"
 

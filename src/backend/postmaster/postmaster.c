@@ -3948,8 +3948,8 @@ BackendStartup(Port *port)
 {
 	Backend    *bn;				/* for backend cleanup */
 	pid_t		pid;
-	char msg[64];
-	char remote[32];
+	char		msg[64];
+	char		remote[32];
 
 	/*
 	 * Create backend data structure.  Better before the fork() so we can
@@ -4179,6 +4179,14 @@ BackendInitialize(Port *port)
 	else
 		snprintf(remote_ps_data, sizeof(remote_ps_data), "%s(%s)", remote_host, remote_port);
 
+	/*
+	 * Save remote_host and remote_port in port structure (after this, they
+	 * will appear in log_line_prefix data for log messages).
+	 */
+	port->remote_host = strdup(remote_host);
+	port->remote_port = strdup(remote_port);
+
+	/* And now we can issue the Log_connections message, if wanted */
 	if (Log_connections)
 	{
 		if (remote_port[0])
@@ -4191,12 +4199,6 @@ BackendInitialize(Port *port)
 					(errmsg("connection received: host=%s",
 							remote_host)));
 	}
-
-	/*
-	 * save remote_host and remote_port in port structure
-	 */
-	port->remote_host = strdup(remote_host);
-	port->remote_port = strdup(remote_port);
 
 	/*
 	 * If we did a reverse lookup to name, we might as well save the results
@@ -4884,22 +4886,6 @@ SubPostmasterMain(int argc, char *argv[])
 		CreateSharedMemoryAndSemaphores(false, 0);
 
 		AutoVacWorkerMain(argc - 2, argv + 2);	/* does not return */
-	}
-	if (strcmp(argv[1], "--forkcqscheduler") == 0)
-	{
-		/* Close the postmaster's sockets */
-		ClosePostmasterPorts(false);
-
-		/* Restore basic shared memory pointers */
-		InitShmemAccess(UsedShmemSegAddr);
-
-		/* Need a PGPROC to run CreateSharedMemoryAndSemaphores */
-		InitProcess();
-
-		/* Attach process to shared data structures */
-		CreateSharedMemoryAndSemaphores(false, 0);
-
-		ContQuerySchedulerMain(argc - 2, argv + 2);	/* does not return */
 	}
 	if (strncmp(argv[1], "--forkbgworker=", 15) == 0)
 	{

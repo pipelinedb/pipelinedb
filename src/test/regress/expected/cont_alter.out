@@ -6,5 +6,7 @@ ERROR:  cannot rename materialization table "test_cont_alter_mrel" for continuou
 ALTER VIEW test_cont_alter ALTER COLUMN x SET DEFAULT 10;
 ERROR:  "test_cont_alter" is not a view
 ALTER TABLE test_cont_alter_mrel DROP COLUMN x;
-ERROR:  cannot alter materialization table "test_cont_alter_mrel" for continuous view "test_cont_alter"
+ERROR:  cannot drop table test_cont_alter_mrel column x because other objects depend on it
+DETAIL:  continuous view test_cont_alter depends on table test_cont_alter_mrel column x
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW test_cont_alter;

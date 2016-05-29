@@ -8,19 +8,22 @@
  *-------------------------------------------------------------------------
  */
 
-#include "pipeline/trigger/sliding_window.h"
-#include "pipeline/trigger/batching.h"
-#include "pipeline/trigger/util.h"
+#include "postgres.h"
+
+#include "commands/trigger.h"
 #include "executor/executor.h"
-#include "pipeline/cont_plan.h"
 #include "executor/tstoreReceiver.h"
-#include "utils/snapmgr.h"
-#include "utils/syscache.h"
 #include "parser/parse_oper.h"
 #include "pipeline/cont_analyze.h"
-#include "utils/builtins.h"
-#include "commands/trigger.h"
+#include "pipeline/cont_plan.h"
+#include "pipeline/stream.h"
+#include "pipeline/trigger/batching.h"
+#include "pipeline/trigger/sliding_window.h"
 #include "pipeline/trigger/tuple_formatter.h"
+#include "pipeline/trigger/util.h"
+#include "utils/builtins.h"
+#include "utils/snapmgr.h"
+#include "utils/syscache.h"
 
 #define TRIGGER_SW_VACUUM_INTERVAL 1 * 1000 /* 1s */
 

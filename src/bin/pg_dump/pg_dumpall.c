@@ -4,7 +4,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * pg_dumpall forces all pg_dump output to be text, since it also outputs
  * text into the same output stream.
@@ -169,7 +168,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if ((ret = find_other_exec(argv[0], "pipeline-dump", PGDUMP_VERSIONSTR,
+	if ((ret = find_other_exec(argv[0], "pg_dump", PGDUMP_VERSIONSTR,
 							   pg_dump_bin)) < 0)
 	{
 		char		full_path[MAXPGPATH];
@@ -179,14 +178,14 @@ main(int argc, char *argv[])
 
 		if (ret == -1)
 			fprintf(stderr,
-					_("The program \"pipeline-dump\" is needed by %s "
+					_("The program \"pg_dump\" is needed by %s "
 					  "but was not found in the\n"
 					  "same directory as \"%s\".\n"
 					  "Check your installation.\n"),
 					progname, full_path);
 		else
 			fprintf(stderr,
-					_("The program \"pipeline-dump\" was found by \"%s\"\n"
+					_("The program \"pg_dump\" was found by \"%s\"\n"
 					  "but was not the same version as %s.\n"
 					  "Check your installation.\n"),
 					full_path, progname);
@@ -545,7 +544,7 @@ main(int argc, char *argv[])
 static void
 help(void)
 {
-	printf(_("%s extracts a PipelineDB database cluster into an SQL script file.\n\n"), progname);
+	printf(_("%s extracts a PostgreSQL database cluster into an SQL script file.\n\n"), progname);
 	printf(_("Usage:\n"));
 	printf(_("  %s [OPTION]...\n"), progname);
 
@@ -777,7 +776,7 @@ dumpRoles(PGconn *conn)
 		{
 			appendPQExpBufferStr(buf, "\n-- For binary upgrade, must preserve pg_authid.oid\n");
 			appendPQExpBuffer(buf,
-							  "SELECT binary_upgrade.set_next_pg_authid_oid('%u'::pg_catalog.oid);\n\n",
+							  "SELECT pg_catalog.binary_upgrade_set_next_pg_authid_oid('%u'::pg_catalog.oid);\n\n",
 							  auth_oid);
 		}
 
@@ -1174,7 +1173,7 @@ dropDBs(PGconn *conn)
 		char	   *dbname = PQgetvalue(res, i, 0);
 
 		/*
-		 * Skip "template1" and "pipeline"; the restore script is almost
+		 * Skip "template1" and "postgres"; the restore script is almost
 		 * certainly going to be run in one or the other, and we don't know
 		 * which.  This must agree with dumpCreateDB's choices!
 		 */
@@ -1275,7 +1274,7 @@ dumpCreateDB(PGconn *conn)
 						   "SELECT datname, "
 						   "coalesce(rolname, (select rolname from pg_authid where oid=(select datdba from pg_database where datname='template0'))), "
 						   "pg_encoding_to_char(d.encoding), "
-						   "datcollate, datctype, datfrozenxid, 0 AS datminmxid, "
+					  "datcollate, datctype, datfrozenxid, 0 AS datminmxid, "
 						   "datistemplate, datacl, datconnlimit, "
 						   "(SELECT spcname FROM pg_tablespace t WHERE t.oid = d.dattablespace) AS dattablespace "
 			  "FROM pg_database d LEFT JOIN pg_authid u ON (datdba = u.oid) "
@@ -1285,7 +1284,7 @@ dumpCreateDB(PGconn *conn)
 						   "SELECT datname, "
 						   "coalesce(rolname, (select rolname from pg_authid where oid=(select datdba from pg_database where datname='template0'))), "
 						   "pg_encoding_to_char(d.encoding), "
-		   "null::text AS datcollate, null::text AS datctype, datfrozenxid, 0 AS datminmxid, "
+						   "null::text AS datcollate, null::text AS datctype, datfrozenxid, 0 AS datminmxid, "
 						   "datistemplate, datacl, datconnlimit, "
 						   "(SELECT spcname FROM pg_tablespace t WHERE t.oid = d.dattablespace) AS dattablespace "
 			  "FROM pg_database d LEFT JOIN pg_authid u ON (datdba = u.oid) "
@@ -1295,7 +1294,7 @@ dumpCreateDB(PGconn *conn)
 						   "SELECT datname, "
 						   "coalesce(usename, (select usename from pg_shadow where usesysid=(select datdba from pg_database where datname='template0'))), "
 						   "pg_encoding_to_char(d.encoding), "
-		   "null::text AS datcollate, null::text AS datctype, datfrozenxid, 0 AS datminmxid, "
+						   "null::text AS datcollate, null::text AS datctype, datfrozenxid, 0 AS datminmxid, "
 						   "datistemplate, datacl, -1 as datconnlimit, "
 						   "(SELECT spcname FROM pg_tablespace t WHERE t.oid = d.dattablespace) AS dattablespace "
 		   "FROM pg_database d LEFT JOIN pg_shadow u ON (datdba = usesysid) "
@@ -1305,7 +1304,7 @@ dumpCreateDB(PGconn *conn)
 						   "SELECT datname, "
 						   "coalesce(usename, (select usename from pg_shadow where usesysid=(select datdba from pg_database where datname='template0'))), "
 						   "pg_encoding_to_char(d.encoding), "
-		   "null::text AS datcollate, null::text AS datctype, datfrozenxid, 0 AS datminmxid, "
+						   "null::text AS datcollate, null::text AS datctype, datfrozenxid, 0 AS datminmxid, "
 						   "datistemplate, datacl, -1 as datconnlimit, "
 						   "'pg_default' AS dattablespace "
 		   "FROM pg_database d LEFT JOIN pg_shadow u ON (datdba = usesysid) "
@@ -1360,7 +1359,7 @@ dumpCreateDB(PGconn *conn)
 		resetPQExpBuffer(buf);
 
 		/*
-		 * Skip the CREATE DATABASE commands for "template1" and "pipeline",
+		 * Skip the CREATE DATABASE commands for "template1" and "postgres",
 		 * since they are presumably already there in the destination cluster.
 		 * We do want to emit their ACLs and config options if any, however.
 		 */
@@ -1420,10 +1419,10 @@ dumpCreateDB(PGconn *conn)
 			 * so to move "postgres" to another tablespace, we connect to
 			 * "template1", and vice versa.
 			 */
-			if (strcmp(dbname, "postgres") == 0)
+			if (strcmp(dbname, "pipeline") == 0)
 				appendPQExpBuffer(buf, "\\connect template1\n");
 			else
-				appendPQExpBuffer(buf, "\\connect postgres\n");
+				appendPQExpBuffer(buf, "\\connect pipeline\n");
 
 			appendPQExpBuffer(buf, "ALTER DATABASE %s SET TABLESPACE %s;\n",
 							  fdbname, fmtId(dbtablespace));

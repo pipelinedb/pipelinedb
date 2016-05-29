@@ -375,6 +375,8 @@ main(int argc, char **argv)
 
 	AH = OpenArchive(inputFileSpec, opts->format);
 
+	SetArchiveOptions(AH, NULL, opts);
+
 	/*
 	 * We don't have a connection yet but that doesn't matter. The connection
 	 * is initialized to NULL and if we terminate through exit_nicely() while
@@ -391,7 +393,7 @@ main(int argc, char **argv)
 	AH->exit_on_error = opts->exit_on_error;
 
 	if (opts->tocFile)
-		SortTocFromFile(AH, opts);
+		SortTocFromFile(AH);
 
 	/* See comments in pg_dump.c */
 #ifdef WIN32
@@ -406,10 +408,10 @@ main(int argc, char **argv)
 	AH->numWorkers = numWorkers;
 
 	if (opts->tocSummary)
-		PrintTOCSummary(AH, opts);
+		PrintTOCSummary(AH);
 	else
 	{
-		SetArchiveRestoreOptions(AH, opts);
+		ProcessArchiveRestoreOptions(AH);
 		RestoreArchive(AH);
 	}
 
@@ -421,7 +423,7 @@ main(int argc, char **argv)
 	/* AH may be freed in CloseArchive? */
 	exit_code = AH->n_errors ? 1 : 0;
 
-	CloseArchive(AH, NULL);
+	CloseArchive(AH);
 
 	return exit_code;
 }

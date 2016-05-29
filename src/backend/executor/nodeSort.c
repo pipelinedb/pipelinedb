@@ -5,7 +5,7 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2016, PipelineDB
+ *
  *
  * IDENTIFICATION
  *	  src/backend/executor/nodeSort.c
@@ -18,7 +18,6 @@
 #include "executor/execdebug.h"
 #include "executor/nodeSort.h"
 #include "miscadmin.h"
-#include "pipeline/cont_plan.h"
 #include "utils/tuplesort.h"
 
 
@@ -139,7 +138,6 @@ ExecSort(SortState *node)
 	(void) tuplesort_gettupleslot(tuplesortstate,
 								  ScanDirectionIsForward(dir),
 								  slot);
-
 	return slot;
 }
 

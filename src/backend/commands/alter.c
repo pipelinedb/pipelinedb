@@ -5,7 +5,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -308,9 +307,9 @@ ExecRenameStmt(RenameStmt *stmt)
 {
 	switch (stmt->renameType)
 	{
-	case OBJECT_TABCONSTRAINT:
-	case OBJECT_DOMCONSTRAINT:
-		return RenameConstraint(stmt);
+		case OBJECT_TABCONSTRAINT:
+		case OBJECT_DOMCONSTRAINT:
+			return RenameConstraint(stmt);
 
 		case OBJECT_DATABASE:
 			return RenameDatabase(stmt->subname, stmt->newname);
@@ -394,6 +393,11 @@ ExecRenameStmt(RenameStmt *stmt)
 /*
  * Executes an ALTER OBJECT / SET SCHEMA statement.  Based on the object
  * type, the function appropriate to that type is executed.
+ *
+ * Return value is that of the altered object.
+ *
+ * oldSchemaAddr is an output argument which, if not NULL, is set to the object
+ * address of the original schema.
  */
 ObjectAddress
 ExecAlterObjectSchemaStmt(AlterObjectSchemaStmt *stmt,
@@ -442,7 +446,6 @@ ExecAlterObjectSchemaStmt(AlterObjectSchemaStmt *stmt,
 				Relation	relation;
 				Oid			classId;
 				Oid			nspOid;
-				ObjectAddress address;
 
 				address = get_object_address(stmt->objectType,
 											 stmt->object,
@@ -770,7 +773,6 @@ ExecAlterOwnerStmt(AlterOwnerStmt *stmt)
 		default:
 			elog(ERROR, "unrecognized AlterOwnerStmt type: %d",
 				 (int) stmt->objectType);
-
 			return InvalidObjectAddress;		/* keep compiler happy */
 	}
 }

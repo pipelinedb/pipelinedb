@@ -7606,30 +7606,65 @@ strip_var(NumericVar *var)
 	var->ndigits = ndigits;
 }
 
+Datum
+numeric_poly_combine(PG_FUNCTION_ARGS)
+{
+#ifdef HAVE_INT128
+	Int128AggState *state = PG_ARGISNULL(0) ? NULL : (Int128AggState *) PG_GETARG_POINTER(0);
+	Int128AggState *incoming = PG_ARGISNULL(1) ? NULL : (Int128AggState *) PG_GETARG_POINTER(1);
+
+	if (state == NULL)
+		state = makeInt128AggState(fcinfo, false);
+
+	if (incoming)
+	{
+		state->N += incoming->N;
+		state->sumX += incoming->sumX;
+
+		if (incoming->calcSumX2 || state->calcSumX2)
+		{
+			state->sumX2 = state->sumX2 + incoming->sumX2;
+			state->calcSumX2 = true;
+		}
+	}
+
+	PG_RETURN_POINTER(state);
+#else
+	PG_RETURN_DATUM(numeric_combine(fcinfo));
+#endif
+}
+
 /*
  * Combines two NumericAggStates into one
  */
 Datum
 numeric_combine(PG_FUNCTION_ARGS)
 {
-	NumericAggState  *state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
-	NumericAggState	 *incoming = (NumericAggState *) PG_GETARG_POINTER(1);
-	MemoryContext old;
+	NumericAggState *state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
+	NumericAggState	*incoming = PG_ARGISNULL(1) ? NULL : (NumericAggState *) PG_GETARG_POINTER(1);
 
 	if (state == NULL)
 		state = makeNumericAggState(fcinfo, false);
 
-	old = MemoryContextSwitchTo(state->agg_context);
+	if (incoming)
+	{
+		MemoryContext old = MemoryContextSwitchTo(state->agg_context);
 
-	state->N += incoming->N;
-	state->maxScale = Max(state->maxScale, incoming->maxScale);
-	state->maxScaleCount += incoming->maxScaleCount;
-	state->NaNcount += incoming->NaNcount;
+		state->N += incoming->N;
+		state->maxScale = Max(state->maxScale, incoming->maxScale);
+		state->maxScaleCount += incoming->maxScaleCount;
+		state->NaNcount += incoming->NaNcount;
 
-	add_var(&(state->sumX), &(incoming->sumX), &(state->sumX));
-	add_var(&(state->sumX2), &(incoming->sumX2), &(state->sumX2));
+		add_var(&(state->sumX), &(incoming->sumX), &(state->sumX));
 
-	MemoryContextSwitchTo(old);
+		if (incoming->calcSumX2 || state->calcSumX2)
+		{
+			add_var(&(state->sumX2), &(incoming->sumX2), &(state->sumX2));
+			state->calcSumX2 = true;
+		}
+
+		MemoryContextSwitchTo(old);
+	}
 
 	PG_RETURN_POINTER(state);
 }
@@ -7680,7 +7715,7 @@ int_avg_combine(PG_FUNCTION_ARGS)
  *	deserialize partial transition states sent to it by a worker process
  */
 Datum
-naggstaterecv(PG_FUNCTION_ARGS)
+numaggstaterecv(PG_FUNCTION_ARGS)
 {
 	MemoryContext context;
 	MemoryContext old;
@@ -7740,7 +7775,7 @@ naggstaterecv(PG_FUNCTION_ARGS)
  *	send their transition states to a combiner process
  */
 Datum
-naggstatesend(PG_FUNCTION_ARGS)
+numaggstatesend(PG_FUNCTION_ARGS)
 {
 	NumericAggState *nagg = (NumericAggState *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
@@ -7777,4 +7812,48 @@ naggstatesend(PG_FUNCTION_ARGS)
 	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
 
 	PG_RETURN_BYTEA_P(result);
+}
+
+Datum
+numpolyaggstaterecv(PG_FUNCTION_ARGS)
+{
+#ifdef HAVE_INT128
+	MemoryContext old;
+	MemoryContext context;
+	Int128AggState *state;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	old = MemoryContextSwitchTo(context);
+	state = (Int128AggState *) VARDATA_ANY(PG_GETARG_ARRAYTYPE_P_COPY(0));
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(state);
+#else
+	PG_RETURN_DATUM(numaggstaterecv(fcinfo));
+#endif
+}
+
+Datum
+numpolyaggstatesend(PG_FUNCTION_ARGS)
+{
+#ifdef HAVE_INT128
+	Int128AggState *state = PG_ARGISNULL(0) ? NULL : (Int128AggState *) PG_GETARG_POINTER(0);
+	bytea *result;
+
+	if (state == NULL)
+		PG_RETURN_NULL();
+
+	result = (bytea *) palloc0(sizeof(Int128AggState) + VARHDRSZ);
+	SET_VARSIZE(result, sizeof(Int128AggState) + VARHDRSZ);
+	memcpy(VARDATA(result), state, sizeof(Int128AggState));
+
+	PG_RETURN_BYTEA_P(result);
+#else
+	PG_RETURN_DATUM(numaggstatesend(fcinfo));
+#endif
 }

@@ -1510,6 +1510,20 @@ INSERT INTO foo VALUES (999999, NULL, 'bar');
 SELECT json_object_agg(name, type) FROM foo;
 ERROR:  field name must not be null
 -- json_object
+-- empty object, one dimension
+SELECT json_object('{}');
+ json_object 
+-------------
+ {}
+(1 row)
+
+-- empty object, two dimensions
+SELECT json_object('{}', '{}');
+ json_object 
+-------------
+ {}
+(1 row)
+
 -- one dimension
 SELECT json_object('{a,1,b,2,3,NULL,"d e f","a b c"}');
                       json_object                      
@@ -1584,6 +1598,22 @@ select * from json_to_recordset('[{"a":1,"b":{"d":"foo"},"c":true},{"a":2,"c":fa
  1 | {"d":"foo"} | t
  2 | {"d":"bar"} | f
 (2 rows)
+
+select *, c is null as c_is_null
+from json_to_record('{"a":1, "b":{"c":16, "d":2}, "x":8}'::json)
+    as t(a int, b json, c text, x int);
+ a |        b        | c | x | c_is_null 
+---+-----------------+---+---+-----------
+ 1 | {"c":16, "d":2} |   | 8 | t
+(1 row)
+
+select *, c is null as c_is_null
+from json_to_recordset('[{"a":1, "b":{"c":16, "d":2}, "x":8}]'::json)
+    as t(a int, b json, c text, x int);
+ a |        b        | c | x | c_is_null 
+---+-----------------+---+---+-----------
+ 1 | {"c":16, "d":2} |   | 8 | t
+(1 row)
 
 -- json_strip_nulls
 select json_strip_nulls(null);

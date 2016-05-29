@@ -7,8 +7,7 @@
  * accessed via the extended FE/BE query protocol.
  *
  *
- * Portions Copyright (c) 2002-2014, PostgreSQL Global Development Group
- * Portions Copyright (c) 2013-2015, PipelineDB
+ * Copyright (c) 2002-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/commands/prepare.c

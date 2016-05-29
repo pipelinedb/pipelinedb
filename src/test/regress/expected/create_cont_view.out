@@ -145,11 +145,11 @@ Indexes:
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate3');
-                  pipeline_get_overlay_viewdef                  
-----------------------------------------------------------------
-  SELECT cqcreate3_mrel.key,                                   +
-     cqcreate3_mrel.count,                                     +
-     numeric_poly_sum(naggstaterecv(cqcreate3_mrel.sum)) AS sum+
+                     pipeline_get_overlay_viewdef                     
+----------------------------------------------------------------------
+  SELECT cqcreate3_mrel.key,                                         +
+     cqcreate3_mrel.count,                                           +
+     numeric_poly_sum(numpolyaggstaterecv(cqcreate3_mrel.sum)) AS sum+
     FROM ONLY cqcreate3_mrel;
 (1 row)
 
@@ -186,10 +186,10 @@ Indexes:
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate4');
-                  pipeline_get_overlay_viewdef                  
-----------------------------------------------------------------
-  SELECT cqcreate4_mrel.count,                                 +
-     numeric_poly_sum(naggstaterecv(cqcreate4_mrel.sum)) AS sum+
+                     pipeline_get_overlay_viewdef                     
+----------------------------------------------------------------------
+  SELECT cqcreate4_mrel.count,                                       +
+     numeric_poly_sum(numpolyaggstaterecv(cqcreate4_mrel.sum)) AS sum+
     FROM ONLY cqcreate4_mrel;
 (1 row)
 
@@ -346,9 +346,9 @@ Indexes:
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cvjson');
-                          pipeline_get_overlay_viewdef                           
----------------------------------------------------------------------------------
-  SELECT json_agg_finalfn(byteatostringinfo(cvjson_mrel.count_col)) AS count_col+
+                          pipeline_get_overlay_viewdef                          
+--------------------------------------------------------------------------------
+  SELECT json_agg_finalfn(jsonaggstaterecv(cvjson_mrel.count_col)) AS count_col+
     FROM ONLY cvjson_mrel;
 (1 row)
 
@@ -373,9 +373,9 @@ Indexes:
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cvjsonobj');
-                                     pipeline_get_overlay_viewdef                                      
--------------------------------------------------------------------------------------------------------
-  SELECT json_object_agg_finalfn(byteatostringinfo(cvjsonobj_mrel.json_object_agg)) AS json_object_agg+
+                                     pipeline_get_overlay_viewdef                                     
+------------------------------------------------------------------------------------------------------
+  SELECT json_object_agg_finalfn(jsonaggstaterecv(cvjsonobj_mrel.json_object_agg)) AS json_object_agg+
     FROM ONLY cvjsonobj_mrel;
 (1 row)
 

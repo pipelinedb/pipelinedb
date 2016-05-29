@@ -2098,7 +2098,7 @@ create_worktablescan_plan(PlannerInfo *root, Path *best_path,
 
 /*
  * create_foreignscan_plan
- *	 Returns a foreignscan plan for the base relation scanned by 'best_path'
+ *	 Returns a foreignscan plan for the relation scanned by 'best_path'
  *	 with restriction clauses 'scan_clauses' and targetlist 'tlist'.
  */
 static ForeignScan *

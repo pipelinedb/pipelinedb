@@ -5,7 +5,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -1006,7 +1005,7 @@ pg_stat_get_backend_client_port(PG_FUNCTION_ARGS)
 	if ((beentry = pgstat_fetch_stat_beentry(beid)) == NULL)
 		PG_RETURN_NULL();
 
-	if (!superuser() && beentry->st_userid != GetUserId())
+	if (!has_privs_of_role(GetUserId(), beentry->st_userid))
 		PG_RETURN_NULL();
 
 	/* A zeroed client addr means we don't know */
@@ -1650,6 +1649,7 @@ pg_stat_get_xact_function_self_time(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	PG_RETURN_FLOAT8(INSTR_TIME_GET_MILLISEC(funcentry->f_counts.f_self_time));
 }
+
 
 /* Get the timestamp of the current statistics snapshot */
 Datum

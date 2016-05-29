@@ -7,7 +7,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -38,7 +37,6 @@
 #include "catalog/pg_shdescription.h"
 #include "catalog/pg_shseclabel.h"
 #include "catalog/pg_tablespace.h"
-#include "catalog/pipeline_query.h"
 #include "catalog/toasting.h"
 #include "miscadmin.h"
 #include "storage/fd.h"

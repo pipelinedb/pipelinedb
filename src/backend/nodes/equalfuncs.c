@@ -639,6 +639,7 @@ _equalNullTest(const NullTest *a, const NullTest *b)
 	COMPARE_NODE_FIELD(arg);
 	COMPARE_SCALAR_FIELD(nulltesttype);
 	COMPARE_SCALAR_FIELD(argisrow);
+	COMPARE_LOCATION_FIELD(location);
 
 	return true;
 }

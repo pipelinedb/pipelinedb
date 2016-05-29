@@ -3055,7 +3055,7 @@ combine_target_belongs_to_cv(Var *target, List *rangetable, RangeVar **cv)
  * table, because it simplifies things if we're not selecting directly from the messy join RTE.
  */
 static AttrNumber
-find_attr_from_joinlist(ParseState *pstate, RangeVar *cvrv, RangeTblEntry *joinrte, Var *var)
+find_cv_attr(ParseState *pstate, RangeVar *cvrv, RangeTblEntry *joinrte, Var *var)
 {
 	RangeTblEntry *cvrte = NULL;
 	ListCell *lc;
@@ -3174,8 +3174,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	 * combine column within the joined target list, so we need to pull out the
 	 * table-level var that will point us to the CQ's target list
 	 */
-	if (rte->rtekind == RTE_JOIN)
-		cvatt = find_attr_from_joinlist(pstate, rv, rte, var);
+	cvatt = find_cv_attr(pstate, rv, rte, var);
 
 	/*
 	 * Find the aggregate node in the CQ that corresponds

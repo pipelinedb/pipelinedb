@@ -4,9 +4,8 @@
  *	  Declarations for BYTEA data type support.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/utils/bytea.h
  *
@@ -49,6 +48,5 @@ extern Datum bytea_substr(PG_FUNCTION_ARGS);
 extern Datum bytea_substr_no_len(PG_FUNCTION_ARGS);
 extern Datum byteaoverlay(PG_FUNCTION_ARGS);
 extern Datum byteaoverlay_no_len(PG_FUNCTION_ARGS);
-extern Datum byteatostringinfo(PG_FUNCTION_ARGS);
 
 #endif   /* BYTEA_H */

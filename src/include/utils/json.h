@@ -83,4 +83,9 @@ extern Datum jsonb_to_record(PG_FUNCTION_ARGS);
 extern Datum jsonb_to_recordset(PG_FUNCTION_ARGS);
 extern Datum jsonb_strip_nulls(PG_FUNCTION_ARGS);
 
+extern Datum json_agg_combine(PG_FUNCTION_ARGS);
+extern Datum json_object_agg_combine(PG_FUNCTION_ARGS);
+extern Datum jsonaggstatesend(PG_FUNCTION_ARGS);
+extern Datum jsonaggstaterecv(PG_FUNCTION_ARGS);
+
 #endif   /* JSON_H */

@@ -190,7 +190,6 @@ static const char *backend_options = "--single -F -O -c search_path=pg_catalog -
 
 static const char *subdirs[] = {
 	"global",
-	"pg_xlog",
 	"pg_xlog/archive_status",
 	"pg_clog",
 	"pg_commit_ts",
@@ -200,6 +199,7 @@ static const char *subdirs[] = {
 	"pg_snapshots",
 	"pg_subtrans",
 	"pg_twophase",
+	"pg_multixact",
 	"pg_multixact/members",
 	"pg_multixact/offsets",
 	"base",
@@ -237,7 +237,6 @@ static FILE *popen_check(const char *command, const char *mode);
 static void exit_nicely(void);
 static char *get_id(void);
 static char *get_encoding_id(char *encoding_name);
-static bool mkdatadir(const char *subdir);
 static void set_input(char **dest, char *filename);
 static void check_input(char *path);
 static void write_version_file(char *extrapath);
@@ -277,7 +276,7 @@ void		setup_locale_encoding(void);
 void		setup_signals(void);
 void		setup_text_search(void);
 void		create_data_directory(void);
-void		create_xlog_symlink(void);
+void		create_xlog_or_symlink(void);
 void		warn_on_mount_point(int error);
 void		initialize_data_directory(void);
 
@@ -922,29 +921,6 @@ find_matching_ts_config(const char *lc_type)
 
 	free(langname);
 	return NULL;
-}
-
-
-/*
- * make the data directory (or one of its subdirectories if subdir is not NULL)
- */
-static bool
-mkdatadir(const char *subdir)
-{
-	char	   *path;
-
-	if (subdir)
-		path = psprintf("%s/%s", pg_data, subdir);
-	else
-		path = pg_strdup(pg_data);
-
-	if (pg_mkdir_p(path, S_IRWXU) == 0)
-		return true;
-
-	fprintf(stderr, _("%s: could not create directory \"%s\": %s\n"),
-			progname, path, strerror(errno));
-
-	return false;
 }
 
 
@@ -2297,8 +2273,14 @@ load_pipeline_extensions(void)
 
 	PG_CMD_PUTS("CREATE FOREIGN DATA WRAPPER stream_fdw HANDLER stream_fdw_handler;\n");
 	PG_CMD_PUTS("CREATE SERVER pipeline_streams FOREIGN DATA WRAPPER stream_fdw;\n");
+
+	/* Add system level dependencies for the fdw and server */
 	PG_CMD_PUTS("INSERT INTO pg_depend SELECT 0,0,0,tableoid,oid,0,'p' FROM pg_foreign_server WHERE srvname = 'pipeline_streams';\n");
 	PG_CMD_PUTS("INSERT INTO pg_depend SELECT 0,0,0,tableoid,oid,0,'p' FROM pg_foreign_data_wrapper WHERE fdwname = 'stream_fdw';\n");
+
+	/* Change owner to InvalidOid */
+	PG_CMD_PUTS("UPDATE pg_foreign_server SET srvowner = 0 WHERE srvname = 'pipeline_streams';\n");
+	PG_CMD_PUTS("UPDATE pg_foreign_data_wrapper SET fdwowner = 0 WHERE fdwname = 'stream_fdw';\n");
 
 	PG_CMD_CLOSE;
 
@@ -3163,8 +3145,12 @@ create_data_directory(void)
 				   pg_data);
 			fflush(stdout);
 
-			if (!mkdatadir(NULL))
-				exit_nicely();
+			if (pg_mkdir_p(pg_data, S_IRWXU) != 0)
+			{
+				fprintf(stderr, _("%s: could not create directory \"%s\": %s\n"),
+						progname, pg_data, strerror(errno));
+ 				exit_nicely();
+			}
 			else
 				check_ok();
 
@@ -3215,13 +3201,18 @@ create_data_directory(void)
 }
 
 
+/* Create transaction log directory, and symlink if required */
 void
-create_xlog_symlink(void)
+create_xlog_or_symlink(void)
 {
+	char	   *subdirloc;
+
+	/* form name of the place for the subdirectory or symlink */
+	subdirloc = psprintf("%s/pg_xlog", pg_data);
+
 	/* Create transaction log symlink, if required */
 	if (strcmp(xlog_dir, "") != 0)
 	{
-		char	   *linkloc;
 		int			ret;
 
 		/* clean up xlog directory name, check it's absolute */
@@ -3294,22 +3285,30 @@ create_xlog_symlink(void)
 				exit_nicely();
 		}
 
-		/* form name of the place where the symlink must go */
-		linkloc = psprintf("%s/pg_xlog", pg_data);
-
 #ifdef HAVE_SYMLINK
-		if (symlink(xlog_dir, linkloc) != 0)
+		if (symlink(xlog_dir, subdirloc) != 0)
 		{
 			fprintf(stderr, _("%s: could not create symbolic link \"%s\": %s\n"),
-					progname, linkloc, strerror(errno));
+					progname, subdirloc, strerror(errno));
 			exit_nicely();
 		}
 #else
 		fprintf(stderr, _("%s: symlinks are not supported on this platform"));
 		exit_nicely();
 #endif
-		free(linkloc);
 	}
+	else
+	{
+		/* Without -X option, just make the subdirectory normally */
+		if (mkdir(subdirloc, S_IRWXU) < 0)
+		{
+			fprintf(stderr, _("%s: could not create directory \"%s\": %s\n"),
+					progname, subdirloc, strerror(errno));
+			exit_nicely();
+		}
+	}
+
+	free(subdirloc);
 }
 
 
@@ -3340,17 +3339,31 @@ initialize_data_directory(void)
 
 	create_data_directory();
 
-	create_xlog_symlink();
+	create_xlog_or_symlink();
 
-	/* Create required subdirectories */
+	/* Create required subdirectories (other than pg_xlog) */
 	printf(_("creating subdirectories ... "));
 	fflush(stdout);
 
-	for (i = 0; i < (sizeof(subdirs) / sizeof(char *)); i++)
+	for (i = 0; i < lengthof(subdirs); i++)
 	{
-		if (!mkdatadir(subdirs[i]))
+		char	   *path;
+
+		path = psprintf("%s/%s", pg_data, subdirs[i]);
+
+		/*
+		 * The parent directory already exists, so we only need mkdir() not
+		 * pg_mkdir_p() here, which avoids some failure modes; cf bug #13853.
+		 */
+		if (mkdir(path, S_IRWXU) < 0)
+		{
+			fprintf(stderr, _("%s: could not create directory \"%s\": %s\n"),
+					progname, path, strerror(errno));
 			exit_nicely();
-	}
+		}
+
+		free(path);
+	 	}
 
 	check_ok();
 

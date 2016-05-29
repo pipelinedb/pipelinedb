@@ -199,9 +199,6 @@ static bool RecoveryConflictPending = false;
 static bool RecoveryConflictRetryable = true;
 static ProcSignalReason RecoveryConflictReason;
 
-/* memory context for event processing */
-static MemoryContext EventContext;
-
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
  * ----------------------------------------------------------------
@@ -3831,18 +3828,6 @@ PostgresMain(int argc, char *argv[],
 										   ALLOCSET_DEFAULT_INITSIZE,
 										   ALLOCSET_DEFAULT_MAXSIZE);
 
-
-	/*
-	 * Create the memory context that is used for event processing
-	 *
-	 * EventContext is reset after each request that uses it
-	 */
-	EventContext = AllocSetContextCreate(TopMemoryContext,
-											"EventContext",
-											ALLOCSET_DEFAULT_MINSIZE,
-											ALLOCSET_DEFAULT_INITSIZE,
-											ALLOCSET_DEFAULT_MAXSIZE);
-
 	/*
 	 * Remember stand-alone backend startup time
 	 */
@@ -3901,6 +3886,7 @@ PostgresMain(int argc, char *argv[],
 		disable_all_timeouts(false);
 		QueryCancelPending = false;		/* second to avoid race condition */
 
+		/* Not reading from the client anymore. */
 		DoingCommandRead = false;
 
 		/* Make sure libpq is in a good state */

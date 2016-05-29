@@ -112,22 +112,22 @@ typedef struct GinMetaPageData
  */
 #define GinPageGetOpaque(page) ( (GinPageOpaque) PageGetSpecialPointer(page) )
 
-#define GinPageIsLeaf(page)    ( GinPageGetOpaque(page)->flags & GIN_LEAF )
+#define GinPageIsLeaf(page)    ( (GinPageGetOpaque(page)->flags & GIN_LEAF) != 0 )
 #define GinPageSetLeaf(page)   ( GinPageGetOpaque(page)->flags |= GIN_LEAF )
 #define GinPageSetNonLeaf(page)    ( GinPageGetOpaque(page)->flags &= ~GIN_LEAF )
-#define GinPageIsData(page)    ( GinPageGetOpaque(page)->flags & GIN_DATA )
+#define GinPageIsData(page)    ( (GinPageGetOpaque(page)->flags & GIN_DATA) != 0 )
 #define GinPageSetData(page)   ( GinPageGetOpaque(page)->flags |= GIN_DATA )
-#define GinPageIsList(page)    ( GinPageGetOpaque(page)->flags & GIN_LIST )
+#define GinPageIsList(page)    ( (GinPageGetOpaque(page)->flags & GIN_LIST) != 0 )
 #define GinPageSetList(page)   ( GinPageGetOpaque(page)->flags |= GIN_LIST )
-#define GinPageHasFullRow(page)    ( GinPageGetOpaque(page)->flags & GIN_LIST_FULLROW )
+#define GinPageHasFullRow(page)    ( (GinPageGetOpaque(page)->flags & GIN_LIST_FULLROW) != 0 )
 #define GinPageSetFullRow(page)   ( GinPageGetOpaque(page)->flags |= GIN_LIST_FULLROW )
-#define GinPageIsCompressed(page)	 ( GinPageGetOpaque(page)->flags & GIN_COMPRESSED )
+#define GinPageIsCompressed(page)	 ( (GinPageGetOpaque(page)->flags & GIN_COMPRESSED) != 0 )
 #define GinPageSetCompressed(page)	 ( GinPageGetOpaque(page)->flags |= GIN_COMPRESSED )
 
-#define GinPageIsDeleted(page) ( GinPageGetOpaque(page)->flags & GIN_DELETED)
+#define GinPageIsDeleted(page) ( (GinPageGetOpaque(page)->flags & GIN_DELETED) != 0 )
 #define GinPageSetDeleted(page)    ( GinPageGetOpaque(page)->flags |= GIN_DELETED)
 #define GinPageSetNonDeleted(page) ( GinPageGetOpaque(page)->flags &= ~GIN_DELETED)
-#define GinPageIsIncompleteSplit(page) ( GinPageGetOpaque(page)->flags & GIN_INCOMPLETE_SPLIT)
+#define GinPageIsIncompleteSplit(page) ( (GinPageGetOpaque(page)->flags & GIN_INCOMPLETE_SPLIT) != 0 )
 
 #define GinPageRightMost(page) ( GinPageGetOpaque(page)->rightlink == InvalidBlockNumber)
 
@@ -224,7 +224,7 @@ typedef signed char GinNullCategory;
 #define GinGetPostingOffset(itup)	(GinItemPointerGetBlockNumber(&(itup)->t_tid) & (~GIN_ITUP_COMPRESSED))
 #define GinSetPostingOffset(itup,n) ItemPointerSetBlockNumber(&(itup)->t_tid,(n)|GIN_ITUP_COMPRESSED)
 #define GinGetPosting(itup)			((Pointer) ((char*)(itup) + GinGetPostingOffset(itup)))
-#define GinItupIsCompressed(itup)	(GinItemPointerGetBlockNumber(&(itup)->t_tid) & GIN_ITUP_COMPRESSED)
+#define GinItupIsCompressed(itup)	((GinItemPointerGetBlockNumber(&(itup)->t_tid) & GIN_ITUP_COMPRESSED) != 0)
 
 /*
  * Maximum size of an item on entry tree page. Make sure that we fit at least
@@ -420,14 +420,14 @@ typedef struct ginxlogCreatePostingTree
 
 typedef struct
 {
-	uint16		flags;			/* GIN_SPLIT_ISLEAF and/or GIN_SPLIT_ISDATA */
+	uint16		flags;			/* GIN_INSERT_ISLEAF and/or GIN_INSERT_ISDATA */
 
 	/*
 	 * FOLLOWS:
 	 *
 	 * 1. if not leaf page, block numbers of the left and right child pages
-	 * whose split this insertion finishes. As BlockIdData[2] (beware of
-	 * adding fields before this that would make them not 16-bit aligned)
+	 * whose split this insertion finishes, as BlockIdData[2] (beware of
+	 * adding fields in this struct that would make them not 16-bit aligned)
 	 *
 	 * 2. a ginxlogInsertEntry or ginxlogRecompressDataLeaf struct, depending
 	 * on tree type.
@@ -499,21 +499,19 @@ typedef struct ginxlogSplit
 								 * split */
 	BlockNumber leftChildBlkno; /* valid on a non-leaf split */
 	BlockNumber rightChildBlkno;
-	uint16		flags;
-
-	/* follows: one of the following structs */
+	uint16		flags;			/* see below */
 } ginxlogSplit;
 
 /*
  * Flags used in ginxlogInsert and ginxlogSplit records
  */
 #define GIN_INSERT_ISDATA	0x01	/* for both insert and split records */
-#define GIN_INSERT_ISLEAF	0x02	/* .. */
+#define GIN_INSERT_ISLEAF	0x02	/* ditto */
 #define GIN_SPLIT_ROOT		0x04	/* only for split records */
 
 /*
  * Vacuum simply WAL-logs the whole page, when anything is modified. This
- * functionally identical heap_newpage records, but is kept separate for
+ * is functionally identical to heap_newpage records, but is kept separate for
  * debugging purposes. (When inspecting the WAL stream, it's easier to see
  * what's going on when GIN vacuum records are marked as such, not as heap
  * records.) This is currently only used for entry tree leaf pages.
@@ -637,12 +635,12 @@ typedef struct GinBtreeStack
 
 typedef struct GinBtreeData *GinBtree;
 
-/* Return codes for GinBtreeData.placeToPage method */
+/* Return codes for GinBtreeData.beginPlaceToPage method */
 typedef enum
 {
-	UNMODIFIED,
-	INSERTED,
-	SPLIT
+	GPTP_NO_WORK,
+	GPTP_INSERT,
+	GPTP_SPLIT
 } GinPlaceToPageRC;
 
 typedef struct GinBtreeData
@@ -655,7 +653,8 @@ typedef struct GinBtreeData
 
 	/* insert methods */
 	OffsetNumber (*findChildPtr) (GinBtree, Page, BlockNumber, OffsetNumber);
-	GinPlaceToPageRC (*placeToPage) (GinBtree, Buffer, GinBtreeStack *, void *, BlockNumber, Page *, Page *);
+	GinPlaceToPageRC (*beginPlaceToPage) (GinBtree, Buffer, GinBtreeStack *, void *, BlockNumber, void **, Page *, Page *);
+	void		(*execPlaceToPage) (GinBtree, Buffer, GinBtreeStack *, void *, BlockNumber, void *);
 	void	   *(*prepareDownlink) (GinBtree, Buffer);
 	void		(*fillRoot) (GinBtree, Page, BlockNumber, Page, BlockNumber, Page);
 

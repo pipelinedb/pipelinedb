@@ -2232,6 +2232,59 @@ SELECT c1,c2,c3,c4 FROM ft2 ORDER BY c1;
  1104 | 204 | ddd                | 
 (819 rows)
 
+EXPLAIN (verbose, costs off)
+INSERT INTO ft2 (c1,c2,c3) VALUES (9999,999,'foo') RETURNING tableoid::regclass;
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Insert on public.ft2
+   Output: (tableoid)::regclass
+   Remote SQL: INSERT INTO "S 1"."T 1"("C 1", c2, c3, c4, c5, c6, c7, c8) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+   ->  Result
+         Output: 9999, 999, NULL::integer, 'foo'::text, NULL::timestamp with time zone, NULL::timestamp without time zone, NULL::character varying, 'ft2       '::character(10), NULL::user_enum
+(5 rows)
+
+INSERT INTO ft2 (c1,c2,c3) VALUES (9999,999,'foo') RETURNING tableoid::regclass;
+ tableoid 
+----------
+ ft2
+(1 row)
+
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c3 = 'bar' WHERE c1 = 9999 RETURNING tableoid::regclass;
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Update on public.ft2
+   Output: (tableoid)::regclass
+   Remote SQL: UPDATE "S 1"."T 1" SET c3 = $2 WHERE ctid = $1
+   ->  Foreign Scan on public.ft2
+         Output: c1, c2, NULL::integer, 'bar'::text, c4, c5, c6, c7, c8, ctid
+         Remote SQL: SELECT "C 1", c2, c4, c5, c6, c7, c8, ctid FROM "S 1"."T 1" WHERE (("C 1" = 9999)) FOR UPDATE
+(6 rows)
+
+UPDATE ft2 SET c3 = 'bar' WHERE c1 = 9999 RETURNING tableoid::regclass;
+ tableoid 
+----------
+ ft2
+(1 row)
+
+EXPLAIN (verbose, costs off)
+DELETE FROM ft2 WHERE c1 = 9999 RETURNING tableoid::regclass;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Delete on public.ft2
+   Output: (tableoid)::regclass
+   Remote SQL: DELETE FROM "S 1"."T 1" WHERE ctid = $1
+   ->  Foreign Scan on public.ft2
+         Output: ctid
+         Remote SQL: SELECT ctid FROM "S 1"."T 1" WHERE (("C 1" = 9999)) FOR UPDATE
+(6 rows)
+
+DELETE FROM ft2 WHERE c1 = 9999 RETURNING tableoid::regclass;
+ tableoid 
+----------
+ ft2
+(1 row)
+
 -- Test that trigger on remote table works as expected
 CREATE OR REPLACE FUNCTION "S 1".F_BRTRIG() RETURNS trigger AS $$
 BEGIN
@@ -3463,7 +3516,7 @@ CREATE TABLE import_source."x 5" (c1 float8);
 ALTER TABLE import_source."x 5" DROP COLUMN c1;
 CREATE SCHEMA import_dest1;
 IMPORT FOREIGN SCHEMA import_source FROM SERVER loopback INTO import_dest1;
-\det+ import_dest1
+\det+ import_dest1.*
                                      List of foreign tables
     Schema    | Table |  Server  |                   FDW Options                   | Description 
 --------------+-------+----------+-------------------------------------------------+-------------
@@ -3519,7 +3572,7 @@ FDW Options: (schema_name 'import_source', table_name 'x 5')
 CREATE SCHEMA import_dest2;
 IMPORT FOREIGN SCHEMA import_source FROM SERVER loopback INTO import_dest2
   OPTIONS (import_default 'true');
-\det+ import_dest2
+\det+ import_dest2.*
                                      List of foreign tables
     Schema    | Table |  Server  |                   FDW Options                   | Description 
 --------------+-------+----------+-------------------------------------------------+-------------
@@ -3574,7 +3627,7 @@ FDW Options: (schema_name 'import_source', table_name 'x 5')
 CREATE SCHEMA import_dest3;
 IMPORT FOREIGN SCHEMA import_source FROM SERVER loopback INTO import_dest3
   OPTIONS (import_collate 'false', import_not_null 'false');
-\det+ import_dest3
+\det+ import_dest3.*
                                      List of foreign tables
     Schema    | Table |  Server  |                   FDW Options                   | Description 
 --------------+-------+----------+-------------------------------------------------+-------------
@@ -3630,7 +3683,7 @@ FDW Options: (schema_name 'import_source', table_name 'x 5')
 CREATE SCHEMA import_dest4;
 IMPORT FOREIGN SCHEMA import_source LIMIT TO (t1, nonesuch)
   FROM SERVER loopback INTO import_dest4;
-\det+ import_dest4
+\det+ import_dest4.*
                                      List of foreign tables
     Schema    | Table |  Server  |                  FDW Options                   | Description 
 --------------+-------+----------+------------------------------------------------+-------------
@@ -3639,7 +3692,7 @@ IMPORT FOREIGN SCHEMA import_source LIMIT TO (t1, nonesuch)
 
 IMPORT FOREIGN SCHEMA import_source EXCEPT (t1, "x 4", nonesuch)
   FROM SERVER loopback INTO import_dest4;
-\det+ import_dest4
+\det+ import_dest4.*
                                      List of foreign tables
     Schema    | Table |  Server  |                   FDW Options                   | Description 
 --------------+-------+----------+-------------------------------------------------+-------------

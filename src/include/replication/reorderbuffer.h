@@ -26,15 +26,18 @@ typedef struct ReorderBufferTupleBuf
 	/* position in preallocated list */
 	slist_node	node;
 
-	/* tuple, stored sequentially */
+	/* tuple header, the interesting bit for users of logical decoding */
 	HeapTupleData tuple;
-	union
-	{
-		HeapTupleHeaderData header;
-		char		data[MaxHeapTupleSize];
-		double		align_it;	/* ensure t_data is MAXALIGN'd */
-	}			t_data;
+
+	/* pre-allocated size of tuple buffer, different from tuple size */
+	Size	alloc_tuple_size;
+
+	/* actual tuple data follows */
 } ReorderBufferTupleBuf;
+
+/* pointer to the data stored in a TupleBuf */
+#define ReorderBufferTupleBufData(p) \
+	((HeapTupleHeader) MAXALIGN(((char *) p) + sizeof(ReorderBufferTupleBuf)))
 
 /*
  * Types of the change passed to a 'change' callback.
@@ -78,8 +81,8 @@ typedef struct ReorderBufferChange
 	RepOriginId origin_id;
 
 	/*
-	 * Context data for the change, which part of the union is valid depends
-	 * on action/action_internal.
+	 * Context data for the change. Which part of the union is valid depends
+	 * on action.
 	 */
 	union
 	{
@@ -245,7 +248,7 @@ typedef struct ReorderBufferTXN
 	/* ---
 	 * Position in one of three lists:
 	 * * list of subtransactions if we are *known* to be subxact
-	 * * list of toplevel xacts (can be am as-yet unknown subxact)
+	 * * list of toplevel xacts (can be an as-yet unknown subxact)
 	 * * list of preallocated ReorderBufferTXNs
 	 * ---
 	 */
@@ -283,7 +286,7 @@ struct ReorderBuffer
 
 	/*
 	 * Transactions that could be a toplevel xact, ordered by LSN of the first
-	 * record bearing that xid..
+	 * record bearing that xid.
 	 */
 	dlist_head	toplevel_by_lsn;
 
@@ -295,7 +298,7 @@ struct ReorderBuffer
 	ReorderBufferTXN *by_txn_last_txn;
 
 	/*
-	 * Callacks to be called when a transactions commits.
+	 * Callbacks to be called when a transactions commits.
 	 */
 	ReorderBufferBeginCB begin;
 	ReorderBufferApplyChangeCB apply_change;
@@ -318,7 +321,7 @@ struct ReorderBuffer
 	 * overhead we cache some unused ones here.
 	 *
 	 * The maximum number of cached entries is controlled by const variables
-	 * ontop of reorderbuffer.c
+	 * on top of reorderbuffer.c
 	 */
 
 	/* cached ReorderBufferTXNs */
@@ -344,7 +347,7 @@ struct ReorderBuffer
 ReorderBuffer *ReorderBufferAllocate(void);
 void		ReorderBufferFree(ReorderBuffer *);
 
-ReorderBufferTupleBuf *ReorderBufferGetTupleBuf(ReorderBuffer *);
+ReorderBufferTupleBuf *ReorderBufferGetTupleBuf(ReorderBuffer *, Size tuple_len);
 void		ReorderBufferReturnTupleBuf(ReorderBuffer *, ReorderBufferTupleBuf *tuple);
 ReorderBufferChange *ReorderBufferGetChange(ReorderBuffer *);
 void		ReorderBufferReturnChange(ReorderBuffer *, ReorderBufferChange *);
@@ -369,7 +372,7 @@ void ReorderBufferAddNewTupleCids(ReorderBuffer *, TransactionId, XLogRecPtr lsn
 						 CommandId cmin, CommandId cmax, CommandId combocid);
 void ReorderBufferAddInvalidations(ReorderBuffer *, TransactionId, XLogRecPtr lsn,
 							  Size nmsgs, SharedInvalidationMessage *msgs);
-bool		ReorderBufferIsXidKnown(ReorderBuffer *, TransactionId xid);
+void		ReorderBufferProcessXid(ReorderBuffer *, TransactionId xid, XLogRecPtr lsn);
 void		ReorderBufferXidSetCatalogChanges(ReorderBuffer *, TransactionId xid, XLogRecPtr lsn);
 bool		ReorderBufferXidHasCatalogChanges(ReorderBuffer *, TransactionId xid);
 bool		ReorderBufferXidHasBaseSnapshot(ReorderBuffer *, TransactionId xid);

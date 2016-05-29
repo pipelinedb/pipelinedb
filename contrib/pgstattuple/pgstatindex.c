@@ -57,16 +57,6 @@ PG_FUNCTION_INFO_V1(pgstatginindex);
 #define IS_BTREE(r) ((r)->rd_rel->relam == BTREE_AM_OID)
 #define IS_GIN(r) ((r)->rd_rel->relam == GIN_AM_OID)
 
-#define CHECK_PAGE_OFFSET_RANGE(pg, offnum) { \
-		if ( !(FirstOffsetNumber <= (offnum) && \
-						(offnum) <= PageGetMaxOffsetNumber(pg)) ) \
-			 elog(ERROR, "page offset number out of range"); }
-
-/* note: BlockNumber is unsigned, hence can't be negative */
-#define CHECK_RELATION_BLOCK_RANGE(rel, blkno) { \
-		if ( RelationGetNumberOfBlocks(rel) <= (BlockNumber) (blkno) ) \
-			 elog(ERROR, "block number out of range"); }
-
 /* ------------------------------------------------
  * A structure for a whole btree index statistics
  * used by pgstatindex().
@@ -78,7 +68,6 @@ typedef struct BTIndexStat
 	uint32		level;
 	BlockNumber root_blkno;
 
-	uint64		root_pages;
 	uint64		internal_pages;
 	uint64		leaf_pages;
 	uint64		empty_pages;
@@ -184,7 +173,6 @@ pgstatindex_impl(Relation rel, FunctionCallInfo fcinfo)
 	}
 
 	/* -- init counters -- */
-	indexStat.root_pages = 0;
 	indexStat.internal_pages = 0;
 	indexStat.leaf_pages = 0;
 	indexStat.empty_pages = 0;
@@ -217,7 +205,11 @@ pgstatindex_impl(Relation rel, FunctionCallInfo fcinfo)
 
 		/* Determine page type, and update totals */
 
-		if (P_ISLEAF(opaque))
+		if (P_ISDELETED(opaque))
+			indexStat.deleted_pages++;
+		else if (P_IGNORE(opaque))
+			indexStat.empty_pages++;	/* this is the "half dead" state */
+		else if (P_ISLEAF(opaque))
 		{
 			int			max_avail;
 
@@ -234,12 +226,6 @@ pgstatindex_impl(Relation rel, FunctionCallInfo fcinfo)
 			if (opaque->btpo_next != P_NONE && opaque->btpo_next < blkno)
 				indexStat.fragments++;
 		}
-		else if (P_ISDELETED(opaque))
-			indexStat.deleted_pages++;
-		else if (P_IGNORE(opaque))
-			indexStat.empty_pages++;
-		else if (P_ISROOT(opaque))
-			indexStat.root_pages++;
 		else
 			indexStat.internal_pages++;
 
@@ -268,7 +254,7 @@ pgstatindex_impl(Relation rel, FunctionCallInfo fcinfo)
 		values[j++] = psprintf("%d", indexStat.version);
 		values[j++] = psprintf("%d", indexStat.level);
 		values[j++] = psprintf(INT64_FORMAT,
-							   (indexStat.root_pages +
+							   (1 +		/* include the metapage in index_size */
 								indexStat.leaf_pages +
 								indexStat.internal_pages +
 								indexStat.deleted_pages +

@@ -2493,6 +2493,8 @@ LCS_asString(LockClauseStrength strength)
 void
 CheckSelectLocking(Query *qry, LockClauseStrength strength)
 {
+	Assert(strength != LCS_NONE);		/* else caller error */
+
 	if (qry->setOperations)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

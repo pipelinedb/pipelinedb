@@ -553,7 +553,8 @@ updateFuzzyAttrMatchState(int fuzzy_rte_penalty,
 		varstr_levenshtein_less_equal(actual, strlen(actual), match, matchlen,
 									  1, 1, 1,
 									  fuzzystate->distance + 1
-									  - fuzzy_rte_penalty);
+									  - fuzzy_rte_penalty,
+									  true);
 
 	/*
 	 * If more than half the characters are different, don't treat it as a
@@ -846,10 +847,12 @@ searchRangeTableForCol(ParseState *pstate, const char *alias, char *colname,
 			 */
 			if (alias != NULL)
 				fuzzy_rte_penalty =
-					varstr_levenshtein(alias, strlen(alias),
-									   rte->eref->aliasname,
-									   strlen(rte->eref->aliasname),
-									   1, 1, 1);
+					varstr_levenshtein_less_equal(alias, strlen(alias),
+												  rte->eref->aliasname,
+												strlen(rte->eref->aliasname),
+												  1, 1, 1,
+												  MAX_FUZZY_DISTANCE + 1,
+												  true);
 
 			/*
 			 * Scan for a matching column; if we find an exact match, we're
@@ -1005,7 +1008,7 @@ markVarForSelectPriv(ParseState *pstate, Var *var, RangeTblEntry *rte)
  *
  * It is an error for there to be more aliases present than required.
  */
-void
+static void
 buildRelationAliases(TupleDesc tupdesc, Alias *alias, Alias *eref)
 {
 	int			maxattrs = tupdesc->natts;

@@ -58,12 +58,9 @@ WHERE p1.prolang = 0 OR p1.prorettype = 0 OR
        0::oid = ANY (p1.proargtypes) OR
        procost <= 0 OR
        CASE WHEN proretset THEN prorows <= 0 ELSE prorows != 0 END;
- oid  |      proname       
-------+--------------------
- 4324 | hll_agg_transp
- 4342 | tdigest_agg_transp
- 4408 | fss_topk
-(3 rows)
+ oid | proname 
+-----+---------
+(0 rows)
 
 -- prosrc should never be null or empty
 SELECT p1.oid, p1.proname
@@ -290,13 +287,14 @@ WHERE p1.prorettype = 'internal'::regtype AND NOT
 ------+------------------------
  2304 | internal_in
  5021 | cqosastaterecv
- 4308 | naggstaterecv
+ 4308 | numaggstaterecv
  4310 | arrayaggstaterecv
- 4313 | byteatostringinfo
+ 4313 | jsonaggstaterecv
  4320 | stringaggstaterecv
  4473 | first_values_recv
  4482 | arrayaggarraystaterecv
-(8 rows)
+ 4491 | numpolyaggstaterecv
+(9 rows)
 
 -- Look for functions that return a polymorphic type and do not have any
 -- polymorphic argument.  Calls of such functions would be unresolvable
@@ -1212,8 +1210,6 @@ WHERE a.aggfnoid = p.oid AND
     );
  aggfnoid |   proname    | oid  |      proname       
 ----------+--------------+------+--------------------
-     4322 | hll_agg      | 4324 | hll_agg_transp
-     4340 | tdigest_agg  | 4342 | tdigest_agg_transp
      4420 | keyed_min    | 4458 | keyed_min_trans
      4421 | keyed_min    | 4458 | keyed_min_trans
      4422 | keyed_min    | 4458 | keyed_min_trans
@@ -1253,7 +1249,7 @@ WHERE a.aggfnoid = p.oid AND
      4456 | keyed_max    | 4459 | keyed_max_trans
      4457 | keyed_max    | 4459 | keyed_max_trans
      4469 | first_values | 4470 | first_values_trans
-(41 rows)
+(39 rows)
 
 -- Cross-check finalfn (if present) against its entry in pg_proc.
 SELECT a.aggfnoid::oid, p.proname, pfn.oid, pfn.proname

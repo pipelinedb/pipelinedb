@@ -3,9 +3,8 @@
  * nodeBitmapIndexscan.c
  *	  Routines to support bitmapped index scans of relations
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -197,7 +196,6 @@ ExecInitBitmapIndexScan(BitmapIndexScan *node, EState *estate, int eflags)
 {
 	BitmapIndexScanState *indexstate;
 	bool		relistarget;
-	LOCKMODE lockmode;
 
 	/* check for unsupported flags */
 	Assert(!(eflags & (EXEC_FLAG_BACKWARD | EXEC_FLAG_MARK)));
@@ -253,13 +251,8 @@ ExecInitBitmapIndexScan(BitmapIndexScan *node, EState *estate, int eflags)
 	 * taking another lock here.  Otherwise we need a normal reader's lock.
 	 */
 	relistarget = ExecRelationIsTargetRelation(estate, node->scan.scanrelid);
-
-	if (relistarget)
-		lockmode = AccessShareLock;
-	else
-		lockmode = NoLock;
-
-	indexstate->biss_RelationDesc = index_open(node->indexid, lockmode);
+	indexstate->biss_RelationDesc = index_open(node->indexid,
+									 relistarget ? NoLock : AccessShareLock);
 
 	/*
 	 * Initialize index-specific scan state

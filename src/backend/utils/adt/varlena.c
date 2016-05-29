@@ -448,17 +448,6 @@ byteasend(PG_FUNCTION_ARGS)
 }
 
 Datum
-byteatostringinfo(PG_FUNCTION_ARGS)
-{
-	StringInfo state = (StringInfo) makeStringAggState(fcinfo)->buf;
-	bytea *bytes = PG_GETARG_BYTEA_PP(0);
-
-	appendBinaryStringInfo(state, VARDATA_ANY(bytes), VARSIZE_ANY_EXHDR(bytes));
-
-	PG_RETURN_POINTER(state);
-}
-
-Datum
 bytea_string_agg_transfn(PG_FUNCTION_ARGS)
 {
 	StringAggState *state;

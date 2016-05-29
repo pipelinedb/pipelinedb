@@ -37,6 +37,13 @@ uninstall:
 
 clean distclean:
 	rm -f pgbench$(X) $(OBJS)
+	rm -rf tmp_check
 
 maintainer-clean: distclean
 	rm -f exprparse.c exprscan.c
+
+check:
+	$(prove_check)
+
+installcheck:
+	$(prove_installcheck)

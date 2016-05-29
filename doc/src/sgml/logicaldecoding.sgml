@@ -6,7 +6,7 @@
   </indexterm>
   <para>
    PostgreSQL provides infrastructure to stream the modifications performed
-   via SQL to external consumers.  This functionality can be used to for a
+   via SQL to external consumers.  This functionality can be used for a
    variety of purposes, including replication solutions and auditing.
   </para>
 
@@ -151,8 +151,8 @@ postgres=# SELECT pg_drop_replication_slot('regression_slot');
     distribution.  This requires that client authentication is set up to allow
     replication connections
     (see <xref linkend="streaming-replication-authentication">) and
-    that <varname>max_wal_senders</varname> is set sufficiently high to an
-    additional connection.
+    that <varname>max_wal_senders</varname> is set sufficiently high to allow
+    an additional connection.
    </para>
 <programlisting>
 $ pg_recvlogical -d postgres --slot test --create-slot
@@ -280,7 +280,7 @@ $ pg_recvlogical -d postgres --slot test --drop-slot
     The commands
     <itemizedlist>
      <listitem>
-      <para><literal>CREATE_REPLICATION_SLOT <replaceable>slot_name</replaceable> LOGICAL <replaceable>options</replaceable></literal></para>
+      <para><literal>CREATE_REPLICATION_SLOT <replaceable>slot_name</replaceable> LOGICAL <replaceable>output_plugin</replaceable></literal></para>
      </listitem>
 
      <listitem>
@@ -288,7 +288,7 @@ $ pg_recvlogical -d postgres --slot test --drop-slot
      </listitem>
 
      <listitem>
-      <para><literal>START_REPLICATION SLOT <replaceable>slot_name</replaceable> LOGICAL <replaceable>options</replaceable></literal></para>
+      <para><literal>START_REPLICATION SLOT <replaceable>slot_name</replaceable> LOGICAL ...</literal></para>
      </listitem>
     </itemizedlist>
     are used to create, drop, and stream changes from a replication
@@ -324,7 +324,7 @@ $ pg_recvlogical -d postgres --slot test --drop-slot
    <title>System Catalogs Related to Logical Decoding</title>
 
    <para>
-    The <link linkend="catalog-pg-replication-slots"><structname>pg_replication_slots</structname></link>
+    The <link linkend="view-pg-replication-slots"><structname>pg_replication_slots</structname></link>
     view and the
     <link linkend="monitoring-stats-views-table"><structname>pg_stat_replication</structname></link>
     view provide information about the current state of replication slots and
@@ -581,7 +581,7 @@ typedef void (*LogicalDecodeChangeCB) (
        from <parameter>origin_id</parameter> is of interest to the
        output plugin.
 <programlisting>
-typedef bool (*LogicalDecodeChangeCB) (
+typedef bool (*LogicalDecodeFilterByOriginCB) (
     struct LogicalDecodingContext *ctx,
     RepNodeId origin_id
 );

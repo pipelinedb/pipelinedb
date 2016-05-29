@@ -214,8 +214,6 @@ typedef struct PlannerInfo
 
 	List	   *join_info_list; /* list of SpecialJoinInfos */
 
-	List	   *lateral_info_list;		/* list of LateralJoinInfos */
-
 	List	   *append_rel_list;	/* list of AppendRelInfos */
 
 	List	   *rowMarks;		/* list of PlanRowMarks */

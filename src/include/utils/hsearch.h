@@ -6,7 +6,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/utils/hsearch.h
  *
@@ -15,7 +14,6 @@
 #ifndef HSEARCH_H
 #define HSEARCH_H
 
-#include "utils/palloc.h"
 
 /*
  * Hash functions must have this signature.
@@ -143,7 +141,6 @@ extern long hash_select_dirsize(long num_entries);
 extern Size hash_get_shared_size(HASHCTL *info, int flags);
 extern void AtEOXact_HashTables(bool isCommit);
 extern void AtEOSubXact_HashTables(bool isCommit, int nestDepth);
-extern void hash_unfreeze(HTAB *hashp);
 
 /*
  * prototypes for functions in hashfn.c
@@ -155,7 +152,6 @@ extern void hash_unfreeze(HTAB *hashp);
 extern uint32 string_hash(const void *key, Size keysize);
 extern uint32 tag_hash(const void *key, Size keysize);
 extern uint32 uint32_hash(const void *key, Size keysize);
-extern uint32 oid_hash(const void *key, Size keysize);
 extern uint32 bitmap_hash(const void *key, Size keysize);
 extern int	bitmap_match(const void *key1, const void *key2, Size keysize);
 

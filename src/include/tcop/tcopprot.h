@@ -6,7 +6,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/tcop/tcopprot.h
  *
@@ -23,7 +22,6 @@
 #include "nodes/params.h"
 #include "nodes/parsenodes.h"
 #include "nodes/plannodes.h"
-#include "pipeline/stream.h"
 #include "storage/procsignal.h"
 #include "utils/guc.h"
 
@@ -69,7 +67,6 @@ extern void StatementCancelHandler(SIGNAL_ARGS);
 extern void FloatExceptionHandler(SIGNAL_ARGS) pg_attribute_noreturn();
 extern void RecoveryConflictInterrupt(ProcSignalReason reason); /* called from SIGUSR1
 																 * handler */
-
 extern void ProcessClientReadInterrupt(bool blocked);
 extern void ProcessClientWriteInterrupt(bool blocked);
 

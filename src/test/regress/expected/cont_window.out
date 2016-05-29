@@ -24,10 +24,10 @@ View definition:
    FROM ONLY cqwindow_stream;
 
 SELECT pipeline_get_overlay_viewdef('cqwindow0');
-                                                                                      pipeline_get_overlay_viewdef                                                                                       
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT cqwindow0_mrel.key,                                                                                                                                                                            +
-     pg_catalog.numeric_sum(combine(naggstaterecv(cqwindow0_mrel.sum)) OVER (PARTITION BY cqwindow0_mrel.key ORDER BY cqwindow0_mrel.arrival_timestamp ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)) AS sum+
+                                                                                       pipeline_get_overlay_viewdef                                                                                        
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT cqwindow0_mrel.key,                                                                                                                                                                              +
+     pg_catalog.numeric_sum(combine(numaggstaterecv(cqwindow0_mrel.sum)) OVER (PARTITION BY cqwindow0_mrel.key ORDER BY cqwindow0_mrel.arrival_timestamp ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)) AS sum+
     FROM ONLY cqwindow0_mrel;
 (1 row)
 

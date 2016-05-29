@@ -358,6 +358,15 @@ EXPLAIN (verbose, costs off)
 DELETE FROM ft2 USING ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 2;
 DELETE FROM ft2 USING ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 2;
 SELECT c1,c2,c3,c4 FROM ft2 ORDER BY c1;
+EXPLAIN (verbose, costs off)
+INSERT INTO ft2 (c1,c2,c3) VALUES (9999,999,'foo') RETURNING tableoid::regclass;
+INSERT INTO ft2 (c1,c2,c3) VALUES (9999,999,'foo') RETURNING tableoid::regclass;
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c3 = 'bar' WHERE c1 = 9999 RETURNING tableoid::regclass;
+UPDATE ft2 SET c3 = 'bar' WHERE c1 = 9999 RETURNING tableoid::regclass;
+EXPLAIN (verbose, costs off)
+DELETE FROM ft2 WHERE c1 = 9999 RETURNING tableoid::regclass;
+DELETE FROM ft2 WHERE c1 = 9999 RETURNING tableoid::regclass;
 
 -- Test that trigger on remote table works as expected
 CREATE OR REPLACE FUNCTION "S 1".F_BRTRIG() RETURNS trigger AS $$
@@ -798,29 +807,29 @@ ALTER TABLE import_source."x 5" DROP COLUMN c1;
 
 CREATE SCHEMA import_dest1;
 IMPORT FOREIGN SCHEMA import_source FROM SERVER loopback INTO import_dest1;
-\det+ import_dest1
+\det+ import_dest1.*
 \d import_dest1.*
 
 -- Options
 CREATE SCHEMA import_dest2;
 IMPORT FOREIGN SCHEMA import_source FROM SERVER loopback INTO import_dest2
   OPTIONS (import_default 'true');
-\det+ import_dest2
+\det+ import_dest2.*
 \d import_dest2.*
 CREATE SCHEMA import_dest3;
 IMPORT FOREIGN SCHEMA import_source FROM SERVER loopback INTO import_dest3
   OPTIONS (import_collate 'false', import_not_null 'false');
-\det+ import_dest3
+\det+ import_dest3.*
 \d import_dest3.*
 
 -- Check LIMIT TO and EXCEPT
 CREATE SCHEMA import_dest4;
 IMPORT FOREIGN SCHEMA import_source LIMIT TO (t1, nonesuch)
   FROM SERVER loopback INTO import_dest4;
-\det+ import_dest4
+\det+ import_dest4.*
 IMPORT FOREIGN SCHEMA import_source EXCEPT (t1, "x 4", nonesuch)
   FROM SERVER loopback INTO import_dest4;
-\det+ import_dest4
+\det+ import_dest4.*
 
 -- Assorted error cases
 IMPORT FOREIGN SCHEMA import_source FROM SERVER loopback INTO import_dest4;

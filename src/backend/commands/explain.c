@@ -38,10 +38,6 @@
 #include "utils/typcache.h"
 #include "utils/xml.h"
 
-/* Crude hack to avoid changing sizeof(ExplainState) in released branches */
-#define grouping_stack extra->groupingstack
-#define deparse_cxt extra->deparsecxt
-
 /* Hook for plugins to get control in ExplainOneQuery() */
 ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
 
@@ -283,9 +279,6 @@ NewExplainState(void)
 	es->costs = true;
 	/* Prepare output buffer. */
 	es->str = makeStringInfo();
-
-	/* Kluge to avoid changing sizeof(ExplainState) in released branches. */
-	es->extra = (ExplainStateExtra *) palloc0(sizeof(ExplainStateExtra));
 
 	return es;
 }

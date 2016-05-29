@@ -2237,6 +2237,38 @@ where t4.thousand = t5.unique1 and ss.x1 = t4.tenthous and ss.x2 = t5.stringu1;
 (1 row)
 
 --
+-- regression test: check a case where we formerly missed including an EC
+-- enforcement clause because it was expected to be handled at scan level
+--
+explain (costs off)
+select a.f1, b.f1, t.thousand, t.tenthous from
+  tenk1 t,
+  (select sum(f1)+1 as f1 from int4_tbl i4a) a,
+  (select sum(f1) as f1 from int4_tbl i4b) b
+where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Aggregate
+         ->  Seq Scan on int4_tbl i4b
+   ->  Nested Loop
+         Join Filter: ((sum(i4b.f1)) = ((sum(i4a.f1) + 1)))
+         ->  Aggregate
+               ->  Seq Scan on int4_tbl i4a
+         ->  Index Only Scan using tenk1_thous_tenthous on tenk1 t
+               Index Cond: ((thousand = (sum(i4b.f1))) AND (tenthous = ((((sum(i4a.f1) + 1)) + (sum(i4b.f1))) + 999)))
+(9 rows)
+
+select a.f1, b.f1, t.thousand, t.tenthous from
+  tenk1 t,
+  (select sum(f1)+1 as f1 from int4_tbl i4a) a,
+  (select sum(f1) as f1 from int4_tbl i4b) b
+where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
+ f1 | f1 | thousand | tenthous 
+----+----+----------+----------
+(0 rows)
+
+--
 -- Clean up
 --
 DROP TABLE t1;
@@ -2330,6 +2362,34 @@ select tt1.*, tt2.* from tt2 right join tt1 on tt1.joincol = tt2.joincol;
 
 reset enable_hashjoin;
 reset enable_nestloop;
+--
+-- regression test for bug #13908 (hash join with skew tuples & nbatch increase)
+--
+set work_mem to '64kB';
+set enable_mergejoin to off;
+explain (costs off)
+select count(*) from tenk1 a, tenk1 b
+  where a.hundred = b.thousand and (b.fivethous % 10) < 10;
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Aggregate
+   ->  Hash Join
+         Hash Cond: (a.hundred = b.thousand)
+         ->  Index Only Scan using tenk1_hundred on tenk1 a
+         ->  Hash
+               ->  Seq Scan on tenk1 b
+                     Filter: ((fivethous % 10) < 10)
+(7 rows)
+
+select count(*) from tenk1 a, tenk1 b
+  where a.hundred = b.thousand and (b.fivethous % 10) < 10;
+ count  
+--------
+ 100000
+(1 row)
+
+reset work_mem;
+reset enable_mergejoin;
 --
 -- regression test for 8.2 bug with improper re-ordering of left joins
 --
@@ -3772,6 +3832,37 @@ where ss1.c2 = 0;
  f1 | q1 | q2 | c1 | c2 | c3 
 ----+----+----+----+----+----
 (0 rows)
+
+--
+-- test successful handling of full join underneath left join (bug #14105)
+--
+explain (costs off)
+select * from
+  (select 1 as id) as xx
+  left join
+    (tenk1 as a1 full join (select 1 as id) as yy on (a1.unique1 = yy.id))
+  on (xx.id = coalesce(yy.id));
+              QUERY PLAN               
+---------------------------------------
+ Nested Loop Left Join
+   Join Filter: ((1) = COALESCE((1)))
+   ->  Result
+   ->  Hash Full Join
+         Hash Cond: (a1.unique1 = (1))
+         ->  Seq Scan on tenk1 a1
+         ->  Hash
+               ->  Result
+(8 rows)
+
+select * from
+  (select 1 as id) as xx
+  left join
+    (tenk1 as a1 full join (select 1 as id) as yy on (a1.unique1 = yy.id))
+  on (xx.id = coalesce(yy.id));
+ id | unique1 | unique2 | two | four | ten | twenty | hundred | thousand | twothousand | fivethous | tenthous | odd | even | stringu1 | stringu2 | string4 | id 
+----+---------+---------+-----+------+-----+--------+---------+----------+-------------+-----------+----------+-----+------+----------+----------+---------+----
+  1 |       1 |    2838 |   1 |    1 |   1 |      1 |       1 |        1 |           1 |         1 |        1 |   2 |    3 | BAAAAA   | EFEAAA   | OOOOxx  |  1
+(1 row)
 
 --
 -- test ability to push constants through outer join clauses

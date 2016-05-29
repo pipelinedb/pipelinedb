@@ -26,7 +26,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -44,7 +43,6 @@
 #include "access/htup_details.h"
 #include "access/multixact.h"
 #include "access/transam.h"
-#include "access/tuptoaster.h"
 #include "access/visibilitymap.h"
 #include "access/xlog.h"
 #include "catalog/catalog.h"
@@ -53,8 +51,6 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "pgstat.h"
-#include "pipeline/cqmatrel.h"
-#include "pipeline/sw_vacuum.h"
 #include "portability/instr_time.h"
 #include "postmaster/autovacuum.h"
 #include "storage/bufmgr.h"
@@ -957,7 +953,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 				heap_execute_freeze_tuple(htup, &frozen[i]);
 			}
 
-			/* Now WAL-log freezing if neccessary */
+			/* Now WAL-log freezing if necessary */
 			if (RelationNeedsWAL(onerel))
 			{
 				XLogRecPtr	recptr;

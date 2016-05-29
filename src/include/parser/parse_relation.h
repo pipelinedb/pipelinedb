@@ -6,7 +6,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/parser/parse_relation.h
  *
@@ -118,6 +117,5 @@ extern Name attnumAttName(Relation rd, int attid);
 extern Oid	attnumTypeId(Relation rd, int attid);
 extern Oid	attnumCollationId(Relation rd, int attid);
 extern bool isQueryUsingTempRelation(Query *query);
-extern void buildRelationAliases(TupleDesc tupdesc, Alias *alias, Alias *eref);
 
 #endif   /* PARSE_RELATION_H */

@@ -391,6 +391,23 @@ from
   tenk1 t5
 where t4.thousand = t5.unique1 and ss.x1 = t4.tenthous and ss.x2 = t5.stringu1;
 
+--
+-- regression test: check a case where we formerly missed including an EC
+-- enforcement clause because it was expected to be handled at scan level
+--
+explain (costs off)
+select a.f1, b.f1, t.thousand, t.tenthous from
+  tenk1 t,
+  (select sum(f1)+1 as f1 from int4_tbl i4a) a,
+  (select sum(f1) as f1 from int4_tbl i4b) b
+where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
+
+select a.f1, b.f1, t.thousand, t.tenthous from
+  tenk1 t,
+  (select sum(f1)+1 as f1 from int4_tbl i4a) a,
+  (select sum(f1) as f1 from int4_tbl i4b) b
+where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
+
 
 --
 -- Clean up
@@ -462,6 +479,22 @@ select tt1.*, tt2.* from tt2 right join tt1 on tt1.joincol = tt2.joincol;
 
 reset enable_hashjoin;
 reset enable_nestloop;
+
+--
+-- regression test for bug #13908 (hash join with skew tuples & nbatch increase)
+--
+
+set work_mem to '64kB';
+set enable_mergejoin to off;
+
+explain (costs off)
+select count(*) from tenk1 a, tenk1 b
+  where a.hundred = b.thousand and (b.fivethous % 10) < 10;
+select count(*) from tenk1 a, tenk1 b
+  where a.hundred = b.thousand and (b.fivethous % 10) < 10;
+
+reset work_mem;
+reset enable_mergejoin;
 
 --
 -- regression test for 8.2 bug with improper re-ordering of left joins
@@ -1192,6 +1225,23 @@ select ss2.* from
   on i41.f1 = ss1.c1,
   lateral (select i41.*, i8.*, ss1.* from text_tbl limit 1) ss2
 where ss1.c2 = 0;
+
+--
+-- test successful handling of full join underneath left join (bug #14105)
+--
+
+explain (costs off)
+select * from
+  (select 1 as id) as xx
+  left join
+    (tenk1 as a1 full join (select 1 as id) as yy on (a1.unique1 = yy.id))
+  on (xx.id = coalesce(yy.id));
+
+select * from
+  (select 1 as id) as xx
+  left join
+    (tenk1 as a1 full join (select 1 as id) as yy on (a1.unique1 = yy.id))
+  on (xx.id = coalesce(yy.id));
 
 --
 -- test ability to push constants through outer join clauses

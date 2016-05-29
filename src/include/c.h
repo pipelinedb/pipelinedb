@@ -293,7 +293,6 @@ typedef unsigned long long int uint64;
  *		There currently is only a limited support for the type. E.g. 128bit
  *		literals and snprintf are not supported; but math is.
  */
-#undef PG_INT128_TYPE
 #if defined(PG_INT128_TYPE)
 #define HAVE_INT128
 typedef PG_INT128_TYPE int128;

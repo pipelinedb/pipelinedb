@@ -42,7 +42,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -1373,11 +1372,6 @@ hash_freeze(HTAB *hashp)
 	hashp->frozen = true;
 }
 
-void
-hash_unfreeze(HTAB *hashp)
-{
-	hashp->frozen = false;
-}
 
 /********************************* UTILITIES ************************/
 

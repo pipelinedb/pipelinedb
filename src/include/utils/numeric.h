@@ -61,8 +61,15 @@ int32		numeric_maximum_size(int32 typmod);
 extern char *numeric_out_sci(Numeric num, int scale);
 extern char *numeric_normalize(Numeric num);
 
-/* serialization/deserialization functions for passing transition states between procs */
-extern Datum naggstaterecv(PG_FUNCTION_ARGS);
-extern Datum naggstatesend(PG_FUNCTION_ARGS);
+/* PipelineDB */
+extern Datum int_avg_combine(PG_FUNCTION_ARGS);
+extern Datum numeric_combine(PG_FUNCTION_ARGS);
+extern Datum numeric_poly_combine(PG_FUNCTION_ARGS);
+extern Datum numeric_avg_combine(PG_FUNCTION_ARGS);
+
+extern Datum numaggstaterecv(PG_FUNCTION_ARGS);
+extern Datum numaggstatesend(PG_FUNCTION_ARGS);
+extern Datum numpolyaggstaterecv(PG_FUNCTION_ARGS);
+extern Datum numpolyaggstatesend(PG_FUNCTION_ARGS);
 
 #endif   /* _PG_NUMERIC_H_ */

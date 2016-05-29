@@ -120,9 +120,9 @@ typedef struct ReplicationState
 	XLogRecPtr	local_lsn;
 
 	/*
-	 * Slot is setup in backend?
+	 * PID of backend that's acquired slot, or 0 if none.
 	 */
-	pid_t		acquired_by;
+	int			acquired_by;
 
 	/*
 	 * Lock protecting remote_lsn and local_lsn.
@@ -604,29 +604,10 @@ CheckPointReplicationOrigin(void)
 						tmppath)));
 	}
 
-	/* fsync the temporary file */
-	if (pg_fsync(tmpfd) != 0)
-	{
-		CloseTransientFile(tmpfd);
-		ereport(PANIC,
-				(errcode_for_file_access(),
-				 errmsg("could not fsync file \"%s\": %m",
-						tmppath)));
-	}
-
 	CloseTransientFile(tmpfd);
 
-	/* rename to permanent file, fsync file and directory */
-	if (rename(tmppath, path) != 0)
-	{
-		ereport(PANIC,
-				(errcode_for_file_access(),
-				 errmsg("could not rename file \"%s\" to \"%s\": %m",
-						tmppath, path)));
-	}
-
-	fsync_fname((char *) path, false);
-	fsync_fname("pg_logical", true);
+	/* fsync, rename to permanent file, fsync file and directory */
+	durable_rename(tmppath, path, PANIC);
 }
 
 /*

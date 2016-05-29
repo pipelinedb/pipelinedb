@@ -32,7 +32,7 @@
 
 #include "access/xact.h"
 #include "access/xlog_internal.h"
-#include "pipeline/cont_scheduler.h"
+
 #include "replication/decode.h"
 #include "replication/logical.h"
 #include "replication/reorderbuffer.h"
@@ -137,16 +137,12 @@ StartupDecodingContext(List *output_plugin_options,
 	 * (re-)load output plugins, so we detect a bad (removed) output plugin
 	 * now.
 	 */
-
 	/*
 	 * XXX(jasonm): An empty string means this is not a dynamically
 	 * loaded plugin. We utilise this for continuous triggers.
 	 */
-
-	if (strlen(NameStr(slot->data.plugin)))
+	if (strlen(slot->data.plugin.data))
 		LoadOutputPlugin(&ctx->callbacks, NameStr(slot->data.plugin));
-	else
-		Assert(IsContQueryTriggerProcess());
 
 	/*
 	 * Now that the slot's xmin has been set, we can announce ourselves as a

@@ -603,7 +603,7 @@ DATA(insert OID = 3800 (  brincostestimate	 PGNSP PGUID 12 1 0 0 0 f f f f t f v
 DESCR("brin(internal)");
 DATA(insert OID = 3801 (  brinoptions		   PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 17 "1009 16" _null_ _null_ _null_ _null_ _null_ brinoptions _null_ _null_ _null_ ));
 DESCR("brin(internal)");
-DATA(insert OID = 3952 (  brin_summarize_new_values PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 23 "2205" _null_ _null_ _null_ _null_ _null_ brin_summarize_new_values _null_ _null_ _null_ ));
+DATA(insert OID = 3952 (  brin_summarize_new_values PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 23 "2205" _null_ _null_ _null_ _null_ _null_ brin_summarize_new_values _null_ _null_ _null_ ));
 DESCR("brin: standalone scan new table pages");
 
 DATA(insert OID = 339 (  poly_same		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "604 604" _null_ _null_ _null_ _null_ _null_ poly_same _null_ _null_ _null_ ));
@@ -2913,9 +2913,9 @@ DATA(insert OID = 2274 (  pg_stat_reset					PGNSP PGUID 12 1 0 0 0 f f f f f f v
 DESCR("statistics: reset collected statistics for current database");
 DATA(insert OID = 3775 (  pg_stat_reset_shared			PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 2278 "25" _null_ _null_ _null_ _null_ _null_	pg_stat_reset_shared _null_ _null_ _null_ ));
 DESCR("statistics: reset collected statistics shared across the cluster");
-DATA(insert OID = 3776 (  pg_stat_reset_single_table_counters	PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 2278 "26" _null_ _null_ _null_ _null_ _null_	pg_stat_reset_single_table_counters _null_ _null_ _null_ ));
+DATA(insert OID = 3776 (  pg_stat_reset_single_table_counters	PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 2278 "26" _null_ _null_ _null_ _null_ _null_	pg_stat_reset_single_table_counters _null_ _null_ _null_ ));
 DESCR("statistics: reset collected statistics for a single table or index in the current database");
-DATA(insert OID = 3777 (  pg_stat_reset_single_function_counters	PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 2278 "26" _null_ _null_ _null_ _null_ _null_	pg_stat_reset_single_function_counters _null_ _null_ _null_ ));
+DATA(insert OID = 3777 (  pg_stat_reset_single_function_counters	PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 2278 "26" _null_ _null_ _null_ _null_ _null_	pg_stat_reset_single_function_counters _null_ _null_ _null_ ));
 DESCR("statistics: reset collected statistics for a single function in the current database");
 
 DATA(insert OID = 3163 (  pg_trigger_depth				PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 23 "" _null_ _null_ _null_ _null_ _null_ pg_trigger_depth _null_ _null_ _null_ ));
@@ -4831,9 +4831,9 @@ DESCR("get record fields from a jsonb object");
 DATA(insert OID = 3475 (  jsonb_populate_recordset	PGNSP PGUID 12 1 100 0 0 f f f f f t s 2 0 2283 "2283 3802" _null_ _null_ _null_ _null_ _null_ jsonb_populate_recordset _null_ _null_ _null_ ));
 DESCR("get set of records with fields from a jsonb array of objects");
 DATA(insert OID = 3490 (  jsonb_to_record			PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 2249 "3802" _null_ _null_ _null_ _null_ _null_ jsonb_to_record _null_ _null_ _null_ ));
-DESCR("get record fields from a json object");
+DESCR("get record fields from a jsonb object");
 DATA(insert OID = 3491 (  jsonb_to_recordset		PGNSP PGUID 12 1 100 0 0 f f f f f t s 1 0 2249 "3802" _null_ _null_ _null_ _null_ _null_ jsonb_to_recordset _null_ _null_ _null_ ));
-DESCR("get set of records with fields from a json array of objects");
+DESCR("get set of records with fields from a jsonb array of objects");
 DATA(insert OID = 3210 (  jsonb_typeof				PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 25 "3802" _null_ _null_ _null_ _null_ _null_ jsonb_typeof _null_ _null_ _null_ ));
 DESCR("get the type of a jsonb value");
 DATA(insert OID = 4038 (  jsonb_ne		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ _null_ jsonb_ne _null_ _null_ _null_ ));
@@ -5188,13 +5188,13 @@ DATA(insert OID = 3473 (  spg_range_quad_leaf_consistent	PGNSP PGUID 12 1 0 0 0 
 DESCR("SP-GiST support for quad tree over range");
 
 /* replication slots */
-DATA(insert OID = 3779 (  pg_create_physical_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 2249 "19" "{19,19,3220}" "{i,o,o}" "{slot_name,slot_name,xlog_position}" _null_ _null_ pg_create_physical_replication_slot _null_ _null_ _null_ ));
+DATA(insert OID = 3779 (  pg_create_physical_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 2249 "19" "{19,19,3220}" "{i,o,o}" "{slot_name,slot_name,xlog_position}" _null_ _null_ pg_create_physical_replication_slot _null_ _null_ _null_ ));
 DESCR("create a physical replication slot");
-DATA(insert OID = 3780 (  pg_drop_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 2278 "19" _null_ _null_ _null_ _null_ _null_ pg_drop_replication_slot _null_ _null_ _null_ ));
+DATA(insert OID = 3780 (  pg_drop_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 2278 "19" _null_ _null_ _null_ _null_ _null_ pg_drop_replication_slot _null_ _null_ _null_ ));
 DESCR("drop a replication slot");
 DATA(insert OID = 3781 (  pg_get_replication_slots	PGNSP PGUID 12 1 10 0 0 f f f f f t s 0 0 2249 "" "{19,19,25,26,16,23,28,28,3220}" "{o,o,o,o,o,o,o,o,o}" "{slot_name,plugin,slot_type,datoid,active,active_pid,xmin,catalog_xmin,restart_lsn}" _null_ _null_ pg_get_replication_slots _null_ _null_ _null_ ));
 DESCR("information about replication slots currently in use");
-DATA(insert OID = 3786 (  pg_create_logical_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f f f v 2 0 2249 "19 19" "{19,19,25,3220}" "{i,i,o,o}" "{slot_name,plugin,slot_name,xlog_position}" _null_ _null_ pg_create_logical_replication_slot _null_ _null_ _null_ ));
+DATA(insert OID = 3786 (  pg_create_logical_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f t f v 2 0 2249 "19 19" "{19,19,25,3220}" "{i,i,o,o}" "{slot_name,plugin,slot_name,xlog_position}" _null_ _null_ pg_create_logical_replication_slot _null_ _null_ _null_ ));
 DESCR("set up a logical replication slot");
 DATA(insert OID = 3782 (  pg_logical_slot_get_changes PGNSP PGUID 12 1000 1000 25 0 f f f f f t v 4 0 2249 "19 3220 23 1009" "{19,3220,23,1009,3220,28,25}" "{i,i,i,v,o,o,o}" "{slot_name,upto_lsn,upto_nchanges,options,location,xid,data}" _null_ _null_ pg_logical_slot_get_changes _null_ _null_ _null_ ));
 DESCR("get changes from replication slot");
@@ -5326,6 +5326,12 @@ DESCR("get an individual replication origin's replication progress");
 DATA(insert OID = 6014 ( pg_show_replication_origin_status PGNSP PGUID 12 1 100 0 0 f f f f f t v 0 0 2249 "" "{26,25,3220,3220}" "{o,o,o,o}" "{local_id, external_id, remote_lsn, local_lsn}" _null_ _null_ pg_show_replication_origin_status _null_ _null_ _null_ ));
 DESCR("get progress for all replication origins");
 
+/* rls */
+DATA(insert OID = 3298 (  row_security_active	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 16 "26" _null_ _null_ _null_ _null_ _null_	row_security_active _null_ _null_ _null_ ));
+DESCR("row security for current context active on table by table oid");
+DATA(insert OID = 3299 (  row_security_active	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 16 "25" _null_ _null_ _null_ _null_ _null_	row_security_active_name _null_ _null_ _null_ ));
+DESCR("row security for current context active on table by table name");
+
 /* PipelineDB streaming hypothetical-set aggregates */
 DATA(insert OID = 9994 ( cq_hypothetical_set_transition_multi	PGNSP PGUID 12 1 0 2276 0 f f f f f f i 2 0 1016 "1016 2276" "{1016,2276}" "{i,v}" _null_ _null_ _null_ cq_hypothetical_set_transition_multi _null_ _null_ _null_ ));
 DESCR("aggregate transition function");
@@ -5409,9 +5415,9 @@ DATA(insert OID = 4307 ( float8_regr_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f 
 DESCR("REGR_...(double, double) combination function");
 
 /* Transition result serialization/deserialization functions */
-DATA(insert OID = 4308 (naggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ naggstaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4308 (numaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ numaggstaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for numeric aggregation transition states");
-DATA(insert OID = 4309 (naggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ naggstatesend _null_ _null_ _null_ ));
+DATA(insert OID = 4309 (numaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ numaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for numeric aggregation transition states");
 
 DATA(insert OID = 4310 (arrayaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ arrayaggstaterecv _null_ _null_ _null_ ));
@@ -5422,8 +5428,11 @@ DESCR("serializer for array aggregation transition states");
 DATA(insert OID = 4312 (array_agg_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ array_agg_combine _null_ _null_ _null_ ));
 DESCR("array aggregation combination function");
 
-DATA(insert OID = 4313 (byteatostringinfo PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ byteatostringinfo _null_ _null_ _null_ ));
-DESCR("deserializer for string aggregation transition states");
+DATA(insert OID = 4313 (jsonaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ jsonaggstaterecv _null_ _null_ _null_ ));
+DESCR("deserializer for json aggregation transition states");
+
+DATA(insert OID = 4487 (jsonaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ jsonaggstatesend _null_ _null_ _null_ ));
+DESCR("serializer for json aggregation transition states");
 
 DATA(insert OID = 4314 (json_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ json_agg_combine _null_ _null_ _null_ ));
 DESCR("json array aggregation combination function");
@@ -5456,7 +5465,7 @@ DATA(insert OID = 4323 ( hll_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 
 DESCR("hyperloglog aggregate");
 
 /* hyperloglog aggregate with p transition function */
-DATA(insert OID = 4324 ( hll_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 2283 23" _null_ _null_ _null_ _null_ _null_ hll_agg_transp _null_ _null_ _null_ ));
+DATA(insert OID = 4324 ( hll_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 3998 "3998 2283 23" _null_ _null_ _null_ _null_ _null_ hll_agg_transp _null_ _null_ _null_ ));
 DESCR("hyperloglog aggregate");
 
 /* hyperloglog union aggregate */
@@ -5526,7 +5535,7 @@ DATA(insert OID = 4341 ( tdigest_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 
 DESCR("t-digest aggregate");
 
 /* t-digest aggregate with compression */
-DATA(insert OID = 4342 ( tdigest_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5034 "5034 701 23" _null_ _null_ _null_ _null_ _null_ tdigest_agg_transp _null_ _null_ _null_ ));
+DATA(insert OID = 4342 ( tdigest_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 5034 "5034 701 23" _null_ _null_ _null_ _null_ _null_ tdigest_agg_transp _null_ _null_ _null_ ));
 DESCR("t-digest aggregate");
 
 /* t-digest union aggregate */
@@ -5669,10 +5678,10 @@ DESCR("hash one or more values into a 64-bit integer using locality sensitive ha
 DATA(insert OID = 4375 ( stream_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20}" "{o,o,o,o,o}" "{schema,name,input_rows,input_batches,input_bytes}" _null_ _null_ stream_stat_get _null_ _null_ _null_ ));
 DESCR("get stream stats");
 
-DATA(insert OID = 4378 ( pipeline_views PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{26,25,25,16,25}" "{o,o,o,o,o}" "{id,schema,name,active,query}" _null_ _null_ pipeline_views _null_ _null_ _null_ ));
+DATA(insert OID = 4378 ( pipeline_views PGNSP PGUID 12 1 20 0 0 f f f f t t s 0 0 2249 "" "{26,25,25,16,25}" "{o,o,o,o,o}" "{id,schema,name,active,query}" _null_ _null_ pipeline_views _null_ _null_ _null_ ));
 DESCR("get continuous views");
 
-DATA(insert OID = 4379 ( pipeline_streams PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,16,1009,1009}" "{o,o,o,o,o}" "{schema,name,inferred,queries,tup_desc}" _null_ _null_ pipeline_streams _null_ _null_ _null_ ));
+DATA(insert OID = 4379 ( pipeline_streams PGNSP PGUID 12 1 20 0 0 f f f f t t s 0 0 2249 "" "{25,25,16,1009,1009}" "{o,o,o,o,o}" "{schema,name,inferred,queries,tup_desc}" _null_ _null_ pipeline_streams _null_ _null_ _null_ ));
 DESCR("get streams");
 
 /* t-digest add n */
@@ -5741,7 +5750,7 @@ DESCR("filtered space saving increment");
 DATA(insert OID = 4407 (fss_print PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 25 "5041" _null_ _null_ _null_ _null_ _null_ fss_print _null_ _null_ _null_ ));
 DESCR("filtered space saving print function");
 /* filtered space saving topk */
-DATA(insert OID = 4408 (fss_topk PGNSP PGUID 12 1 0 0 0 f f f f f t i 1 0 2249 "5041" "{2283,23}" "{o,o}" "{value,frequency}" _null_ _null_ fss_topk _null_ _null_ _null_ ));
+DATA(insert OID = 4408 (fss_topk PGNSP PGUID 12 1 10 0 0 f f f f f t i 1 0 2249 "5041" "{2283,23}" "{o,o}" "{value,frequency}" _null_ _null_ fss_topk _null_ _null_ _null_ ));
 DESCR("filtered space saving top-k function");
 
 DATA(insert OID = 4409 ( pipeline_get_worker_querydef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ _null_ pipeline_get_worker_querydef _null_ _null_ _null_ ));
@@ -5903,7 +5912,7 @@ DATA(insert OID = 4478 (  json_object_int_sum_transout PGNSP PGUID 12 1 0 0 0 f 
 DESCR("json_object_sum transition out function");
 
 /* continuous transforms */
-DATA(insert OID = 4479 ( pipeline_transforms PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{26,25,25,16,25,1009,25}" "{o,o,o,o,o,o,o}" "{id,schema,name,active,tgfn,tgargs,query}" _null_ _null_ pipeline_transforms _null_ _null_ _null_ ));
+DATA(insert OID = 4479 ( pipeline_transforms PGNSP PGUID 12 1 20 0 0 f f f f t t s 0 0 2249 "" "{26,25,25,16,25,1009,25}" "{o,o,o,o,o,o,o}" "{id,schema,name,active,tgfn,tgargs,query}" _null_ _null_ pipeline_transforms _null_ _null_ _null_ ));
 DESCR("get continuous transforms");
 DATA(insert OID = 4480 ( pipeline_stream_insert	PGNSP PGUID 12 1 0 0 0 f f f f t f v 0 0 2279 "" _null_ _null_ _null_ _null_ _null_ pipeline_stream_insert _null_ _null_ _null_ ));
 DESCR("trigger to insert into streams");
@@ -5923,6 +5932,13 @@ DESCR("continuous trigger debug utility");
 DATA(insert OID = 4486 ( pipeline_test_alert_new_row PGNSP PGUID 12 1 0 0 0 f f f f t f v 0 0 2279 "" _null_ _null_ _null_ _null_ _null_ pipeline_test_alert_new_row _null_ _null_ _null_ ));
 DESCR("test alert new row");
 
+DATA(insert OID = 4490 ( numeric_poly_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1231 "1231 1231" _null_ _null_ _null_ _null_ _null_ numeric_poly_combine _null_ _null_ _null_ ));
+DESCR("aggregate combination function");
+DATA(insert OID = 4491 (numpolyaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ numpolyaggstaterecv _null_ _null_ _null_ ));
+DESCR("deserializer for poly numeric aggregation transition states");
+DATA(insert OID = 4492 (numpolyaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ numpolyaggstatesend _null_ _null_ _null_ ));
+DESCR("serializer for poly numeric aggregation transition states");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
@@ -5934,12 +5950,6 @@ DESCR("test alert new row");
 #define PROVOLATILE_IMMUTABLE	'i'		/* never changes for given input */
 #define PROVOLATILE_STABLE		's'		/* does not change within a scan */
 #define PROVOLATILE_VOLATILE	'v'		/* can change even within a scan */
-
-/* rls */
-DATA(insert OID = 3298 (  row_security_active	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 16 "26" _null_ _null_ _null_ _null_ _null_	row_security_active _null_ _null_ _null_ ));
-DESCR("row security for current context active on table by table oid");
-DATA(insert OID = 3299 (  row_security_active	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 16 "25" _null_ _null_ _null_ _null_ _null_	row_security_active_name _null_ _null_ _null_ ));
-DESCR("row security for current context active on table by table name");
 
 /*
  * Symbolic values for proargmodes column.  Note that these must agree with

@@ -5,7 +5,7 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
+ *
  *
  * IDENTIFICATION
  *	  src/backend/optimizer/path/joinrels.c
@@ -17,8 +17,6 @@
 #include "optimizer/joininfo.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
-#include "optimizer/planner.h"
-#include "pipeline/cont_plan.h"
 #include "utils/memutils.h"
 
 

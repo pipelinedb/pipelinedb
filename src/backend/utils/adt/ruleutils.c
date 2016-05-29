@@ -5612,9 +5612,21 @@ get_insert_query_def(Query *query, deparse_context *context)
 			/* Add a WHERE clause (for partial indexes) if given */
 			if (confl->arbiterWhere != NULL)
 			{
+				bool		save_varprefix;
+
+				/*
+				 * Force non-prefixing of Vars, since parser assumes that they
+				 * belong to target relation.  WHERE clause does not use
+				 * InferenceElem, so this is separately required.
+				 */
+				save_varprefix = context->varprefix;
+				context->varprefix = false;
+
 				appendContextKeyword(context, " WHERE ",
-									 -PRETTYINDENT_STD, PRETTYINDENT_STD, 1);
-				get_rule_expr(confl->arbiterWhere, context, false);
+ 									 -PRETTYINDENT_STD, PRETTYINDENT_STD, 1);
+ 				get_rule_expr(confl->arbiterWhere, context, false);
+
+				context->varprefix = save_varprefix;
 			}
 		}
 		else if (confl->constraint != InvalidOid)
@@ -7291,6 +7303,23 @@ get_rule_expr(Node *node, deparse_context *context,
 									  get_base_element_type(exprType(arg2))),
 								 expr->useOr ? "ANY" : "ALL");
 				get_rule_expr_paren(arg2, context, true, node);
+				/*
+				 * There's inherent ambiguity in "x op ANY/ALL (y)" when y is
+				 * a bare sub-SELECT.  Since we're here, the sub-SELECT must
+				 * be meant as a scalar sub-SELECT yielding an array value to
+				 * be used in ScalarArrayOpExpr; but the grammar will
+				 * preferentially interpret such a construct as an ANY/ALL
+				 * SubLink.  To prevent misparsing the output that way, insert
+				 * a dummy coercion (which will be stripped by parse analysis,
+				 * so no inefficiency is added in dump and reload).  This is
+				 * indeed most likely what the user wrote to get the construct
+				 * accepted in the first place.
+				 */
+				if (IsA(arg2, SubLink) &&
+					((SubLink *) arg2)->subLinkType == EXPR_SUBLINK)
+					appendStringInfo(buf, "::%s",
+									 format_type_with_typemod(exprType(arg2),
+														  exprTypmod(arg2)));
 				appendStringInfoChar(buf, ')');
 				if (!PRETTY_PAREN(context))
 					appendStringInfoChar(buf, ')');
@@ -8050,13 +8079,14 @@ get_rule_expr(Node *node, deparse_context *context,
 		case T_InferenceElem:
 			{
 				InferenceElem *iexpr = (InferenceElem *) node;
-				bool		varprefix = context->varprefix;
+				bool		save_varprefix;
 				bool		need_parens;
 
 				/*
 				 * InferenceElem can only refer to target relation, so a
-				 * prefix is never useful.
-				 */
+				 * prefix is not useful, and indeed would cause parse errors.
+ 				 */
+				save_varprefix = context->varprefix;
 				context->varprefix = false;
 
 				/*
@@ -8076,7 +8106,7 @@ get_rule_expr(Node *node, deparse_context *context,
 				if (need_parens)
 					appendStringInfoChar(buf, ')');
 
-				context->varprefix = varprefix;
+				context->varprefix = save_varprefix;
 
 				if (iexpr->infercollid)
 					appendStringInfo(buf, " COLLATE %s",

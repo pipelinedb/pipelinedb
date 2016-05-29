@@ -33,6 +33,7 @@
 #include "parser/parse_target.h"
 #include "parser/analyze.h"
 #include "pipeline/cont_analyze.h"
+#include "pipeline/stream.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
 #include "utils/guc.h"
@@ -74,7 +75,7 @@ infer_tupledesc(StreamTargetsEntry *stream)
 	List *types = NIL;
 	List *mods = NIL;
 	List *collations = NIL;
-	Const *preferred = makeConst(NUMERIC_OID, -1, 0, -1, 0, false, false);
+	Const *preferred = makeConst(NUMERIC_OID, -1, 0, -1, 0, true, false);
 
 	hash_seq_init(&status, stream->colstotypes);
 	while ((entry = (StreamColumnsEntry *) hash_seq_search(&status)) != NULL)

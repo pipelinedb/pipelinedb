@@ -72,13 +72,21 @@ def list_files(path):
     if _dir.startswith('src/test/py') or _dir.startswith('src/test/unit'):
       continue
 
-    # Ignore any PipelineDB or PostGIS files.
+    # Ignore any PipelineDB files.
     if (_dir.startswith('bin') or
-        _dir.startswith('pipeline') or
+        _dir.startswith('pkg') or
+        _dir.startswith('src/bin/pipeline') or
+        _dir.startswith('src/bin/recv-alerts') or
         _dir.startswith('src/backend/pipeline') or
         _dir.startswith('src/include/pipeline') or
-        _dir.startswith('src/gis')):
+        _dir.startswith('src/test/unit') or
+        _dir.startswith('src/test/py')):
       continue
+
+    # Ignore any PipelineDB test files.
+    if (_dir.startswith('src/test/regress/sql') or
+        _dir.startswith('src/test/regress/expected')):
+        filenames = filter(lambda f: not f.startswith('cont_'), filenames)
 
     # Ignore dot files and emacs temp files or compiled files.
     filenames = filter(lambda f: not f.startswith('.') and not f.endswith('~')
@@ -120,6 +128,7 @@ def main(args):
     subprocess.call(['make', 'clean'], stdout=dnull)
 
   tmp_dir = args.tmp_dir or tempfile.mkdtemp()
+  safe_mkdirs(tmp_dir)
   tar_path = download_upstream(args.version, tmp_dir)
 
   tar = tarfile.open(tar_path)
@@ -159,10 +168,10 @@ def main(args):
   print 'Generating diffs against upstream files for mismatching files...'
   need_merge = []
   progress = progressbar.ProgressBar()
-  remaining = len(upstream_files)
+  completed = 0
   default_action = 'c'
   for rel_path in progress(upstream_files):
-    remaining -= 1
+    completed += 1
     upstream_path = os.path.join(upstream_root, rel_path)
     local_path = os.path.join(local_root, rel_path)
 
@@ -180,7 +189,7 @@ def main(args):
 
     lf = open(local_path)
     rf = open(upstream_path)
-    
+
     # We both potentially modified this file.
     left = [l.strip('\n') for l in lf.readlines()]
     right = [l.strip('\n') for l in rf.readlines()]
@@ -193,11 +202,11 @@ def main(args):
       if 'pipelinedb' in line.lower():
         contains_pdb = True
         break
-    
+
     if not contains_pdb:
       shutil.copyfile(upstream_path, local_path)
       continue
-      
+
     diff_lines = list(difflib.unified_diff(left, right,
                                            local_path, upstream_path))
 
@@ -210,28 +219,40 @@ def main(args):
     subdir, _ = os.path.split(diff_path)
     safe_mkdirs(subdir)
 
-#     # Give the option to simply clobber the local copy as this is a common case
-#     print '%s%s' % (local_path, '=' * 80)
-#     contains_pdb = ' '
-#     for line in diff_lines:
-#       if 'pipelinedb' in line.lower():
-#         contains_pdb = 'contains PipelineDB '
-#       if re.match('\-[^\-]', line):
-#         print colored(line, 'red')
-#       elif re.match('\+[^\+]', line):
-#         print colored(line, 'green')
-#       else:
-#         print line
-#     print '%s%s' % (local_path, '=' * 80)
-# 
-#     action = raw_input('(c)lobber or (m)anual merge? [%s] (%d/%d) %s' % (default_action, remaining, len(upstream_files), contains_pdb))
-#     if not action:
-#       action = default_action
-#     default_action = action
-# 
-#     if action == 'c':
-#       shutil.copyfile(upstream_path, local_path)
-#       continue
+    # Give the option to simply clobber the local copy as this is a common case
+    print
+    print '=' * 80
+    print local_path
+    print '=' * 80
+    print
+
+    for line in diff_lines:
+      if re.match('\-[^\-]', line):
+        print colored(line, 'red')
+      elif re.match('\+[^\+]', line):
+        print colored(line, 'green')
+      else:
+        print line
+
+    print
+    print '=' * 80
+    print local_path
+    print '=' * 80
+    print
+
+    while True:
+      action = raw_input('(c)lobber, (k)eep or (m)anual merge? [%s] (%d/%d): ' % (default_action, completed, len(upstream_files)))
+      if not action:
+        action = default_action
+      if action in ['c', 'k', 'm']:
+        break
+    default_action = action
+
+    if action == 'c':
+      shutil.copyfile(upstream_path, local_path)
+      continue
+    if action == 'k':
+      continue
 
     with open(diff_path, 'w+') as f:
       f.write('\n'.join(diff_lines))

@@ -1599,12 +1599,12 @@ arrayaggstaterecv(PG_FUNCTION_ARGS)
 Datum
 arrayaggarraystatesend(PG_FUNCTION_ARGS)
 {
-	ArrayBuildStateArr *state = (ArrayBuildStateArr *) PG_GETARG_POINTER(0);
+	ArrayBuildStateArr *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildStateArr *) PG_GETARG_POINTER(0);
 	bytea *result;
 	char *pos;
 	int nbytes;
 
-	if (PG_ARGISNULL(0) || PG_GETARG_POINTER(0) == NULL)
+	if (state == NULL)
 		PG_RETURN_NULL();
 
 	nbytes = sizeof(ArrayBuildStateArr) + state->abytes + ((state->aitems + 7) / 8);

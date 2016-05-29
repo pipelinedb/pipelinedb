@@ -249,11 +249,6 @@ BackgroundWorkerStateChange(void)
 				}
 			}
 
-			/*
-			 * Update the recovery related metadata.
-			 */
-			rw->rw_worker.bgw_restart_time = slot->worker.bgw_restart_time;
-
 			continue;
 		}
 

@@ -462,6 +462,12 @@ SELECT json_object_agg(name, type) FROM foo;
 
 -- json_object
 
+-- empty object, one dimension
+SELECT json_object('{}');
+
+-- empty object, two dimensions
+SELECT json_object('{}', '{}');
+
 -- one dimension
 SELECT json_object('{a,1,b,2,3,NULL,"d e f","a b c"}');
 
@@ -513,6 +519,13 @@ select * from json_to_recordset('[{"a":1,"b":"foo","d":false},{"a":2,"b":"bar","
 select * from json_to_recordset('[{"a":1,"b":{"d":"foo"},"c":true},{"a":2,"c":false,"b":{"d":"bar"}}]')
     as x(a int, b json, c boolean);
 
+select *, c is null as c_is_null
+from json_to_record('{"a":1, "b":{"c":16, "d":2}, "x":8}'::json)
+    as t(a int, b json, c text, x int);
+
+select *, c is null as c_is_null
+from json_to_recordset('[{"a":1, "b":{"c":16, "d":2}, "x":8}]'::json)
+    as t(a int, b json, c text, x int);
 
 -- json_strip_nulls
 

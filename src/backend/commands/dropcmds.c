@@ -5,7 +5,6 @@
  *
  * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *
  * IDENTIFICATION
@@ -22,14 +21,11 @@
 #include "catalog/objectaddress.h"
 #include "catalog/pg_class.h"
 #include "catalog/pg_proc.h"
-#include "catalog/pipeline_stream_fn.h"
 #include "commands/defrem.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
 #include "utils/builtins.h"
-#include "utils/lsyscache.h"
-#include "utils/rel.h"
 #include "utils/syscache.h"
 
 

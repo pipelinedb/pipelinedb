@@ -74,9 +74,6 @@
    reference if 'false' */
 #undef FLOAT8PASSBYVAL
 
-/* Define to 1 if getpwuid_r() takes a 5th argument. */
-#undef GETPWUID_R_5ARG
-
 /* Define to 1 if gettimeofday() takes only 1 argument. */
 #undef GETTIMEOFDAY_1ARG
 
@@ -396,9 +393,6 @@
 
 /* Define to 1 if the PS_STRINGS thing exists. */
 #undef HAVE_PS_STRINGS
-
-/* Define if you have POSIX threads libraries and header files. */
-#undef HAVE_PTHREAD
 
 /* Define to 1 if you have the `pthread_is_threaded_np' function. */
 #undef HAVE_PTHREAD_IS_THREADED_NP
@@ -771,10 +765,6 @@
    process. */
 #undef PROFILE_PID_DIR
 
-/* Define to the necessary symbol if this constant uses a non-standard name on
-   your system. */
-#undef PTHREAD_CREATE_JOINABLE
-
 /* RELSEG_SIZE is the maximum number of blocks allowed in one disk file. Thus,
    the maximum size of a single file is RELSEG_SIZE * BLCKSZ; relations bigger
    than that are divided into multiple files. RELSEG_SIZE * BLCKSZ must be
@@ -808,9 +798,6 @@
 
 /* Define to 1 if your <sys/time.h> declares `struct tm'. */
 #undef TM_IN_SYS_TIME
-
-/* Define to the appropriate snprintf format for unsigned 64-bit ints. */
-#undef UINT64_FORMAT
 
 /* Define to 1 to build with assertion checks. (--enable-cassert) */
 #undef USE_ASSERT_CHECKING
@@ -875,6 +862,9 @@
 
 /* Define to select Win32-style shared memory. */
 #undef USE_WIN32_SHARED_MEMORY
+
+/* Define to 1 if `wcstombs_l' requires <xlocale.h>. */
+#undef WCSTOMBS_L_IN_XLOCALE
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

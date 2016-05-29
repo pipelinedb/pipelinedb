@@ -2627,19 +2627,6 @@ RenameRelation(RenameStmt *stmt)
 									 RangeVarCallbackForAlterRelation,
 									 (void *) stmt);
 
-	/*
-	 * Grab an exclusive lock on the target table, index, sequence, view,
-	 * materialized view, or foreign table, which we will NOT release until
-	 * end of transaction.
-	 *
-	 * Lock level used here should match RenameRelationInternal, to avoid lock
-	 * escalation.
-	 */
-	relid = RangeVarGetRelidExtended(stmt->relation, AccessExclusiveLock,
-									 stmt->missing_ok, false,
-									 RangeVarCallbackForAlterRelation,
-									 (void *) stmt);
-
 	if (!OidIsValid(relid))
 	{
 		ereport(NOTICE,
@@ -2847,18 +2834,6 @@ void
 AlterTable(Oid relid, LOCKMODE lockmode, AlterTableStmt *stmt)
 {
 	Relation	rel;
-	RangeVar	*cv;
-
-	if (stmt->relkind == OBJECT_TABLE && IsAMatRel(stmt->relation, &cv))
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("cannot alter materialization table \"%s\" for continuous view \"%s\"",
-						stmt->relation->relname, cv->relname)));
-	else if (stmt->relkind == OBJECT_VIEW  && IsAContinuousView(stmt->relation))
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("cannot alter continuous view \"%s\"",
-						stmt->relation->relname)));
 
 	/* Caller is required to provide an adequate lock. */
 	rel = relation_open(relid, NoLock);
@@ -3183,10 +3158,21 @@ ATController(AlterTableStmt *parsetree,
 	{
 		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lcmd);
 
-		if (rel->rd_rel->relkind == RELKIND_STREAM && cmd->subtype != AT_AddColumn)
+		if (rel->rd_rel->relkind == RELKIND_STREAM &&
+				cmd->subtype != AT_AddColumn &&
+				cmd->subtype != AT_ChangeOwner)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					(errmsg("streams only support ADD COLUMN actions"))));
+					(errmsg("streams only support ADD COLUMN or OWNER TO actions"))));
+
+		if ((rel->rd_rel->relkind == RELKIND_CONTVIEW || rel->rd_rel->relkind == RELKIND_CONTTRANSFORM) &&
+				cmd->subtype != AT_ChangeOwner)
+		{
+			char *name = rel->rd_rel->relkind == RELKIND_CONTVIEW ? "view" : "transform";
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					(errmsg("continuous %ss only support OWNER TO actions", name))));
+		}
 
 		ATPrepCmd(&wqueue, rel, cmd, recurse, false, lockmode);
 	}
@@ -11135,10 +11121,20 @@ ATExecReplicaIdentity(Relation rel, ReplicaIdentityStmt *stmt, LOCKMODE lockmode
 		int16		attno = indexRel->rd_index->indkey.values[key];
 		Form_pg_attribute attr;
 
-		/* Of the system columns, only oid is indexable. */
-		if (attno <= 0 && attno != ObjectIdAttributeNumber)
-			elog(ERROR, "internal column %u in unique index \"%s\"",
-				 attno, RelationGetRelationName(indexRel));
+		/* Allow OID column to be indexed; it's certainly not nullable */
+		if (attno == ObjectIdAttributeNumber)
+			continue;
+
+		/*
+		 * Reject any other system columns.  (Going forward, we'll disallow
+		 * indexes containing such columns in the first place, but they might
+		 * exist in older branches.)
+		 */
+		if (attno <= 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("index \"%s\" cannot be used as replica identity because column %d is a system column",
+							RelationGetRelationName(indexRel), attno)));
 
 		attr = rel->rd_att->attrs[attno - 1];
 		if (!attr->attnotnull)
@@ -12105,16 +12101,6 @@ RangeVarCallbackForAlterRelation(const RangeVar *rv, Oid relid, Oid oldrelid,
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						errmsg("\"%s\" is not a stream", rv->relname)));
-
-	if (relkind == RELKIND_CONTVIEW)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						errmsg("\"%s\" is a continuous view and cannot be renamed", rv->relname)));
-
-	if (relkind == RELKIND_CONTTRANSFORM)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						errmsg("\"%s\" is a continuous transform and cannot be renamed", rv->relname)));
 
 	/*
 	 * Don't allow ALTER TABLE on composite types. We want people to use ALTER

@@ -957,7 +957,6 @@ array_positions(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(makeArrayResult(astate, CurrentMemoryContext));
 }
 
-
 /*
  * ARRAY_AGG combine function
  */
