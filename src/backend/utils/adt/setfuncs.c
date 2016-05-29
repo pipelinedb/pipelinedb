@@ -196,7 +196,7 @@ set_agg_combine(PG_FUNCTION_ARGS)
 
 	old = MemoryContextSwitchTo(context);
 
-	if (state == NULL)
+	if (fcinfo->flinfo->fn_extra == NULL)
 		set_agg_startup(fcinfo, incoming->element_type);
 
 	/*
