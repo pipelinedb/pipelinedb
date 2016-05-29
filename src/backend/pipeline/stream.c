@@ -18,6 +18,7 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "commands/trigger.h"
 #include "funcapi.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
@@ -53,7 +54,8 @@ int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;
 void *copy_iter_arg = NULL;
 
 uint64
-SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, InsertBatchAck *acks, int nacks)
+SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples,
+		int ntuples, InsertBatchAck *acks, int nacks)
 {
 	ipc_queue *ipcq;
 	Bitmapset *all_targets = GetLocalStreamReaders(RelationGetRelid(stream));
@@ -199,8 +201,63 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 		PushActiveSnapshot(GetTransactionSnapshot());
 }
 
-extern
-Datum pipeline_stream_insert(PG_FUNCTION_ARGS)
+Datum
+pipeline_stream_insert(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "pipeline_stream_insert can only be used by continuous transforms");
+	TriggerData *trigdata = (TriggerData *) fcinfo->context;
+	Trigger *trig = trigdata->tg_trigger;
+	HeapTuple tup;
+	TupleDesc desc;
+	int i;
+
+	if (trig->tgnargs < 1)
+		elog(ERROR, "pipeline_stream_insert: must be provided a stream name");
+
+	/* make sure it's called as a trigger */
+	if (!CALLED_AS_TRIGGER(fcinfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				 errmsg("pipeline_stream_insert: must be called as trigger")));
+
+	/* and that it's called on update or insert */
+	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event) && !TRIGGER_FIRED_BY_INSERT(trigdata->tg_event))
+		ereport(ERROR,
+				(errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				 errmsg("pipeline_stream_insert: must be called on insert or update")));
+
+	/* and that it's called for each row */
+	if (!TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
+		ereport(ERROR,
+				(errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				 errmsg("pipeline_stream_insert: must be called for each row")));
+
+	/* and that it's called after insert or update */
+	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event))
+		ereport(ERROR,
+				(errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				 errmsg("pipeline_stream_insert: must be called after insert or update")));
+
+	if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
+		tup = trigdata->tg_newtuple;
+	else
+		tup = trigdata->tg_trigtuple;
+
+	desc = RelationGetDescr(trigdata->tg_relation);
+
+	for (i = 0; i < trig->tgnargs; i++)
+	{
+		RangeVar *stream;
+		Relation rel;
+		HeapTuple tups[1];
+
+		stream = makeRangeVarFromNameList(textToQualifiedNameList(cstring_to_text(trig->tgargs[i])));
+		rel = heap_openrv(stream, AccessShareLock);
+
+		tups[0] = tup;
+		SendTuplesToContWorkers(rel, desc, tups, 1, NULL, 0);
+
+		heap_close(rel, AccessShareLock);
+	}
+
+	return PointerGetDatum(tup);
 }

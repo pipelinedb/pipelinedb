@@ -366,7 +366,7 @@ InsertBatchAckCreate(List *sts, int *nacksptr)
 		ListCell *lc2;
 		bool found = false;
 
-		if (!ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
+		if (!ack || !ShmemDynAddrIsValid(ack->batch) || ack->batch_id != ack->batch->id)
 			continue;
 
 		foreach(lc2, acks_list)
