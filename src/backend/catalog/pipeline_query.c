@@ -200,7 +200,7 @@ GetPipelineQueryTuple(RangeVar *name)
 
 	Assert(OidIsValid(namespace));
 
-	tuple = SearchSysCache2(PIPELINEQUERYNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(name->relname));
+	tuple = SearchSysCache1(PIPELINEQUERYRELID, ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
 
 	return tuple;
 }
@@ -211,21 +211,15 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id)
+DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, bool gc, bool adhoc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
 	bool nulls[Natts_pipeline_query];
 	Datum values[Natts_pipeline_query];
-	NameData name_data;
 	Oid id;
 	Oid result;
 	char *query_str;
-
-	if (!name)
-		ereport(ERROR,
-				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-						errmsg("name is null")));
 
 	if (!query)
 		ereport(ERROR,
@@ -244,14 +238,12 @@ DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool 
 
 	values[Anum_pipeline_query_type - 1] = Int8GetDatum(PIPELINE_QUERY_VIEW);
 
-	namestrcpy(&name_data, name->relname);
 	values[Anum_pipeline_query_id - 1] = Int32GetDatum(id);
-	values[Anum_pipeline_query_name - 1] = NameGetDatum(&name_data);
+	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
-	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(RangeVarGetCreationNamespace(name));
-	values[Anum_pipeline_query_matrel - 1] = ObjectIdGetDatum(matrel);
-	values[Anum_pipeline_query_seqrel - 1] = ObjectIdGetDatum(seqrel);
+	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(matrelid);
+	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(seqrelid);
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 
@@ -302,7 +294,7 @@ GetMatRelName(RangeVar *cvname)
 				errmsg("continuous view \"%s\" does not exist", cvname->relname)));
 
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
-	result = makeRangeVar(get_namespace_name(row->namespace), get_rel_name(row->matrel), -1);
+	result = makeRangeVar(get_namespace_name(get_rel_namespace(row->matrelid)), get_rel_name(row->matrelid), -1);
 
 	ReleaseSysCache(tuple);
 
@@ -327,14 +319,13 @@ GetCVNameFromMatRelName(RangeVar *name)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace),
-			ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
+	tup = SearchSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
 
 	if (!HeapTupleIsValid(tup))
 		return NULL;
 
 	row = (Form_pipeline_query) GETSTRUCT(tup);
-	cv = makeRangeVar(get_namespace_name(namespace), pstrdup(NameStr(row->name)), -1);
+	cv = makeRangeVar(get_namespace_name(get_rel_namespace(row->relid)), get_rel_name(row->relid), -1);
 
 	ReleaseSysCache(tup);
 
@@ -354,14 +345,13 @@ OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace),
-			RelationGetRelid(matrel));
+	tup = SearchSysCache1(PIPELINEQUERYMATRELID, RelationGetRelid(matrel));
 
 	if (!HeapTupleIsValid(tup))
 		return NULL;
 
 	row = (Form_pipeline_query) GETSTRUCT(tup);
-	cv = makeRangeVar(get_namespace_name(namespace), pstrdup(NameStr(row->name)), -1);
+	cv = makeRangeVar(get_namespace_name(namespace), get_rel_name(row->relid), -1);
 
 	ReleaseSysCache(tup);
 
@@ -436,8 +426,7 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace),
-			ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
+	tup = SearchSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
 
 	if (!HeapTupleIsValid(tup))
 	{
@@ -449,7 +438,7 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
 	row = (Form_pipeline_query) GETSTRUCT(tup);
 
 	if (cvname)
-		*cvname = makeRangeVar(get_namespace_name(namespace), pstrdup(NameStr(row->name)), -1);
+		*cvname = makeRangeVar(get_namespace_name(namespace), get_rel_name(row->relid), -1);
 
 	ReleaseSysCache(tup);
 
@@ -470,8 +459,7 @@ RelIdIsForMatRel(Oid relid, RangeVar **cvname)
 
 	heap_close(rel, NoLock);
 
-	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL,
-			ObjectIdGetDatum(namespace), ObjectIdGetDatum(relid));
+	tup = SearchSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(relid));
 
 	if (!HeapTupleIsValid(tup))
 		return false;
@@ -479,7 +467,7 @@ RelIdIsForMatRel(Oid relid, RangeVar **cvname)
 	if (cvname)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		*cvname = makeRangeVar(get_namespace_name(namespace), pstrdup(NameStr(row->name)), -1);
+		*cvname = makeRangeVar(get_namespace_name(namespace), get_rel_name(row->relid), -1);
 	}
 
 	ReleaseSysCache(tup);
@@ -529,22 +517,22 @@ GetContQueryForId(Oid id)
 	Assert(row->type == PIPELINE_QUERY_TRANSFORM || row->type == PIPELINE_QUERY_VIEW);
 	cq->type = row->type == PIPELINE_QUERY_TRANSFORM ? CONT_TRANSFORM : CONT_VIEW;
 
-	namestrcpy(&cq->name, NameStr(row->name));
-	cq->namespace = row->namespace;
-	cq->seqrel = row->seqrel;
-	cq->matrelid = row->matrel;
+	cq->relid = row->relid;
+	cq->relname = get_rel_name(row->relid);
+	cq->seqrelid = row->seqrelid;
+	cq->matrelid = row->matrelid;
 	cq->active = row->active;
 
 	if (cq->type == CONT_VIEW)
 	{
-		cq->matrel = makeRangeVar(get_namespace_name(row->namespace), get_rel_name(row->matrel), -1);
+		cq->matrel = makeRangeVar(get_namespace_name(get_rel_namespace(row->matrelid)), get_rel_name(row->matrelid), -1);
 		/* Ignore inherited tables when working with the matrel */
 		cq->matrel->inhOpt = INH_NO;
 	}
 	else
 		cq->matrel = NULL;
 
-	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+	tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 	cq->sql = deparse_query_def(query);
 	cq->sw_step_factor = query->swStepFactor;
@@ -559,7 +547,7 @@ GetContQueryForId(Oid id)
 		char *p;
 		int i;
 
-		val = DatumGetByteaP(SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_tgargs, &isnull));
+		val = DatumGetByteaP(SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_tgargs, &isnull));
 		Assert(!isnull);
 
 		p = (char *) VARDATA(val);
@@ -763,21 +751,15 @@ GetContQueryId(RangeVar *name)
 }
 
 Oid
-DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, List *args)
+DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, List *args)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
 	bool nulls[Natts_pipeline_query];
 	Datum values[Natts_pipeline_query];
-	NameData name_data;
 	Oid id;
 	Oid result;
 	char *query_str;
-
-	if (!name)
-		ereport(ERROR,
-				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-						errmsg("name is null")));
 
 	if (!query)
 		ereport(ERROR,
@@ -796,14 +778,12 @@ DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, L
 
 	values[Anum_pipeline_query_type - 1] = Int8GetDatum(PIPELINE_QUERY_TRANSFORM);
 
-	namestrcpy(&name_data, name->relname);
 	values[Anum_pipeline_query_id - 1] = Int32GetDatum(id);
-	values[Anum_pipeline_query_name - 1] = NameGetDatum(&name_data);
+	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
-	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(RangeVarGetCreationNamespace(name));
 	values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(fnoid);
-	values[Anum_pipeline_query_matrel - 1] = ObjectIdGetDatum(typoid); /* HACK(usmanm): So namespace, matrel index works */
+	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(typoid); /* HACK(usmanm): So matrel index works */
 
 	/* This code is copied from trigger.c:CreateTrigger */
 	if (list_length(args))
@@ -852,7 +832,7 @@ DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, L
 	}
 
 	/* unused */
-	values[Anum_pipeline_query_seqrel - 1] = ObjectIdGetDatum(InvalidOid);
+	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(InvalidOid);
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(false);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(false);
 	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);

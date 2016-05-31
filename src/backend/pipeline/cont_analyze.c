@@ -2669,7 +2669,7 @@ get_cont_query_select_stmt(RangeVar *rv)
 				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
 				errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
-	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+	tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 
 	sql = deparse_query_def(query);

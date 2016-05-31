@@ -175,7 +175,7 @@ streams_to_meta(Relation pipeline_query)
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
 		ContAnalyzeContext *context;
 
-		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+		tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 		querystring = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 		parsetree_list = pg_parse_query(querystring);

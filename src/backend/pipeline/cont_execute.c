@@ -91,7 +91,7 @@ PartialTupleStatePeekFn(void *ptr, int len)
 			return;
 		}
 
-		tup = SearchSysCache2(PIPELINEQUERYNAMESPACENAME, ObjectIdGetDatum(namespace),
+		tup = SearchSysCache2(PIPELINEQUERYRELID, ObjectIdGetDatum(namespace),
 				CStringGetDatum(NameStr(pts->cv)));
 
 		if (!HeapTupleIsValid(tup))
@@ -663,7 +663,7 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 			MemoryContextSwitchTo(old);
 		}
 		else
-			debug_query_string = NameStr(exec->current_query->query->name);
+			debug_query_string = exec->current_query->query->relname;
 	}
 
 	if (exec->current_query)
