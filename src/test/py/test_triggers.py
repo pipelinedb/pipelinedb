@@ -331,7 +331,7 @@ def test_sw_external_vacuum(pipeline, clean_db):
 
   Final tallies are verified to be insert amount minus vacuumed amt
   """
-  pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'3 seconds\') group by x;', step_factor=10)
+  pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'3 seconds\') group by x;', step_factor='10')
 
   pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
 
@@ -384,7 +384,7 @@ def test_sw_trigger_sync(pipeline, clean_db):
 
   Verify that counts are equal to pre-creation plus post_creation amts
   """
-  pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'10 seconds\') group by x;', step_factor=10)
+  pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'10 seconds\') group by x;', step_factor='10')
 
   rows = [(n % 10,) for n in range(1000)]
   pipeline.insert('stream', ('x',), rows)
@@ -423,7 +423,7 @@ def test_sw_internal_vacuum(pipeline, clean_db):
   This test does not verify results, it is for code coverage.
   """
 
-  pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'3 seconds\') group by x;', step_factor=10)
+  pipeline.create_cv('cv0', 'SELECT x::integer,count(*) FROM stream where (arrival_timestamp > clock_timestamp() - interval \'3 seconds\') group by x;', step_factor='10')
 
   pipeline.create_cv_trigger('t0', 'cv0', 'true', 'pipeline_test_alert_new_row')
 

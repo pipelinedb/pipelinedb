@@ -15,7 +15,7 @@
 #include "parser/parse_node.h"
 #include "pipeline/cont_scheduler.h"
 
-extern int sliding_window_step_factor;
+extern double sliding_window_step_factor;
 
 typedef struct ContAnalyzeContext
 {

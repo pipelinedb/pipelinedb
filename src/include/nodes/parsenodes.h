@@ -168,7 +168,7 @@ typedef struct Query
 	Oid  cqId; /* continuous query id, valid only if is_continuous is true */
 	bool isCombine; /* is this query being run as a merge query? */
 	bool isCombineLookup; /* is this query a combiner looking up groups to combine with? */
-	int  swStepFactor;
+	double swStepFactor;
 } Query;
 
 
@@ -1328,7 +1328,7 @@ typedef struct SelectStmt
 	/* PipelineDB */
 	bool forContinuousView; /* does this SELECT statement for a CREATE CONTINUOUS VIEW statement? */
 	bool forCombineLookup; /* is this SELECT stmt for looking up groups in the combiner? */
-	int	 swStepFactor;
+	double swStepFactor;
 } SelectStmt;
 
 

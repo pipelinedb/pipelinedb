@@ -89,7 +89,7 @@ SELECT * FROM msw7;
 DROP CONTINUOUS VIEW msw5 CASCADE;
 
 -- max_age of view vs step_size
-CREATE CONTINUOUS VIEW msw8 WITH (max_age='10 minute', step_factor=10) AS SELECT count(*) FROM stream;
+CREATE CONTINUOUS VIEW msw8 WITH (max_age='10 minute', step_factor='10') AS SELECT count(*) FROM stream;
 CREATE VIEW msw9 WITH (max_age='5 minute') AS SELECT * FROM msw8;
 CREATE VIEW msw10 WITH (max_age='2 minute') AS SELECT * FROM msw8;
 CREATE VIEW msw11 WITH (max_age='1 minute') AS SELECT * FROM msw8;

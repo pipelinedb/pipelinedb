@@ -61,7 +61,7 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-int sliding_window_step_factor;
+double sliding_window_step_factor;
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
 #define DATE_ROUND "date_round"
@@ -3902,23 +3902,23 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 	def = GetContinuousViewOption(stmt->into->options, OPTION_STEP_FACTOR);
 	if (def)
 	{
-		int factor;
+		double factor;
 
 		if (!has_clock_timestamp(select->whereClause, NULL))
 			elog(ERROR, "can only specify \"step_factor\" for sliding window queries");
 
-		if (!IsA(def->arg, Integer))
+		if (!IsA(def->arg, String))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("\"step_size\" must be a valid integer in the range 1..50"),
-					 errhint("For example, ... WITH (step_factor = 25) ...")));
+					 errmsg("\"step_size\" must be a valid float in the range 0..50"),
+					 errhint("For example, ... WITH (step_factor = '25') ...")));
 
-		factor = intVal(def->arg);
-		if (factor < 1 || factor > 50)
+		factor = floatVal(def->arg);
+		if (factor <= 0 || factor > 50)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("\"step_size\" must be a valid integer in the range 1..50"),
-					 errhint("For example, ... WITH (step_factor = 25) ...")));
+					 errmsg("\"step_size\" must be a valid float in the range 0..50"),
+					 errhint("For example, ... WITH (step_factor = '25') ...")));
 
 		select->swStepFactor = factor;
 		stmt->into->options = list_delete(stmt->into->options, def);

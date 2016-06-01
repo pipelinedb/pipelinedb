@@ -2845,16 +2845,6 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"sliding_window_step_factor", PGC_USERSET, QUERY_TUNING_OTHER,
-		 gettext_noop("Sets the default step size for a sliding window query as a percentage of the window size."),
-		 gettext_noop("A higher number will improve performance but tradeoff refresh interval.")
-		},
-		&sliding_window_step_factor,
-		5, 1, 50,
-		NULL, NULL, NULL
-	},
-
-	{
 		{"continuous_query_commit_interval", PGC_BACKEND, QUERY_TUNING_OTHER,
 		 gettext_noop("Sets the number of milliseconds that combiners will keep combining in memory before committing the result."),
 		 gettext_noop("A longer commit interval will increase performance at the expense of less frequent continuous view updates and more potential data loss.")
@@ -3029,6 +3019,16 @@ static struct config_real ConfigureNamesReal[] =
 		},
 		&continuous_query_proc_priority,
 		0.75, 0.0, 1.0,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"sliding_window_step_factor", PGC_USERSET, QUERY_TUNING_OTHER,
+		 gettext_noop("Sets the default step size for a sliding window query as a percentage of the window size."),
+		 gettext_noop("A higher number will improve performance but tradeoff refresh interval.")
+		},
+		&sliding_window_step_factor,
+		5.0, 0.0, 50.0,
 		NULL, NULL, NULL
 	},
 
