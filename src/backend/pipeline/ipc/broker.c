@@ -293,7 +293,7 @@ mark_unused_locks_as_free(List *db_oids)
  * purge_dropped_db_segments
  */
 static void
-purge_dropped_db_segments(void)
+purge_dropped_db_segments(bool force)
 {
 	static TimestampTz last_purge_time = 0;
 	List *db_oids;
@@ -301,7 +301,7 @@ purge_dropped_db_segments(void)
 	HASH_SEQ_STATUS status;
 	broker_db_meta *db_meta;
 
-	if (!TimestampDifferenceExceeds(last_purge_time, GetCurrentTimestamp(), 10 * 1000)) /* 10s */
+	if (!force && !TimestampDifferenceExceeds(last_purge_time, GetCurrentTimestamp(), 10 * 1000)) /* 10s */
 		return;
 
 	db_oids = get_database_oids();
@@ -568,6 +568,7 @@ copy_messages(void)
 	HASH_SEQ_STATUS status;
 	broker_db_meta *db_meta;
 	int num_copied = 0;
+	bool purge_needed = false;
 
 	LWLockAcquire(IPCMessageBrokerIndexLock, LW_SHARED);
 
@@ -577,15 +578,22 @@ copy_messages(void)
 		int i;
 		char *ptr;
 
-		if (db_meta->segment == NULL)
-			db_meta->segment = dsm_attach_and_pin(db_meta->handle);
+		if (!db_meta->segment)
+		{
+			dsm_segment *segment = dsm_attach_and_pin(db_meta->handle);
 
-		if (db_meta->lqueues == NULL)
+			if (!segment)
+			{
+				purge_needed = true;
+				continue;
+			}
+
+			db_meta->segment = segment;
+		}
+
+		if (!db_meta->lqueues)
 			db_meta->lqueues = MemoryContextAllocZero(CacheMemoryContext,
 					sizeof(local_queue) * continuous_query_num_workers);
-
-		if (db_meta->segment == NULL)
-			continue;
 
 		ptr = dsm_segment_address(db_meta->segment);
 
@@ -649,6 +657,9 @@ copy_messages(void)
 
 	LWLockRelease(IPCMessageBrokerIndexLock);
 
+	if (purge_needed)
+		purge_dropped_db_segments(true);
+
 	return num_copied;
 }
 
@@ -667,7 +678,11 @@ have_no_pending_messages_or_out_of_space(void)
 		int i;
 		char *ptr;
 
-		Assert(db_meta->segment);
+		if (!db_meta->segment)
+		{
+			success = false;
+			break;
+		}
 
 		ptr = dsm_segment_address(db_meta->segment);
 
@@ -858,7 +873,7 @@ ipc_msg_broker_main(int argc, char *argv[])
 		MemoryContextSwitchTo(work_ctx);
 		MemoryContextReset(work_ctx);
 
-		purge_dropped_db_segments();
+		purge_dropped_db_segments(false);
 
 		num_copied = copy_messages();
 
