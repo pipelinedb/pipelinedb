@@ -112,10 +112,14 @@ ipc_queue_push_nolock(ipc_queue *ipcq, void *ptr, int len, bool wait)
 		Assert(producer_latch);
 
 		r = WaitLatch(producer_latch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+		ResetLatch(producer_latch);
+
 		if (r & WL_POSTMASTER_DEATH)
 			return false;
 
-		ResetLatch(producer_latch);
+		if (ShouldTerminateContQueryProcess())
+			return false;
+
 		CHECK_FOR_INTERRUPTS();
 	}
 
