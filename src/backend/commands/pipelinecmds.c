@@ -451,9 +451,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	RangeVar *view;
 	List *tableElts = NIL;
 	ListCell *lc;
-	Oid matrelid = InvalidOid;
-	Oid seqrelid = InvalidOid;
-	Oid cvrelid = InvalidOid;
+	Oid matrelid;
+	Oid seqrelid;
+	Oid cvrelid;
 	Oid pqoid;
 	Oid indexoid;
 	Oid pkey_idxoid;
