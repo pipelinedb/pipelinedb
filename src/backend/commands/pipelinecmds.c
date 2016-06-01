@@ -451,9 +451,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	RangeVar *view;
 	List *tableElts = NIL;
 	ListCell *lc;
-	Oid matreloid;
-	Oid seqreloid;
-	Oid viewoid;
+	Oid matrelid;
+	Oid seqrelid;
+	Oid cvrelid;
 	Oid pqoid;
 	Oid indexoid;
 	Oid pkey_idxoid;
@@ -514,7 +514,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying matrel.
 	 */
-	workerselect = TransformSelectStmtForContProcess(matrel, cont_select, &viewselect, WORKER);
+	workerselect = TransformSelectStmtForContProcess(matrel, copyObject(cont_select), &viewselect, WORKER);
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
 
@@ -581,7 +581,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	create_stmt->options = stmt->into->options;
 
 	address = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid, NULL);
-	matreloid = address.objectId;
+	matrelid = address.objectId;
 	CommandCounterIncrement();
 
 	toast_options = transformRelOptions((Datum) 0, create_stmt->options, "toast",
@@ -590,7 +590,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options,
 						   true);
 
-	AlterTableCreateToastTable(matreloid, toast_options, AccessExclusiveLock);
+	AlterTableCreateToastTable(matrelid, toast_options, AccessExclusiveLock);
 
 	/* Create the sequence for primary keys */
 	if (!pk)
@@ -599,20 +599,21 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		create_seq_stmt->sequence = seqrel;
 
 		address = DefineSequence(create_seq_stmt);
-		seqreloid = address.objectId;
+		seqrelid = address.objectId;
 		CommandCounterIncrement();
 	}
 	else
-		seqreloid = InvalidOid;
+		seqrelid = InvalidOid;
 
 	/*
-	 * Now save the underlying query in the `pipeline_query` catalog
-	 * relation.
+	 * Now save the underlying query in the `pipeline_query` catalog relation. We don't have relid for
+	 * the continuous view yet, since we need this entry for the DefineView call below to succeed.
+	 * We'll update it afterwards.
 	 *
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(view, cont_query, matreloid, seqreloid, context->is_sw,
+	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, context->is_sw,
 								 IsContQueryAdhocProcess(),
 								 &cvid);
 	CommandCounterIncrement();
@@ -622,15 +623,16 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
 	viewselect->forContinuousView = true;
-
 	address = DefineView(view_stmt, cont_select_sql);
-	viewoid = address.objectId;
 	CommandCounterIncrement();
 
+	cvrelid = address.objectId;
+	UpdateContViewRelId(cvid, cvrelid);
+
 	/* Create group look up index and record dependencies */
-	indexoid = create_lookup_index(view, matreloid, matrel, query, context->is_sw);
-	pkey_idxoid = create_pkey_index(view, matreloid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
-	record_cv_dependencies(pqoid, matreloid, seqreloid, viewoid, indexoid, pkey_idxoid, workerselect, query);
+	indexoid = create_lookup_index(view, matrelid, matrel, query, context->is_sw);
+	pkey_idxoid = create_pkey_index(view, matrelid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
+	record_cv_dependencies(pqoid, matrelid, seqrelid, cvrelid, indexoid, pkey_idxoid, workerselect, query);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
 
@@ -1067,7 +1069,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	relid = relobj.objectId;
 	CommandCounterIncrement();
 
-	pqoid = DefineContinuousTransform(transform, query, relid, tgfnid, stmt->args);
+	pqoid = DefineContinuousTransform(relid, query, relid, tgfnid, stmt->args);
 	CommandCounterIncrement();
 
 	record_ct_dependencies(pqoid, relid, tgfnid, (SelectStmt *) stmt->query, query, stmt->args);

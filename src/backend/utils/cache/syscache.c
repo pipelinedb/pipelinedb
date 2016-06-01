@@ -605,23 +605,23 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		2048
 	},
-	{PipelineQueryRelationId,	/* PIPELINEQUERYNAMESPACENAME */
-		PipelineQueryNamespaceNameIndexId,
-		2,
+	{PipelineQueryRelationId,	/* PIPELINEQUERYRELID */
+		PipelineQueryRelIdIndexId,
+		1,
 		{
-			Anum_pipeline_query_namespace,
-			Anum_pipeline_query_name,
+			Anum_pipeline_query_relid,
+			0,
 			0,
 			0
 		},
 		2048
 	},
-	{PipelineQueryRelationId,	/* PIPELINEQUERYNAMESPACEMATREL */
-		PipelineQueryNamespaceMatrelIndexId,
-		2,
+	{PipelineQueryRelationId,	/* PIPELINEQUERYMATRELID */
+		PipelineQueryMatRelIdIndexId,
+		1,
 		{
-			Anum_pipeline_query_namespace,
-			Anum_pipeline_query_matrel,
+				Anum_pipeline_query_matrelid,
+			0,
 			0,
 			0
 		},

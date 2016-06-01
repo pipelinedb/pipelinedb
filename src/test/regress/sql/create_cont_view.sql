@@ -2,48 +2,45 @@ SET IntervalStyle to postgres;
 
 -- Simple ones
 CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key::integer FROM create_cont_stream1;
-SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate0';
-SELECT gc FROM pipeline_query WHERE name = 'cqcreate0';
+SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate0';
 \d+ cqcreate0;
 \d+ cqcreate0_mrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate0');
 
 CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url::text, 1, 2) FROM create_cont_stream1;
-SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate1';
+SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate1';
 \d+ cqcreate1;
 \d+ cqcreate1_mrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate1');
 
 CREATE CONTINUOUS VIEW cqcreate2 AS SELECT key::integer, substring(value::text, 1, 2) AS s FROM create_cont_stream1;
-SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate2';
+SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate2';
 \d+ cqcreate2;
 \d+ cqcreate2_mrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate2');
 
 -- Group by projections
 CREATE CONTINUOUS VIEW cqcreate3 AS SELECT key::text, COUNT(*), SUM(value::int8) FROM cont_create_stream2 GROUP BY key;
-SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate3';
+SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate3';
 \d+ cqcreate3;
 \d+ cqcreate3_mrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate3');
 
 CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM cont_create_stream2 GROUP BY key::text;
-SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate4';
+SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate4';
 \d+ cqcreate4;
 \d+ cqcreate4_mrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate4');
 
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds');
-SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate5';
-SELECT gc FROM pipeline_query WHERE name = 'cqcreate5';
+SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate5';
 \d+ cqcreate5;
 \d+ cqcreate5_mrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate5');
 
 CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key::text;
-SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate6';
-SELECT gc FROM pipeline_query WHERE name = 'cqcreate6';
+SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate6';
 \d+ cqcreate6;
 \d+ cqcreate6_mrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate6');

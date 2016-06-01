@@ -24,6 +24,7 @@
 #include "pipeline/stream.h"
 #include "miscadmin.h"
 #include "storage/shm_alloc.h"
+#include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
 
@@ -38,7 +39,7 @@ typedef struct
 	ContExecutor *cont_exec;
 	FunctionCallInfo hash_fcinfo;
 	FuncExpr *hash;
-	int64 query_hash;
+	int64 cv_name_hash;
 	List **partials;
 	int ntups;
 	int nacks;
@@ -116,7 +117,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	if (c->hash_fcinfo)
 		pts->hash = hash_group(slot, c);
 	else
-		pts->hash = MurmurHash3_64(&c->cont_query->name, sizeof(NameData), MURMUR_SEED);
+		pts->hash = c->cv_name_hash;
 
 	idx = pts->hash % continuous_query_num_combiners;
 	c->partials[idx] = lappend(c->partials[idx], pts);
@@ -159,8 +160,13 @@ void
 SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery *query)
 {
 	CombinerState *c = (CombinerState *) self;
+	char *relname = get_rel_name(query->relid);
+
 	c->cont_exec = exec;
 	c->cont_query = query;
+	c->cv_name_hash = MurmurHash3_64(relname, strlen(relname), MURMUR_SEED);
+
+	pfree(relname);
 }
 
 /*

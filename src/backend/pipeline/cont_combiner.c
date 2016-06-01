@@ -603,7 +603,7 @@ sync_combine(ContQueryCombinerState *state)
 		{
 			/* No existing tuple found, so it's an INSERT. Also generate a primary key for it if necessary. */
 			if (state->seq_pk)
-				slot->tts_values[state->pk - 1] = nextval_internal(state->base.query->seqrel);
+				slot->tts_values[state->pk - 1] = nextval_internal(state->base.query->seqrelid);
 			slot->tts_isnull[state->pk - 1] = false;
 			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
@@ -814,7 +814,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	heap_close(matrel, AccessShareLock);
 
 	Assert(AttributeNumberIsValid(state->pk));
-	state->seq_pk = OidIsValid(base->query->seqrel);
+	state->seq_pk = OidIsValid(base->query->seqrelid);
 
 	return base;
 }

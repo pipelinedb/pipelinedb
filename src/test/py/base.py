@@ -185,11 +185,10 @@ class PipelineDB(object):
         """
         Drop all continuous queries
         """
-        queries = self.execute('SELECT name, type FROM pipeline_query '
-                               'ORDER BY type')
-        for query in queries:
-          _t = 'VIEW' if query['type'] == 'v' else 'TRANSFORM'
-          self.execute('DROP CONTINUOUS %s %s' % (_t, query['name']))
+        for transform in self.execute('SELECT name FROM pipeline_transforms()'):
+          self.execute('DROP CONTINUOUS TRANSFORM %s CASCADE' % transform['name'])
+        for view in self.execute('SELECT name FROM pipeline_views()'):
+          self.execute('DROP CONTINUOUS VIEW %s CASCADE' % view['name'])
 
     def create_cv_trigger(self, name, view, when, proc, ttype='INSERT OR UPDATE'):
         """

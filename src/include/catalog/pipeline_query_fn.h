@@ -34,14 +34,14 @@ typedef struct ContQuery
 	ContQueryType type;
 
 	/* meta */
-	Oid namespace;
-	NameData name;
+	Oid relid;
 	char *sql;
 	Oid matrelid;
+	char *relname;
 
 	/* for view */
 	RangeVar *matrel;
-	Oid seqrel;
+	Oid seqrelid;
 	int sw_step_factor;
 
 	/* for transform */
@@ -53,14 +53,15 @@ typedef struct ContQuery
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern void RemovePipelineQueryById(Oid oid);
 
-extern Oid DefineContinuousView(RangeVar *name, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
-extern Oid DefineContinuousTransform(RangeVar *name, Query *query, Oid typoid, Oid fnoid, List *args);
+extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
+extern void UpdateContViewRelId(Oid cvid, Oid cvrelid);
+extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, List *args);
 
 extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);
 extern bool IsAContinuousView(RangeVar *name);
 extern RangeVar *GetSWContinuousViewRangeVar(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
-extern bool RelIdIsForMatRel(Oid relid, RangeVar **cvname);
+extern bool RelIdIsForMatRel(Oid relid, Oid *id);
 extern bool GetGCFlag(RangeVar *name);
 extern RangeVar *GetMatRelName(RangeVar *cv);
 extern RangeVar *GetCVNameFromMatRelName(RangeVar *matrel);

@@ -239,7 +239,7 @@ cq_stat_get(PG_FUNCTION_ARGS)
 			continue;
 		}
 
-		viewname = NameStr(cv->name);
+		viewname = get_rel_name(cv->relid);
 
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, 0, sizeof(nulls));
@@ -493,11 +493,11 @@ pipeline_views(PG_FUNCTION_ARGS)
 		MemSet(nulls, 0, sizeof(nulls));
 
 		values[0] = ObjectIdGetDatum(row->id);
-		values[1] = CStringGetTextDatum(get_namespace_name(row->namespace));
-		values[2] = CStringGetTextDatum(NameStr(row->name));
+		values[1] = CStringGetTextDatum(get_namespace_name(get_rel_namespace(row->relid)));
+		values[2] = CStringGetTextDatum(get_rel_name(row->relid));
 		values[3] = BoolGetDatum(row->active);
 
-		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+		tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 
 		Assert(!isnull);
 
@@ -644,9 +644,9 @@ pipeline_streams(PG_FUNCTION_ARGS)
 					visible = TypeIsVisible(view->matrelid);
 
 				if (!visible)
-					cq_name = quote_qualified_identifier(get_namespace_name(view->namespace), NameStr(view->name));
+					cq_name = quote_qualified_identifier(get_namespace_name(view->relid), get_rel_name(view->relid));
 				else
-					cq_name = quote_qualified_identifier(NULL, NameStr(view->name));
+					cq_name = quote_qualified_identifier(NULL, get_rel_name(view->relid));
 
 				queries[i] = cq_name;
 				i++;
@@ -929,8 +929,8 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 		MemSet(nulls, 0, sizeof(nulls));
 
 		values[0] = ObjectIdGetDatum(row->id);
-		values[1] = CStringGetTextDatum(get_namespace_name(row->namespace));
-		values[2] = CStringGetTextDatum(NameStr(row->name));
+		values[1] = CStringGetTextDatum(get_namespace_name(get_rel_namespace(row->relid)));
+		values[2] = CStringGetTextDatum(get_rel_name(row->relid));
 		values[3] = BoolGetDatum(row->active);
 
 		if (!FunctionIsVisible(row->tgfn))
@@ -947,7 +947,7 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 			char *p;
 			int i;
 
-			val = DatumGetByteaP(SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_tgargs, &isnull));
+			val = DatumGetByteaP(SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_tgargs, &isnull));
 			Assert(!isnull);
 
 			p = (char *) VARDATA(val);
@@ -963,7 +963,7 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 		else
 			nulls[5] = true;
 
-		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+		tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 		Assert(!isnull);
 		values[6] = CStringGetTextDatum(deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp))));
 

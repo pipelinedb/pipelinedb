@@ -3165,7 +3165,7 @@ getObjectDescription(const ObjectAddress *object)
 					elog(ERROR, "cache lookup failed for pipeline_query %u",
 						 object->objectId);
 				appendStringInfo(&buffer, _("pipeline_query %s"),
-						NameStr(((Form_pipeline_query) GETSTRUCT(tup))->name));
+						get_rel_name(((Form_pipeline_query) GETSTRUCT(tup))->relid));
 				ReleaseSysCache(tup);
 				break;
 			}

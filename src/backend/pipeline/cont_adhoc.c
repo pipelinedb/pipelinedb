@@ -50,6 +50,7 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "tcop/utility.h"
+#include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
@@ -633,7 +634,8 @@ CleanupAdhocContinuousView(ContQuery *view)
 	Node *plan;
 	Portal portal;
 
-	stmt->objects = list_make1(list_make1(makeString(NameStr(view->name))));
+	stmt->objects = list_make1(
+			list_make2(makeString(get_namespace_name(get_rel_namespace(view->relid))), makeString(view->relname)));
 	stmt->removeType = OBJECT_CONTVIEW;
 
 	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",

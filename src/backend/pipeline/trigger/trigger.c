@@ -506,7 +506,7 @@ GetMatrelOidForView(const char *name)
 	if (HeapTupleIsValid(tuple))
 	{
 		row = (Form_pipeline_query) GETSTRUCT(tuple);
-		matrel_oid = row->matrel;
+		matrel_oid = row->matrelid;
 		ReleaseSysCache(tuple);
 	}
 
@@ -830,17 +830,14 @@ get_cv_Info(Relation matrel, TriggerCacheEntry *entry, MemoryContext cache_cxt)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL,
-			ObjectIdGetDatum(namespace),
-			RelationGetRelid(matrel));
+	tup = SearchSysCache1(PIPELINEQUERYMATRELID, RelationGetRelid(matrel));
 
 	if (!HeapTupleIsValid(tup))
 		return;
 
 	row = (Form_pipeline_query) GETSTRUCT(tup);
 
-	cv = makeRangeVar(get_namespace_name(namespace),
-			pstrdup(NameStr(row->name)), -1);
+	cv = makeRangeVar(get_namespace_name(namespace), get_rel_name(row->relid), -1);
 
 	rel = heap_openrv(cv, AccessShareLock);
 	entry->cvrelid = RelationGetRelid(rel);
@@ -848,8 +845,7 @@ get_cv_Info(Relation matrel, TriggerCacheEntry *entry, MemoryContext cache_cxt)
 
 	old = MemoryContextSwitchTo(cache_cxt);
 
-	entry->cv_name = makeRangeVar(get_namespace_name(namespace),
-			pstrdup(NameStr(row->name)), -1);
+	entry->cv_name = makeRangeVar(get_namespace_name(namespace), get_rel_name(row->relid), -1);
 
 	MemoryContextSwitchTo(old);
 
@@ -886,7 +882,7 @@ do_synchronize(TriggerProcessState *state)
 	while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		Oid relid = row->matrel;
+		Oid relid = row->matrelid;
 		Relation rel = NULL;
 
 		PG_TRY();
@@ -1103,16 +1099,13 @@ get_trig_oid_from_matrel(Relation matrel, const char *tname)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL,
-			ObjectIdGetDatum(namespace),
-			RelationGetRelid(matrel));
+	tup = SearchSysCache1(PIPELINEQUERYMATRELID, RelationGetRelid(matrel));
 
 	if (!HeapTupleIsValid(tup))
 		return InvalidOid;
 
 	row = (Form_pipeline_query) GETSTRUCT(tup);
-	cv = makeRangeVar(get_namespace_name(namespace),
-			pstrdup(NameStr(row->name)), -1);
+	cv = makeRangeVar(get_namespace_name(namespace), get_rel_name(row->relid), -1);
 
 	rel = heap_openrv(cv, AccessShareLock);
 	tgoid = get_trig_oid_from_cvrel(rel, tname);
