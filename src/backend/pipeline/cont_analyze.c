@@ -3907,13 +3907,11 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 		if (!has_clock_timestamp(select->whereClause, NULL))
 			elog(ERROR, "can only specify \"step_factor\" for sliding window queries");
 
-		if (!IsA(def->arg, String))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("\"step_size\" must be a valid float in the range 0..50"),
-					 errhint("For example, ... WITH (step_factor = '25') ...")));
+		if (IsA(def->arg, Integer))
+			factor = intVal(def->arg);
+		else
+			factor = floatVal(def->arg);
 
-		factor = floatVal(def->arg);
 		if (factor <= 0 || factor > 50)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
