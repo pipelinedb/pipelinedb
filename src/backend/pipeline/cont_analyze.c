@@ -2810,13 +2810,48 @@ extract_agg_final_info(Node *n, Oid *aggfn, Oid *type, Oid *finaltype)
 	}
 }
 
+static Query *
+get_worker_query_for_id(Oid id)
+{
+	HeapTuple tup;
+	bool isnull;
+	Datum tmp;
+	char *sql;
+	Query *query;
+	SelectStmt *sel;
+	RangeVar *matrel;
+	Form_pipeline_query row;
+
+	tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
+
+	if (!HeapTupleIsValid(tup))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view with id \"%d\" does not exist", id)));
+
+	tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
+	query = (Query *) stringToNode(TextDatumGetCString(tmp));
+
+	sql = deparse_query_def(query);
+	sel = (SelectStmt *) linitial(pg_parse_query(sql));
+	sel->swStepFactor = query->swStepFactor;
+
+	row = (Form_pipeline_query) GETSTRUCT(tup);
+	matrel = makeRangeVar(get_namespace_name(get_rel_namespace(row->matrelid)), get_rel_name(row->matrelid), -1);
+
+	ReleaseSysCache(tup);
+
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, WORKER);
+	return parse_analyze((Node *) sel, "SELECT", 0, 0);
+}
+
 /*
  * make_combine_agg_for_viewdef
  *
  * Creates a combine aggregate for a view definition against a matrel
  */
 static Node *
-make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
+make_combine_agg_for_viewdef(ParseState *pstate, Oid cvid, Var *var,
 		 List *order, WindowDef *over)
 {
 	List *args;
@@ -2829,7 +2864,7 @@ make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
 	Oid finaltype = InvalidOid;
 	Oid statetype;
 	Oid aggtype;
-	Query *q = GetContWorkerQuery(cvrv);
+	Query *q = get_worker_query_for_id(cvid);
 
 	Assert(!IsContQueryWorkerProcess());
 
@@ -2951,7 +2986,7 @@ coerce_to_finalize(ParseState *pstate, Oid aggfn, Oid type,
  * Creates a combine aggregate for a view definition against a matrel
  */
 static Node *
-make_finalize_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var, Node *arg)
+make_finalize_for_viewdef(ParseState *pstate, Oid cvid, Var *var, Node *arg)
 {
 	Node *result;
 	Oid fnoid = InvalidOid;
@@ -2961,7 +2996,7 @@ make_finalize_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var, Node *ar
 	Oid statetype;
 	Oid type = InvalidOid;
 	Oid finaltype = InvalidOid;
-	Query *q = GetContWorkerQuery(cvrv);
+	Query *q = get_worker_query_for_id(cvid);
 
 	Assert(IsContQueryAdhocProcess() || !IsContQueryProcess());
 
@@ -3109,7 +3144,6 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	Oid combineinfn;
 	Oid statetype;
 	RangeVar *rv;
-	bool ismatrel;
 	Query *cont_qry;
 	TargetEntry *target;
 	RangeTblEntry *rte;
@@ -3133,9 +3167,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 
 	if (!combine_target_belongs_to_cv(var, pstate->p_rtable, &rv))
 	{
-		RangeVar *matrelrv;
-		RangeVar *cvrv;
-		Relation rel;
+		Oid cvid;
 		RangeTblEntry *rte = list_nth(pstate->p_rtable, var->varno - 1);
 
 		if (rte->relkind != RELKIND_RELATION)
@@ -3144,23 +3176,18 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 					 errmsg("the FROM clause is not a continuous view"),
 					 errhint("Only aggregate continuous view columns can be combined.")));
 
-		rel = heap_open(rte->relid, NoLock);
-		matrelrv = makeRangeVar(get_namespace_name(RelationGetNamespace(rel)), RelationGetRelationName(rel), -1);
-		relation_close(rel, NoLock);
-
 		/*
 		 * Sliding-window CQ's use combine aggregates in their
 		 * view definition, so when they're created we can also
 		 * end up here. We do this check second because it's slow.
 		 */
-		ismatrel = IsAMatRel(matrelrv, &cvrv);
-		if (!ismatrel)
+		if (!RelIdIsForMatRel(rte->relid, &cvid))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-					 errmsg("\"%s\" is not a continuous view", matrelrv->relname),
+					 errmsg("\"%s\" is not a continuous view", get_rel_name(rte->relid)),
 					 errhint("Only aggregate continuous view columns can be combined.")));
 
-		return make_combine_agg_for_viewdef(pstate, cvrv, var, order, over);
+		return make_combine_agg_for_viewdef(pstate, cvid, var, order, over);
 	}
 
 	/* Ok, it's a user combine query against an existing continuous view */
@@ -3256,8 +3283,7 @@ ParseFinalizeFuncCall(ParseState *pstate, List *fargs, int location)
 {
 	Node *arg;
 	Var *var;
-	RangeVar *rv;
-	bool ismatrel;
+	Oid cvid;
 	RangeTblEntry *rte;
 	RangeVar *matrelrv;
 	Relation rel;
@@ -3316,8 +3342,7 @@ ParseFinalizeFuncCall(ParseState *pstate, List *fargs, int location)
 	matrelrv = makeRangeVar(get_namespace_name(RelationGetNamespace(rel)), RelationGetRelationName(rel), -1);
 	relation_close(rel, NoLock);
 
-	ismatrel = IsAMatRel(matrelrv, &rv);
-	if (!ismatrel)
+	if (!RelIdIsForMatRel(rte->relid, &cvid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
@@ -3325,7 +3350,7 @@ ParseFinalizeFuncCall(ParseState *pstate, List *fargs, int location)
 				 errhint("Only aggregate continuous view columns can be finalized.")));
 	}
 
-	return make_finalize_for_viewdef(pstate, rv, var, linitial(fargs));
+	return make_finalize_for_viewdef(pstate, cvid, var, linitial(fargs));
 }
 
 /*

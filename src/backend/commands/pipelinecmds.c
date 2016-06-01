@@ -606,35 +606,28 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		seqrelid = InvalidOid;
 
 	/*
-	 * Create a view for this continuous view, with the select stmt passed to CREATE CONTINUOUS VIEW,
-	 * so we have a relid. We'll replace this view's query once we've created the pipeline_query entry.
-	 * That entry is needed to parse the actual view query, so there's a circular dependency.
-	 */
-	view_stmt = makeNode(ViewStmt);
-	view_stmt->view = view;
-	cont_select->forContinuousView = true;
-	view_stmt->query = (Node *) cont_select;
-	address = DefineView(view_stmt, cont_select_sql);
-	CommandCounterIncrement();
-
-	cvrelid = address.objectId;
-
-	/*
-	 * Now save the underlying query in the `pipeline_query` catalog
-	 * relation.
+	 * Now save the underlying query in the `pipeline_query` catalog relation. We don't have relid for
+	 * the continuous view yet, since we need this entry for the DefineView call below to succeed.
+	 * We'll update it afterwards.
 	 *
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(cvrelid, cont_query, matrelid, seqrelid, context->is_sw,
+	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, context->is_sw,
 								 IsContQueryAdhocProcess(),
 								 &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
+	view_stmt = makeNode(ViewStmt);
+	view_stmt->view = view;
+	view_stmt->query = (Node *) viewselect;
 	viewselect->forContinuousView = true;
-	StoreViewQuery(cvrelid, parse_analyze((Node *) viewselect, cont_select_sql, NULL, 0), true);
+	address = DefineView(view_stmt, cont_select_sql);
 	CommandCounterIncrement();
+
+	cvrelid = address.objectId;
+	UpdateContViewRelId(cvid, cvrelid);
 
 	/* Create group look up index and record dependencies */
 	indexoid = create_lookup_index(view, matrelid, matrel, query, context->is_sw);

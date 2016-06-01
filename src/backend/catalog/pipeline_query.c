@@ -277,6 +277,36 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, bool g
 	return result;
 }
 
+void
+UpdateContViewRelId(Oid cvid, Oid cvrelid)
+{
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
+	bool replace[Natts_pipeline_query];
+	bool nulls[Natts_pipeline_query];
+	Datum values[Natts_pipeline_query];
+	HeapTuple new;
+
+	if (!HeapTupleIsValid(tup))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view with id \"%d\" does not exist", cvid)));
+
+	MemSet(replace, 0 , sizeof(replace));
+	MemSet(nulls, 0 , sizeof(nulls));
+	replace[Anum_pipeline_query_relid - 1] = true;
+	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(cvrelid);
+
+	new = heap_modify_tuple(tup, RelationGetDescr(pipeline_query), values, nulls, replace);
+
+	simple_heap_update(pipeline_query, &tup->t_self, new);
+	CatalogUpdateIndexes(pipeline_query, new);
+	CommandCounterIncrement();
+
+	ReleaseSysCache(tup);
+	heap_close(pipeline_query, NoLock);
+}
+
 /*
  * GetMatRelationName
  */
@@ -451,23 +481,23 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
  * Returns true if the given oid represents a materialization table
  */
 bool
-RelIdIsForMatRel(Oid relid, RangeVar **cvname)
+RelIdIsForMatRel(Oid relid, Oid *id)
 {
-	Relation rel = heap_open(relid, NoLock);
-	Oid namespace = RelationGetNamespace(rel);
 	HeapTuple tup;
-
-	heap_close(rel, NoLock);
 
 	tup = SearchSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(relid));
 
 	if (!HeapTupleIsValid(tup))
+	{
+		if (id)
+			*id = InvalidOid;
 		return false;
+	}
 
-	if (cvname)
+	if (id)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		*cvname = makeRangeVar(get_namespace_name(namespace), get_rel_name(row->relid), -1);
+		*id = row->id;
 	}
 
 	ReleaseSysCache(tup);
