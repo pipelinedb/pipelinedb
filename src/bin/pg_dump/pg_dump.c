@@ -279,8 +279,8 @@ is_matrel(Archive *fout, TableInfo *ti, Oid matrel_oid)
 	 * If this table is a matrel, we don't want to dump its definition since
 	 * CREATE CONTINUOUS VIEW will create it.
 	 */
-	appendPQExpBuffer(pq, "SELECT c.oid, pq.matrel AS matrel FROM pipeline_query pq "
-			"RIGHT JOIN pg_class c ON pq.matrel = c.oid WHERE c.oid = %d", oid);
+	appendPQExpBuffer(pq, "SELECT c.oid, pq.matrelid AS matrel FROM pipeline_query pq "
+			"RIGHT JOIN pg_class c ON pq.matrelid = c.oid WHERE c.oid = %d", oid);
 	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
 	destroyPQExpBuffer(pq);
 
@@ -302,8 +302,8 @@ is_seqrel(Archive *fout, Oid oid)
 	PGresult *res;
 	bool result = false;
 
-	appendPQExpBuffer(pq, "SELECT c.oid, pq.seqrel AS seqrel FROM pipeline_query pq "
-			"RIGHT JOIN pg_class c ON pq.seqrel = c.oid WHERE c.oid = %d", oid);
+	appendPQExpBuffer(pq, "SELECT c.oid, pq.seqrelid AS seqrel FROM pipeline_query pq "
+			"RIGHT JOIN pg_class c ON pq.seqrelid = c.oid WHERE c.oid = %d", oid);
 	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
 	destroyPQExpBuffer(pq);
 
@@ -370,8 +370,7 @@ dumpContinuousView(Archive *fout, TableInfo *ti, PQExpBuffer delq)
 	/* Get the name of the seqrel */
 	resetPQExpBuffer(pq);
 	appendPQExpBuffer(pq, "SELECT c.relname AS seqrel FROM pipeline_query pq JOIN pg_class c "
-			"ON pq.seqrel = c.oid WHERE pq.namespace = %d AND pq.name = '%s'",
-			ti->dobj.namespace->dobj.catId.oid, ti->dobj.name);
+			"ON pq.seqrelid = c.oid WHERE pq.relid = %d", ti->dobj.catId.oid);
 	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
 	seqrel = PQgetvalue(res, 0, PQfnumber(res, "seqrel"));
 

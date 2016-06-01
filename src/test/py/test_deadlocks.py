@@ -67,7 +67,7 @@ def test_concurrent_add_drop(pipeline, clean_db):
 
   map(lambda t: t.join(), threads)
 
-  views = list(pipeline.execute('SELECT name FROM pipeline_query'))
+  views = list(pipeline.execute('SELECT name FROM pipeline_views()'))
   mrels = list(pipeline.execute(
     "SELECT relname FROM pg_class WHERE relname LIKE 'cv%%_mrel'"))
   assert len(views) == len(mrels)
