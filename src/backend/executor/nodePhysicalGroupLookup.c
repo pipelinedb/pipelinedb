@@ -86,7 +86,7 @@ lnext:
 
 	/* lock the physical tuple for update */
 	res = heap_lock_tuple(rel, tup, estate->es_output_cid,
-			LockTupleExclusive, false, true, &buffer, &hufd);
+			LockTupleExclusive, LockWaitBlock, true, &buffer, &hufd);
 	ReleaseBuffer(buffer);
 
 	switch (res)
