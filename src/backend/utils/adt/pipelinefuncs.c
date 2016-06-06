@@ -589,8 +589,8 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		Datum result;
 		Datum tmp;
 		bool isnull;
-		Relation rel = heap_open(row->relid, AccessShareLock);
-		char *relname = RelationGetRelationName(rel);
+		Relation rel = try_relation_open(row->relid, AccessShareLock);
+		char *relname;
 		char *namespace;
 		TupleDesc desc;
 		bool needs_arrival_time;
@@ -598,6 +598,10 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		StringInfoData buf;
 		Datum *cols;
 
+		if (!rel)
+			continue;
+
+		relname = RelationGetRelationName(rel);
 		namespace = get_namespace_name(RelationGetNamespace(rel));
 		if (!namespace)
 		{
@@ -708,7 +712,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		values[4] = PointerGetDatum(construct_array(cols,
 				needs_arrival_time ? desc->natts + 1 : desc->natts, TEXTOID, -1, false, 'i'));
 
-		heap_close(rel, AccessShareLock);
+		relation_close(rel, AccessShareLock);
 
 		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(rtup);
