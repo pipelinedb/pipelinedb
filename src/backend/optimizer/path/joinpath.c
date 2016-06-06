@@ -249,15 +249,10 @@ add_paths_to_joinrel(PlannerInfo *root,
 
 		/* Set the cheapest path, only if we actually added any paths. */
 		if (joinrel->pathlist)
+		{
 			set_cheapest(joinrel);
-		/*
-		 * In case it's an ANTI or SEMI join and we didn't have any indices on the relation,
-		 * throw an error.
-		 */
-		else if (jointype == JOIN_ANTI || jointype == JOIN_SEMI)
-			elog(ERROR, "streams only support anti or semi JOINs when there is an index on the table column being joined on");
-
-		return;
+			return;
+		}
 	}
 
 	/*

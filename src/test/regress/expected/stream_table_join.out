@@ -383,261 +383,423 @@ DROP TABLE test_stj_empty;
 CREATE TABLE test_stj_t (x int);
 INSERT INTO test_stj_t (x) SELECT generate_series(0, 1000) AS x;
 CREATE STREAM test_stj_stream (x int);
-CREATE CONTINUOUS VIEW test_stj_inner AS SELECT s.x FROM test_stj_stream AS s JOIN test_stj_t AS t ON (s.x = t.x);
+CREATE CONTINUOUS VIEW test_stj_inner AS SELECT s.x, count(*) FROM test_stj_stream AS s JOIN test_stj_t AS t ON (s.x = t.x) GROUP BY s.x;
 NOTICE:  consider creating an index on t.x for improved stream-table join performance
-CREATE CONTINUOUS VIEW test_stj_left AS SELECT s.x FROM test_stj_stream AS s LEFT JOIN test_stj_t AS t ON (s.x = t.x);
+CREATE CONTINUOUS VIEW test_stj_left AS SELECT s.x, count(*) FROM test_stj_stream AS s LEFT JOIN test_stj_t AS t ON (s.x = t.x) GROUP BY s.x;
 NOTICE:  consider creating an index on t.x for improved stream-table join performance
-CREATE CONTINUOUS VIEW test_stj_right AS SELECT s.x FROM test_stj_t AS t RIGHT JOIN test_stj_stream AS s ON (s.x = t.x);
+CREATE CONTINUOUS VIEW test_stj_right AS SELECT s.x, count(*) FROM test_stj_t AS t RIGHT JOIN test_stj_stream AS s ON (s.x = t.x) GROUP BY s.x;
 NOTICE:  consider creating an index on t.x for improved stream-table join performance
--- Erroneous
-CREATE CONTINUOUS VIEW test_stj_anti AS SELECT s.x FROM test_stj_stream AS s LEFT JOIN test_stj_t AS t ON (s.x = t.x) WHERE t.x IS NULL;
+CREATE CONTINUOUS VIEW test_stj_anti AS SELECT s.x, count(*) FROM test_stj_stream AS s LEFT JOIN test_stj_t AS t ON (s.x = t.x) WHERE t.x IS NULL GROUP BY s.x;
 NOTICE:  consider creating an index on t.x for improved stream-table join performance
-ERROR:  streams only support anti or semi JOINs when there is an index on the table column being joined on
-CREATE CONTINUOUS VIEW test_stj_semi AS SELECT s.x FROM test_stj_stream AS s WHERE EXISTS (SELECT 1 FROM test_stj_t AS t WHERE t.x = s.x);
-ERROR:  streams only support anti or semi JOINs when there is an index on the table column being joined on
+CREATE CONTINUOUS VIEW test_stj_semi AS SELECT s.x, count(*) FROM test_stj_stream AS s WHERE EXISTS (SELECT 1 FROM test_stj_t AS t WHERE t.x = s.x) GROUP BY s.x;
+CREATE CONTINUOUS VIEW test_stj_cross AS SELECT s.x, count(*) FROM test_stj_stream AS s, test_stj_t AS t GROUP BY s.x;
 EXPLAIN CONTINUOUS VIEW test_stj_inner;
-                                 CONTINUOUS QUERY PLANS                                  
------------------------------------------------------------------------------------------
+                                    CONTINUOUS QUERY PLANS                                     
+-----------------------------------------------------------------------------------------------
  Worker Plan:
-   ->  Hash Join  (cost=2.25..88.75 rows=12750 width=4)
-         Hash Cond: (t.x = s.x)
-         ->  Seq Scan on test_stj_t t  (cost=0.00..35.50 rows=2550 width=4)
-         ->  Hash  (cost=1.00..1.00 rows=100 width=4)
-               ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+   ->  HashAggregate  (cost=152.50..152.51 rows=1 width=4)
+         Group Key: s.x
+         ->  Hash Join  (cost=2.25..88.75 rows=12750 width=4)
+               Hash Cond: (t.x = s.x)
+               ->  Seq Scan on test_stj_t t  (cost=0.00..35.50 rows=2550 width=4)
+               ->  Hash  (cost=1.00..1.00 rows=100 width=4)
+                     ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
  Combiner Plan:
-   ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=12)
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
  Combiner Lookup Plan:
-   ->  Seq Scan on test_stj_inner_mrel  (cost=0.00..30.40 rows=2040 width=12)
-(10 rows)
+   ->  Seq Scan on test_stj_inner_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(14 rows)
 
 EXPLAIN CONTINUOUS VIEW test_stj_left;
-                                 CONTINUOUS QUERY PLANS                                  
------------------------------------------------------------------------------------------
+                                    CONTINUOUS QUERY PLANS                                     
+-----------------------------------------------------------------------------------------------
  Worker Plan:
-   ->  Hash Right Join  (cost=2.25..88.75 rows=12750 width=4)
-         Hash Cond: (t.x = s.x)
-         ->  Seq Scan on test_stj_t t  (cost=0.00..35.50 rows=2550 width=4)
-         ->  Hash  (cost=1.00..1.00 rows=100 width=4)
-               ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+   ->  HashAggregate  (cost=152.50..152.51 rows=1 width=4)
+         Group Key: s.x
+         ->  Hash Right Join  (cost=2.25..88.75 rows=12750 width=4)
+               Hash Cond: (t.x = s.x)
+               ->  Seq Scan on test_stj_t t  (cost=0.00..35.50 rows=2550 width=4)
+               ->  Hash  (cost=1.00..1.00 rows=100 width=4)
+                     ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
  Combiner Plan:
-   ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=12)
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
  Combiner Lookup Plan:
-   ->  Seq Scan on test_stj_left_mrel  (cost=0.00..30.40 rows=2040 width=12)
-(10 rows)
+   ->  Seq Scan on test_stj_left_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(14 rows)
 
 EXPLAIN CONTINUOUS VIEW test_stj_right;
+                                    CONTINUOUS QUERY PLANS                                     
+-----------------------------------------------------------------------------------------------
+ Worker Plan:
+   ->  HashAggregate  (cost=152.50..152.51 rows=1 width=4)
+         Group Key: s.x
+         ->  Hash Right Join  (cost=2.25..88.75 rows=12750 width=4)
+               Hash Cond: (t.x = s.x)
+               ->  Seq Scan on test_stj_t t  (cost=0.00..35.50 rows=2550 width=4)
+               ->  Hash  (cost=1.00..1.00 rows=100 width=4)
+                     ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+ Combiner Plan:
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
+ Combiner Lookup Plan:
+   ->  Seq Scan on test_stj_right_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(14 rows)
+
+EXPLAIN CONTINUOUS VIEW test_stj_anti;
                                  CONTINUOUS QUERY PLANS                                  
 -----------------------------------------------------------------------------------------
  Worker Plan:
-   ->  Hash Right Join  (cost=2.25..88.75 rows=12750 width=4)
-         Hash Cond: (t.x = s.x)
-         ->  Seq Scan on test_stj_t t  (cost=0.00..35.50 rows=2550 width=4)
-         ->  Hash  (cost=1.00..1.00 rows=100 width=4)
+   ->  HashAggregate  (cost=72.82..72.83 rows=1 width=4)
+         Group Key: s.x
+         ->  Hash Anti Join  (cost=67.38..70.32 rows=500 width=4)
+               Hash Cond: (s.x = t.x)
                ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+               ->  Hash  (cost=35.50..35.50 rows=2550 width=4)
+                     ->  Seq Scan on test_stj_t t  (cost=0.00..35.50 rows=2550 width=4)
  Combiner Plan:
-   ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=12)
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
  Combiner Lookup Plan:
-   ->  Seq Scan on test_stj_right_mrel  (cost=0.00..30.40 rows=2040 width=12)
-(10 rows)
+   ->  Seq Scan on test_stj_anti_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(14 rows)
+
+EXPLAIN CONTINUOUS VIEW test_stj_semi;
+                                 CONTINUOUS QUERY PLANS                                  
+-----------------------------------------------------------------------------------------
+ Worker Plan:
+   ->  HashAggregate  (cost=72.82..72.83 rows=1 width=4)
+         Group Key: s.x
+         ->  Hash Semi Join  (cost=67.38..70.32 rows=500 width=4)
+               Hash Cond: (s.x = t.x)
+               ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+               ->  Hash  (cost=35.50..35.50 rows=2550 width=4)
+                     ->  Seq Scan on test_stj_t t  (cost=0.00..35.50 rows=2550 width=4)
+ Combiner Plan:
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
+ Combiner Lookup Plan:
+   ->  Seq Scan on test_stj_semi_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(14 rows)
+
+EXPLAIN CONTINUOUS VIEW test_stj_cross;
+                                    CONTINUOUS QUERY PLANS                                     
+-----------------------------------------------------------------------------------------------
+ Worker Plan:
+   ->  HashAggregate  (cost=15337.50..15337.51 rows=1 width=4)
+         Group Key: s.x
+         ->  Hash Join  (cost=2.00..2587.50 rows=2550000 width=4)
+               ->  Seq Scan on test_stj_t t  (cost=0.00..35.50 rows=2550 width=0)
+               ->  Hash  (cost=1.00..1.00 rows=100 width=4)
+                     ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+ Combiner Plan:
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
+ Combiner Lookup Plan:
+   ->  Seq Scan on test_stj_cross_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(13 rows)
 
 INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
 INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;
 SELECT * FROM test_stj_inner ORDER BY x;
- x 
----
- 0
- 1
- 2
- 3
- 4
- 5
+ x | count 
+---+-------
+ 0 |     1
+ 1 |     1
+ 2 |     1
+ 3 |     1
+ 4 |     1
+ 5 |     1
 (6 rows)
 
 SELECT * FROM test_stj_left ORDER BY x;
-  x   
-------
-    0
-    1
-    2
-    3
-    4
-    5
- 2000
- 2001
- 2002
- 2003
- 2004
- 2005
+  x   | count 
+------+-------
+    0 |     1
+    1 |     1
+    2 |     1
+    3 |     1
+    4 |     1
+    5 |     1
+ 2000 |     1
+ 2001 |     1
+ 2002 |     1
+ 2003 |     1
+ 2004 |     1
+ 2005 |     1
 (12 rows)
 
 SELECT * FROM test_stj_right ORDER BY x;
-  x   
-------
-    0
-    1
-    2
-    3
-    4
-    5
- 2000
- 2001
- 2002
- 2003
- 2004
- 2005
+  x   | count 
+------+-------
+    0 |     1
+    1 |     1
+    2 |     1
+    3 |     1
+    4 |     1
+    5 |     1
+ 2000 |     1
+ 2001 |     1
+ 2002 |     1
+ 2003 |     1
+ 2004 |     1
+ 2005 |     1
+(12 rows)
+
+SELECT * FROM test_stj_anti ORDER BY x;
+  x   | count 
+------+-------
+ 2000 |     1
+ 2001 |     1
+ 2002 |     1
+ 2003 |     1
+ 2004 |     1
+ 2005 |     1
+(6 rows)
+
+SELECT * FROM test_stj_semi ORDER BY x;
+ x | count 
+---+-------
+ 0 |     1
+ 1 |     1
+ 2 |     1
+ 3 |     1
+ 4 |     1
+ 5 |     1
+(6 rows)
+
+SELECT * FROM test_stj_cross ORDER BY x;
+  x   | count 
+------+-------
+    0 |  1001
+    1 |  1001
+    2 |  1001
+    3 |  1001
+    4 |  1001
+    5 |  1001
+ 2000 |  1001
+ 2001 |  1001
+ 2002 |  1001
+ 2003 |  1001
+ 2004 |  1001
+ 2005 |  1001
 (12 rows)
 
 TRUNCATE CONTINUOUS VIEW test_stj_inner;
 TRUNCATE CONTINUOUS VIEW test_stj_left;
 TRUNCATE CONTINUOUS VIEW test_stj_right;
+TRUNCATE CONTINUOUS VIEW test_stj_anti;
+TRUNCATE CONTINUOUS VIEW test_stj_semi;
+TRUNCATE CONTINUOUS VIEW test_stj_cross;
 CREATE INDEX test_stj_t_idx ON test_stj_t (x);
 ANALYZE test_stj_t;
-CREATE CONTINUOUS VIEW test_stj_anti AS SELECT s.x FROM test_stj_stream AS s LEFT JOIN test_stj_t AS t ON (s.x = t.x) WHERE t.x IS NULL;
-CREATE CONTINUOUS VIEW test_stj_semi AS SELECT s.x FROM test_stj_stream AS s WHERE EXISTS (SELECT 1 FROM test_stj_t AS t WHERE t.x = s.x);
 EXPLAIN CONTINUOUS VIEW test_stj_inner;
-                                       CONTINUOUS QUERY PLANS                                       
-----------------------------------------------------------------------------------------------------
+                                          CONTINUOUS QUERY PLANS                                          
+----------------------------------------------------------------------------------------------------------
  Worker Plan:
-   ->  Nested Loop  (cost=0.00..0.33 rows=1000 width=4)
-         ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
-         ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
-               Index Cond: (x = s.x)
+   ->  HashAggregate  (cost=5.33..5.34 rows=1 width=4)
+         Group Key: s.x
+         ->  Nested Loop  (cost=0.00..0.33 rows=1000 width=4)
+               ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+               ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
+                     Index Cond: (x = s.x)
  Combiner Plan:
-   ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=12)
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
  Combiner Lookup Plan:
-   ->  Seq Scan on test_stj_inner_mrel  (cost=0.00..30.40 rows=2040 width=12)
-(9 rows)
+   ->  Seq Scan on test_stj_inner_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(13 rows)
 
 EXPLAIN CONTINUOUS VIEW test_stj_left;
-                                       CONTINUOUS QUERY PLANS                                       
-----------------------------------------------------------------------------------------------------
+                                          CONTINUOUS QUERY PLANS                                          
+----------------------------------------------------------------------------------------------------------
  Worker Plan:
-   ->  Nested Loop Left Join  (cost=0.00..0.33 rows=1000 width=4)
-         ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
-         ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
-               Index Cond: (x = s.x)
+   ->  HashAggregate  (cost=5.33..5.34 rows=1 width=4)
+         Group Key: s.x
+         ->  Nested Loop Left Join  (cost=0.00..0.33 rows=1000 width=4)
+               ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+               ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
+                     Index Cond: (x = s.x)
  Combiner Plan:
-   ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=12)
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
  Combiner Lookup Plan:
-   ->  Seq Scan on test_stj_left_mrel  (cost=0.00..30.40 rows=2040 width=12)
-(9 rows)
+   ->  Seq Scan on test_stj_left_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(13 rows)
 
 EXPLAIN CONTINUOUS VIEW test_stj_right;
-                                       CONTINUOUS QUERY PLANS                                       
-----------------------------------------------------------------------------------------------------
+                                          CONTINUOUS QUERY PLANS                                          
+----------------------------------------------------------------------------------------------------------
  Worker Plan:
-   ->  Nested Loop Left Join  (cost=0.00..0.33 rows=1000 width=4)
-         ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
-         ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
-               Index Cond: (x = s.x)
+   ->  HashAggregate  (cost=5.33..5.34 rows=1 width=4)
+         Group Key: s.x
+         ->  Nested Loop Left Join  (cost=0.00..0.33 rows=1000 width=4)
+               ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+               ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
+                     Index Cond: (x = s.x)
  Combiner Plan:
-   ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=12)
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
  Combiner Lookup Plan:
-   ->  Seq Scan on test_stj_right_mrel  (cost=0.00..30.40 rows=2040 width=12)
-(9 rows)
+   ->  Seq Scan on test_stj_right_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(13 rows)
 
 EXPLAIN CONTINUOUS VIEW test_stj_anti;
-                                       CONTINUOUS QUERY PLANS                                       
-----------------------------------------------------------------------------------------------------
+                                          CONTINUOUS QUERY PLANS                                          
+----------------------------------------------------------------------------------------------------------
  Worker Plan:
-   ->  Nested Loop Anti Join  (cost=0.00..0.33 rows=500 width=4)
-         ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
-         ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
-               Index Cond: (x = s.x)
+   ->  HashAggregate  (cost=2.83..2.84 rows=1 width=4)
+         Group Key: s.x
+         ->  Nested Loop Anti Join  (cost=0.00..0.33 rows=500 width=4)
+               ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+               ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
+                     Index Cond: (x = s.x)
  Combiner Plan:
-   ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=12)
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
  Combiner Lookup Plan:
-   ->  Seq Scan on test_stj_anti_mrel  (cost=0.00..30.40 rows=2040 width=12)
-(9 rows)
+   ->  Seq Scan on test_stj_anti_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(13 rows)
 
 EXPLAIN CONTINUOUS VIEW test_stj_semi;
-                                       CONTINUOUS QUERY PLANS                                       
-----------------------------------------------------------------------------------------------------
+                                          CONTINUOUS QUERY PLANS                                          
+----------------------------------------------------------------------------------------------------------
  Worker Plan:
-   ->  Nested Loop Semi Join  (cost=0.00..0.33 rows=500 width=4)
-         ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
-         ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
-               Index Cond: (x = s.x)
+   ->  HashAggregate  (cost=2.83..2.84 rows=1 width=4)
+         Group Key: s.x
+         ->  Nested Loop Semi Join  (cost=0.00..0.33 rows=500 width=4)
+               ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+               ->  Index Only Scan using test_stj_t_idx on test_stj_t t  (cost=0.28..0.33 rows=1 width=4)
+                     Index Cond: (x = s.x)
  Combiner Plan:
-   ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=12)
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
  Combiner Lookup Plan:
-   ->  Seq Scan on test_stj_semi_mrel  (cost=0.00..30.40 rows=2040 width=12)
-(9 rows)
+   ->  Seq Scan on test_stj_semi_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(13 rows)
+
+EXPLAIN CONTINUOUS VIEW test_stj_cross;
+                                    CONTINUOUS QUERY PLANS                                     
+-----------------------------------------------------------------------------------------------
+ Worker Plan:
+   ->  HashAggregate  (cost=6023.01..6023.02 rows=1 width=4)
+         Group Key: s.x
+         ->  Hash Join  (cost=2.00..1018.01 rows=1001000 width=4)
+               ->  Seq Scan on test_stj_t t  (cost=0.00..15.01 rows=1001 width=0)
+               ->  Hash  (cost=1.00..1.00 rows=100 width=4)
+                     ->  Foreign Scan on test_stj_stream s  (cost=0.00..1.00 rows=100 width=4)
+ Combiner Plan:
+   ->  HashAggregate  (cost=0.00..2.00 rows=200 width=0)
+         Group Key: x
+         ->  Tuplestore Scan  (cost=0.00..0.00 rows=0 width=20)
+ Combiner Lookup Plan:
+   ->  Seq Scan on test_stj_cross_mrel  (cost=0.00..27.00 rows=1700 width=20)
+(13 rows)
 
 INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
 INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;
 SELECT * FROM test_stj_inner ORDER BY x;
- x 
----
- 0
- 1
- 2
- 3
- 4
- 5
+ x | count 
+---+-------
+ 0 |     1
+ 1 |     1
+ 2 |     1
+ 3 |     1
+ 4 |     1
+ 5 |     1
 (6 rows)
 
 SELECT * FROM test_stj_left ORDER BY x;
-  x   
-------
-    0
-    1
-    2
-    3
-    4
-    5
- 2000
- 2001
- 2002
- 2003
- 2004
- 2005
+  x   | count 
+------+-------
+    0 |     1
+    1 |     1
+    2 |     1
+    3 |     1
+    4 |     1
+    5 |     1
+ 2000 |     1
+ 2001 |     1
+ 2002 |     1
+ 2003 |     1
+ 2004 |     1
+ 2005 |     1
 (12 rows)
 
 SELECT * FROM test_stj_right ORDER BY x;
-  x   
-------
-    0
-    1
-    2
-    3
-    4
-    5
- 2000
- 2001
- 2002
- 2003
- 2004
- 2005
+  x   | count 
+------+-------
+    0 |     1
+    1 |     1
+    2 |     1
+    3 |     1
+    4 |     1
+    5 |     1
+ 2000 |     1
+ 2001 |     1
+ 2002 |     1
+ 2003 |     1
+ 2004 |     1
+ 2005 |     1
 (12 rows)
 
 SELECT * FROM test_stj_anti ORDER BY x;
-  x   
-------
- 2000
- 2001
- 2002
- 2003
- 2004
- 2005
+  x   | count 
+------+-------
+ 2000 |     1
+ 2001 |     1
+ 2002 |     1
+ 2003 |     1
+ 2004 |     1
+ 2005 |     1
 (6 rows)
 
 SELECT * FROM test_stj_semi ORDER BY x;
- x 
----
- 0
- 1
- 2
- 3
- 4
- 5
+ x | count 
+---+-------
+ 0 |     1
+ 1 |     1
+ 2 |     1
+ 3 |     1
+ 4 |     1
+ 5 |     1
 (6 rows)
 
+SELECT * FROM test_stj_cross ORDER BY x;
+  x   | count 
+------+-------
+    0 |  1001
+    1 |  1001
+    2 |  1001
+    3 |  1001
+    4 |  1001
+    5 |  1001
+ 2000 |  1001
+ 2001 |  1001
+ 2002 |  1001
+ 2003 |  1001
+ 2004 |  1001
+ 2005 |  1001
+(12 rows)
+
 DROP STREAM test_stj_stream CASCADE;
-NOTICE:  drop cascades to 5 other objects
+NOTICE:  drop cascades to 6 other objects
 DETAIL:  drop cascades to continuous view test_stj_inner
 drop cascades to continuous view test_stj_left
 drop cascades to continuous view test_stj_right
 drop cascades to continuous view test_stj_anti
 drop cascades to continuous view test_stj_semi
+drop cascades to continuous view test_stj_cross
 DROP TABLE test_stj_t;

@@ -966,47 +966,6 @@ validate_target_list(SelectStmt *stmt)
 }
 
 /*
- * validate_joins
- */
-static bool
-validate_joins(Node *node, ContAnalyzeContext *context)
-{
-	if (node == NULL)
-		return false;
-
-	/*
-	 * We don't need to check for JOIN_ANTI or JOIN_SEMI because they don't exist in the SQL
-	 * syntax and are represented as LEFT JOIN and RIGHT JOIN by the parser.
-	 */
-	if (IsA(node, JoinExpr))
-	{
-		JoinExpr *join = (JoinExpr *) node;
-
-		if (IsA(join->larg, RangeVar))
-		{
-			RangeVar *rv = (RangeVar *) join->larg;
-
-			if (RangeVarIsForStream(rv, NULL) && join->jointype != JOIN_INNER && join->jointype != JOIN_LEFT)
-				ereport(ERROR,
-						(errmsg("streams can only be used in INNER JOINs, LEFT JOINs if they're on the LHS and RIGHT JOINs if they're on the RHS"),
-						parser_errposition(context->pstate, rv->location)));
-		}
-
-		if (IsA(join->rarg, RangeVar))
-		{
-			RangeVar *rv = (RangeVar *) join->rarg;
-
-			if (RangeVarIsForStream(rv, NULL) && join->jointype != JOIN_INNER && join->jointype != JOIN_RIGHT)
-				ereport(ERROR,
-						(errmsg("streams can only be used in INNER JOINs, LEFT JOINs if they're on the LHS and RIGHT JOINs if they're on the RHS"),
-						parser_errposition(context->pstate, rv->location)));
-		}
-	}
-
-	return raw_expression_tree_walker(node, validate_joins, context);
-}
-
-/*
  * ValidateContQuery
  */
 void
@@ -1105,9 +1064,6 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				errmsg("continuous queries cannot read from themselves"),
 				errhint("Remove \"%s\" from the FROM clause.", stream->relname),
 				parser_errposition(context->pstate, stream->location)));
-
-	if (list_length(context->rels))
-		validate_joins((Node *) select->fromClause, context);
 
 	/*
 	 * Ensure that we have no `*` in the target list.

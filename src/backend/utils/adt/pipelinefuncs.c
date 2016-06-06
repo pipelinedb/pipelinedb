@@ -486,15 +486,23 @@ pipeline_views(PG_FUNCTION_ARGS)
 		Datum result;
 		Datum tmp;
 		bool isnull;
+		char *relname;
+		Oid nsp;
 
 		if (row->type != PIPELINE_QUERY_VIEW || row->adhoc)
+			continue;
+
+		relname = get_rel_name(row->relid);
+		nsp = get_rel_namespace(row->relid);
+
+		if (!relname || !OidIsValid(nsp))
 			continue;
 
 		MemSet(nulls, 0, sizeof(nulls));
 
 		values[0] = ObjectIdGetDatum(row->id);
-		values[1] = CStringGetTextDatum(get_namespace_name(get_rel_namespace(row->relid)));
-		values[2] = CStringGetTextDatum(get_rel_name(row->relid));
+		values[1] = CStringGetTextDatum(get_namespace_name(nsp));
+		values[2] = CStringGetTextDatum(relname);
 		values[3] = BoolGetDatum(row->active);
 
 		tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
@@ -581,7 +589,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		Datum result;
 		Datum tmp;
 		bool isnull;
-		Relation rel = heap_open(row->relid, NoLock);
+		Relation rel = heap_open(row->relid, AccessShareLock);
 		char *relname = RelationGetRelationName(rel);
 		char *namespace;
 		TupleDesc desc;
@@ -593,7 +601,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		namespace = get_namespace_name(RelationGetNamespace(rel));
 		if (!namespace)
 		{
-			heap_close(rel, NoLock);
+			heap_close(rel, AccessShareLock);
 			continue;
 		}
 
@@ -700,7 +708,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		values[4] = PointerGetDatum(construct_array(cols,
 				needs_arrival_time ? desc->natts + 1 : desc->natts, TEXTOID, -1, false, 'i'));
 
-		heap_close(rel, NoLock);
+		heap_close(rel, AccessShareLock);
 
 		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(rtup);
@@ -922,15 +930,23 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 		Datum tmp;
 		bool isnull;
 		char *fn;
+		char *relname;
+		Oid nsp;
 
 		if (row->type != PIPELINE_QUERY_TRANSFORM)
+			continue;
+
+		relname = get_rel_name(row->relid);
+		nsp = get_rel_namespace(row->relid);
+
+		if (!relname || !OidIsValid(nsp))
 			continue;
 
 		MemSet(nulls, 0, sizeof(nulls));
 
 		values[0] = ObjectIdGetDatum(row->id);
-		values[1] = CStringGetTextDatum(get_namespace_name(get_rel_namespace(row->relid)));
-		values[2] = CStringGetTextDatum(get_rel_name(row->relid));
+		values[1] = CStringGetTextDatum(get_namespace_name(nsp));
+		values[2] = CStringGetTextDatum(relname);
 		values[3] = BoolGetDatum(row->active);
 
 		if (!FunctionIsVisible(row->tgfn))
