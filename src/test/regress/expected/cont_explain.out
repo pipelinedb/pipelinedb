@@ -136,3 +136,6 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
                            Index Cond: (hash_group(test_cont_explain3_mrel.x, test_cont_explain3_mrel.y) = "*VALUES*".column1)
 (24 rows)
 
+DROP CONTINUOUS VIEW test_cont_explain1;
+DROP CONTINUOUS VIEW test_cont_explain2;
+DROP CONTINUOUS VIEW test_cont_explain3;

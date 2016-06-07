@@ -127,6 +127,8 @@ INSERT INTO stream (uid) VALUES (41950);
 
 SELECT * FROM test_view ORDER BY uid;
 
+DROP CONTINUOUS VIEW test_view;
+
 CREATE CONTINUOUS VIEW v AS SELECT x::int, count(*) FROM stream;
 CREATE CONTINUOUS VIEW v AS SELECT x::int, y::int, count(*) FROM stream GROUP BY x;
 

@@ -27,3 +27,5 @@ SELECT pg_sleep(6);
 
 SELECT * FROM sw_count0;
 SELECT * FROM sw_count1;
+
+DROP CONTINUOUS VIEW sw_count0 CASCADE;

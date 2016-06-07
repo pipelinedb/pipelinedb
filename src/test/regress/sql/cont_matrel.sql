@@ -25,3 +25,5 @@ INSERT INTO cont_matrel_mrel (count, "$pk") VALUES (10, 1);
 SELECT * FROM cont_matrel;
 INSERT INTO cont_matrel_stream (x) VALUES (1);
 SELECT * FROM cont_matrel;
+
+DROP CONTINUOUS VIEW cont_matrel;

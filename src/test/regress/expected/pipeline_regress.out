@@ -178,6 +178,7 @@ SELECT * FROM test_view ORDER BY uid;
  41950 |     6
 (2 rows)
 
+DROP CONTINUOUS VIEW test_view;
 CREATE CONTINUOUS VIEW v AS SELECT x::int, count(*) FROM stream;
 ERROR:  column "stream.x" must appear in the GROUP BY clause or be used in an aggregate function
 LINE 1: CREATE CONTINUOUS VIEW v AS SELECT x::int, count(*) FROM str...

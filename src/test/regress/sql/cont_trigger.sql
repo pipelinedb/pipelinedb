@@ -98,3 +98,6 @@ INSERT INTO stream (x) VALUES (11);
 SELECT pg_sleep(2);
 
 SELECT * FROM cont_tg_t;
+
+DROP CONTINUOUS VIEW cont_tg_cv CASCADE;
+DROP CONTINUOUS VIEW cont_tg_v2 CASCADE;

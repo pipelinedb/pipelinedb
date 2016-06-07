@@ -180,3 +180,5 @@ SELECT * FROM cont_tg_t;
      8
 (3 rows)
 
+DROP CONTINUOUS VIEW cont_tg_cv CASCADE;
+DROP CONTINUOUS VIEW cont_tg_v2 CASCADE;

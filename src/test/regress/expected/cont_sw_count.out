@@ -57,3 +57,5 @@ SELECT * FROM sw_count1;
        0
 (1 row)
 
+DROP CONTINUOUS VIEW sw_count0 CASCADE;
+NOTICE:  drop cascades to view sw_count1
