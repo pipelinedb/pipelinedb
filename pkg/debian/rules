@@ -41,7 +41,7 @@ move-installation:
 binary-arch: conf pipeline pipeline-debug clean-libs move-installation
 	dh_installdocs -a
 	dh_installchangelogs -a
-	dh_strip
+	dh_strip --exclude=pipelinedb-debug
 	dh_compress -a
 	dh_fixperms -a
 	dh_installdeb -a
