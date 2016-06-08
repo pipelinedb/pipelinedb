@@ -28,7 +28,7 @@ pipeline:
 
 pipeline-debug:
 	(cd $(TOP_BUILDDIR) && make clean)
-	(cd $(TOP_BUILDDIR) && ./configure CFLAGS="-g -O0" PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo --enable-cassert --disable-rpath)
+	(cd $(TOP_BUILDDIR) && ./configure CFLAGS="-g -O0 -DDUMP_CORE" PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo --enable-cassert --disable-rpath)
 	(cd $(TOP_BUILDDIR) && $(MAKE) PIPELINE_SERVER_BINARY=pipelinedb-debug)
 	(cd $(TOP_BUILDDIR)/src/backend && $(MAKE) PIPELINE_SERVER_BINARY=pipelinedb-debug install-server-bin )
 
