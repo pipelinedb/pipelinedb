@@ -166,7 +166,7 @@ set_agg_trans(PG_FUNCTION_ARGS)
 
 	old = MemoryContextSwitchTo(context);
 
-	if (state == NULL)
+	if (fcinfo->flinfo->fn_extra == NULL)
 		set_agg_startup(fcinfo, AggGetInitialArgType(fcinfo));
 
 	state = set_add(fcinfo, context, PG_GETARG_DATUM(1), PG_ARGISNULL(1), state);
@@ -182,8 +182,7 @@ set_agg_trans(PG_FUNCTION_ARGS)
 Datum
 set_agg_combine(PG_FUNCTION_ARGS)
 {
-	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
-	ArrayBuildState *incoming = PG_ARGISNULL(1) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(1);
+	ArrayBuildState *state;
 	MemoryContext old;
 	MemoryContext context;
 	int i;
@@ -191,20 +190,27 @@ set_agg_combine(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "set_agg_combine called in non-aggregate context");
 
-	if (incoming == NULL)
-		PG_RETURN_POINTER(state);
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+		PG_RETURN_NULL();
 
 	old = MemoryContextSwitchTo(context);
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		set_agg_startup(fcinfo, incoming->element_type);
+	state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
 
 	/*
 	 * The incoming arrays will be appended to the existing transition state,
 	 * but the order in which they're appended isn't predictable.
 	 */
-	for (i = 0; i < incoming->nelems; i++)
-		state = set_add(fcinfo, context, incoming->dvalues[i], incoming->dnulls[i], state);
+	if (!PG_ARGISNULL(1))
+	{
+		ArrayBuildState *incoming = (ArrayBuildState *) PG_GETARG_POINTER(1);
+
+		if (fcinfo->flinfo->fn_extra == NULL)
+			set_agg_startup(fcinfo, incoming->element_type);
+
+		for (i = 0; i < incoming->nelems; i++)
+			state = set_add(fcinfo, context, incoming->dvalues[i], incoming->dnulls[i], state);
+	}
 
 	MemoryContextSwitchTo(old);
 
