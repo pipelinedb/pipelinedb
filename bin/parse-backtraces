@@ -9,8 +9,7 @@ import sys
 
 PIPELINE_DEBUG_BIN = 'pipelinedb-debug'
 ADDR2LINE = ['addr2line', '-e']
-BT_RE = re.compile(r'^pipelinedb: .+ \[.+\] \w+\(\w+\+0x[0-9a-f]+\)'
-                   '\[(0x[0-9a-f]+)\]$')
+BT_RE = re.compile(r'^pipelinedb: .+\[(0x[0-9a-f]+)\]$')
 
 
 def is_executable(path):
