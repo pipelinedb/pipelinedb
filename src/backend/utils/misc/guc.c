@@ -2774,7 +2774,7 @@ static struct config_int ConfigureNamesInt[] =
 		 GUC_UNIT_KB
 		},
 		&continuous_query_ipc_shared_mem,
-		262144, 8192, MAX_KILOBYTES,
+		262144, 32768, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 
