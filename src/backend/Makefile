@@ -224,7 +224,7 @@ install-bin: $(PIPELINE_SERVER_BINARY) $(POSTGRES_IMP) installdirs
 	$(INSTALL_PROGRAM) $(PIPELINE_SERVER_BINARY)$(X) '$(DESTDIR)$(bindir)/$(PIPELINE_SERVER_BINARY)$(X)'
 ifneq ($(PORTNAME), win32)
 	@rm -f '$(DESTDIR)$(bindir)/postmaster$(X)'
-	ln -s $(PIPELINE_SERVER_BINARY)$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
+	ln -s pipelinedb$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
 else
 	$(INSTALL_PROGRAM) $(PIPELINE_SERVER_BINARY)$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
 endif
