@@ -603,11 +603,17 @@ pipeline_streams(PG_FUNCTION_ARGS)
 
 		relname = RelationGetRelationName(rel);
 		namespace = get_namespace_name(RelationGetNamespace(rel));
-		if (!namespace)
-		{
-			heap_close(rel, AccessShareLock);
-			continue;
-		}
+
+		/*
+		 * XXX(usmanm): This should never happen but is a hack needed because we don't clear all inferred
+		 * streams properly...
+		 */
+		 if (!namespace)
+		 {
+			 heap_close(rel, AccessShareLock);
+			 continue;
+		 }
+
 
 		MemSet(nulls, 0, sizeof(nulls));
 
@@ -648,21 +654,30 @@ pipeline_streams(PG_FUNCTION_ARGS)
 			{
 				ContQuery *view = GetContQueryForId(j);
 				char *cq_name;
-				bool visible = false;
+				Relation rel;
 
-				if (view->type == CONT_VIEW)
-					visible = RelationIsVisible(view->matrelid);
-				else
-					visible = TypeIsVisible(view->matrelid);
+				if (!view)
+					continue;
 
-				if (!visible)
-					cq_name = quote_qualified_identifier(get_namespace_name(view->relid), get_rel_name(view->relid));
+				rel = try_relation_open(view->relid, AccessShareLock);
+				if (!rel)
+					continue;
+
+				if (!RelationIsVisible(view->relid))
+					cq_name = quote_qualified_identifier(get_namespace_name(RelationGetNamespace(rel)),
+							RelationGetRelationName(rel));
 				else
-					cq_name = quote_qualified_identifier(NULL, get_rel_name(view->relid));
+					cq_name = quote_qualified_identifier(NULL, RelationGetRelationName(rel));
+
+				relation_close(rel, AccessShareLock);
 
 				queries[i] = cq_name;
 				i++;
 			}
+
+			/* In case a view wasn't found above, nqueries is stale */
+			Assert(i <= nqueries);
+			nqueries = i;
 
 			qsort(queries, nqueries, sizeof(char *), cstring_cmp);
 
