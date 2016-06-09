@@ -109,12 +109,13 @@ replace_node(Node *tree, ReplaceNodeContext *context)
 	 * For now to be conservative we only allow replacing FuncCall and ColumnRefs.
 	 */
 	Assert(IsA(context->old, FuncCall) || IsA(context->old, TypeCast) || IsA(context->old, ColumnRef) ||
-			IsA(context->old, Aggref) || IsA(context->old, WindowFunc));
+			IsA(context->old, Aggref) || IsA(context->old, WindowFunc) || IsA(context->old, A_Expr));
 	Assert(IsA(context->new, FuncCall) || IsA(context->new, ColumnRef) || IsA(context->new, WindowFunc) ||
 			IsA(context->new, FuncExpr));
 	Assert(IsA(context->old, TypeCast) || IsA(context->old, ColumnRef) ? IsA(context->new, ColumnRef) : true);
 	Assert(IsA(context->old, Aggref) ? IsA(context->new, WindowFunc) || IsA(context->new, FuncExpr) : true);
 	Assert(IsA(context->old, WindowFunc) ? IsA(context->new, FuncExpr) : true);
+	Assert(sizeof(ColumnRef) <= sizeof(A_Expr));
 	Assert(sizeof(ColumnRef) <= sizeof(FuncCall));
 	Assert(sizeof(ColumnRef) <= sizeof(TypeCast));
 	Assert(sizeof(WindowFunc) <= sizeof(WindowFunc));
@@ -595,70 +596,11 @@ get_truncation_from_interval(SelectStmt *select, Node *time, Node *interval)
 	return (Node *) func;
 }
 
-static ColumnRef *
-validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext *context)
+static bool
+validate_window_timestamp_expr(Node *node, ContAnalyzeContext *context)
 {
-	Node *col = node;
-	bool saw_expr = false;
-
-	context->cols = NIL;
-	collect_types_and_cols(node, context);
-
-	/* Only a single column can be compared to clock_timestamp */
-	if (list_length(context->cols) != 1)
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-				errmsg("clock_timestamp() can only appear in an expression containing a single column reference")));
-
-	while (col)
-	{
-		if (IsA(col, TypeCast))
-		{
-			col = ((TypeCast *) col)->arg;
-			continue;
-		}
-
-		if (IsA(col, ColumnRef))
-			break;
-
-		if (IsA(col, FuncCall))
-		{
-			FuncCall *fc = (FuncCall *) col;
-			char *name = NameListToString(fc->funcname);
-
-			if (pg_strcasecmp(name, TO_TIMESTAMP) != 0)
-				return NULL;
-
-			/* Date truncation should happen at the top level */
-			if (saw_expr)
-				return NULL;
-
-			col = linitial(fc->args);
-
-			continue;
-		}
-
-		if (IsA(col, A_Expr))
-		{
-			A_Expr *expr = (A_Expr *) col;
-
-			saw_expr = true;
-
-			context->cols = NIL;
-			collect_types_and_cols(expr->lexpr, context);
-
-			if (list_length(context->cols))
-				col = expr->lexpr;
-			else
-				col = expr->rexpr;
-
-			continue;
-		}
-
-		return NULL;
-	}
-
-	return (ColumnRef *) col;
+	Oid type = exprType(transformExpr(context->pstate, node, EXPR_KIND_WHERE));
+	return TypeCategory(type) == TYPCATEGORY_DATETIME;
 }
 
 /*
@@ -725,7 +667,7 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ContAnalyzeContext *
 		goto error;
 
 	context->expr = ct_expr;
-	if (validate_window_timestamp_expr(stmt, col_expr, context) == NULL)
+	if (!validate_window_timestamp_expr(col_expr, context))
 		goto error;
 
 	return;
@@ -1258,19 +1200,11 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 		else if (list_length(window->orderClause) == 1)
 		{
 			SortBy *sort = (SortBy *) linitial(window->orderClause);
-			Oid type = exprType(transformExpr(context->pstate, sort->node, EXPR_KIND_WHERE));
 
-			/* ORDER BY must be on a datetime type field */
-			if (TypeCategory(type) != TYPCATEGORY_DATETIME)
+			if (!validate_window_timestamp_expr(sort->node, context))
 				ereport(ERROR,
 						(errcode(ERRCODE_SYNTAX_ERROR),
 						errmsg("ORDER BY expression for WINDOWs must evaluate to datetime type category values"),
-						parser_errposition(context->pstate, sort->location)));
-
-			if (validate_window_timestamp_expr(select, sort->node, context) == NULL)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						errmsg("ORDER BY expression for WINDOWs must reference a datetime type column"),
 						parser_errposition(context->pstate, sort->location)));
 		}
 	}

@@ -163,3 +163,21 @@ DROP CONTINUOUS VIEW test_json_udf_agg;
 DROP AGGREGATE jsonb_element_bigint_agg(jsonb);
 DROP FUNCTION jsonb_element_bigint_agg_state(acc jsonb, elem jsonb);
 DROP STREAM jsonb_test_stream;
+
+CREATE CONTINUOUS VIEW sw_ts_expr1 AS
+  SELECT count(*) FROM sw_ts_expr_s
+  WHERE minute(arrival_timestamp) + interval '1 second' > clock_timestamp() - interval '5 minute';
+
+CREATE CONTINUOUS VIEW sw_ts_expr2 AS
+  SELECT minute(arrival_timestamp), count(*) FROM sw_ts_expr_s
+  WHERE minute(arrival_timestamp) > clock_timestamp() - interval '5 minute'
+  GROUP BY minute(arrival_timestamp);
+
+\d+ sw_ts_expr1
+\d+ sw_ts_expr2
+
+INSERT INTO sw_ts_expr_s (x) VALUES (1), (1);
+INSERT INTO sw_ts_expr_s (x) VALUES (1), (1);
+
+SELECT * FROM sw_ts_expr1;
+SELECT count FROM sw_ts_expr2;

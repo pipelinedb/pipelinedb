@@ -92,7 +92,7 @@ DeleteSWExpiredTuples(Oid relid)
 	if (!GetGCFlag(cvname))
 		goto end;
 
-	/* Now we're certain relid if for a SW continuous view's matrel */
+	/* Now we're certain relid is for a SW continuous view's matrel */
 
 	/*
 	 * TODO(usmanm): Use lock contention free strategy here. See https://news.ycombinator.com/item?id=9018129
