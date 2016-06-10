@@ -57,5 +57,5 @@ def test_tdigest_type(pipeline, clean_db):
   result = list(pipeline.execute('SELECT tdigest_cdf(y, 400), '
                                  'tdigest_quantile(y, 0.9)'
                                  'FROM test_tdigest_type ORDER BY x'))
-  assert map(lambda x: round(x, 1), result[0]) == [0.8, 450.0]
-  assert map(lambda x: round(x, 1), result[1]) == [0.4, 900.5]
+  assert map(lambda x: round(x, 1), result[0]) == [0.8, 449.5]
+  assert map(lambda x: round(x, 1), result[1]) == [0.4, 899.5]

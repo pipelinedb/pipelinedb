@@ -340,7 +340,7 @@ TDigestQuantile(TDigest *t, float8 q)
 	b->weight = 0;
 	right = t->min;
 
-	for (i = 1; i < t->num_centroids; i++)
+	for (i = 0; i < t->num_centroids; i++)
 	{
 		Centroid *c = &t->centroids[i];
 		a = b;

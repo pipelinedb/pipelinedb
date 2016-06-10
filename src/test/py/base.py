@@ -261,6 +261,8 @@ class PipelineDB(object):
         """
         Execute a raw SQL statement
         """
+        if not self.conn:
+          return None
         return self.conn.execute(stmt)
 
     def insert(self, target, desc, rows):
