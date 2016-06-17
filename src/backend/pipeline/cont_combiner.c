@@ -659,6 +659,8 @@ sync_all(ContExecutor *cont_exec)
 		}
 		PG_END_TRY();
 
+		pgstat_report_cqstat(false);
+
 		state->pending_tuples = 0;
 		state->existing = NULL;
 		MemSet(state->group_hashes, 0, state->group_hashes_len);

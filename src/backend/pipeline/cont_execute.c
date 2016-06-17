@@ -864,7 +864,8 @@ ContExecutorEndQuery(ContExecutor *exec)
 	if (exec->current_query)
 	{
 		pgstat_end_cq(MyStatCQEntry);
-		pgstat_report_cqstat(false);
+		if (IsContQueryWorkerProcess())
+			pgstat_report_cqstat(false);
 	}
 	else
 		pgstat_send_cqpurge(exec->current_query_id, 0, exec->ptype);
