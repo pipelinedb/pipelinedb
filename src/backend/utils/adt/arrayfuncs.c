@@ -1536,16 +1536,16 @@ ReadArrayBinary(StringInfo buf,
 Datum
 arrayaggstatesend(PG_FUNCTION_ARGS)
 {
-	ArrayBuildState *state = (ArrayBuildState *) PG_GETARG_POINTER(0);
+	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
 	ArrayType *vals;
 	int	dims[1];
 	int	lbs[1];
 
-	dims[0] = state->nelems;
-	lbs[0] = 1;
-
 	if (state == NULL)
 		PG_RETURN_NULL();
+
+	dims[0] = state->nelems;
+	lbs[0] = 1;
 
 	vals = construct_md_array(state->dvalues, state->dnulls, 1, dims, lbs, state->element_type,
 			state->typlen, state->typbyval, state->typalign);

@@ -19,7 +19,7 @@ def _kill(sig):
                               stdout=subprocess.PIPE).communicate()
   errprocs = []
   for line in out.split('\n'):
-    if __file__ not in line and 'pipelinedb' in line:
+    if __file__ not in line and 'pipelinedb:' in line:
       pid = line.split()[0]
       try:
         os.kill(int(pid), sig)
@@ -75,7 +75,7 @@ def main(args):
                               stdout=subprocess.PIPE).communicate()
   errprocs = []
   for line in out.split('\n'):
-    if __file__ not in line and 'pipelinedb' in line:
+    if __file__ not in line and 'pipelinedb:' in line:
       errprocs.append(line)
 
   if errprocs:
