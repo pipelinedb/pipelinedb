@@ -19,6 +19,7 @@
 #include "catalog/pipeline_stream_fn.h"
 #include "catalog/pg_type.h"
 #include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "pgstat.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
@@ -26,6 +27,7 @@
 #include "pipeline/stream.h"
 #include "storage/shm_alloc.h"
 #include "tcop/tcopprot.h"
+#include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
@@ -77,8 +79,9 @@ PartialTupleStatePeekFn(void *ptr, int len)
 	if (pts->query_id == InvalidOid)
 	{
 		HeapTuple tup;
-		Oid namespace;
 		Form_pipeline_query row;
+		Oid relid;
+		Oid namespace;
 
 		Assert(strlen(NameStr(pts->cv)));
 		Assert(strlen(NameStr(pts->namespace)));
@@ -91,8 +94,16 @@ PartialTupleStatePeekFn(void *ptr, int len)
 			return;
 		}
 
-		tup = SearchSysCache2(PIPELINEQUERYRELID, ObjectIdGetDatum(namespace),
-				CStringGetDatum(NameStr(pts->cv)));
+		relid = get_relname_relid(NameStr(pts->cv), namespace);
+
+		if (!OidIsValid(relid))
+		{
+			elog(WARNING, "couldn't find relation %s.%s, skipping partial tuple",
+					NameStr(pts->namespace), NameStr(pts->cv));
+			return;
+		}
+
+		tup = SearchSysCache1(PIPELINEQUERYRELID, ObjectIdGetDatum(relid));
 
 		if (!HeapTupleIsValid(tup))
 		{
