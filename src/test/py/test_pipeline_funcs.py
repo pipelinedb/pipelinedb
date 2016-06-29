@@ -9,8 +9,8 @@ def test_combine_table(pipeline, clean_db):
   pipeline.create_cv('combine_table',
                      'SELECT x::int, COUNT(*) FROM stream GROUP BY x')
 
-  values = [(i, ) for i in xrange(1000)]
-  pipeline.insert('stream', ('x', ), values)
+  values = [(i,) for i in xrange(1000)]
+  pipeline.insert('stream', ('x',), values)
 
   pipeline.execute('SELECT * INTO tmprel FROM combine_table_mrel')
 
@@ -19,8 +19,8 @@ def test_combine_table(pipeline, clean_db):
 
   def insert():
     while not stop:
-      pipeline.insert('stream', ('x', ), values)
-      ninserts[0] +=1
+      pipeline.insert('stream', ('x',), values)
+      ninserts[0] += 1
       time.sleep(0.01)
 
   t = threading.Thread(target=insert)
@@ -46,3 +46,17 @@ def test_combine_table(pipeline, clean_db):
     assert row[0] == ninserts[0] + 2
 
   pipeline.execute('DROP TABLE tmprel')
+
+
+def test_combine_table_no_groups(pipeline, clean_db):
+  pipeline.create_cv('no_groups', 'SELECT COUNT(*) FROM stream')
+  values = [(i,) for i in xrange(1000)]
+  pipeline.insert('stream', ('x',), values)
+
+  pipeline.execute('SELECT * INTO tmprel FROM no_groups_mrel')
+  pipeline.execute("SELECT pipeline_combine_table('no_groups', 'tmprel')")
+
+  rows = list(pipeline.execute('SELECT count FROM no_groups'))
+  assert len(rows) == 1
+  assert len(rows[0]) == 1
+  assert rows[0][0] == 2000

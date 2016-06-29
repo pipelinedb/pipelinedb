@@ -1184,11 +1184,14 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	hashfcinfo->flinfo = palloc0(sizeof(FmgrInfo));
 	hashfcinfo->flinfo->fn_mcxt = base->tmp_cxt;
 
-	fmgr_info(state->hashfunc->funcid, hashfcinfo->flinfo);
-	fmgr_info_set_expr((Node *) state->hashfunc, hashfcinfo->flinfo);
+	if (state->hashfunc)
+	{
+		fmgr_info(state->hashfunc->funcid, hashfcinfo->flinfo);
+		fmgr_info_set_expr((Node *) state->hashfunc, hashfcinfo->flinfo);
 
-	hashfcinfo->fncollation = state->hashfunc->funccollid;
-	hashfcinfo->nargs = list_length(state->hashfunc->args);
+		hashfcinfo->fncollation = state->hashfunc->funccollid;
+		hashfcinfo->nargs = list_length(state->hashfunc->args);
+	}
 
 	scan = heap_beginscan(srcrel, GetTransactionSnapshot(), 0, NULL);
 	state->pending_tuples = 0;
@@ -1200,7 +1203,9 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	{
 		ExecStoreTuple(heap_copytuple(tup), state->slot, InvalidBuffer, false);
 		tuplestore_puttupleslot(state->batch, state->slot);
-		set_group_hash(state, state->pending_tuples, hash_group(state, hashfcinfo));
+
+		if (state->hashfunc)
+			set_group_hash(state, state->pending_tuples, hash_group(state, hashfcinfo));
 
 		if (++state->pending_tuples < continuous_query_batch_size)
 			continue;
