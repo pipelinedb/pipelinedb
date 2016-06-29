@@ -595,7 +595,7 @@ syncTargetDirectory(const char *argv0)
 	char	cmd[MAXCMDLEN];
 
 	/* locate initdb binary */
-	if ((ret = find_other_exec(argv0, "initdb",
+	if ((ret = find_other_exec(argv0, "pipeline-init",
 							   "initdb (PostgreSQL) " PG_VERSION "\n",
 							   exec_path)) < 0)
 	{
@@ -605,11 +605,11 @@ syncTargetDirectory(const char *argv0)
 			strlcpy(full_path, progname, sizeof(full_path));
 
 		if (ret == -1)
-			pg_fatal("The program \"initdb\" is needed by %s but was \n"
+			pg_fatal("The program \"pipeline-init\" is needed by %s but was \n"
 					 "not found in the same directory as \"%s\".\n"
 					 "Check your installation.\n", progname, full_path);
 		else
-			pg_fatal("The program \"initdb\" was found by \"%s\"\n"
+			pg_fatal("The program \"pipeline-init\" was found by \"%s\"\n"
 					 "but was not the same version as %s.\n"
 					 "Check your installation.\n", full_path, progname);
 	}

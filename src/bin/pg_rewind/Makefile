@@ -35,13 +35,13 @@ xlogreader.c: % : $(top_srcdir)/src/backend/access/transam/%
 	rm -f $@ && $(LN_S) $< .
 
 install: all installdirs
-	$(INSTALL_PROGRAM) pg_rewind$(X) '$(DESTDIR)$(bindir)/pg_rewind$(X)'
+	$(INSTALL_PROGRAM) pg_rewind$(X) '$(DESTDIR)$(bindir)/pipeline-rewind$(X)'
 
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
 
 uninstall:
-	rm -f '$(DESTDIR)$(bindir)/pg_rewind$(X)'
+	rm -f '$(DESTDIR)$(bindir)/pipeline-rewind$(X)'
 
 clean distclean maintainer-clean:
 	rm -f pg_rewind$(X) $(OBJS) xlogreader.c
