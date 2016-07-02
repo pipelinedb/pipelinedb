@@ -614,124 +614,123 @@ pipeline_streams(PG_FUNCTION_ARGS)
 			 continue;
 		 }
 
+		 MemSet(nulls, 0, sizeof(nulls));
 
-		MemSet(nulls, 0, sizeof(nulls));
+		 values[0] = CStringGetTextDatum(namespace);
+		 values[1] = CStringGetTextDatum(relname);
+		 values[2] = BoolGetDatum(row->inferred);
 
-		values[0] = CStringGetTextDatum(namespace);
-		values[1] = CStringGetTextDatum(relname);
-		values[2] = BoolGetDatum(row->inferred);
+		 tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
 
-		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
+		 if (isnull)
+			 nulls[3] = true;
+		 else
+		 {
+			 int nqueries;
+			 char **queries;
+			 Datum *qdatums;
+			 bytea *bytes;
+			 int nbytes;
+			 int nwords;
+			 Bitmapset *bms;
+			 int i;
+			 int j;
 
-		if (isnull)
-			nulls[3] = true;
-		else
-		{
-			int nqueries;
-			char **queries;
-			Datum *qdatums;
-			bytea *bytes;
-			int nbytes;
-			int nwords;
-			Bitmapset *bms;
-			int i;
-			int j;
+			 bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(tmp));
+			 nbytes = VARSIZE(bytes) - VARHDRSZ;
+			 nwords = nbytes / sizeof(bitmapword);
 
-			bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(tmp));
-			nbytes = VARSIZE(bytes) - VARHDRSZ;
-			nwords = nbytes / sizeof(bitmapword);
+			 bms = palloc0(BITMAPSET_SIZE(nwords));
+			 bms->nwords = nwords;
 
-			bms = palloc0(BITMAPSET_SIZE(nwords));
-			bms->nwords = nwords;
+			 memcpy(bms->words, VARDATA(bytes), nbytes);
 
-			memcpy(bms->words, VARDATA(bytes), nbytes);
+			 nqueries = bms_num_members(bms);
+			 queries = palloc0(sizeof(char *) * nqueries);
 
-			nqueries = bms_num_members(bms);
-			queries = palloc0(sizeof(char *) * nqueries);
+			 i = 0;
+			 while ((j = bms_first_member(bms)) >= 0)
+			 {
+				 ContQuery *view = GetContQueryForId(j);
+				 char *cq_name;
+				 Relation rel;
 
-			i = 0;
-			while ((j = bms_first_member(bms)) >= 0)
-			{
-				ContQuery *view = GetContQueryForId(j);
-				char *cq_name;
-				Relation rel;
+				 if (!view)
+					 continue;
 
-				if (!view)
-					continue;
+				 rel = try_relation_open(view->relid, AccessShareLock);
+				 if (!rel)
+					 continue;
 
-				rel = try_relation_open(view->relid, AccessShareLock);
-				if (!rel)
-					continue;
+				 if (!RelationIsVisible(view->relid))
+					 cq_name = quote_qualified_identifier(get_namespace_name(RelationGetNamespace(rel)),
+							 RelationGetRelationName(rel));
+				 else
+					 cq_name = quote_qualified_identifier(NULL, RelationGetRelationName(rel));
 
-				if (!RelationIsVisible(view->relid))
-					cq_name = quote_qualified_identifier(get_namespace_name(RelationGetNamespace(rel)),
-							RelationGetRelationName(rel));
-				else
-					cq_name = quote_qualified_identifier(NULL, RelationGetRelationName(rel));
+				 relation_close(rel, AccessShareLock);
 
-				relation_close(rel, AccessShareLock);
+				 queries[i] = cq_name;
+				 i++;
+			 }
 
-				queries[i] = cq_name;
-				i++;
-			}
+			 /* In case a view wasn't found above, nqueries is stale */
+			 Assert(i <= nqueries);
+			 nqueries = i;
 
-			/* In case a view wasn't found above, nqueries is stale */
-			Assert(i <= nqueries);
-			nqueries = i;
+			 qsort(queries, nqueries, sizeof(char *), cstring_cmp);
 
-			qsort(queries, nqueries, sizeof(char *), cstring_cmp);
+			 qdatums = palloc0(sizeof(Datum) * nqueries);
 
-			qdatums = palloc0(sizeof(Datum) * nqueries);
+			 for (i = 0; i < nqueries; i++)
+				 qdatums[i] = CStringGetTextDatum(queries[i]);
 
-			for (i = 0; i < nqueries; i++)
-				qdatums[i] = CStringGetTextDatum(queries[i]);
+			 values[3] = PointerGetDatum(construct_array(qdatums, nqueries, TEXTOID, -1, false, 'i'));
+		 }
 
-			values[3] = PointerGetDatum(construct_array(qdatums, nqueries, TEXTOID, -1, false, 'i'));
-		}
+		 tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_desc, &isnull);
 
-		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_desc, &isnull);
+		 if (isnull)
+		 {
+			 needs_arrival_time = false;
+			 desc = RelationGetDescr(rel);
+		 }
+		 else
+		 {
+			 needs_arrival_time = true;
+			 desc = UnpackTupleDesc(DatumGetByteaP(tmp));
+		 }
 
-		if (isnull)
-		{
-			needs_arrival_time = false;
-			desc = RelationGetDescr(rel);
-		}
-		else
-		{
-			needs_arrival_time = true;
-			desc = UnpackTupleDesc(DatumGetByteaP(tmp));
-		}
+		 initStringInfo(&buf);
+		 cols = palloc0(sizeof(Datum) * desc->natts);
 
-		initStringInfo(&buf);
-		cols = palloc0(sizeof(Datum) * desc->natts);
+		 for (i = 0; i < desc->natts; i++)
+		 {
+			 Form_pg_attribute attr = desc->attrs[i];
 
-		for (i = 0; i < desc->natts; i++)
-		{
-			Form_pg_attribute attr = desc->attrs[i];
-
-			resetStringInfo(&buf);
-			appendStringInfo(&buf, "%s::%s", NameStr(attr->attname),
+			 resetStringInfo(&buf);
+			 appendStringInfo(&buf, "%s::%s", NameStr(attr->attname),
 					format_type_with_typemod(attr->atttypid, attr->atttypmod));
 
-			cols[i] = CStringGetTextDatum(buf.data);
-		}
+			 cols[i] = CStringGetTextDatum(buf.data);
+		 }
 
-		if (needs_arrival_time)
-		{
-			cols = repalloc(cols, sizeof(Datum) * (desc->natts + 1));
-			resetStringInfo(&buf);
-			appendStringInfo(&buf, "%s::%s", ARRIVAL_TIMESTAMP, format_type_with_typemod(TIMESTAMPTZOID, 0));
-			cols[desc->natts] = CStringGetTextDatum(buf.data);
-		}
+		 if (needs_arrival_time)
+		 {
+			 cols = repalloc(cols, sizeof(Datum) * (desc->natts + 1));
+			 resetStringInfo(&buf);
+			 appendStringInfo(&buf, "%s::%s", ARRIVAL_TIMESTAMP, format_type_with_typemod(TIMESTAMPTZOID, 0));
+			 cols[desc->natts] = CStringGetTextDatum(buf.data);
+		 }
 
-		values[4] = PointerGetDatum(construct_array(cols,
-				needs_arrival_time ? desc->natts + 1 : desc->natts, TEXTOID, -1, false, 'i'));
+		 values[4] = PointerGetDatum(construct_array(cols,
+				 needs_arrival_time ? desc->natts + 1 : desc->natts, TEXTOID, -1, false, 'i'));
 
-		relation_close(rel, AccessShareLock);
+		 relation_close(rel, AccessShareLock);
 
-		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
-		result = HeapTupleGetDatum(rtup);
-		SRF_RETURN_NEXT(funcctx, result);
+		 rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
+		 result = HeapTupleGetDatum(rtup);
+		 SRF_RETURN_NEXT(funcctx, result);
 	}
 
 	heap_endscan(data->scan);
@@ -1011,4 +1010,58 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 	heap_close(data->rel, AccessShareLock);
 
 	SRF_RETURN_DONE(funcctx);
+}
+
+static void
+ipc_queue_wait_till_empty(ipc_queue *ipcq)
+{
+	while (true)
+	{
+		if (ipc_queue_is_empty(ipcq))
+			break;
+		pg_usleep(10);
+	}
+}
+
+/*
+ * pipeline_flush
+ */
+Datum
+pipeline_flush(PG_FUNCTION_ARGS)
+{
+	int i;
+	ipc_queue *wqueues[continuous_query_num_workers * 2];
+	ipc_queue *cqueues[continuous_query_num_combiners];
+	ipc_queue *ipcq;
+
+	for (i = 0; i < continuous_query_num_workers; i++)
+	{
+		ipcq = get_worker_queue_with_lock(i, false);
+		ipc_queue_wait_till_empty(ipcq);
+		wqueues[i + continuous_query_num_workers] = ipcq;
+
+		ipcq = get_worker_queue_with_lock(i, true);
+		ipc_queue_wait_till_empty(ipcq);
+		wqueues[i] = ipcq;
+	}
+
+	for (i = 0; i < continuous_query_num_combiners; i++)
+	{
+		ipcq = get_combiner_queue_with_lock(i);
+		ipc_queue_wait_till_empty(ipcq);
+		cqueues[i] = ipcq;
+	}
+
+	/* At this point everything there is no more data in continuous process queues, however,
+	 * we must still wait for commit_interval for everything to get flushed to disk. After that
+	 * we can unlock all the queues. */
+	pg_usleep(continuous_query_commit_interval * 1000 * 2);
+
+	for (i = 0; i < continuous_query_num_combiners; i++)
+		ipc_queue_unlock(cqueues[i]);
+
+	for (i = 0; i < continuous_query_num_workers * 2; i++)
+		ipc_queue_unlock(wqueues[i]);
+
+	PG_RETURN_BOOL(true);
 }

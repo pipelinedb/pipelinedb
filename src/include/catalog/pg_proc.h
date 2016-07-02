@@ -5939,6 +5939,9 @@ DESCR("deserializer for poly numeric aggregation transition states");
 DATA(insert OID = 4492 (numpolyaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ numpolyaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for poly numeric aggregation transition states");
 
+DATA(insert OID = 4493 ( pipeline_flush	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 16 "" _null_ _null_ _null_ _null_ _null_ pipeline_flush _null_ _null_ _null_ ));
+DESCR("flush all continuous process queues");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
