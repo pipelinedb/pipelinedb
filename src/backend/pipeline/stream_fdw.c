@@ -532,7 +532,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 			ack->batch = batch;
 		}
 
-		sis->worker_queue = get_worker_queue_with_lock();
+		sis->worker_queue = get_any_worker_queue_with_lock();
 		Assert(sis->worker_queue);
 	}
 
@@ -574,7 +574,7 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 		if (sis->count && (sis->count % continuous_query_batch_size == 0))
 		{
 			ipc_queue_unlock(sis->worker_queue);
-			sis->worker_queue = get_worker_queue_with_lock();
+			sis->worker_queue = get_any_worker_queue_with_lock();
 			sis->num_batches++;
 		}
 
@@ -587,7 +587,7 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 			{
 				ntries++;
 				ipc_queue_unlock(sis->worker_queue);
-				sis->worker_queue = get_worker_queue_with_lock();
+				sis->worker_queue = get_any_worker_queue_with_lock();
 			}
 			while (!ipc_queue_push_nolock(sis->worker_queue, sts, len, ntries == continuous_query_num_workers));
 		}

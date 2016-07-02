@@ -1230,7 +1230,7 @@ release_my_ipc_queue()
 }
 
 ipc_queue *
-get_worker_queue_with_lock(void)
+get_any_worker_queue_with_lock(void)
 {
 	static long idx = -1;
 	static bool broker_handled;
@@ -1284,6 +1284,16 @@ get_worker_queue_with_lock(void)
 	Assert(ipcq);
 	Assert(LWLockHeldByMe(ipcq->lock));
 
+	return ipcq;
+}
+
+ipc_queue *
+get_worker_queue_with_lock(int idx, bool broker_handled)
+{
+	broker_db_meta *db_meta = get_db_meta(MyDatabaseId);
+	dsm_segment *segment = dsm_attach_and_pin(db_meta->handle);
+	ipc_queue *ipcq = get_worker_ipcq(segment, idx, true, broker_handled);
+	ipc_queue_lock(ipcq, true);
 	return ipcq;
 }
 
