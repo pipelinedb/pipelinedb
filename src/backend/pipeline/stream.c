@@ -80,7 +80,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples,
 
 	packed_desc = PackTupleDesc(desc);
 
-	ipcq = get_worker_queue_with_lock();
+	ipcq = get_any_worker_queue_with_lock();
 	head = pg_atomic_read_u64(&ipcq->head);
 	tail = pg_atomic_read_u64(&ipcq->tail);
 	free = ipc_queue_free_size(ipcq, head, tail);
@@ -115,7 +115,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples,
 			ipc_queue_update_head(ipcq, head);
 			ipc_queue_unlock(ipcq);
 
-			ipcq = get_worker_queue_with_lock();
+			ipcq = get_any_worker_queue_with_lock();
 
 			head = pg_atomic_read_u64(&ipcq->head);
 			tail = pg_atomic_read_u64(&ipcq->tail);

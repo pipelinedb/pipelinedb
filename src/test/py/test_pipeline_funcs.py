@@ -1,4 +1,4 @@
-from base import pipeline, clean_db
+from base import async_insert, pipeline, clean_db
 import getpass
 import psycopg2
 import threading
@@ -60,3 +60,25 @@ def test_combine_table_no_groups(pipeline, clean_db):
   assert len(rows) == 1
   assert len(rows[0]) == 1
   assert rows[0][0] == 2000
+
+
+@async_insert
+def test_pipeline_flush(pipeline, clean_db):
+  pipeline.create_cv('flush', 'SELECT x::int, pg_sleep(0.01) FROM stream')
+  values = [(i,) for i in xrange(1000)]
+
+  start = time.time()
+
+  # This will take 0.01 * 1000 = 10s to process but return immediately since inserts are async
+  # and values will fit in one batch.
+  pipeline.insert('stream', ('x',), values)
+  insert_end = time.time()
+
+  pipeline.execute('SELECT pipeline_flush()')
+  flush_end = time.time()
+
+  assert insert_end - start < 0.1
+  assert flush_end - start > 10
+
+  row = list(pipeline.execute('SELECT count(*) FROM flush'))[0]
+  assert row[0] == 1000
