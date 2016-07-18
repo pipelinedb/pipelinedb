@@ -16,6 +16,7 @@
 
 extern bool continuous_query_materialization_table_updatable;
 
+#define CQ_CSREL_SUFFIX "_csrel"
 #define CQ_MATREL_SUFFIX "_mrel"
 #define CQ_SEQREL_SUFFIX "_seq"
 #define CQ_MATREL_PKEY "$pk"
@@ -27,6 +28,7 @@ extern void ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlo
 extern void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
 extern void ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
 
+extern char *CVNameToCSRelName(char *cv_name);
 extern char *CVNameToMatRelName(char *cv_name);
 extern char *CVNameToSeqRelName(char *cv_name);
 

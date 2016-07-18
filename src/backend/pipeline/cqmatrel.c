@@ -147,6 +147,17 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 }
 
 char *
+CVNameToCSRelName(char *cv_name)
+{
+	char *relname = palloc0(NAMEDATALEN);
+
+	strcpy(relname, cv_name);
+	append_suffix(relname, CQ_CSREL_SUFFIX, NAMEDATALEN);
+
+	return relname;
+}
+
+char *
 CVNameToMatRelName(char *cv_name)
 {
 	char *relname = palloc0(NAMEDATALEN);
