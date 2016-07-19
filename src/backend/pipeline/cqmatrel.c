@@ -28,6 +28,34 @@
 bool continuous_query_materialization_table_updatable;
 
 /*
+ * CQOSRelOpen
+ *
+ * Open an output stream
+ */
+ResultRelInfo *
+CQOSRelOpen(Relation osrel)
+{
+	ResultRelInfo *resultRelInfo;
+
+	resultRelInfo = makeNode(ResultRelInfo);
+	resultRelInfo->ri_RangeTableIndex = 1; /* dummy */
+	resultRelInfo->ri_RelationDesc = osrel;
+	resultRelInfo->ri_TrigDesc = NULL;
+
+	return resultRelInfo;
+}
+
+/*
+ * CQCSRelClose
+ */
+void
+CQOSRelClose(ResultRelInfo *rinfo)
+{
+	ExecCloseIndices(rinfo);
+	pfree(rinfo);
+}
+
+/*
  * CQMatViewOpen
  *
  * Open any indexes associated with the given materialization table

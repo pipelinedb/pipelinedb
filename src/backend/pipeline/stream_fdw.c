@@ -43,25 +43,6 @@ typedef struct StreamFdwInfo
 	List *colnames;
 } StreamFdwInfo;
 
-typedef struct StreamInsertState
-{
-	Bitmapset *targets;
-
-	long count;
-	long bytes;
-	int num_batches;
-
-	InsertBatch *batch;
-	InsertBatchAck *ack;
-
-	TupleDesc desc;
-	bytea *packed_desc;
-
-	ipc_queue *worker_queue;
-	AdhocInsertState *adhoc_state;
-} StreamInsertState;
-
-
 struct StreamProjectionInfo {
 	/*
 	 * Temporary context to use during stream projections,
@@ -516,10 +497,10 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 			bms_difference(all_targets, worker_targets) : NULL;
 	InsertBatchAck *ack = NULL;
 	InsertBatch *batch = NULL;
-	List *insert_tl;
+	List *insert_tl = NIL;
 
-	Assert(fdw_private);
-	insert_tl = linitial(fdw_private);
+	if (fdw_private)
+		insert_tl = linitial(fdw_private);
 
 	if (!bms_is_empty(worker_targets))
 	{
@@ -545,7 +526,17 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	sis->count = 0;
 	sis->bytes = 0;
 	sis->num_batches = 1;
-	sis->desc = is_inferred_stream_relation(stream) ? ExecTypeFromTL(insert_tl, false) : RelationGetDescr(stream);
+
+	if (is_inferred_stream_relation(stream))
+	{
+		Assert(insert_tl);
+		sis->desc = ExecTypeFromTL(insert_tl, false);
+	}
+	else
+	{
+		sis->desc = RelationGetDescr(stream);
+	}
+
 	sis->packed_desc = PackTupleDesc(sis->desc);
 
 	result_info->ri_FdwState = sis;

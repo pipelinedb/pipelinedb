@@ -487,8 +487,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ObjectAddress address;
 	ColumnDef *old;
 	ColumnDef *new;
-	CreateStreamStmt *create_csrel;
-	Oid csrelid;
+	CreateStreamStmt *create_osrel;
+	Oid osrelid;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -622,7 +622,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		seqrelid = InvalidOid;
 
 	/*
-	 * Create the changestream relation
+	 * Create the output stream
 	 */
 	mrel = heap_open(matrelid, NoLock);
 
@@ -636,18 +636,18 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	heap_close(mrel, NoLock);
 
-	create_csrel = makeNode(CreateStreamStmt);
-	create_csrel->ft.servername = PIPELINE_STREAM_SERVER;
-	create_csrel->ft.base.stream = true;
-	create_csrel->ft.base.tableElts = list_make2(old, new);
-	create_csrel->ft.base.relation = makeRangeVar(view->schemaname, CVNameToCSRelName(view->relname), -1);
-	transformCreateStreamStmt(create_csrel);
+	create_osrel = makeNode(CreateStreamStmt);
+	create_osrel->ft.servername = PIPELINE_STREAM_SERVER;
+	create_osrel->ft.base.stream = true;
+	create_osrel->ft.base.tableElts = list_make2(old, new);
+	create_osrel->ft.base.relation = makeRangeVar(view->schemaname, CVNameToCSRelName(view->relname), -1);
+	transformCreateStreamStmt(create_osrel);
 
-	address = DefineRelation((CreateStmt *) create_csrel, RELKIND_STREAM, InvalidOid, NULL);
-	CreateForeignTable((CreateForeignTableStmt *) create_csrel, address.objectId);
-	CreatePipelineStreamEntry((CreateStreamStmt *) create_csrel, address.objectId);
+	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_STREAM, InvalidOid, NULL);
+	CreateForeignTable((CreateForeignTableStmt *) create_osrel, address.objectId);
+	CreatePipelineStreamEntry((CreateStreamStmt *) create_osrel, address.objectId);
 
-	csrelid = address.objectId;
+	osrelid = address.objectId;
 	CommandCounterIncrement();
 
 	/*
@@ -658,7 +658,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, context->is_sw,
+	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, osrelid, seqrelid, context->is_sw,
 								 IsContQueryAdhocProcess(),
 								 &cvid);
 	CommandCounterIncrement();
@@ -677,7 +677,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/* Create group look up index and record dependencies */
 	indexoid = create_lookup_index(view, matrelid, matrel, query, context->is_sw);
 	pkey_idxoid = create_pkey_index(view, matrelid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
-	record_cv_dependencies(pqoid, matrelid, csrelid, seqrelid, cvrelid, indexoid, pkey_idxoid, workerselect, query);
+	record_cv_dependencies(pqoid, matrelid, osrelid, seqrelid, cvrelid, indexoid, pkey_idxoid, workerselect, query);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
 

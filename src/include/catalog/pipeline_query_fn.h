@@ -38,6 +38,7 @@ typedef struct ContQuery
 	char *sql;
 	Oid matrelid;
 	char *relname;
+	RangeVar *osrel;
 
 	/* for view */
 	RangeVar *matrel;
@@ -53,7 +54,7 @@ typedef struct ContQuery
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern void RemovePipelineQueryById(Oid oid);
 
-extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
+extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid csrelid, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
 extern void UpdateContViewRelId(Oid cvid, Oid cvrelid);
 extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, List *args);
 

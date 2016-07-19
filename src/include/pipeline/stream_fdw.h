@@ -29,6 +29,24 @@ typedef struct StreamScanState
 	int ntuples;
 } StreamScanState;
 
+typedef struct StreamInsertState
+{
+	Bitmapset *targets;
+
+	long count;
+	long bytes;
+	int num_batches;
+
+	InsertBatch *batch;
+	InsertBatchAck *ack;
+
+	TupleDesc desc;
+	bytea *packed_desc;
+
+	ipc_queue *worker_queue;
+	AdhocInsertState *adhoc_state;
+} StreamInsertState;
+
 extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);
 
 extern void GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid);

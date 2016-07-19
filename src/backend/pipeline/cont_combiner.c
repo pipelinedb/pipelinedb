@@ -38,6 +38,7 @@
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/stream.h"
+#include "pipeline/stream_fdw.h"
 #include "pipeline/sw_vacuum.h"
 #include "storage/ipc.h"
 #include "tcop/dest.h"
@@ -75,6 +76,7 @@ typedef struct
 	Tuplestorestate *batch;
 	TupleTableSlot *slot;
 	TupleTableSlot *prev_slot;
+	TupleTableSlot *os_slot;
 	bool isagg;
 	int ngroupatts;
 	AttrNumber *groupatts;
@@ -519,15 +521,30 @@ sync_combine(ContQueryCombinerState *state)
 	int i;
 	int natts;
 	Relation matrel;
+	Relation osrel;
 	ResultRelInfo *ri;
+	ResultRelInfo *osri;
 	Size nbytes_inserted = 0;
 	Size nbytes_updated = 0;
 	int ntups_inserted = 0;
 	int ntups_updated = 0;
+	StreamInsertState *sis = NULL;
+	Bitmapset *os_targets = NULL;
 
 	matrel = heap_openrv_extended(state->base.query->matrel, RowExclusiveLock, true);
 	if (matrel == NULL)
 		return;
+
+	osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
+	if (osrel == NULL)
+		return;
+
+	osri = CQOSRelOpen(osrel);
+	BeginStreamModify(NULL, osri, NIL, 0, 0);
+	sis = (StreamInsertState *) osri->ri_FdwState;
+	Assert(sis);
+
+	os_targets = sis->targets;
 
 	ri = CQMatRelOpen(matrel);
 	natts = state->prev_slot->tts_tupleDescriptor->natts;
@@ -536,8 +553,13 @@ sync_combine(ContQueryCombinerState *state)
 	{
 		HeapTupleEntry update = NULL;
 		HeapTuple tup = NULL;
+		HeapTuple os_tup;
+		Datum os_values[2];
+		bool os_nulls[2];
 		AttrNumber att = 1;
 		int replaces = 0;
+
+		MemSet(os_nulls, 0, sizeof(os_nulls));
 
 		/* Only replace values for non-group attributes */
 		MemSet(replace_all, true, size);
@@ -588,6 +610,9 @@ sync_combine(ContQueryCombinerState *state)
 			if (replaces == 0)
 				continue;
 
+			if (os_targets)
+				os_values[0] = heap_copy_tuple_as_datum(update->tuple, slot->tts_tupleDescriptor);
+
 			/*
 			 * The slot has the updated values, so store them in the updatable physical tuple
 			 */
@@ -595,6 +620,12 @@ sync_combine(ContQueryCombinerState *state)
 					slot->tts_values, slot->tts_isnull, replace_all);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecCQMatRelUpdate(ri, slot, estate);
+
+			if (os_targets)
+			{
+				os_values[1] = heap_copy_tuple_as_datum(tup, slot->tts_tupleDescriptor);
+				os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, os_values, os_nulls);
+			}
 
 			ntups_updated++;
 			nbytes_updated += HEAPTUPLESIZE + slot->tts_tuple->t_len;
@@ -609,8 +640,24 @@ sync_combine(ContQueryCombinerState *state)
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecCQMatRelInsert(ri, slot, estate);
 
+			if (os_targets)
+			{
+				os_nulls[0] = true;
+				os_nulls[1] = false;
+
+				os_values[0] = (Datum) NULL;
+				os_values[1] = heap_copy_tuple_as_datum(tup, slot->tts_tupleDescriptor);
+			}
+
 			ntups_inserted++;
 			nbytes_inserted += HEAPTUPLESIZE + slot->tts_tuple->t_len;
+		}
+
+		if (os_targets && (os_nulls[0] == false || os_nulls[1] == false))
+		{
+			os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, os_values, os_nulls);
+			ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
+			ExecStreamInsert(NULL, osri, state->os_slot, NULL);
 		}
 
 		ResetPerTupleExprContext(estate);
@@ -623,6 +670,11 @@ sync_combine(ContQueryCombinerState *state)
 
 	CQMatRelClose(ri);
 	heap_close(matrel, NoLock);
+
+	EndStreamModify(NULL, osri);
+	CQOSRelClose(osri);
+	heap_close(osrel, NoLock);
+
 	FreeExecutorState(estate);
 }
 
@@ -726,6 +778,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	Relation matrel;
 	List *indices = NIL;
 	ListCell *lc;
+	Relation osrel ;
 
 	if (base->query->type != CONT_VIEW)
 	{
@@ -769,6 +822,17 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 		base->query = NULL;
 		return base;
 	}
+
+	osrel = heap_openrv_extended(base->query->osrel, AccessShareLock, true);
+
+	if (osrel  == NULL)
+	{
+		base->query = NULL;
+		return base;
+	}
+
+	state->os_slot = MakeSingleTupleTableSlot(CreateTupleDescCopy(RelationGetDescr(osrel)));
+	heap_close(osrel, AccessShareLock);
 
 	if (IsA(state->combine_plan->planTree, Agg))
 	{
