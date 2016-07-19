@@ -211,7 +211,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid csrelid, Oid seqrelid, bool gc, bool adhoc, Oid *pq_id)
+DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid osrelid, Oid seqrelid, bool gc, bool adhoc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -242,7 +242,7 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid csrelid, Oid seq
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
-	values[Anum_pipeline_query_csrelid - 1] = ObjectIdGetDatum(csrelid);
+	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(matrelid);
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(seqrelid);
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
@@ -553,7 +553,7 @@ GetContQueryForId(Oid id)
 	cq->seqrelid = row->seqrelid;
 	cq->matrelid = row->matrelid;
 	cq->active = row->active;
-	cq->csrel = makeRangeVar(get_namespace_name(get_rel_namespace(row->csrelid)), get_rel_name(row->csrelid), -1);
+	cq->osrel = makeRangeVar(get_namespace_name(get_rel_namespace(row->osrelid)), get_rel_name(row->osrelid), -1);
 
 	if (cq->type == CONT_VIEW)
 	{

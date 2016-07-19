@@ -671,6 +671,13 @@ sync_combine(ContQueryCombinerState *state)
 	CQMatRelClose(ri);
 	heap_close(matrel, NoLock);
 
+
+
+
+
+
+
+
 	EndStreamModify(NULL, osri);
 	CQOSRelClose(osri);
 	heap_close(osrel, NoLock);
