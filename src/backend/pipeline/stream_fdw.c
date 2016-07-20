@@ -520,6 +520,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	if (!bms_is_empty(adhoc_targets))
 		sis->adhoc_state = AdhocInsertStateCreate(adhoc_targets);
 
+	sis->flags = eflags;
 	sis->targets = worker_targets;
 	sis->ack = ack;
 	sis->batch = batch;
@@ -609,7 +610,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 	if (sis->worker_queue)
 	{
 		ipc_queue_unlock(sis->worker_queue);
-		if (synchronous_stream_insert)
+		if (!(sis->flags & REENTRANT_STREAM_INSERT) && synchronous_stream_insert)
 			InsertBatchWaitAndRemove(sis->batch, sis->count);
 	}
 

@@ -579,7 +579,8 @@ sync_combine(ContQueryCombinerState *state)
 		return;
 
 	osri = CQOSRelOpen(osrel);
-	BeginStreamModify(NULL, osri, NIL, 0, 0);
+
+	BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
 	sis = (StreamInsertState *) osri->ri_FdwState;
 	Assert(sis);
 
@@ -831,7 +832,7 @@ assign_output_stream_projection(ContQueryCombinerState *state)
 	EState *estate = CreateExecutorState();
 	ExprContext *context = CreateStandaloneExprContext();
 
-	if (state->base.query->sw_step_factor)
+	if (state->base.query->is_sw)
 		return;
 
 	foreach(lc, overlay->planTree->targetlist)
