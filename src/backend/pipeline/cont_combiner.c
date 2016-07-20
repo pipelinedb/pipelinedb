@@ -831,6 +831,9 @@ assign_output_stream_projection(ContQueryCombinerState *state)
 	EState *estate = CreateExecutorState();
 	ExprContext *context = CreateStandaloneExprContext();
 
+	if (state->base.query->sw_step_factor)
+		return;
+
 	foreach(lc, overlay->planTree->targetlist)
 	{
 		TargetEntry *te = (TargetEntry *) lfirst(lc);
