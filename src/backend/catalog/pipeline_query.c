@@ -211,7 +211,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid osrelid, Oid seqrelid, bool gc, bool adhoc, Oid *pq_id)
+DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, bool gc, bool adhoc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -242,7 +242,6 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid osrelid, Oid seq
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
-	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(matrelid);
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(seqrelid);
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
@@ -279,7 +278,7 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid osrelid, Oid seq
 }
 
 void
-UpdateContViewRelId(Oid cvid, Oid cvrelid)
+UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
 {
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
@@ -296,7 +295,9 @@ UpdateContViewRelId(Oid cvid, Oid cvrelid)
 	MemSet(replace, 0 , sizeof(replace));
 	MemSet(nulls, 0 , sizeof(nulls));
 	replace[Anum_pipeline_query_relid - 1] = true;
+	replace[Anum_pipeline_query_osrelid - 1] = true;
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(cvrelid);
+	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 
 	new = heap_modify_tuple(tup, RelationGetDescr(pipeline_query), values, nulls, replace);
 

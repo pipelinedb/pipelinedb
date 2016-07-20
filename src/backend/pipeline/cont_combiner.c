@@ -40,6 +40,7 @@
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
 #include "pipeline/sw_vacuum.h"
+#include "pipeline/trigger/util.h"
 #include "storage/ipc.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -63,6 +64,9 @@
  * an ongoing combine result.
  */
 #define EXISTING_ADDED 0x1
+
+#define OLD_TUPLE 0
+#define NEW_TUPLE 1
 
 typedef struct
 {
@@ -93,6 +97,11 @@ typedef struct
 	int group_hashes_len;
 	AttrNumber pk;
 	bool seq_pk;
+
+	/* Projection to execute on output stream tuples */
+	ProjectionInfo *output_stream_proj;
+	TupleTableSlot *proj_input_slot;
+	TupleDesc overlay_desc;
 } ContQueryCombinerState;
 
 /*
@@ -505,6 +514,36 @@ build_existing_hashtable(ContQueryCombinerState *state)
 }
 
 /*
+ * project_current_tuple
+ */
+static Datum
+project_overlay(ContQueryCombinerState *state, HeapTuple tup, bool *isnull)
+{
+	TupleTableSlot *slot;
+	HeapTuple projected;
+
+	if (!state->output_stream_proj)
+		return heap_copy_tuple_as_datum(tup, state->desc);
+
+	Assert(state->proj_input_slot);
+
+	/* Should we copy the input tuple so it doesn't get modified? */
+	ExecStoreTuple(tup, state->proj_input_slot, InvalidBuffer, false);
+	slot = ExecProject(state->output_stream_proj, NULL);
+
+	if (TupIsNull(slot))
+	{
+		*isnull = true;
+		return (Datum) NULL;
+	}
+
+	*isnull = false;
+	projected = ExecMaterializeSlot(slot);
+
+	return heap_copy_tuple_as_datum(projected, state->overlay_desc);
+}
+
+/*
  * sync_combine
  *
  * Writes the combine results to a continuous view's table, performing
@@ -549,8 +588,15 @@ sync_combine(ContQueryCombinerState *state)
 	ri = CQMatRelOpen(matrel);
 	natts = state->prev_slot->tts_tupleDescriptor->natts;
 
+	estate->es_per_tuple_exprcontext = CreateStandaloneExprContext();
+	estate->es_per_tuple_exprcontext->ecxt_scantuple = state->proj_input_slot;
+
+	if (state->output_stream_proj)
+		state->output_stream_proj->pi_exprContext = estate->es_per_tuple_exprcontext;
+
 	foreach_tuple(slot, state->combined)
 	{
+
 		HeapTupleEntry update = NULL;
 		HeapTuple tup = NULL;
 		HeapTuple os_tup;
@@ -611,7 +657,7 @@ sync_combine(ContQueryCombinerState *state)
 				continue;
 
 			if (os_targets)
-				os_values[0] = heap_copy_tuple_as_datum(update->tuple, slot->tts_tupleDescriptor);
+				os_values[OLD_TUPLE] = project_overlay(state, update->tuple, &os_nulls[OLD_TUPLE]);
 
 			/*
 			 * The slot has the updated values, so store them in the updatable physical tuple
@@ -622,10 +668,7 @@ sync_combine(ContQueryCombinerState *state)
 			ExecCQMatRelUpdate(ri, slot, estate);
 
 			if (os_targets)
-			{
-				os_values[1] = heap_copy_tuple_as_datum(tup, slot->tts_tupleDescriptor);
-				os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, os_values, os_nulls);
-			}
+				os_values[NEW_TUPLE] = project_overlay(state, tup, &os_nulls[NEW_TUPLE]);
 
 			ntups_updated++;
 			nbytes_updated += HEAPTUPLESIZE + slot->tts_tuple->t_len;
@@ -642,18 +685,19 @@ sync_combine(ContQueryCombinerState *state)
 
 			if (os_targets)
 			{
-				os_nulls[0] = true;
-				os_nulls[1] = false;
+				os_nulls[OLD_TUPLE] = true;
+				os_nulls[NEW_TUPLE] = false;
 
-				os_values[0] = (Datum) NULL;
-				os_values[1] = heap_copy_tuple_as_datum(tup, slot->tts_tupleDescriptor);
+				os_values[OLD_TUPLE] = (Datum) NULL;
+				os_values[NEW_TUPLE] = project_overlay(state, tup, &os_nulls[NEW_TUPLE]);
 			}
 
 			ntups_inserted++;
 			nbytes_inserted += HEAPTUPLESIZE + slot->tts_tuple->t_len;
 		}
 
-		if (os_targets && (os_nulls[0] == false || os_nulls[1] == false))
+		if (os_targets &&
+				(os_nulls[OLD_TUPLE] == false || os_nulls[NEW_TUPLE] == false))
 		{
 			os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, os_values, os_nulls);
 			ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
@@ -671,14 +715,8 @@ sync_combine(ContQueryCombinerState *state)
 	CQMatRelClose(ri);
 	heap_close(matrel, NoLock);
 
-
-
-
-
-
-
-
 	EndStreamModify(NULL, osri);
+
 	CQOSRelClose(osri);
 	heap_close(osrel, NoLock);
 
@@ -777,6 +815,39 @@ combine(ContQueryCombinerState *state)
 	tuplestore_clear(state->batch);
 }
 
+/*
+ * assign_output_stream_projection
+ *
+ * If this query's output stream requires a projection, assign the projection here.
+ * This is necessary when any aggregates have a final function that isn't applied until
+ * read time, as consumers of the output stream expect a finalized aggregate value.
+ */
+static void
+assign_output_stream_projection(ContQueryCombinerState *state)
+{
+	ListCell *lc;
+	bool needs_proj = false;
+	PlannedStmt *overlay = GetContinuousViewOverlayPlan(state->base.query);
+	EState *estate = CreateExecutorState();
+	ExprContext *context = CreateStandaloneExprContext();
+
+	foreach(lc, overlay->planTree->targetlist)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+		if (IsA(te->expr, FuncExpr))
+		{
+			needs_proj = true;
+			break;
+		}
+	}
+
+	if (!needs_proj)
+		return;
+
+	state->output_stream_proj = build_projection(overlay->planTree->targetlist, estate, context, NULL);
+	state->proj_input_slot = MakeSingleTupleTableSlot(state->desc);
+}
+
 static ContQueryState *
 init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 {
@@ -786,6 +857,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	List *indices = NIL;
 	ListCell *lc;
 	Relation osrel ;
+	Relation overlay;
 
 	if (base->query->type != CONT_VIEW)
 	{
@@ -840,6 +912,19 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 
 	state->os_slot = MakeSingleTupleTableSlot(CreateTupleDescCopy(RelationGetDescr(osrel)));
 	heap_close(osrel, AccessShareLock);
+
+	overlay = heap_open(state->base.query->relid, NoLock);
+
+	if (overlay  == NULL)
+	{
+		base->query = NULL;
+		return base;
+	}
+
+	state->overlay_desc = CreateTupleDescCopy(RelationGetDescr(overlay));
+	heap_close(overlay, NoLock);
+
+	assign_output_stream_projection(state);
 
 	if (IsA(state->combine_plan->planTree, Agg))
 	{
