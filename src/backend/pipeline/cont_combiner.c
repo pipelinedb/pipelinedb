@@ -716,8 +716,6 @@ find_arrival_ts_attr(TupleDesc desc)
 		}
 	}
 
-	Assert(result);
-
 	return result;
 }
 
@@ -780,8 +778,17 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	MemoryContext tmp_cxt;
 	TuplestoreScan *scan;
 	MemoryContext old;
+	AttrNumber ats;
 
 	Assert(OidIsValid(eq_func_oid));
+
+	if (!state->isagg)
+		return;
+
+	ats = find_arrival_ts_attr(RelationGetDescr(matrel));
+
+	if (!AttributeNumberIsValid(ats))
+		return;
 
 	i = GetSWInterval(state->base.query->name);
 
@@ -790,8 +797,7 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	state->sw->step_ms = (int) (state->sw->interval_ms * state->base.query->sw_step_factor) / 100.0;
 	state->sw->arrival_ts_attr = find_arrival_ts_attr(RelationGetDescr(matrel));
 
-	if (!state->isagg)
-		return;
+
 
 	tmp_cxt = AllocSetContextCreate(CurrentMemoryContext, "SWOutputTmpCxt",
 				ALLOCSET_DEFAULT_MINSIZE,
@@ -1212,6 +1218,10 @@ assign_output_stream_projection(ContQueryCombinerState *state)
 	if (state->base.query->is_sw)
 		return;
 
+	/* Non-sliding windows not supported */
+	if (GetWindowTimeColumn(state->base.query->name))
+		return;
+
 	foreach(lc, overlay->planTree->targetlist)
 	{
 		TargetEntry *te = (TargetEntry *) lfirst(lc);
@@ -1446,19 +1456,20 @@ ContinuousQueryCombinerMain(void)
 		if (ShouldTerminateContQueryProcess())
 			break;
 
-		ContExecutorStartBatch(cont_exec, min_tick_ms ? min_tick_ms : 1);
+		ContExecutorStartBatch(cont_exec, 0);
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec)) != InvalidOid)
 		{
 			int count = 0;
 			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->current_query;
 
-			min_tick_ms = min_tick_ms ? Min(min_tick_ms, state->sw->step_ms) : state->sw->step_ms;
-
 			PG_TRY();
 			{
 				if (state == NULL)
 					goto next;
+
+				if (state->sw)
+					min_tick_ms = min_tick_ms ? Min(min_tick_ms, state->sw->step_ms) : state->sw->step_ms;
 
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 
