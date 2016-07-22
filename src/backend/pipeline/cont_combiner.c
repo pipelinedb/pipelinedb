@@ -80,7 +80,10 @@ typedef struct
 	int step_ms;
 	PlannedStmt *overlay_plan;
 	Tuplestorestate *overlay_input;
+	DestReceiver *overlay_dest;
 	Tuplestorestate *overlay_output;
+	MemoryContext context;
+	TimestampTz last_tick;
 } SWOutputState;
 
 typedef struct
@@ -571,11 +574,85 @@ project_overlay(ContQueryCombinerState *state, HeapTuple tup, bool *isnull)
  * to this CV's output stream if anything is reading it.
  */
 static void
-tick_sw_groups(ContQueryCombinerState *state)
+tick_sw_groups(ContQueryCombinerState *state, bool force)
 {
 	// if this CV's step size hasn't passed, return
 	// remove expired tuples from the cache
 	// project_sw_overlay_into_ostream
+	struct Plan *plan;
+	HASH_SEQ_STATUS seq;
+	HeapTupleEntry entry;
+	QueryDesc *query_desc;
+
+	if (!force && !TimestampDifferenceExceeds(state->sw->last_tick,
+			GetCurrentTimestamp(), state->sw->step_ms))
+		return;
+
+	if (!hash_get_num_entries(state->sw->step_groups->hashtab))
+		return;
+
+	// add all step groups within the window to
+	// to the input of the overlay plan we're about to execute
+	// func
+	hash_seq_init(&seq, state->sw->step_groups->hashtab);
+	while ((entry = (HeapTupleEntry) hash_seq_search(&seq)) != NULL)
+	{
+		bool isnull;
+		TimestampTz ts;
+
+		ExecStoreTuple(entry->tuple, state->slot, InvalidBuffer, false);
+		ts = slot_getattr(state->slot, state->sw->arrival_ts_attr, &isnull);
+
+		if (TimestampDifferenceExceeds(ts, GetCurrentTimestamp(), state->sw->interval_ms))
+			continue;
+
+		tuplestore_puttuple(state->sw->overlay_input, entry->tuple);
+	}
+	tuplestore_rescan(state->sw->overlay_input);
+
+
+	// execute plan
+	query_desc = CreateQueryDesc(state->sw->overlay_plan,
+			NULL, InvalidSnapshot, InvalidSnapshot, state->sw->overlay_dest, NULL, 0);
+	query_desc->estate = CreateEState(query_desc);
+
+	plan = state->sw->overlay_plan->planTree;
+	query_desc->planstate = ExecInitNode(plan, query_desc->estate, 0);
+	ExecutePlan(query_desc->estate, query_desc->planstate,
+			query_desc->operation,
+			true, 0, ForwardScanDirection, state->sw->overlay_dest);
+	ExecEndNode(query_desc->planstate);
+
+
+	// write out old and new overlay tuples to the output stream
+	tuplestore_rescan(state->sw->overlay_output);
+	foreach_tuple(state->overlay_slot, state->sw->overlay_output)
+	{
+		Datum values[3];
+		bool nulls[3];
+		HeapTuple tup = ExecMaterializeSlot(state->overlay_slot);
+		HeapTuple ostup;
+
+		MemSet(nulls, false, sizeof(nulls));
+
+		// get the old tuple
+		nulls[0] = true;
+		values[OLD_TUPLE] = (Datum) 0;
+		values[NEW_TUPLE] = heap_copy_tuple_as_datum(tup, state->overlay_desc);
+		values[2] = TimestampTzGetDatum(GetCurrentTimestamp());
+
+		ostup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
+		ExecStoreTuple(ostup, state->os_slot, InvalidBuffer, false);
+
+//		print_slot(state->os_slot);
+		// only output new row if it's different from old
+//		ExecStreamInsert(NULL, ostream, state->os_slot, NULL);
+	}
+
+	tuplestore_clear(state->sw->overlay_input);
+	tuplestore_clear(state->sw->overlay_output);
+
+	state->sw->last_tick = GetCurrentTimestamp();
 }
 
 
@@ -701,6 +778,8 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	Oid eq_func_oid = lookup_eq_func_oid(state->desc, pk);
 	Interval *i;
 	MemoryContext tmp_cxt;
+	TuplestoreScan *scan;
+	MemoryContext old;
 
 	Assert(OidIsValid(eq_func_oid));
 
@@ -724,6 +803,22 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 			sizeof(HeapTupleEntryData), CurrentMemoryContext, tmp_cxt);
 
 	state->sw->overlay_plan = GetContinuousViewOverlayPlan(state->base.query);
+	state->sw->context = AllocSetContextCreate(CurrentMemoryContext, "SWOutputCxt",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	old = MemoryContextSwitchTo(state->sw->context);
+	state->sw->overlay_input = tuplestore_begin_heap(true, true, work_mem);
+	state->sw->overlay_output = tuplestore_begin_heap(true, true, work_mem);
+	MemoryContextSwitchTo(old);
+
+	state->sw->overlay_plan->isContinuous = false;
+	scan = SetCombinerPlanTuplestorestate(state->sw->overlay_plan, state->sw->overlay_input);
+	scan->desc = state->desc;
+
+	state->sw->overlay_dest = CreateDestReceiver(DestTuplestore);
+	SetTuplestoreDestReceiverParams(state->sw->overlay_dest, state->sw->overlay_output, state->sw->context, true);
 }
 
 /*
@@ -751,6 +846,7 @@ load_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 
 	scan = heap_beginscan(matrel, GetTransactionSnapshot(), 1, skey);
 
+	// we need to make sure the autovac is free to delete these rows
 	while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
 		bool isnew;
@@ -766,6 +862,8 @@ load_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 	}
 
 	heap_endscan(scan);
+
+	// execute overlay plan once so we always have an old tuple
 }
 
 /*
@@ -778,12 +876,17 @@ static void
 project_sw_overlay_into_ostream(ContQueryCombinerState *state, ResultRelInfo *ostream)
 {
 	struct Plan *plan;
-	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
 	HASH_SEQ_STATUS seq;
 	HeapTupleEntry entry;
 	QueryDesc *query_desc;
 
+	Assert(state->sw->overlay_input);
+	Assert(state->sw->overlay_output);
+	Assert(state->sw->overlay_plan);
+	Assert(state->sw->overlay_dest);
+
 	// add any new tuples in the combine output to the cache
+	// func
 	tuplestore_rescan(state->combined);
 	foreach_tuple(state->slot, state->combined)
 	{
@@ -792,75 +895,15 @@ project_sw_overlay_into_ostream(ContQueryCombinerState *state, ResultRelInfo *os
 		HeapTupleEntry entry = (HeapTupleEntry)
 				LookupTupleHashEntry(state->sw->step_groups, state->slot, &isnew);
 
+		if (!isnew)
+			heap_freetuple(entry->tuple);
+
 		old = MemoryContextSwitchTo(state->sw->step_groups->tablecxt);
-		heap_freetuple(entry->tuple);
 		entry->tuple = ExecCopySlotTuple(state->slot);
 		MemoryContextSwitchTo(old);
 	}
 
-
-	// initialize overlay plan
-	// function with one-time init
-	state->sw->overlay_input = tuplestore_begin_heap(true, true, work_mem);
-	state->sw->overlay_output = tuplestore_begin_heap(true, true, work_mem);
-
-	PreparePlanForReading(state->base.query->matrel, state->sw->overlay_plan, state->sw->overlay_input);
-	query_desc = CreateQueryDesc(state->sw->overlay_plan,
-			NULL, InvalidSnapshot, InvalidSnapshot, dest, NULL, 0);
-	query_desc->estate = CreateEState(query_desc);
-	SetTuplestoreDestReceiverParams(dest, state->sw->overlay_output, CurrentMemoryContext, true);
-
-
-
-
-
-	// add all step groups within the window to
-	// to the input of the overlay plan we're about to execute
-	hash_seq_init(&seq, state->sw->step_groups->hashtab);
-	while ((entry = (HeapTupleEntry) hash_seq_search(&seq)) != NULL)
-	{
-		ExecStoreTuple(entry->tuple, state->slot, InvalidBuffer, false);
-		tuplestore_puttuple(state->sw->overlay_input, entry->tuple);
-	}
-	tuplestore_rescan(state->sw->overlay_input);
-
-
-
-
-
-
-
-	// execute overlay plan
-	plan = query_desc->plannedstmt->planTree;
-	query_desc->planstate = ExecInitNode(plan, query_desc->estate, 0);
-	ExecutePlan(query_desc->estate, query_desc->planstate,
-			query_desc->operation,
-			true, 0, ForwardScanDirection, dest);
-	ExecEndNode(query_desc->planstate);
-
-
-
-
-	// write out old and new overlay tuples to the output stream
-	foreach_tuple(state->overlay_slot, state->sw->overlay_output)
-	{
-		Datum values[2];
-		bool nulls[2];
-		HeapTuple tup = ExecMaterializeSlot(state->overlay_slot);
-		HeapTuple ostup;
-
-		// get the old tuple
-		nulls[0] = true;
-		nulls[1] = false;
-		values[OLD_TUPLE] = (Datum) 0;
-		values[NEW_TUPLE] = heap_copy_tuple_as_datum(tup, state->overlay_desc);
-
-		ostup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
-		ExecStoreTuple(ostup, state->os_slot, InvalidBuffer, false);
-
-		print_slot(state->os_slot);
-//		ExecStreamInsert(NULL, ostream, state->os_slot, NULL);
-	}
+	tick_sw_groups(state, true);
 }
 
 /*
@@ -894,15 +937,15 @@ sync_combine(ContQueryCombinerState *state)
 	if (matrel == NULL)
 		return;
 
-	osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
-	osri = CQOSRelOpen(osrel);
-
-	BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
-	sis = (StreamInsertState *) osri->ri_FdwState;
-	Assert(sis);
+//	osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
+//	osri = CQOSRelOpen(osrel);
+//
+//	BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
+//	sis = (StreamInsertState *) osri->ri_FdwState;
+//	Assert(sis);
 
 	/* We'll handle output stream writes separately for SWs */
-	os_targets = state->base.query->is_sw ? NULL: sis->targets;
+//	os_targets = state->base.query->is_sw ? NULL: sis->targets;
 
 	ri = CQMatRelOpen(matrel);
 	natts = state->prev_slot->tts_tupleDescriptor->natts;
@@ -1033,11 +1076,15 @@ sync_combine(ContQueryCombinerState *state)
 	 * overlay plan on the whole batch all at once in order to to
 	 * compute output stream tuples.
 	 */
-	if (true || sis->targets)
-	{
-		load_sw_matrel_groups(state, matrel);
-		project_sw_overlay_into_ostream(state, osri);
-	}
+//	static bool sw = false;
+////	if (true || sis->targets)
+//	if (!sw)
+//	{
+//		sw = true;
+//		load_sw_matrel_groups(state, matrel);
+//	}
+//
+//	project_sw_overlay_into_ostream(state, osri);
 
 	tuplestore_clear(state->combined);
 
@@ -1047,9 +1094,9 @@ sync_combine(ContQueryCombinerState *state)
 	CQMatRelClose(ri);
 	heap_close(matrel, NoLock);
 
-	EndStreamModify(NULL, osri);
-	CQOSRelClose(osri);
-	heap_close(osrel, NoLock);
+//	EndStreamModify(NULL, osri);
+//	CQOSRelClose(osri);
+//	heap_close(osrel, NoLock);
 
 	FreeExecutorState(estate);
 }
@@ -1387,6 +1434,7 @@ ContinuousQueryCombinerMain(void)
 	TimestampTz first_seen = GetCurrentTimestamp();
 	bool do_commit = false;
 	long total_pending = 0;
+	int min_tick_ms = 0;
 
 	/* Set the commit level */
 	synchronous_commit = continuous_query_combiner_synchronous_commit;
@@ -1398,12 +1446,14 @@ ContinuousQueryCombinerMain(void)
 		if (ShouldTerminateContQueryProcess())
 			break;
 
-		ContExecutorStartBatch(cont_exec);
+		ContExecutorStartBatch(cont_exec, min_tick_ms ? min_tick_ms : 1);
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec)) != InvalidOid)
 		{
 			int count = 0;
 			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->current_query;
+
+			min_tick_ms = min_tick_ms ? Min(min_tick_ms, state->sw->step_ms) : state->sw->step_ms;
 
 			PG_TRY();
 			{
@@ -1424,6 +1474,9 @@ ContinuousQueryCombinerMain(void)
 					if (first_seen == 0)
 						first_seen = GetCurrentTimestamp();
 				}
+
+				if (state->sw)
+					tick_sw_groups(state, false);
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
 			}

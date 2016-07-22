@@ -195,7 +195,7 @@ ContinuousQueryWorkerMain(void)
 		if (ShouldTerminateContQueryProcess())
 			break;
 
-		ContExecutorStartBatch(cont_exec);
+		ContExecutorStartBatch(cont_exec, 0);
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec)) != InvalidOid)
 		{

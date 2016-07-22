@@ -475,7 +475,7 @@ ContExecutorDestroy(ContExecutor *exec)
 }
 
 void
-ContExecutorStartBatch(ContExecutor *exec)
+ContExecutorStartBatch(ContExecutor *exec, int timeout)
 {
 	bool is_empty;
 
@@ -494,11 +494,10 @@ ContExecutorStartBatch(ContExecutor *exec)
 
 			pgstat_report_activity(STATE_IDLE, proc_name);
 
-			// if we need to tick SW tuples, time out here at the minimum step size
 			if (exec->ptype == WORKER)
-				ipc_multi_queue_wait_non_empty(exec->ipcmq, 0);
+				ipc_multi_queue_wait_non_empty(exec->ipcmq, timeout);
 			else
-				ipc_queue_wait_non_empty(exec->ipcq, 0);
+				ipc_queue_wait_non_empty(exec->ipcq, timeout);
 
 			pgstat_report_activity(STATE_RUNNING, proc_name);
 
