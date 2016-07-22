@@ -550,7 +550,7 @@ GetContQueryForId(Oid id)
 	cq->type = row->type == PIPELINE_QUERY_TRANSFORM ? CONT_TRANSFORM : CONT_VIEW;
 
 	cq->relid = row->relid;
-	cq->relname = get_rel_name(row->relid);
+	cq->name = makeRangeVar(get_namespace_name(get_rel_namespace(row->relid)), get_rel_name(row->relid), -1);
 	cq->seqrelid = row->seqrelid;
 	cq->matrelid = row->matrelid;
 	cq->active = row->active;

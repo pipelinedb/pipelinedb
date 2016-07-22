@@ -494,11 +494,11 @@ ContExecutorStartBatch(ContExecutor *exec)
 
 			pgstat_report_activity(STATE_IDLE, proc_name);
 
+			// if we need to tick SW tuples, time out here at the minimum step size
 			if (exec->ptype == WORKER)
 				ipc_multi_queue_wait_non_empty(exec->ipcmq, 0);
 			else
 				ipc_queue_wait_non_empty(exec->ipcq, 0);
-
 
 			pgstat_report_activity(STATE_RUNNING, proc_name);
 
@@ -674,7 +674,7 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 			MemoryContextSwitchTo(old);
 		}
 		else
-			debug_query_string = exec->current_query->query->relname;
+			debug_query_string = exec->current_query->query->name->relname;
 	}
 
 	if (exec->current_query)

@@ -163,7 +163,7 @@ SetTransformDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery
 		fmgr_info(query->tgfn, finfo);
 
 		/* Create mock TriggerData and Trigger */
-		trig->tgname = query->relname;
+		trig->tgname = query->name->relname;
 		trig->tgenabled = TRIGGER_FIRES_ALWAYS;
 		trig->tgfoid = query->tgfn;
 		trig->tgnargs = query->tgnargs;

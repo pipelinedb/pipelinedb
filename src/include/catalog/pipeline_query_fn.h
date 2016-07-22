@@ -29,6 +29,7 @@ typedef enum ContQueryType
 typedef struct ContQuery
 {
 	Oid id;
+	RangeVar *name;
 	Oid oid; /* OID in pipeline_query table */
 	bool active;
 	ContQueryType type;
@@ -37,7 +38,6 @@ typedef struct ContQuery
 	Oid relid;
 	char *sql;
 	Oid matrelid;
-	char *relname;
 	RangeVar *osrel;
 
 	/* for view */
