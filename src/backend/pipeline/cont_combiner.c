@@ -602,7 +602,7 @@ sync_sw_matrel_groups(ContQueryCombinerState *state)
 	/* We only need to scan for in-window rows */
 	ScanKeyInit(&skey[0],
 				state->sw->arrival_ts_attr,
-				BTGreaterEqualStrategyNumber, F_TIMESTAMP_GE, TimestampTzGetDatum(0));
+				BTGreaterEqualStrategyNumber, F_TIMESTAMP_GE, TimestampTzGetDatum(oldest));
 
 	scan = heap_beginscan(matrel, GetTransactionSnapshot(), 1, skey);
 
