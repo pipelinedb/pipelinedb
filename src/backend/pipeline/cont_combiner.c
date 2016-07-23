@@ -76,8 +76,6 @@ typedef struct
 	AttrNumber arrival_ts_attr;
 //	TupleHashTable overlay_groups;
 	TupleHashTable step_groups;
-	int interval_ms;
-	int step_ms;
 	PlannedStmt *overlay_plan;
 	Tuplestorestate *overlay_input;
 	DestReceiver *overlay_dest;
@@ -567,6 +565,57 @@ project_overlay(ContQueryCombinerState *state, HeapTuple tup, bool *isnull)
 }
 
 /*
+ * load_sw_matrel_groups
+ *
+ * Sync sliding-window matrel rows newer than the given timestamp
+ * from disk into the local cache. If the cache already contains rows
+ * covering the given timestamp, the matrel doesn't need to be scanned.
+ */
+static void
+load_sw_matrel_groups(ContQueryCombinerState *state)
+{
+	HeapTuple tup = NULL;
+	HeapScanDesc scan;
+	ScanKeyData skey[1];
+	TimestampTz oldest;
+	Relation matrel = heap_openrv(state->base.query->matrel, NoLock);
+
+	// bail early if alredy synced, we should only need to do this onceas possible
+
+	Assert(state->sw);
+	oldest = GetCurrentTimestamp() - (1000 * state->base.query->sw_interval_ms);
+
+	/* We only need to scan for in-window rows */
+	ScanKeyInit(&skey[0],
+				state->sw->arrival_ts_attr,
+				BTGreaterEqualStrategyNumber, F_TIMESTAMP_GE, TimestampTzGetDatum(0));
+
+	scan = heap_beginscan(matrel, GetTransactionSnapshot(), 1, skey);
+
+	// we need to make sure the autovac is free to delete these rows
+	// we only need to sync groups that this combiner will see
+
+	while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
+	{
+		bool isnew;
+		HeapTupleEntry entry;
+		MemoryContext old;
+
+		ExecStoreTuple(tup, state->slot, InvalidBuffer, false);
+		entry = (HeapTupleEntry) LookupTupleHashEntry(state->sw->step_groups, state->slot, &isnew);
+
+		old = MemoryContextSwitchTo(state->sw->step_groups->tablecxt);
+		entry->tuple = heap_copytuple(tup);
+		MemoryContextSwitchTo(old);
+	}
+
+	heap_endscan(scan);
+	heap_close(matrel, NoLock);
+
+	// execute overlay plan once so we always have an old tuple
+}
+
+/*
  * tick_sw_groups
  *
  * Since sliding-window values can change over time without receiving
@@ -584,12 +633,17 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 	HeapTupleEntry entry;
 	QueryDesc *query_desc;
 
+	load_sw_matrel_groups(state);
+
 	if (!force && !TimestampDifferenceExceeds(state->sw->last_tick,
-			GetCurrentTimestamp(), state->sw->step_ms))
+			GetCurrentTimestamp(), state->base.query->sw_step_ms))
 		return;
 
 	if (!hash_get_num_entries(state->sw->step_groups->hashtab))
 		return;
+
+	return;
+	// if I don't have any readers, bail
 
 	// add all step groups within the window to
 	// to the input of the overlay plan we're about to execute
@@ -603,9 +657,13 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 		ExecStoreTuple(entry->tuple, state->slot, InvalidBuffer, false);
 		ts = slot_getattr(state->slot, state->sw->arrival_ts_attr, &isnull);
 
-		if (TimestampDifferenceExceeds(ts, GetCurrentTimestamp(), state->sw->interval_ms))
+		if (TimestampDifferenceExceeds(ts, GetCurrentTimestamp(),
+				state->base.query->sw_interval_ms))
+		{
+			// send empty row
+			// deleted rows indicated by null new tuple
 			continue;
-
+		}
 		tuplestore_puttuple(state->sw->overlay_input, entry->tuple);
 	}
 	tuplestore_rescan(state->sw->overlay_input);
@@ -622,7 +680,6 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 			query_desc->operation,
 			true, 0, ForwardScanDirection, state->sw->overlay_dest);
 	ExecEndNode(query_desc->planstate);
-
 
 	// write out old and new overlay tuples to the output stream
 	tuplestore_rescan(state->sw->overlay_output);
@@ -644,11 +701,15 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 		ostup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
 		ExecStoreTuple(ostup, state->os_slot, InvalidBuffer, false);
 
+		// we shouldn't write this out until the batch is actually committed
+		elog(LOG, state->base.query->name->relname);
 //		print_slot(state->os_slot);
 		// only output new row if it's different from old
+		// just factor out equality logic from sync_combine
 //		ExecStreamInsert(NULL, ostream, state->os_slot, NULL);
 	}
 
+	// how to output empty rows?
 	tuplestore_clear(state->sw->overlay_input);
 	tuplestore_clear(state->sw->overlay_output);
 
@@ -749,22 +810,6 @@ lookup_eq_func_oid(TupleDesc desc, AttrNumber pk)
 }
 
 /*
- * extract_epoch_from_interval
- */
-static TimestampTz
-extract_epoch_from_interval(Interval *i)
-{
-	Datum d;
-	float8 f;
-
-	d = DirectFunctionCall2(interval_part,
-			CStringGetTextDatum("epoch"), (Datum) i);
-	f = DatumGetFloat8(d);
-
-	return (TimestampTz) f;
-}
-
-/*
  * init_sw_state
  *
  * Initialize the state necessary to write SW results to output streams
@@ -774,7 +819,6 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 {
 	AttrNumber pk = find_pk_attr(matrel, state->desc);
 	Oid eq_func_oid = lookup_eq_func_oid(state->desc, pk);
-	Interval *i;
 	MemoryContext tmp_cxt;
 	TuplestoreScan *scan;
 	MemoryContext old;
@@ -790,14 +834,8 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	if (!AttributeNumberIsValid(ats))
 		return;
 
-	i = GetSWInterval(state->base.query->name);
-
 	state->sw = palloc0(sizeof(SWOutputState));
-	state->sw->interval_ms = 1000 * extract_epoch_from_interval(i);
-	state->sw->step_ms = (int) (state->sw->interval_ms * state->base.query->sw_step_factor) / 100.0;
 	state->sw->arrival_ts_attr = find_arrival_ts_attr(RelationGetDescr(matrel));
-
-
 
 	tmp_cxt = AllocSetContextCreate(CurrentMemoryContext, "SWOutputTmpCxt",
 				ALLOCSET_DEFAULT_MINSIZE,
@@ -828,51 +866,6 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 }
 
 /*
- * load_sw_matrel_groups
- *
- * Sync sliding-window matrel rows newer than the given timestamp
- * from disk into the local cache. If the cache already contains rows
- * covering the given timestamp, the matrel doesn't need to be scanned.
- */
-static void
-load_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
-{
-	HeapTuple tup = NULL;
-	HeapScanDesc scan;
-	ScanKeyData skey[1];
-	TimestampTz oldest;
-
-	Assert(state->sw);
-	oldest = GetCurrentTimestamp() - (1000 * state->sw->interval_ms);
-
-	/* We only need to scan for in-window rows */
-	ScanKeyInit(&skey[0],
-				state->sw->arrival_ts_attr,
-				BTGreaterEqualStrategyNumber, F_TIMESTAMP_GE, TimestampTzGetDatum(0));
-
-	scan = heap_beginscan(matrel, GetTransactionSnapshot(), 1, skey);
-
-	// we need to make sure the autovac is free to delete these rows
-	while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
-	{
-		bool isnew;
-		HeapTupleEntry entry;
-		MemoryContext old;
-
-		ExecStoreTuple(tup, state->slot, InvalidBuffer, false);
-		entry = (HeapTupleEntry) LookupTupleHashEntry(state->sw->step_groups, state->slot, &isnew);
-
-		old = MemoryContextSwitchTo(state->sw->step_groups->tablecxt);
-		entry->tuple = heap_copytuple(tup);
-		MemoryContextSwitchTo(old);
-	}
-
-	heap_endscan(scan);
-
-	// execute overlay plan once so we always have an old tuple
-}
-
-/*
  * project_sw_overlay_into_ostream
  *
  * Execute the sliding-window overlay plan on step-sized matrel groups
@@ -886,6 +879,7 @@ project_sw_overlay_into_ostream(ContQueryCombinerState *state, ResultRelInfo *os
 	HeapTupleEntry entry;
 	QueryDesc *query_desc;
 
+	Assert(state->sw);
 	Assert(state->sw->overlay_input);
 	Assert(state->sw->overlay_output);
 	Assert(state->sw->overlay_plan);
@@ -1090,7 +1084,8 @@ sync_combine(ContQueryCombinerState *state)
 //		load_sw_matrel_groups(state, matrel);
 //	}
 //
-//	project_sw_overlay_into_ostream(state, osri);
+	if (state->sw)
+		project_sw_overlay_into_ostream(state, osri);
 
 	tuplestore_clear(state->combined);
 
@@ -1402,7 +1397,6 @@ read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
 
 		nbytes += len;
 		count++;
-
 	}
 
 	if (!TupIsNull(state->slot))
@@ -1445,6 +1439,30 @@ ContinuousQueryCombinerMain(void)
 	bool do_commit = false;
 	long total_pending = 0;
 	int min_tick_ms = 0;
+	Bitmapset *queries;
+	int id;
+
+	/*
+	 * Get the minimum timeout we can use to ensure SW queries
+	 * tick up-to-date results to any output streams at roughly an interval
+	 * equal to their step size.
+	 *
+	 * Note that if no SW queries are present, the timeout is set to 0 and
+	 * thus there is no ticking.
+	 */
+	StartTransactionCommand();
+	queries = GetContinuousViewIds();
+
+	while ((id = bms_first_member(queries)) >= 0)
+	{
+		ContQuery *q = GetContQueryForViewId(id);
+		if (!q->is_sw)
+			continue;
+		Assert(q->sw_step_ms);
+		min_tick_ms = min_tick_ms ? Min(min_tick_ms, q->sw_step_ms) : q->sw_step_ms;
+	}
+
+	CommitTransactionCommand();
 
 	/* Set the commit level */
 	synchronous_commit = continuous_query_combiner_synchronous_commit;
@@ -1456,9 +1474,9 @@ ContinuousQueryCombinerMain(void)
 		if (ShouldTerminateContQueryProcess())
 			break;
 
-		ContExecutorStartBatch(cont_exec, 0);
+		ContExecutorStartBatch(cont_exec, min_tick_ms);
 
-		while ((query_id = ContExecutorStartNextQuery(cont_exec)) != InvalidOid)
+		while ((query_id = ContExecutorStartNextQuery(cont_exec, min_tick_ms)) != InvalidOid)
 		{
 			int count = 0;
 			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->current_query;
@@ -1467,9 +1485,6 @@ ContinuousQueryCombinerMain(void)
 			{
 				if (state == NULL)
 					goto next;
-
-				if (state->sw)
-					min_tick_ms = min_tick_ms ? Min(min_tick_ms, state->sw->step_ms) : state->sw->step_ms;
 
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 

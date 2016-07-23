@@ -44,6 +44,8 @@ typedef struct ContQuery
 	RangeVar *matrel;
 	Oid seqrelid;
 	int sw_step_factor;
+	int sw_step_ms;
+	int sw_interval_ms;
 	bool is_sw;
 
 	/* for transform */

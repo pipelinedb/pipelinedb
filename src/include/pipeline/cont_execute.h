@@ -156,7 +156,7 @@ struct ContExecutor
 extern ContExecutor *ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn);
 extern void ContExecutorDestroy(ContExecutor *exec);
 extern void ContExecutorStartBatch(ContExecutor *exec, int timeout);
-extern Oid ContExecutorStartNextQuery(ContExecutor *exec);
+extern Oid ContExecutorStartNextQuery(ContExecutor *exec, int timeout);
 extern void ContExecutorPurgeQuery(ContExecutor *exec);
 extern void *ContExecutorYieldNextMessage(ContExecutor *exec, int *len);
 extern void ContExecutorEndQuery(ContExecutor *exec);
