@@ -74,7 +74,7 @@
 typedef struct
 {
 	AttrNumber arrival_ts_attr;
-//	TupleHashTable overlay_groups;
+	TupleHashTable overlay_groups;
 	TupleHashTable step_groups;
 	PlannedStmt *overlay_plan;
 	Tuplestorestate *overlay_input;
@@ -82,8 +82,14 @@ typedef struct
 	Tuplestorestate *overlay_output;
 	MemoryContext context;
 	TimestampTz last_tick;
+	TimestampTz last_matrel_sync;
 } SWOutputState;
 
+typedef struct
+{
+	HeapTupleEntryData base;
+	TimestampTz last_touched;
+} OverlayTupleEntry;
 typedef struct
 {
 	ContQueryState base;
@@ -118,6 +124,7 @@ typedef struct
 	ProjectionInfo *output_stream_proj;
 	TupleTableSlot *proj_input_slot;
 	TupleDesc overlay_desc;
+	TupleTableSlot *overlay_prev_slot;
 	TupleTableSlot *overlay_slot;
 
 	/* Sliding-window state */
@@ -572,15 +579,22 @@ project_overlay(ContQueryCombinerState *state, HeapTuple tup, bool *isnull)
  * covering the given timestamp, the matrel doesn't need to be scanned.
  */
 static void
-load_sw_matrel_groups(ContQueryCombinerState *state)
+sync_sw_matrel_groups(ContQueryCombinerState *state)
 {
 	HeapTuple tup = NULL;
 	HeapScanDesc scan;
 	ScanKeyData skey[1];
 	TimestampTz oldest;
-	Relation matrel = heap_openrv(state->base.query->matrel, AccessShareLock);
+	Relation matrel;
 
-	// bail early if alredy synced, we should only need to do this onceas possible
+	/*
+	 * We only need to sync once, all other groups will be cached
+	 * from the combiner's output.
+	 */
+	if (state->sw->last_matrel_sync)
+		return;
+
+	matrel = heap_openrv(state->base.query->matrel, AccessShareLock);
 
 	Assert(state->sw);
 	oldest = GetCurrentTimestamp() - (1000 * state->base.query->sw_interval_ms);
@@ -592,9 +606,7 @@ load_sw_matrel_groups(ContQueryCombinerState *state)
 
 	scan = heap_beginscan(matrel, GetTransactionSnapshot(), 1, skey);
 
-	// we need to make sure the autovac is free to delete these rows
-	// we only need to sync groups that this combiner will see
-
+	/* TODO(derekjn) we only need to cache groups that this combiner can update */
 	while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
 		bool isnew;
@@ -607,12 +619,162 @@ load_sw_matrel_groups(ContQueryCombinerState *state)
 		old = MemoryContextSwitchTo(state->sw->step_groups->tablecxt);
 		entry->tuple = heap_copytuple(tup);
 		MemoryContextSwitchTo(old);
+
+		state->sw->last_matrel_sync = GetCurrentTimestamp();
 	}
 
 	heap_endscan(scan);
-	heap_close(matrel, NoLock);
+	heap_close(matrel, AccessShareLock);
+}
 
-	// execute overlay plan once so we always have an old tuple
+/*
+ * compare_slots
+ */
+static int
+compare_slots(TupleTableSlot *lslot, TupleTableSlot *rslot,
+		AttrNumber pk, bool *equal)
+{
+	AttrNumber att;
+	TupleDesc desc;
+	int natts;
+	int num_changed = 0;
+
+	Assert(equalTupleDescs(lslot->tts_tupleDescriptor, rslot->tts_tupleDescriptor));
+
+	desc = lslot->tts_tupleDescriptor;
+	natts = desc->natts;
+
+	/*
+	 * Figure out which columns actually changed, as those are the only values
+	 * that we want to write to disk.
+	 */
+	for (att = 1; att <= natts; att++)
+	{
+		Datum prev;
+		Datum new;
+		bool prev_null;
+		bool new_null;
+		Form_pg_attribute attr = desc->attrs[att - 1];
+
+		if (att == pk)
+			continue;
+
+		prev = slot_getattr(lslot, att, &prev_null);
+		new = slot_getattr(rslot, att, &new_null);
+
+		/*
+		 * Note that this equality check only does a byte-by-byte comparison, which may yield false
+		 * negatives. This is fine, because a false negative will just cause an extraneous write, which
+		 * seems like a reasonable balance compared to looking up and invoking actual equality operators.
+		 */
+		if ((!prev_null && !new_null) && datumIsEqual(prev, new, attr->attbyval, attr->attlen))
+			equal[att - 1] = false;
+		else
+			num_changed++;
+	}
+
+	return num_changed;
+}
+
+/*
+ * add_matrel_tuples_to_overlay_input
+ *
+ * Add all existing cached matrel groups to the input of the overlay plan
+ * we're about to execute. Note that we still add matrel rows that may
+ * not have been modified by the most recent combine call, because their
+ * corresponding values in the overlay output are dependent on the current
+ * time.
+ */
+static List *
+add_cached_sw_tuples_to_overlay_input(ContQueryCombinerState *state)
+{
+	HASH_SEQ_STATUS seq;
+	HeapTupleEntry matrel_entry;
+	List *to_delete = NIL;
+
+	hash_seq_init(&seq, state->sw->step_groups->hashtab);
+	while ((matrel_entry = (HeapTupleEntry) hash_seq_search(&seq)) != NULL)
+	{
+		Datum d;
+		bool isnull;
+		TimestampTz ts;
+
+		ExecStoreTuple(matrel_entry->tuple, state->slot, InvalidBuffer, false);
+		d = slot_getattr(state->slot, state->sw->arrival_ts_attr, &isnull);
+		ts = DatumGetTimestampTz(d);
+		Assert(!isnull);
+
+		if ((GetCurrentTimestamp() - ts) / 1000 > state->base.query->sw_interval_ms)
+		{
+			to_delete = lappend(to_delete, matrel_entry->tuple);
+			continue;
+		}
+
+		tuplestore_puttuple(state->sw->overlay_input, matrel_entry->tuple);
+	}
+	tuplestore_rescan(state->sw->overlay_input);
+
+	return to_delete;
+}
+
+/*
+ * gc_cached_sw_tuples
+ *
+ * Garbage collect any out-of-window step tuples
+ */
+static void
+gc_cached_sw_tuples(ContQueryCombinerState *state, List *expired)
+{
+	ListCell *lc;
+
+	Assert(state->sw);
+	Assert(state->sw->step_groups);
+
+	foreach(lc, expired)
+	{
+		bool isnew;
+		HeapTuple tup = (HeapTuple) lfirst(lc);
+		HeapTupleEntry entry;
+
+		ExecStoreTuple(tup, state->slot, InvalidBuffer, false);
+		entry = (HeapTupleEntry) LookupTupleHashEntry(state->sw->step_groups, state->slot, &isnew);
+		Assert(!isnew);
+
+		RemoveTupleHashEntry(state->sw->step_groups, state->slot);
+		heap_freetuple(entry->tuple);
+	}
+}
+/*
+ * execute_sw_overlay_plan
+ *
+ * Execute the overlay plan to compute the instantaneous values over the sliding window
+ */
+static void
+execute_sw_overlay_plan(ContQueryCombinerState *state)
+{
+	QueryDesc *query_desc;
+	struct Plan *plan;
+
+	Assert(state->sw);
+	Assert(state->sw->overlay_plan);
+	Assert(state->sw->overlay_dest);
+
+	tuplestore_clear(state->sw->overlay_output);
+	query_desc = CreateQueryDesc(state->sw->overlay_plan,
+			NULL, InvalidSnapshot, InvalidSnapshot, state->sw->overlay_dest, NULL, 0);
+	query_desc->estate = CreateEState(query_desc);
+
+	plan = state->sw->overlay_plan->planTree;
+	query_desc->planstate = ExecInitNode(plan, query_desc->estate, 0);
+	ExecutePlan(query_desc->estate, query_desc->planstate,
+			query_desc->operation,
+			true, 0, ForwardScanDirection, state->sw->overlay_dest);
+	ExecEndNode(query_desc->planstate);
+
+	query_desc->planstate = NULL;
+	query_desc->estate = NULL;
+
+	tuplestore_rescan(state->sw->overlay_output);
 }
 
 /*
@@ -625,15 +787,15 @@ load_sw_matrel_groups(ContQueryCombinerState *state)
 static void
 tick_sw_groups(ContQueryCombinerState *state, bool force)
 {
-	// if this CV's step size hasn't passed, return
-	// remove expired tuples from the cache
-	// project_sw_overlay_into_ostream
-	struct Plan *plan;
-	HASH_SEQ_STATUS seq;
-	HeapTupleEntry entry;
-	QueryDesc *query_desc;
+	TimestampTz this_tick = GetCurrentTimestamp();
+	OverlayTupleEntry *overlay_entry;
+	Relation osrel;
+	ResultRelInfo *osri;
+	StreamInsertState *sis;
+	List *to_delete = NIL;
 
-	load_sw_matrel_groups(state);
+	/* Ensure matrel rows are synced into memory */
+	sync_sw_matrel_groups(state);
 
 	if (!force && !TimestampDifferenceExceeds(state->sw->last_tick,
 			GetCurrentTimestamp(), state->base.query->sw_step_ms))
@@ -642,121 +804,98 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 	if (!hash_get_num_entries(state->sw->step_groups->hashtab))
 		return;
 
-//	return;
-	// if I don't have any readers, bail
+	osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
+	osri = CQOSRelOpen(osrel);
 
-	// add all step groups within the window to
-	// to the input of the overlay plan we're about to execute
-	// func
-	hash_seq_init(&seq, state->sw->step_groups->hashtab);
-	while ((entry = (HeapTupleEntry) hash_seq_search(&seq)) != NULL)
+	BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
+	sis = (StreamInsertState *) osri->ri_FdwState;
+	Assert(sis);
+
+	/* If nothing is reading from this output stream, there is nothing to do */
+	if (sis->targets == NULL)
 	{
-		bool isnull;
-		TimestampTz ts;
-
-		ExecStoreTuple(entry->tuple, state->slot, InvalidBuffer, false);
-		ts = slot_getattr(state->slot, state->sw->arrival_ts_attr, &isnull);
-
-		if (TimestampDifferenceExceeds(ts, GetCurrentTimestamp(),
-				state->base.query->sw_interval_ms))
-		{
-			// send empty row
-			// deleted rows indicated by null new tuple
-			continue;
-		}
-		tuplestore_puttuple(state->sw->overlay_input, entry->tuple);
+		EndStreamModify(NULL, osri);
+		CQOSRelClose(osri);
+		heap_close(osrel, NoLock);
+		return;
 	}
-	tuplestore_rescan(state->sw->overlay_input);
 
-	// execute plan
-	query_desc = CreateQueryDesc(state->sw->overlay_plan,
-			NULL, InvalidSnapshot, InvalidSnapshot, state->sw->overlay_dest, NULL, 0);
-	query_desc->estate = CreateEState(query_desc);
+	/*
+	 * Compute instantaneous sliding-window values
+	 */
+	to_delete = add_cached_sw_tuples_to_overlay_input(state);
+	gc_cached_sw_tuples(state, to_delete);
+	execute_sw_overlay_plan(state);
 
-	plan = state->sw->overlay_plan->planTree;
-	query_desc->planstate = ExecInitNode(plan, query_desc->estate, 0);
-	ExecutePlan(query_desc->estate, query_desc->planstate,
-			query_desc->operation,
-			true, 0, ForwardScanDirection, state->sw->overlay_dest);
-	ExecEndNode(query_desc->planstate);
-
-	// write out old and new overlay tuples to the output stream
+	/*
+	 * Write out any changed sliding-window values to the output stream
+	 */
 	tuplestore_rescan(state->sw->overlay_output);
 	foreach_tuple(state->overlay_slot, state->sw->overlay_output)
 	{
+		bool isnew;
 		Datum values[3];
 		bool nulls[3];
-		HeapTuple tup = ExecMaterializeSlot(state->overlay_slot);
-		HeapTuple ostup;
+		bool replaces[3];
+		HeapTuple new_tup = ExecMaterializeSlot(state->overlay_slot);
+		HeapTuple old_tup = NULL;
+		HeapTuple os_tup;
+		MemoryContext old;
 
-		MemSet(nulls, false, sizeof(nulls));
+		Assert(!TupIsNull(state->overlay_slot));
+		overlay_entry = (OverlayTupleEntry *) LookupTupleHashEntry(state->sw->overlay_groups, state->overlay_slot, &isnew);
 
-		// get the old tuple
-		nulls[0] = true;
-		values[OLD_TUPLE] = (Datum) 0;
-		values[NEW_TUPLE] = heap_copy_tuple_as_datum(tup, state->overlay_desc);
+		if (!isnew)
+		{
+			MemSet(replaces, false, sizeof(replaces));
+			ExecStoreTuple(overlay_entry->base.tuple, state->overlay_prev_slot, InvalidBuffer, false);
+
+			/*
+			 * Similarly to how we don't sync unchanged tuples to disk when combining,
+			 * we don't write unchanged tuples to output streams.
+			 */
+			if (!compare_slots(state->overlay_slot, state->overlay_prev_slot, state->pk, replaces))
+				continue;
+
+			old_tup = overlay_entry->base.tuple;
+		}
+
+		overlay_entry->last_touched = this_tick;
+
+		old = MemoryContextSwitchTo(state->sw->step_groups->tablecxt);
+		overlay_entry->base.tuple = heap_copytuple(new_tup);
+		MemoryContextSwitchTo(old);
+
+		MemSet(nulls, true, sizeof(nulls));
+
+		if (old_tup)
+		{
+			nulls[OLD_TUPLE] = false;
+			values[OLD_TUPLE] = heap_copy_tuple_as_datum(old_tup, state->overlay_desc);
+		}
+
+		nulls[NEW_TUPLE] = false;
+		values[NEW_TUPLE] = heap_copy_tuple_as_datum(new_tup, state->overlay_desc);
 		values[2] = TimestampTzGetDatum(GetCurrentTimestamp());
 
-		ostup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
-		ExecStoreTuple(ostup, state->os_slot, InvalidBuffer, false);
+		/* Finally write the old and new tuple to the output stream */
+		os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
+		ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
+		ExecStreamInsert(NULL, osri, state->os_slot, NULL);
 
-		// old = overlay_groups[slot]
-
-		// we shouldn't write this out until the batch is actually committed
-		elog(LOG, state->base.query->name->relname);
-//		print_slot(state->os_slot);
-		// only output new row if it's different from old
-		// just factor out equality logic from sync_combine
-//		ExecStreamInsert(NULL, ostream, state->os_slot, NULL);
-
-		// overlay_groups[slot] = new
+		if (old_tup)
+			heap_freetuple(old_tup);
 	}
+
+	/* Done, cleanup */
+	EndStreamModify(NULL, osri);
+	CQOSRelClose(osri);
+	heap_close(osrel, NoLock);
 
 	tuplestore_clear(state->sw->overlay_input);
 	tuplestore_clear(state->sw->overlay_output);
 
 	state->sw->last_tick = GetCurrentTimestamp();
-}
-
-
-
-/*
- * find_pk_attr
- *
- * Find the pk column. 1 based.
- */
-static AttrNumber
-find_pk_attr(Relation matrel, TupleDesc desc)
-{
-	List *indices = NIL;
-	ListCell *lc;
-	AttrNumber pk = InvalidAttrNumber;
-
-	indices = RelationGetIndexList(matrel);
-
-	foreach(lc, indices)
-	{
-		Oid indexoid = lfirst_oid(lc);
-		HeapTuple tup = SearchSysCache1(INDEXRELID,
-				ObjectIdGetDatum(indexoid));
-		Form_pg_index form;
-
-		if (!HeapTupleIsValid(tup))
-			elog(ERROR, "index %u for matrel %u not found",
-					indexoid, RelationGetRelid(matrel));
-
-		form = (Form_pg_index) GETSTRUCT(tup);
-
-		if (form->indisprimary)
-		{
-			Assert(form->indnatts == 1);
-			pk = form->indkey.values[0];
-		}
-
-		ReleaseSysCache(tup);
-	}
-
-	return pk;
 }
 
 /*
@@ -770,6 +909,7 @@ find_arrival_ts_attr(TupleDesc desc)
 	int i;
 	AttrNumber result = InvalidAttrNumber;
 
+	/* XXX(derekjn this needs to work for non-arrival-ts columns */
 	for (i = 0; i < desc->natts; i++)
 	{
 		if (pg_strcasecmp(ARRIVAL_TIMESTAMP, NameStr(desc->attrs[i]->attname)) == 0)
@@ -819,12 +959,16 @@ lookup_eq_func_oid(TupleDesc desc, AttrNumber pk)
 static void
 init_sw_state(ContQueryCombinerState *state, Relation matrel)
 {
-	AttrNumber pk = find_pk_attr(matrel, state->desc);
-	Oid eq_func_oid = lookup_eq_func_oid(state->desc, pk);
+	Oid eq_func_oid = lookup_eq_func_oid(state->desc, state->pk);
 	MemoryContext tmp_cxt;
 	TuplestoreScan *scan;
 	MemoryContext old;
 	AttrNumber ats;
+	Oid *group_ops;
+	AttrNumber *group_idx;
+	FmgrInfo *eq_funcs;
+	FmgrInfo *hash_funcs;
+	int n_group_attr = 0;
 
 	Assert(OidIsValid(eq_func_oid));
 
@@ -865,6 +1009,39 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 
 	state->sw->overlay_dest = CreateDestReceiver(DestTuplestore);
 	SetTuplestoreDestReceiverParams(state->sw->overlay_dest, state->sw->overlay_output, state->sw->context, true);
+
+	if (IsA(state->sw->overlay_plan->planTree, Agg))
+	{
+		Agg *agg = (Agg *) state->sw->overlay_plan->planTree;
+		int i;
+
+		group_ops = agg->grpOperators;
+		n_group_attr = agg->numCols;
+
+		/*
+		 * Since this is a view over a matrel, these grouping attributes actually
+		 * refer to matrel attributes so we need to offset them by 1 to account for
+		 * the matrel's additional arrival_timestamp column.
+		 *
+		 * There is probably a better way to do this.
+		 */
+		group_idx = palloc0(sizeof(AttrNumber) * n_group_attr);
+		memcpy(group_idx, agg->grpColIdx, sizeof(AttrNumber) * n_group_attr);
+		for (i = 0; i < n_group_attr; i++)
+		{
+			Assert(group_idx[i] > 1);
+			group_idx[i] -= 1;
+		}
+	}
+
+	tmp_cxt = AllocSetContextCreate(CurrentMemoryContext, "SWOverlayOutputTmpCxt",
+				ALLOCSET_DEFAULT_MINSIZE,
+				ALLOCSET_DEFAULT_INITSIZE,
+				ALLOCSET_DEFAULT_MAXSIZE);
+
+	execTuplesHashPrepare(n_group_attr, group_ops, &eq_funcs, &hash_funcs);
+	state->sw->overlay_groups = BuildTupleHashTable(n_group_attr,
+			group_idx, eq_funcs, hash_funcs, 1000, sizeof(OverlayTupleEntry), CurrentMemoryContext, tmp_cxt);
 }
 
 /*
@@ -874,21 +1051,17 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
  * and write the result to the CV's output stream
  */
 static void
-project_sw_overlay_into_ostream(ContQueryCombinerState *state, ResultRelInfo *ostream)
+project_sw_overlay_into_ostream(ContQueryCombinerState *state)
 {
-	struct Plan *plan;
-	HASH_SEQ_STATUS seq;
-	HeapTupleEntry entry;
-	QueryDesc *query_desc;
-
 	Assert(state->sw);
 	Assert(state->sw->overlay_input);
 	Assert(state->sw->overlay_output);
 	Assert(state->sw->overlay_plan);
 	Assert(state->sw->overlay_dest);
 
-	// add any new tuples in the combine output to the cache
-	// func
+	/*
+	 * Add or replace any tuples in the cache based on the combiner's most recent output
+	 */
 	tuplestore_rescan(state->combined);
 	foreach_tuple(state->slot, state->combined)
 	{
@@ -905,49 +1078,8 @@ project_sw_overlay_into_ostream(ContQueryCombinerState *state, ResultRelInfo *os
 		MemoryContextSwitchTo(old);
 	}
 
+	/* Force a tick */
 	tick_sw_groups(state, true);
-}
-
-static int
-compare_slots(TupleTableSlot *lslot, TupleTableSlot *rslot,
-		AttrNumber pk, bool *equal)
-{
-	Assert(equalTupleDescs(lslot->tts_tupleDescriptor, rslot->tts_tupleDescriptor));
-
-	AttrNumber att;
-	TupleDesc desc = lslot->tts_tupleDescriptor;
-	int natts = desc->natts;
-	int num_changed = 0;
-
-	/*
-	 * Figure out which columns actually changed, as those are the only values
-	 * that we want to write to disk.
-	 */
-	for (att = 1; att <= natts; att++)
-	{
-		Datum prev;
-		Datum new;
-		bool prev_null;
-		bool new_null;
-		Form_pg_attribute attr = desc->attrs[att - 1];
-
-		if (att == pk)
-			continue;
-
-		prev = slot_getattr(lslot, att, &prev_null);
-		new = slot_getattr(rslot, att, &new_null);
-
-		/*
-		 * Note that this equality check only does a byte-by-byte comparison, which may yield false
-		 * negatives. This is fine, because a false negative will just cause an extraneous write, which
-		 * seems like a reasonable balance compared to looking up and invoking actual equality operators.
-		 */
-		if ((!prev_null && !new_null) && datumIsEqual(prev, new, attr->attbyval, attr->attlen))
-			equal[att - 1] = false;
-		else
-			num_changed++;
-	}
-	return num_changed;
 }
 
 /*
@@ -965,7 +1097,6 @@ sync_combine(ContQueryCombinerState *state)
 	bool *replace_all = palloc0(size);
 	EState *estate = CreateExecutorState();
 	int i;
-	int natts;
 	Relation matrel;
 	Relation osrel;
 	ResultRelInfo *ri;
@@ -981,18 +1112,32 @@ sync_combine(ContQueryCombinerState *state)
 	if (matrel == NULL)
 		return;
 
-//	osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
-//	osri = CQOSRelOpen(osrel);
-//
-//	BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
-//	sis = (StreamInsertState *) osri->ri_FdwState;
-//	Assert(sis);
+	/*
+	 * We'll handle output stream writes separately for SWs since
+	 * they require the execution of an overlay plan
+	 */
+	if (!state->base.query->is_sw)
+	{
+		osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
+		osri = CQOSRelOpen(osrel);
 
-	/* We'll handle output stream writes separately for SWs */
-//	os_targets = state->base.query->is_sw ? NULL: sis->targets;
+		BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
+		sis = (StreamInsertState *) osri->ri_FdwState;
+		Assert(sis);
+
+		os_targets = sis->targets;
+
+		/* If nothing is reading from the output stream, close it immediately */
+		if (os_targets == NULL)
+		{
+			EndStreamModify(NULL, osri);
+			CQOSRelClose(osri);
+			heap_close(osrel, NoLock);
+			sis = NULL;
+		}
+	}
 
 	ri = CQMatRelOpen(matrel);
-	natts = state->prev_slot->tts_tupleDescriptor->natts;
 
 	estate->es_per_tuple_exprcontext = CreateStandaloneExprContext();
 	estate->es_per_tuple_exprcontext->ecxt_scantuple = state->proj_input_slot;
@@ -1007,7 +1152,6 @@ sync_combine(ContQueryCombinerState *state)
 		HeapTuple os_tup;
 		Datum os_values[2];
 		bool os_nulls[2];
-		AttrNumber att = 1;
 		int replaces = 0;
 
 		MemSet(os_nulls, 0, sizeof(os_nulls));
@@ -1088,21 +1232,21 @@ sync_combine(ContQueryCombinerState *state)
 		ResetPerTupleExprContext(estate);
 	}
 
+	if (sis)
+	{
+		EndStreamModify(NULL, osri);
+		CQOSRelClose(osri);
+		heap_close(osrel, NoLock);
+		sis = NULL;
+	}
+
 	/*
 	 * We handle SW output stream writes here so we can execute the
 	 * overlay plan on the whole batch all at once in order to to
 	 * compute output stream tuples.
 	 */
-//	static bool sw = false;
-////	if (true || sis->targets)
-//	if (!sw)
-//	{
-//		sw = true;
-//		load_sw_matrel_groups(state, matrel);
-//	}
-//
 	if (state->sw)
-		project_sw_overlay_into_ostream(state, osri);
+		project_sw_overlay_into_ostream(state);
 
 	tuplestore_clear(state->combined);
 
@@ -1111,10 +1255,6 @@ sync_combine(ContQueryCombinerState *state)
 
 	CQMatRelClose(ri);
 	heap_close(matrel, NoLock);
-
-//	EndStreamModify(NULL, osri);
-//	CQOSRelClose(osri);
-//	heap_close(osrel, NoLock);
 
 	FreeExecutorState(estate);
 }
@@ -1312,6 +1452,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	overlay = heap_open(state->base.query->relid, NoLock);
 	state->overlay_desc = CreateTupleDescCopy(RelationGetDescr(overlay));
 	state->overlay_slot = MakeSingleTupleTableSlot(state->overlay_desc);
+	state->overlay_prev_slot = MakeSingleTupleTableSlot(state->overlay_desc);
 	heap_close(overlay, NoLock);
 
 	assign_output_stream_projection(state);
@@ -1337,9 +1478,6 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 		state->existing = build_existing_hashtable(state);
 	}
 
-	if (state->base.query->is_sw)
-		init_sw_state(state, matrel);
-
 	/*
 	 * Find the primary key column
 	 */
@@ -1361,6 +1499,9 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 		}
 		ReleaseSysCache(tup);
 	}
+
+	if (state->base.query->is_sw)
+		init_sw_state(state, matrel);
 
 	heap_close(matrel, AccessShareLock);
 
@@ -1519,7 +1660,10 @@ ContinuousQueryCombinerMain(void)
 				}
 
 				if (state->sw)
+				{
 					tick_sw_groups(state, false);
+					min_tick_ms = state->base.query->sw_step_ms;
+				}
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
 			}
