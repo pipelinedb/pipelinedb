@@ -578,7 +578,7 @@ load_sw_matrel_groups(ContQueryCombinerState *state)
 	HeapScanDesc scan;
 	ScanKeyData skey[1];
 	TimestampTz oldest;
-	Relation matrel = heap_openrv(state->base.query->matrel, NoLock);
+	Relation matrel = heap_openrv(state->base.query->matrel, AccessShareLock);
 
 	// bail early if alredy synced, we should only need to do this onceas possible
 
@@ -642,7 +642,7 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 	if (!hash_get_num_entries(state->sw->step_groups->hashtab))
 		return;
 
-	return;
+//	return;
 	// if I don't have any readers, bail
 
 	// add all step groups within the window to
@@ -667,7 +667,6 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 		tuplestore_puttuple(state->sw->overlay_input, entry->tuple);
 	}
 	tuplestore_rescan(state->sw->overlay_input);
-
 
 	// execute plan
 	query_desc = CreateQueryDesc(state->sw->overlay_plan,
@@ -701,15 +700,18 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 		ostup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
 		ExecStoreTuple(ostup, state->os_slot, InvalidBuffer, false);
 
+		// old = overlay_groups[slot]
+
 		// we shouldn't write this out until the batch is actually committed
 		elog(LOG, state->base.query->name->relname);
 //		print_slot(state->os_slot);
 		// only output new row if it's different from old
 		// just factor out equality logic from sync_combine
 //		ExecStreamInsert(NULL, ostream, state->os_slot, NULL);
+
+		// overlay_groups[slot] = new
 	}
 
-	// how to output empty rows?
 	tuplestore_clear(state->sw->overlay_input);
 	tuplestore_clear(state->sw->overlay_output);
 
@@ -906,6 +908,48 @@ project_sw_overlay_into_ostream(ContQueryCombinerState *state, ResultRelInfo *os
 	tick_sw_groups(state, true);
 }
 
+static int
+compare_slots(TupleTableSlot *lslot, TupleTableSlot *rslot,
+		AttrNumber pk, bool *equal)
+{
+	Assert(equalTupleDescs(lslot->tts_tupleDescriptor, rslot->tts_tupleDescriptor));
+
+	AttrNumber att;
+	TupleDesc desc = lslot->tts_tupleDescriptor;
+	int natts = desc->natts;
+	int num_changed = 0;
+
+	/*
+	 * Figure out which columns actually changed, as those are the only values
+	 * that we want to write to disk.
+	 */
+	for (att = 1; att <= natts; att++)
+	{
+		Datum prev;
+		Datum new;
+		bool prev_null;
+		bool new_null;
+		Form_pg_attribute attr = desc->attrs[att - 1];
+
+		if (att == pk)
+			continue;
+
+		prev = slot_getattr(lslot, att, &prev_null);
+		new = slot_getattr(rslot, att, &new_null);
+
+		/*
+		 * Note that this equality check only does a byte-by-byte comparison, which may yield false
+		 * negatives. This is fine, because a false negative will just cause an extraneous write, which
+		 * seems like a reasonable balance compared to looking up and invoking actual equality operators.
+		 */
+		if ((!prev_null && !new_null) && datumIsEqual(prev, new, attr->attbyval, attr->attlen))
+			equal[att - 1] = false;
+		else
+			num_changed++;
+	}
+	return num_changed;
+}
+
 /*
  * sync_combine
  *
@@ -984,35 +1028,8 @@ sync_combine(ContQueryCombinerState *state)
 		if (update)
 		{
 			ExecStoreTuple(update->tuple, state->prev_slot, InvalidBuffer, false);
-
-			/*
-			 * Figure out which columns actually changed, as those are the only values
-			 * that we want to write to disk.
-			 */
-			for (att = 1; att <= natts; att++)
-			{
-				Datum prev;
-				Datum new;
-				bool prev_null;
-				bool new_null;
-				Form_pg_attribute attr = state->prev_slot->tts_tupleDescriptor->attrs[att - 1];
-
-				if (att == state->pk)
-					continue;
-
-				prev = slot_getattr(state->prev_slot, att, &prev_null);
-				new = slot_getattr(slot, att, &new_null);
-
-				/*
-				 * Note that this equality check only does a byte-by-byte comparison, which may yield false
-				 * negatives. This is fine, because a false negative will just cause an extraneous write, which
-				 * seems like a reasonable balance compared to looking up and invoking actual equality operators.
-				 */
-				if ((!prev_null && !new_null) && datumIsEqual(prev, new, attr->attbyval, attr->attlen))
-					replace_all[att - 1] = false;
-				else
-					replaces++;
-			}
+			replaces = compare_slots(state->prev_slot, state->slot,
+					state->pk, replace_all);
 
 			if (replaces == 0)
 				continue;
