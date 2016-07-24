@@ -3,22 +3,22 @@ CREATE CONTINUOUS VIEW os0 AS SELECT COUNT(*) FROM os_stream;
 CREATE CONTINUOUS VIEW os0_output AS SELECT (old).count AS old_count, (new).count AS new_count FROM os0_osrel;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os0_output;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os0_output;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os0_output;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os0_output;
 
@@ -38,40 +38,42 @@ CREATE CONTINUOUS VIEW os1_output AS SELECT
 FROM os1_osrel;
 
 INSERT INTO os_stream (x) VALUES (10);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os1_output;
 
 INSERT INTO os_stream (x) VALUES (20);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os1_output;
 
 INSERT INTO os_stream (x) VALUES (30);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os1_output;
 
 INSERT INTO os_stream (x) VALUES (40);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 INSERT INTO os_stream (x) VALUES (-40);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os1_output;
 
 INSERT INTO os_stream (x) VALUES (-30);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os1_output;
 
 INSERT INTO os_stream (x) VALUES (-20);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT * FROM os1_output;
 
 INSERT INTO os_stream (x) VALUES (-10);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
+
+SELECT * FROM os1_output;
 
 DROP CONTINUOUS VIEW os1 CASCADE;
 
@@ -86,17 +88,17 @@ CREATE CONTINUOUS VIEW os2_output AS SELECT
 FROM os2_osrel;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os2_output;
 
 INSERT INTO os_stream (x) VALUES (1);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os2_output;
 
 INSERT INTO os_stream (x) VALUES (2);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os2_output;
 

@@ -1,7 +1,7 @@
 CREATE CONTINUOUS VIEW os0 AS SELECT COUNT(*) FROM os_stream;
 CREATE CONTINUOUS VIEW os0_output AS SELECT (old).count AS old_count, (new).count AS new_count FROM os0_osrel;
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -14,7 +14,7 @@ SELECT * FROM os0_output;
 (1 row)
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -28,7 +28,7 @@ SELECT * FROM os0_output;
 (2 rows)
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -43,7 +43,7 @@ SELECT * FROM os0_output;
 (3 rows)
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -73,7 +73,7 @@ CREATE CONTINUOUS VIEW os1_output AS SELECT
   (old).sum AS old_sum, (new).sum AS new_sum
 FROM os1_osrel;
 INSERT INTO os_stream (x) VALUES (10);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -86,7 +86,7 @@ SELECT * FROM os1_output;
 (1 row)
 
 INSERT INTO os_stream (x) VALUES (20);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -100,7 +100,7 @@ SELECT * FROM os1_output;
 (2 rows)
 
 INSERT INTO os_stream (x) VALUES (30);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -115,14 +115,14 @@ SELECT * FROM os1_output;
 (3 rows)
 
 INSERT INTO os_stream (x) VALUES (40);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
 (1 row)
 
 INSERT INTO os_stream (x) VALUES (-40);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -139,7 +139,7 @@ SELECT * FROM os1_output;
 (5 rows)
 
 INSERT INTO os_stream (x) VALUES (-30);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -157,7 +157,7 @@ SELECT * FROM os1_output;
 (6 rows)
 
 INSERT INTO os_stream (x) VALUES (-20);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -176,11 +176,24 @@ SELECT * FROM os1_output;
 (7 rows)
 
 INSERT INTO os_stream (x) VALUES (-10);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
 (1 row)
+
+SELECT * FROM os1_output;
+ g  | old_count | new_count | old_sum | new_sum 
+----+-----------+-----------+---------+---------
+ 10 |           |         1 |         |      10
+ 20 |           |         1 |         |      20
+ 30 |           |         1 |         |      30
+ 40 |           |         1 |         |      40
+ 40 |         1 |         2 |      40 |       0
+ 30 |         1 |         2 |      30 |       0
+ 20 |         1 |         2 |      20 |       0
+ 10 |         1 |         2 |      10 |       0
+(8 rows)
 
 DROP CONTINUOUS VIEW os1 CASCADE;
 NOTICE:  drop cascades to continuous view os1_output
@@ -193,7 +206,7 @@ CREATE CONTINUOUS VIEW os2_output AS SELECT
   old, new
 FROM os2_osrel;
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -206,7 +219,7 @@ SELECT x, old, new FROM os2_output;
 (1 row)
 
 INSERT INTO os_stream (x) VALUES (1);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -220,7 +233,7 @@ SELECT x, old, new FROM os2_output;
 (2 rows)
 
 INSERT INTO os_stream (x) VALUES (2);
-SELECT pg_sleep(1);
+SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
@@ -256,3 +269,4 @@ SELECT x, old, new FROM os2_output ORDER BY arrival_timestamp;
 
 DROP CONTINUOUS VIEW os2 CASCADE;
 NOTICE:  drop cascades to continuous view os2_output
+
