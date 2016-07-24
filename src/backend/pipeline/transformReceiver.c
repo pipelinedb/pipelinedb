@@ -108,9 +108,6 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 			t->acks = InsertBatchAckCreate(t->cont_exec->yielded_msgs, &t->nacks);
 	}
 
-	// insert into ostream of necessary
-
-
 	MemoryContextSwitchTo(old);
 }
 
