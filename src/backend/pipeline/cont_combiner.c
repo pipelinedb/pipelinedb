@@ -593,6 +593,7 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 	FunctionCallInfoData hashfcinfo;
 	FmgrInfo flinfo;
 	int64 cv_name_hash;
+	bool close_matrel = matrel == NULL;
 
 	/*
 	 * We only need to sync once, all other groups will be cached
@@ -670,7 +671,9 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 	}
 
 	heap_endscan(scan);
-	heap_close(matrel, AccessShareLock);
+
+	if (close_matrel)
+		heap_close(matrel, AccessShareLock);
 }
 
 /*
