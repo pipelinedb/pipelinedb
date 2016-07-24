@@ -126,6 +126,7 @@ typedef struct
 	TupleDesc overlay_desc;
 	TupleTableSlot *overlay_prev_slot;
 	TupleTableSlot *overlay_slot;
+	AttrNumber output_stream_arrival_ts;
 
 	/* Sliding-window state */
 	SWOutputState *sw;
@@ -781,7 +782,7 @@ gc_cached_overlay_tuples(ContQueryCombinerState *state,
 		nulls[NEW_TUPLE] = true;
 		values[NEW_TUPLE] = (Datum) 0;
 		values[OLD_TUPLE] = heap_copy_tuple_as_datum(tup, state->overlay_desc);
-		values[2] = TimestampTzGetDatum(GetCurrentTimestamp());
+		values[state->output_stream_arrival_ts] = TimestampTzGetDatum(GetCurrentTimestamp());
 
 		os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
 		ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
@@ -928,7 +929,7 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 
 		nulls[NEW_TUPLE] = false;
 		values[NEW_TUPLE] = heap_copy_tuple_as_datum(new_tup, state->overlay_desc);
-		values[2] = TimestampTzGetDatum(GetCurrentTimestamp());
+		values[state->output_stream_arrival_ts] = TimestampTzGetDatum(GetCurrentTimestamp());
 
 		/* Finally write the old and new tuple to the output stream */
 		os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
@@ -1414,6 +1415,7 @@ assign_output_stream_projection(ContQueryCombinerState *state)
 
 	state->output_stream_proj = build_projection(overlay->planTree->targetlist, estate, context, NULL);
 	state->proj_input_slot = MakeSingleTupleTableSlot(state->desc);
+	state->output_stream_arrival_ts = find_arrival_ts_attr(state->os_slot->tts_tupleDescriptor);
 }
 
 static ContQueryState *
