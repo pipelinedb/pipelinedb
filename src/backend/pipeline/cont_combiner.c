@@ -605,6 +605,7 @@ sync_sw_matrel_groups(ContQueryCombinerState *state)
 	matrel = heap_openrv(state->base.query->matrel, AccessShareLock);
 
 	Assert(state->sw);
+	Assert(state->sw->arrival_ts_attr);
 	oldest = GetCurrentTimestamp() - (1000 * state->base.query->sw_interval_ms);
 
 	/* We only need to scan for in-window rows */
@@ -997,20 +998,19 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 }
 
 /*
- * find_arrival_ts_attr
+ * find_attr
  *
- * Find the arrival_timestamp column of a SW matrel
+ * Find the attribute with the given name in the given TupleDesc
  */
 static AttrNumber
-find_arrival_ts_attr(TupleDesc desc)
+find_attr(TupleDesc desc, char *name)
 {
 	int i;
 	AttrNumber result = InvalidAttrNumber;
 
-	/* XXX(derekjn this needs to work for non-arrival-ts columns */
 	for (i = 0; i < desc->natts; i++)
 	{
-		if (pg_strcasecmp(ARRIVAL_TIMESTAMP, NameStr(desc->attrs[i]->attname)) == 0)
+		if (pg_strcasecmp(name, NameStr(desc->attrs[i]->attname)) == 0)
 		{
 			result = i + 1;
 			break;
@@ -1036,6 +1036,7 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
 	Relation overlay;
+	ColumnRef *cref;
 	int n_group_attr = 0;
 
 	if (!state->isagg)
@@ -1047,8 +1048,13 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	state->overlay_prev_slot = MakeSingleTupleTableSlot(state->overlay_desc);
 	heap_close(overlay, NoLock);
 
+	cref = GetWindowTimeColumn(state->base.query->name);
+	Assert(cref);
+	Assert(list_length(cref->fields) == 1);
+	Assert(IsA(linitial(cref->fields), String));
+
 	state->sw = palloc0(sizeof(SWOutputState));
-	state->sw->arrival_ts_attr = find_arrival_ts_attr(RelationGetDescr(matrel));
+	state->sw->arrival_ts_attr = find_attr(state->desc, strVal(linitial(cref->fields)));
 
 	tmp_cxt = AllocSetContextCreate(CurrentMemoryContext, "SWOutputTmpCxt",
 				ALLOCSET_DEFAULT_MINSIZE,
@@ -1096,7 +1102,7 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 		memcpy(group_idx, agg->grpColIdx, sizeof(AttrNumber) * n_group_attr);
 		for (i = 0; i < n_group_attr; i++)
 		{
-			Assert(group_idx[i] > 1);
+			Assert(group_idx[i] >= 1);
 			group_idx[i] -= 1;
 		}
 	}
@@ -1513,7 +1519,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	state->os_slot = MakeSingleTupleTableSlot(CreateTupleDescCopy(RelationGetDescr(osrel)));
 	heap_close(osrel, AccessShareLock);
 
-	state->output_stream_arrival_ts = find_arrival_ts_attr(state->os_slot->tts_tupleDescriptor);
+	state->output_stream_arrival_ts = find_attr(state->os_slot->tts_tupleDescriptor, ARRIVAL_TIMESTAMP);
 	Assert(state->output_stream_arrival_ts);
 
 	assign_output_stream_projection(state);
