@@ -760,6 +760,7 @@ gc_cached_overlay_tuples(ContQueryCombinerState *state,
 	HASH_SEQ_STATUS seq;
 	OverlayTupleEntry *overlay_entry;
 	List *to_delete = NIL;
+	ListCell *lc;
 
 	hash_seq_init(&seq, state->sw->overlay_groups->hashtab);
 	while ((overlay_entry = (OverlayTupleEntry *) hash_seq_search(&seq)) != NULL)
@@ -785,6 +786,14 @@ gc_cached_overlay_tuples(ContQueryCombinerState *state,
 		os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
 		ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
 		ExecStreamInsert(NULL, osri, state->os_slot, NULL);
+	}
+
+	foreach(lc, to_delete)
+	{
+		HeapTuple tup = (HeapTuple) lfirst(lc);
+
+		ExecStoreTuple(tup, state->overlay_slot, InvalidBuffer, false);
+		RemoveTupleHashEntry(state->sw->overlay_groups, state->overlay_slot);
 	}
 }
 
