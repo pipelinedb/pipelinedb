@@ -513,7 +513,20 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 			ack->batch = batch;
 		}
 
-		sis->worker_queue = get_any_worker_queue_with_lock();
+		/*
+		 * We always write to the same worker from a combiner process to prevent
+		 * unnecessary reordering
+		 */
+		if (IsContQueryCombinerProcess())
+		{
+			int idx = MyContQueryProc->group_id % continuous_query_num_workers;
+			sis->worker_queue = get_worker_queue_with_lock(idx, false);
+		}
+		else
+		{
+			sis->worker_queue = get_any_worker_queue_with_lock();
+		}
+
 		Assert(sis->worker_queue);
 	}
 
