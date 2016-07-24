@@ -718,12 +718,12 @@ add_cached_sw_tuples_to_overlay_input(ContQueryCombinerState *state)
 }
 
 /*
- * gc_cached_sw_tuples
+ * gc_cached_matrel_tuples
  *
  * Garbage collect any out-of-window step tuples
  */
 static void
-gc_cached_sw_tuples(ContQueryCombinerState *state, List *expired)
+gc_cached_matrel_tuples(ContQueryCombinerState *state, List *expired)
 {
 	ListCell *lc;
 
@@ -744,6 +744,50 @@ gc_cached_sw_tuples(ContQueryCombinerState *state, List *expired)
 		heap_freetuple(entry->tuple);
 	}
 }
+
+/*
+ * gc_cached_overlay_tuples
+ *
+ * GC any out-of-window tuples in the overlay cache. We indicate an
+ * out-of-window tuple in the output stream by writing a null new tuple:
+ *
+ * INSERT INTO osrel (old, new) VALUES (<old tuple>, <null>)
+ */
+static void
+gc_cached_overlay_tuples(ContQueryCombinerState *state,
+		TimestampTz this_tick, ResultRelInfo *osri)
+{
+	HASH_SEQ_STATUS seq;
+	OverlayTupleEntry *overlay_entry;
+	List *to_delete = NIL;
+
+	hash_seq_init(&seq, state->sw->overlay_groups->hashtab);
+	while ((overlay_entry = (OverlayTupleEntry *) hash_seq_search(&seq)) != NULL)
+	{
+		Datum values[3];
+		bool nulls[3];
+		HeapTuple tup;
+		HeapTuple os_tup;
+
+		if (overlay_entry->last_touched == this_tick)
+			continue;
+
+		tup = overlay_entry->base.tuple;
+		to_delete = lappend(to_delete, overlay_entry->base.tuple);
+
+		MemSet(nulls, false, sizeof(nulls));
+
+		nulls[NEW_TUPLE] = true;
+		values[NEW_TUPLE] = (Datum) 0;
+		values[OLD_TUPLE] = heap_copy_tuple_as_datum(tup, state->overlay_desc);
+		values[2] = TimestampTzGetDatum(GetCurrentTimestamp());
+
+		os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
+		ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
+		ExecStreamInsert(NULL, osri, state->os_slot, NULL);
+	}
+}
+
 /*
  * execute_sw_overlay_plan
  *
@@ -824,7 +868,7 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 	 * Compute instantaneous sliding-window values
 	 */
 	to_delete = add_cached_sw_tuples_to_overlay_input(state);
-	gc_cached_sw_tuples(state, to_delete);
+	gc_cached_matrel_tuples(state, to_delete);
 	execute_sw_overlay_plan(state);
 
 	/*
@@ -844,6 +888,7 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 
 		Assert(!TupIsNull(state->overlay_slot));
 		overlay_entry = (OverlayTupleEntry *) LookupTupleHashEntry(state->sw->overlay_groups, state->overlay_slot, &isnew);
+		overlay_entry->last_touched = this_tick;
 
 		if (!isnew)
 		{
@@ -859,8 +904,6 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 
 			old_tup = overlay_entry->base.tuple;
 		}
-
-		overlay_entry->last_touched = this_tick;
 
 		old = MemoryContextSwitchTo(state->sw->step_groups->tablecxt);
 		overlay_entry->base.tuple = heap_copytuple(new_tup);
@@ -886,6 +929,11 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 		if (old_tup)
 			heap_freetuple(old_tup);
 	}
+
+	/*
+	 * Expire any out-of-window tuples in the overlay cache
+	 */
+	gc_cached_overlay_tuples(state, this_tick, osri);
 
 	/* Done, cleanup */
 	EndStreamModify(NULL, osri);
