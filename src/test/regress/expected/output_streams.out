@@ -269,4 +269,3 @@ SELECT x, old, new FROM os2_output ORDER BY arrival_timestamp;
 
 DROP CONTINUOUS VIEW os2 CASCADE;
 NOTICE:  drop cascades to continuous view os2_output
-
