@@ -80,8 +80,7 @@ def test_concurrent_sw_ticking(pipeline, clean_db):
   time.sleep(30)
 
   for name in output_names:
-
-    rows = pipeline.execute('SELECT COUNT(DISTINCT x) FROM %s' % name)
+    rows = list(pipeline.execute('SELECT COUNT(DISTINCT x) FROM %s' % name))
     assert rows[0][0] == 100
 
     for x in range(100):
