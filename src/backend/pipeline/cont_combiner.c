@@ -1393,9 +1393,6 @@ assign_output_stream_projection(ContQueryCombinerState *state)
 	EState *estate = CreateExecutorState();
 	ExprContext *context = CreateStandaloneExprContext();
 
-	if (state->base.query->is_sw)
-		return;
-
 	/* Non-sliding windows not supported */
 	if (GetWindowTimeColumn(state->base.query->name))
 		return;
@@ -1415,7 +1412,6 @@ assign_output_stream_projection(ContQueryCombinerState *state)
 
 	state->output_stream_proj = build_projection(overlay->planTree->targetlist, estate, context, NULL);
 	state->proj_input_slot = MakeSingleTupleTableSlot(state->desc);
-	state->output_stream_arrival_ts = find_arrival_ts_attr(state->os_slot->tts_tupleDescriptor);
 }
 
 static ContQueryState *
@@ -1480,6 +1476,9 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	state->overlay_desc = CreateTupleDescCopy(RelationGetDescr(overlay));
 	state->overlay_slot = MakeSingleTupleTableSlot(state->overlay_desc);
 	state->overlay_prev_slot = MakeSingleTupleTableSlot(state->overlay_desc);
+	state->output_stream_arrival_ts = find_arrival_ts_attr(state->os_slot->tts_tupleDescriptor);
+
+	Assert(state->output_stream_arrival_ts);
 	heap_close(overlay, NoLock);
 
 	assign_output_stream_projection(state);

@@ -22,7 +22,7 @@ SELECT pg_sleep(2);
 
 SELECT * FROM os0_output;
 
--- Shouldn't be able to drop this because os0_output depends on it now
+-- We shouldn't be able to drop this because os0_output depends on it now
 DROP CONTINUOUS VIEW os0;
 
 DROP CONTINUOUS VIEW os0_output;
@@ -77,6 +77,7 @@ SELECT * FROM os1_output;
 
 DROP CONTINUOUS VIEW os1 CASCADE;
 
+-- Verify SW ticking into output streams
 CREATE CONTINUOUS VIEW os2 WITH (max_age = '10 seconds') AS
 SELECT x::integer, COUNT(*)
 FROM os_stream GROUP BY x;
@@ -108,3 +109,33 @@ SELECT pg_sleep(20);
 SELECT x, old, new FROM os2_output ORDER BY arrival_timestamp;
 
 DROP CONTINUOUS VIEW os2 CASCADE;
+
+-- Stream-table joins on output streams
+CREATE TABLE os_t0 (x integer, y integer);
+INSERT INTO os_t0 (x, y) VALUES (0, 42);
+
+CREATE CONTINUOUS VIEW os3 AS SELECT x::integer, COUNT(*)
+FROM os_stream GROUP BY x;
+
+CREATE CONTINUOUS VIEW os3_output AS SELECT
+  CASE WHEN (s.old) IS NULL THEN (s.new).x ELSE (s.old).x END AS x,
+  s.new, t.y
+  FROM os3_osrel s JOIN os_t0 t ON x = t.x;
+
+INSERT INTO os_stream (x) VALUES (0);
+SELECT pg_sleep(2);
+
+SELECT x, new, y FROM os3_output;
+
+INSERT INTO os_stream (x) VALUES (0);
+SELECT pg_sleep(2);
+
+SELECT x, new, y FROM os3_output;
+
+INSERT INTO os_stream (x) VALUES (0);
+SELECT pg_sleep(2);
+
+SELECT x, new, y FROM os3_output;
+
+DROP TABLE os_t0;
+DROP CONTINUOUS VIEW os3 CASCADE;
