@@ -971,35 +971,6 @@ find_arrival_ts_attr(TupleDesc desc)
 }
 
 /*
- * lookup_eq_func_oid
- *
- * Get the pk field eq opr, so we can use it for hashing.
- * If the tuple desc doesn't match what we are expecting, we return InvalidOid
- */
-static Oid
-lookup_eq_func_oid(TupleDesc desc, AttrNumber pk)
-{
-	bool is_hash;
-	Form_pg_attribute attr;
-	int pki = pk - 1;
-	Oid eqOpr = InvalidOid;
-
-	Assert(pki >= 0 && pki < desc->natts);
-
-	attr = desc->attrs[pki];
-
-	get_sort_group_operators(attr->atttypid,
-							 false, true, false,
-							 NULL, &eqOpr, NULL,
-							 &is_hash);
-
-	if (!is_hash)
-		return InvalidOid;
-
-	return eqOpr;
-}
-
-/*
  * init_sw_state
  *
  * Initialize the state necessary to write SW results to output streams
@@ -1007,7 +978,6 @@ lookup_eq_func_oid(TupleDesc desc, AttrNumber pk)
 static void
 init_sw_state(ContQueryCombinerState *state, Relation matrel)
 {
-	Oid eq_func_oid = lookup_eq_func_oid(state->desc, state->pk);
 	MemoryContext tmp_cxt;
 	TuplestoreScan *scan;
 	MemoryContext old;
@@ -1017,8 +987,6 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
 	int n_group_attr = 0;
-
-	Assert(OidIsValid(eq_func_oid));
 
 	if (!state->isagg)
 		return;
