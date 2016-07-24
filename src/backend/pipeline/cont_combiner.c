@@ -819,10 +819,10 @@ gc_cached_overlay_tuples(ContQueryCombinerState *state,
 
 		MemSet(nulls, false, sizeof(nulls));
 
+		nulls[state->output_stream_arrival_ts] = true;
 		nulls[NEW_TUPLE] = true;
 		values[NEW_TUPLE] = (Datum) 0;
 		values[OLD_TUPLE] = heap_copy_tuple_as_datum(tup, state->overlay_desc);
-		values[state->output_stream_arrival_ts] = TimestampTzGetDatum(GetCurrentTimestamp());
 
 		os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
 		ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
@@ -967,9 +967,9 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 			values[OLD_TUPLE] = heap_copy_tuple_as_datum(old_tup, state->overlay_desc);
 		}
 
+		nulls[state->output_stream_arrival_ts] = true;
 		nulls[NEW_TUPLE] = false;
 		values[NEW_TUPLE] = heap_copy_tuple_as_datum(new_tup, state->overlay_desc);
-		values[state->output_stream_arrival_ts] = TimestampTzGetDatum(GetCurrentTimestamp());
 
 		/* Finally write the old and new tuple to the output stream */
 		os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, values, nulls);
@@ -1031,20 +1031,21 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	MemoryContext tmp_cxt;
 	TuplestoreScan *scan;
 	MemoryContext old;
-	AttrNumber ats;
 	Oid *group_ops;
 	AttrNumber *group_idx;
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
+	Relation overlay;
 	int n_group_attr = 0;
 
 	if (!state->isagg)
 		return;
 
-	ats = find_arrival_ts_attr(RelationGetDescr(matrel));
-
-	if (!AttributeNumberIsValid(ats))
-		return;
+	overlay = heap_open(state->base.query->relid, NoLock);
+	state->overlay_desc = CreateTupleDescCopy(RelationGetDescr(overlay));
+	state->overlay_slot = MakeSingleTupleTableSlot(state->overlay_desc);
+	state->overlay_prev_slot = MakeSingleTupleTableSlot(state->overlay_desc);
+	heap_close(overlay, NoLock);
 
 	state->sw = palloc0(sizeof(SWOutputState));
 	state->sw->arrival_ts_attr = find_arrival_ts_attr(RelationGetDescr(matrel));
@@ -1216,11 +1217,11 @@ sync_combine(ContQueryCombinerState *state)
 		HeapTupleEntry update = NULL;
 		HeapTuple tup = NULL;
 		HeapTuple os_tup;
-		Datum os_values[2];
-		bool os_nulls[2];
+		Datum os_values[3];
+		bool os_nulls[3];
 		int replaces = 0;
 
-		MemSet(os_nulls, 0, sizeof(os_nulls));
+		MemSet(os_nulls, false, sizeof(os_nulls));
 
 		/* Only replace values for non-group attributes */
 		MemSet(replace_all, true, size);
@@ -1290,6 +1291,7 @@ sync_combine(ContQueryCombinerState *state)
 		if (os_targets &&
 				(os_nulls[OLD_TUPLE] == false || os_nulls[NEW_TUPLE] == false))
 		{
+			os_nulls[state->output_stream_arrival_ts] = true;
 			os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, os_values, os_nulls);
 			ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
 			ExecStreamInsert(NULL, osri, state->os_slot, NULL);
@@ -1463,7 +1465,6 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	List *indices = NIL;
 	ListCell *lc;
 	Relation osrel ;
-	Relation overlay;
 
 	if (base->query->type != CONT_VIEW)
 	{
@@ -1512,14 +1513,8 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	state->os_slot = MakeSingleTupleTableSlot(CreateTupleDescCopy(RelationGetDescr(osrel)));
 	heap_close(osrel, AccessShareLock);
 
-	overlay = heap_open(state->base.query->relid, NoLock);
-	state->overlay_desc = CreateTupleDescCopy(RelationGetDescr(overlay));
-	state->overlay_slot = MakeSingleTupleTableSlot(state->overlay_desc);
-	state->overlay_prev_slot = MakeSingleTupleTableSlot(state->overlay_desc);
 	state->output_stream_arrival_ts = find_arrival_ts_attr(state->os_slot->tts_tupleDescriptor);
-
 	Assert(state->output_stream_arrival_ts);
-	heap_close(overlay, NoLock);
 
 	assign_output_stream_projection(state);
 

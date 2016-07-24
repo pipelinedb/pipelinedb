@@ -5,22 +5,22 @@ CREATE CONTINUOUS VIEW os0_output AS SELECT (old).count AS old_count, (new).coun
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
 
-SELECT * FROM os0_output;
+SELECT * FROM os0_output ORDER BY old_count, new_count;
 
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
 
-SELECT * FROM os0_output;
+SELECT * FROM os0_output ORDER BY old_count, new_count;
 
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
 
-SELECT * FROM os0_output;
+SELECT * FROM os0_output ORDER BY old_count, new_count;
 
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
 
-SELECT * FROM os0_output;
+SELECT * FROM os0_output ORDER BY old_count, new_count;
 
 -- We shouldn't be able to drop this because os0_output depends on it now
 DROP CONTINUOUS VIEW os0;
@@ -40,17 +40,17 @@ FROM os1_osrel;
 INSERT INTO os_stream (x) VALUES (10);
 SELECT pg_sleep(2);
 
-SELECT * FROM os1_output;
+SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (20);
 SELECT pg_sleep(2);
 
-SELECT * FROM os1_output;
+SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (30);
 SELECT pg_sleep(2);
 
-SELECT * FROM os1_output;
+SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (40);
 SELECT pg_sleep(2);
@@ -58,22 +58,22 @@ SELECT pg_sleep(2);
 INSERT INTO os_stream (x) VALUES (-40);
 SELECT pg_sleep(2);
 
-SELECT * FROM os1_output;
+SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (-30);
 SELECT pg_sleep(2);
 
-SELECT * FROM os1_output;
+SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (-20);
 SELECT pg_sleep(2);
 
-SELECT * FROM os1_output;
+SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (-10);
 SELECT pg_sleep(2);
 
-SELECT * FROM os1_output;
+SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 DROP CONTINUOUS VIEW os1 CASCADE;
 
@@ -91,22 +91,22 @@ FROM os2_osrel;
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
 
-SELECT x, old, new FROM os2_output;
+SELECT x, old, new FROM os2_output ORDER BY x, old, new;
 
 INSERT INTO os_stream (x) VALUES (1);
 SELECT pg_sleep(2);
 
-SELECT x, old, new FROM os2_output;
+SELECT x, old, new FROM os2_output ORDER BY x, old, new;
 
 INSERT INTO os_stream (x) VALUES (2);
 SELECT pg_sleep(2);
 
-SELECT x, old, new FROM os2_output;
+SELECT x, old, new FROM os2_output ORDER BY x, old, new;
 
 INSERT INTO os_stream (x) VALUES (3);
 SELECT pg_sleep(20);
 
-SELECT x, old, new FROM os2_output ORDER BY arrival_timestamp;
+SELECT x, old, new FROM os2_output ORDER BY x, old, new;
 
 DROP CONTINUOUS VIEW os2 CASCADE;
 
@@ -125,17 +125,17 @@ CREATE CONTINUOUS VIEW os3_output AS SELECT
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
 
-SELECT x, new, y FROM os3_output;
+SELECT x, new, y FROM os3_output ORDER BY x, new, y;
 
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
 
-SELECT x, new, y FROM os3_output;
+SELECT x, new, y FROM os3_output ORDER BY x, new, y;
 
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
 
-SELECT x, new, y FROM os3_output;
+SELECT x, new, y FROM os3_output ORDER BY x, new, y;
 
 DROP TABLE os_t0;
 DROP CONTINUOUS VIEW os3 CASCADE;
