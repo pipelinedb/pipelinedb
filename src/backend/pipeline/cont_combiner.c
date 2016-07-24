@@ -1742,7 +1742,7 @@ ContinuousQueryCombinerMain(void)
 				if (state->sw)
 				{
 					tick_sw_groups(state, NULL, false);
-					min_tick_ms = Min(min_tick_ms, state->base.query->sw_step_ms);
+					min_tick_ms = min_tick_ms ? Min(min_tick_ms, state->base.query->sw_step_ms) : state->base.query->sw_step_ms;
 				}
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
