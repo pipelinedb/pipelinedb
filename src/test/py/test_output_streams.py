@@ -55,16 +55,42 @@ def test_output_tree(pipeline, clean_db):
     pipeline.drop_cv(name)
 
 
-def test_no_ticking_non_sw(pipeline, clean_db):
-  """
-  Verify that no ticking is done for non-SW queries. We should
-  only see new rows in the output stream when the combiner syncs
-  rows to disk.
-  """
-
-
 def test_concurrent_sw_ticking(pipeline, clean_db):
   """
   Verify that several concurrent sliding-window queries each
   having different windows tick correctly at different intervals.
   """
+  output_names = []
+  for n in range(10):
+    name = 'sw%d' % n
+    pipeline.create_cv(name, 'SELECT x::integer, count(*) FROM stream GROUP BY x', max_age='%d seconds' % (n + 10))
+    output_name = name + '_output'
+
+    q = """
+    SELECT arrival_timestamp,
+    CASE WHEN (old).x IS NULL THEN (new).x ELSE (old).x END AS x, old, new FROM %s_osrel
+    """ % name
+    pipeline.create_cv(output_name, q)
+    output_names.append(output_name)
+
+  names = [r[0] for r in pipeline.execute('SELECT name FROM pipeline_views() ORDER BY name DESC')]
+  assert len(names) == 2 * 10
+
+  pipeline.insert('stream', ('x',), [(x % 100,) for x in range(10000)])
+  time.sleep(30)
+
+  for name in output_names:
+
+    rows = pipeline.execute('SELECT COUNT(DISTINCT x) FROM %s' % name)
+    assert rows[0][0] == 100
+
+    for x in range(100):
+      # In window
+      assert pipeline.execute('SELECT * FROM %s WHERE old IS NULL AND new IS NOT NULL AND x = %d' % (name, x))
+      # Out of window
+      assert pipeline.execute('SELECT * FROM %s WHERE old IS NOT NULL AND new IS NULL AND x = %d' % (name, x))
+
+  # Drop these in reverse dependency order to prevent deadlocks
+  for name in names:
+    pipeline.drop_cv(name)
+

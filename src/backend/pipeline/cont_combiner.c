@@ -907,6 +907,9 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 		return;
 
 	osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
+	if (osrel == NULL)
+		return;
+
 	osri = CQOSRelOpen(osrel);
 
 	BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
@@ -1199,6 +1202,9 @@ sync_combine(ContQueryCombinerState *state)
 	if (!state->base.query->is_sw)
 	{
 		osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
+		if (osrel == NULL)
+			return;
+
 		osri = CQOSRelOpen(osrel);
 
 		BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
