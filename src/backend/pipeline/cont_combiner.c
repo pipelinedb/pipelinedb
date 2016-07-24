@@ -584,13 +584,12 @@ project_overlay(ContQueryCombinerState *state, HeapTuple tup, bool *isnull)
  * covering the given timestamp, the matrel doesn't need to be scanned.
  */
 static void
-sync_sw_matrel_groups(ContQueryCombinerState *state)
+sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 {
 	HeapTuple tup = NULL;
 	HeapScanDesc scan;
 	ScanKeyData skey[1];
 	TimestampTz oldest;
-	Relation matrel;
 	FunctionCallInfoData hashfcinfo;
 	FmgrInfo flinfo;
 	int64 cv_name_hash;
@@ -602,7 +601,12 @@ sync_sw_matrel_groups(ContQueryCombinerState *state)
 	if (state->sw->last_matrel_sync)
 		return;
 
-	matrel = heap_openrv(state->base.query->matrel, AccessShareLock);
+	/* If a matrel didn't get passed to us, we need to lock one ourselves */
+	if (matrel == NULL)
+		matrel = heap_openrv_extended(state->base.query->matrel, AccessShareLock, true);
+
+	if (matrel == NULL)
+		return;
 
 	Assert(state->sw);
 	Assert(state->sw->arrival_ts_attr);
@@ -880,7 +884,7 @@ execute_sw_overlay_plan(ContQueryCombinerState *state)
  * to this CV's output stream if anything is reading it.
  */
 static void
-tick_sw_groups(ContQueryCombinerState *state, bool force)
+tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 {
 	TimestampTz this_tick = GetCurrentTimestamp();
 	OverlayTupleEntry *overlay_entry;
@@ -890,7 +894,7 @@ tick_sw_groups(ContQueryCombinerState *state, bool force)
 	List *to_delete = NIL;
 
 	/* Ensure matrel rows are synced into memory */
-	sync_sw_matrel_groups(state);
+	sync_sw_matrel_groups(state, matrel);
 
 	if (!force && !TimestampDifferenceExceeds(state->sw->last_tick,
 			GetCurrentTimestamp(), state->base.query->sw_step_ms))
@@ -1124,7 +1128,7 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
  * and write the result to the CV's output stream
  */
 static void
-project_sw_overlay_into_ostream(ContQueryCombinerState *state)
+project_sw_overlay_into_ostream(ContQueryCombinerState *state, Relation matrel)
 {
 	Assert(state->sw);
 	Assert(state->sw->overlay_input);
@@ -1152,7 +1156,7 @@ project_sw_overlay_into_ostream(ContQueryCombinerState *state)
 	}
 
 	/* Force a tick */
-	tick_sw_groups(state, true);
+	tick_sw_groups(state, matrel, true);
 }
 
 /*
@@ -1320,7 +1324,7 @@ sync_combine(ContQueryCombinerState *state)
 	 * compute output stream tuples.
 	 */
 	if (state->sw)
-		project_sw_overlay_into_ostream(state);
+		project_sw_overlay_into_ostream(state, matrel);
 
 	tuplestore_clear(state->combined);
 
@@ -1728,7 +1732,7 @@ ContinuousQueryCombinerMain(void)
 
 				if (state->sw)
 				{
-					tick_sw_groups(state, false);
+					tick_sw_groups(state, NULL, false);
 					min_tick_ms = state->base.query->sw_step_ms;
 				}
 
