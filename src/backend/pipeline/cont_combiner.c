@@ -39,6 +39,7 @@
 #include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
 #include "pipeline/sw_vacuum.h"
@@ -50,6 +51,7 @@
 #include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/fmgroids.h"
+#include "utils/hashfuncs.h"
 #include "utils/hsearch.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
@@ -61,6 +63,7 @@
 #include "utils/timestamp.h"
 
 #define GROUPS_PLAN_LIFESPAN (10 * 1000)
+#define MURMUR_SEED 0x155517D2
 
 /*
  * Flag that indicates whether or not an on-disk tuple has already been added to
@@ -90,6 +93,7 @@ typedef struct
 	HeapTupleEntryData base;
 	TimestampTz last_touched;
 } OverlayTupleEntry;
+
 typedef struct
 {
 	ContQueryState base;
@@ -587,6 +591,9 @@ sync_sw_matrel_groups(ContQueryCombinerState *state)
 	ScanKeyData skey[1];
 	TimestampTz oldest;
 	Relation matrel;
+	FunctionCallInfoData hashfcinfo;
+	FmgrInfo flinfo;
+	int64 cv_name_hash;
 
 	/*
 	 * We only need to sync once, all other groups will be cached
@@ -607,14 +614,47 @@ sync_sw_matrel_groups(ContQueryCombinerState *state)
 
 	scan = heap_beginscan(matrel, GetTransactionSnapshot(), 1, skey);
 
-	/* TODO(derekjn) we only need to cache groups that this combiner can update */
+	if (state->hashfunc)
+	{
+		InitFunctionCallInfoData(hashfcinfo, &flinfo,
+				list_length(state->hashfunc->args), state->hashfunc->funccollid, NULL, NULL);
+
+		fmgr_info(state->hashfunc->funcid, hashfcinfo.flinfo);
+		fmgr_info_set_expr((Node *) state->hashfunc, hashfcinfo.flinfo);
+	}
+	else
+	{
+		cv_name_hash = MurmurHash3_64(state->base.query->name->relname, strlen(state->base.query->name->relname), MURMUR_SEED);
+	}
+
 	while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
 		bool isnew;
 		HeapTupleEntry entry;
 		MemoryContext old;
+		int64 hash;
 
 		ExecStoreTuple(tup, state->slot, InvalidBuffer, false);
+
+		if (state->hashfunc)
+			hash = hash_group_for_combiner(state->slot, state->hashfunc, &hashfcinfo);
+		else
+			hash = cv_name_hash;
+
+		/*
+		 * Shard groups across combiners.
+		 *
+		 * Note that this sharding logic must match exactly with what the worker
+		 * uses to shard partials across combiners. This combiner will act on whatever
+		 * tuples it receives from the worker, but these are the only tuples that will
+		 * be used as input into the overlay plan, so we need to ensure that we sync
+		 * all groups that this combiner will receive. Loading all matrel rows would
+		 * technically work as well, but we'd get duplicate output stream writes and
+		 * obviously waste memory.
+		 */
+		if (!is_group_hash_mine(hash))
+			continue;
+
 		entry = (HeapTupleEntry) LookupTupleHashEntry(state->sw->step_groups, state->slot, &isnew);
 
 		old = MemoryContextSwitchTo(state->sw->step_groups->tablecxt);
@@ -1816,30 +1856,6 @@ GetCombinerLookupPlan(ContQuery *view)
 	return plan;
 }
 
-static uint64
-hash_group(ContQueryCombinerState *state, FunctionCallInfo fcinfo)
-{
-	ListCell *lc;
-	Datum result;
-	int i = 0;
-
-	foreach(lc, state->hashfunc->args)
-	{
-		AttrNumber attno = ((Var *) lfirst(lc))->varattno;
-		bool isnull;
-		Datum d;
-
-		d = slot_getattr(state->slot, attno, &isnull);
-		fcinfo->arg[i] = d;
-		fcinfo->argnull[i] = isnull;
-		i++;
-	}
-
-	result = FunctionCallInvoke(fcinfo);
-
-	return DatumGetInt64(result);
-}
-
 /*
  * equal_tupdesc
  *
@@ -1951,7 +1967,10 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 		tuplestore_puttupleslot(state->batch, state->slot);
 
 		if (state->hashfunc)
-			set_group_hash(state, state->pending_tuples, hash_group(state, hashfcinfo));
+		{
+			int64 hash =  hash_group_for_combiner(state->slot, state->hashfunc, hashfcinfo);
+			set_group_hash(state, state->pending_tuples, hash);
+		}
 
 		if (++state->pending_tuples < continuous_query_batch_size)
 			continue;
