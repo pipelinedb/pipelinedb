@@ -1448,19 +1448,22 @@ assign_output_stream_projection(ContQueryCombinerState *state)
 	ExprContext *context;
 	Relation rel;
 
-	/* Non-sliding windows not supported */
-	if (!state->base.query->is_sw && GetWindowTimeColumn(state->base.query->name))
-		return;
-
-	overlay = GetContinuousViewOverlayPlan(state->base.query);
-	estate = CreateExecutorState();
-	context = CreateStandaloneExprContext();
-
 	rel = heap_open(state->base.query->relid, NoLock);
 	state->overlay_desc = CreateTupleDescCopy(RelationGetDescr(rel));
 	state->overlay_slot = MakeSingleTupleTableSlot(state->overlay_desc);
 	state->overlay_prev_slot = MakeSingleTupleTableSlot(state->overlay_desc);
 	heap_close(rel, NoLock);
+
+	/*
+	 * Sliding windows are set up in init_sw_state,
+	 * and non-sliding windows aren't supported
+	 */
+	if (GetWindowTimeColumn(state->base.query->name))
+		return;
+
+	overlay = GetContinuousViewOverlayPlan(state->base.query);
+	estate = CreateExecutorState();
+	context = CreateStandaloneExprContext();
 
 	foreach(lc, overlay->planTree->targetlist)
 	{
