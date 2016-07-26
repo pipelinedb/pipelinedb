@@ -65,22 +65,7 @@ write_to_file(StringInfo info)
 Datum
 pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 {
-	if (IsContQueryTriggerProcess())
-	{
-		HeapTuple new_tup = NULL;
-		TriggerData *data = (TriggerData *) (fcinfo->context);
-
-		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
-		resetStringInfo(f->buf);
-
-		new_tup = TRIGGER_FIRED_BY_INSERT(data->tg_event) ?
-			data->tg_trigtuple : data->tg_newtuple;
-
-		tf_write_tuple(f, f->slot, f->buf, new_tup);
-		alert_server_push(MyAlertServer, data->tg_trigger->tgoid, f->buf);
-	}
-	else
-		elog(ERROR, "send_alert_new_row: not called from pipelinedb trigger process");
+	elog(ERROR, "send_alert_new_row: not called from pipelinedb trigger process");
 
 	PG_RETURN_NULL();
 }
@@ -88,24 +73,7 @@ pipeline_send_alert_new_row(PG_FUNCTION_ARGS)
 Datum
 pipeline_test_alert_new_row(PG_FUNCTION_ARGS)
 {
-	if (IsContQueryTriggerProcess())
-	{
-		HeapTuple new_tup = NULL;
-		TriggerData *data = (TriggerData *) (fcinfo->context);
-
-		TupleFormatter *f = get_formatter(RelationGetRelid(data->tg_relation));
-		Assert(f);
-		resetStringInfo(f->buf);
-
-		new_tup = TRIGGER_FIRED_BY_INSERT(data->tg_event) ?
-			data->tg_trigtuple : data->tg_newtuple;
-
-		tf_write_tuple(f, f->slot, f->buf, new_tup);
-		alert_server_push(MyAlertServer, data->tg_trigger->tgoid, f->buf);
-		write_to_file(f->buf);
-	}
-	else
-		elog(ERROR, "test_alert_new_row: not called from pipelinedb trigger process");
+	elog(ERROR, "test_alert_new_row: not called from pipelinedb trigger process");
 
 	PG_RETURN_NULL();
 }

@@ -15,6 +15,7 @@
 
 #include "storage/latch.h"
 #include "pipeline/ipc/broker.h"
+#include "pipeline/ipc/microbatch.h"
 #include "postmaster/bgworker.h"
 #include "storage/dsm.h"
 #include "storage/spin.h"
@@ -27,7 +28,6 @@ typedef enum
 	COMBINER = 0,
 	WORKER,
 	ADHOC,
-	TRIG,
 	SCHEDULER /* unused */
 } ContQueryProcType;
 
@@ -90,7 +90,6 @@ extern bool continuous_query_crash_recovery;
 extern bool continuous_queries_adhoc_enabled;
 extern int  continuous_query_num_combiners;
 extern int  continuous_query_num_workers;
-extern int  continuous_query_batch_size;
 extern int  continuous_query_max_wait;
 extern int  continuous_query_combiner_work_mem;
 extern int  continuous_query_combiner_synchronous_commit;
