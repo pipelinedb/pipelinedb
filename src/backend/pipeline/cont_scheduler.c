@@ -169,16 +169,16 @@ GetContQueryProcName(ContQueryProc *proc)
 
 	switch (proc->type)
 	{
-		case COMBINER:
+		case Combiner:
 			sprintf(buf, "combiner%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
 			break;
-		case WORKER:
+		case Worker:
 			sprintf(buf, "worker%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
 			break;
-		case ADHOC:
+		case Adhoc:
 			sprintf(buf, "adhoc [%s]", NameStr(proc->db_meta->db_name));
 			break;
-		case SCHEDULER:
+		case Scheduler:
 			return pstrdup("scheduler");
 			break;
 	}
@@ -405,15 +405,15 @@ cont_bgworker_main(Datum arg)
 
 	switch (proc->type)
 	{
-		case COMBINER:
+		case Combiner:
 			am_cont_combiner = true;
 			run = &ContinuousQueryCombinerMain;
 			break;
-		case WORKER:
+		case Worker:
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
 			break;
-		case ADHOC:
+		case Adhoc:
 			/* Clean up and die. */
 			purge_adhoc_queries();
 			return;
@@ -577,7 +577,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 		proc = &db_meta->db_procs[slot_idx];
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		proc->type = WORKER;
+		proc->type = Worker;
 		proc->id = slot_idx;
 		proc->group_id = group_id;
 		proc->db_meta = db_meta;
@@ -591,7 +591,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 		proc = &db_meta->db_procs[slot_idx];
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		proc->type = COMBINER;
+		proc->type = Combiner;
 		proc->id = slot_idx;
 		proc->group_id = group_id;
 		proc->db_meta = db_meta;
@@ -603,7 +603,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	proc = db_meta->adhoc_procs;
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
-	proc->type = ADHOC;
+	proc->type = Adhoc;
 	proc->group_id = 1;
 	proc->db_meta = db_meta;
 
@@ -1021,7 +1021,7 @@ AdhocContQueryProcAcquire(void)
 	{
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		proc->type = ADHOC;
+		proc->type = Adhoc;
 		proc->id = rand();
 		proc->latch = MyLatch;
 		proc->db_meta = db_meta;
@@ -1042,7 +1042,7 @@ AdhocContQueryProcRelease(void)
 	Assert(MyContQueryProc);
 	proc = MyContQueryProc;
 
-	Assert(proc->type == ADHOC);
+	Assert(proc->type == Adhoc);
 	Assert(proc->group_id > 0);
 
 	db_meta = (ContQueryDatabaseMetadata *) hash_search(
