@@ -906,7 +906,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 	if (!hash_get_num_entries(state->sw->step_groups->hashtab))
 		return;
 
-	osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
+	osrel = try_relation_open(state->base.query->osrelid, RowExclusiveLock);
 	if (osrel == NULL)
 		return;
 
@@ -1201,7 +1201,7 @@ sync_combine(ContQueryCombinerState *state)
 	 */
 	if (!state->base.query->is_sw)
 	{
-		osrel = heap_openrv_extended(state->base.query->osrel, RowExclusiveLock, true);
+		osrel = try_relation_open(state->base.query->osrelid, RowExclusiveLock);
 		if (osrel == NULL)
 			return;
 
@@ -1528,7 +1528,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 		return base;
 	}
 
-	osrel = heap_openrv_extended(base->query->osrel, AccessShareLock, true);
+	osrel = try_relation_open(base->query->osrelid, AccessShareLock);
 	state->os_slot = MakeSingleTupleTableSlot(CreateTupleDescCopy(RelationGetDescr(osrel)));
 	heap_close(osrel, AccessShareLock);
 

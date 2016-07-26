@@ -554,7 +554,7 @@ GetContQueryForId(Oid id)
 	cq->seqrelid = row->seqrelid;
 	cq->matrelid = row->matrelid;
 	cq->active = row->active;
-	cq->osrel = makeRangeVar(get_namespace_name(get_rel_namespace(row->osrelid)), get_rel_name(row->osrelid), -1);
+	cq->osrelid = row->osrelid;
 
 	if (cq->type == CONT_VIEW)
 	{

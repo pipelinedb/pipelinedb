@@ -38,7 +38,7 @@ typedef struct ContQuery
 	Oid relid;
 	char *sql;
 	Oid matrelid;
-	RangeVar *osrel;
+	Oid osrelid;
 
 	/* for view */
 	RangeVar *matrel;
