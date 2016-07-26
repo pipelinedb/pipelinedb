@@ -29,6 +29,7 @@ typedef enum ContQueryType
 typedef struct ContQuery
 {
 	Oid id;
+	RangeVar *name;
 	Oid oid; /* OID in pipeline_query table */
 	bool active;
 	ContQueryType type;
@@ -37,12 +38,15 @@ typedef struct ContQuery
 	Oid relid;
 	char *sql;
 	Oid matrelid;
-	char *relname;
+	Oid osrelid;
 
 	/* for view */
 	RangeVar *matrel;
 	Oid seqrelid;
 	int sw_step_factor;
+	int sw_step_ms;
+	uint64 sw_interval_ms;
+	bool is_sw;
 
 	/* for transform */
 	Oid tgfn;
@@ -54,7 +58,7 @@ extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern void RemovePipelineQueryById(Oid oid);
 
 extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid seqrel, bool gc, bool adhoc, Oid *pq_id);
-extern void UpdateContViewRelId(Oid cvid, Oid cvrelid);
+extern void UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid);
 extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, List *args);
 
 extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);

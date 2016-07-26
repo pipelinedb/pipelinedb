@@ -33,6 +33,7 @@ CATALOG(pipeline_query,4242)
 	char 		type;
 	Oid			relid;
 	bool 		active;
+	Oid 		osrelid;
 
 	/* valid for views only */
 	Oid			matrelid;
@@ -62,20 +63,21 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query			13
+#define Natts_pipeline_query			14
 #define Anum_pipeline_query_id			1
 #define Anum_pipeline_query_type		2
 #define Anum_pipeline_query_relid		3
 #define Anum_pipeline_query_active		4
-#define Anum_pipeline_query_matrelid	5
-#define Anum_pipeline_query_seqrelid	6
-#define Anum_pipeline_query_gc			7
-#define Anum_pipeline_query_adhoc		8
-#define Anum_pipeline_query_step_factor 9
-#define Anum_pipeline_query_tgfn		10
-#define Anum_pipeline_query_tgnargs		11
-#define Anum_pipeline_query_tgargs		12
-#define Anum_pipeline_query_query 		13
+#define Anum_pipeline_query_osrelid		5
+#define Anum_pipeline_query_matrelid	6
+#define Anum_pipeline_query_seqrelid	7
+#define Anum_pipeline_query_gc			8
+#define Anum_pipeline_query_adhoc		9
+#define Anum_pipeline_query_step_factor 10
+#define Anum_pipeline_query_tgfn		11
+#define Anum_pipeline_query_tgnargs		12
+#define Anum_pipeline_query_tgargs		13
+#define Anum_pipeline_query_query 		14
 
 #define PIPELINE_QUERY_VIEW 		'v'
 #define PIPELINE_QUERY_TRANSFORM 	't'

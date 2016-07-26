@@ -2888,8 +2888,6 @@ make_finalize_for_viewdef(ParseState *pstate, Oid cvid, Var *var, Node *arg)
 	Oid finaltype = InvalidOid;
 	Query *q = get_worker_query_for_id(cvid);
 
-	Assert(IsContQueryAdhocProcess() || !IsContQueryProcess());
-
 	result = attr_to_aggs(var->varattno, q->targetList);
 	extract_agg_final_info(result, &fnoid, &type, &finaltype);
 	GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);

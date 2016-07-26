@@ -28,6 +28,33 @@
 bool continuous_query_materialization_table_updatable;
 
 /*
+ * CQOSRelOpen
+ *
+ * Open an output stream
+ */
+ResultRelInfo *
+CQOSRelOpen(Relation osrel)
+{
+	ResultRelInfo *resultRelInfo;
+
+	resultRelInfo = makeNode(ResultRelInfo);
+	resultRelInfo->ri_RangeTableIndex = 1; /* dummy */
+	resultRelInfo->ri_RelationDesc = osrel;
+	resultRelInfo->ri_TrigDesc = NULL;
+
+	return resultRelInfo;
+}
+
+/*
+ * CQCSRelClose
+ */
+void
+CQOSRelClose(ResultRelInfo *rinfo)
+{
+	pfree(rinfo);
+}
+
+/*
  * CQMatViewOpen
  *
  * Open any indexes associated with the given materialization table
@@ -144,6 +171,17 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 
 	heap_insert(ri->ri_RelationDesc, tup, GetCurrentCommandId(true), 0, NULL);
 	ExecInsertCQMatRelIndexTuples(ri, slot, estate);
+}
+
+char *
+CVNameToOSRelName(char *cv_name)
+{
+	char *relname = palloc0(NAMEDATALEN);
+
+	strcpy(relname, cv_name);
+	append_suffix(relname, CQ_OSREL_SUFFIX, NAMEDATALEN);
+
+	return relname;
 }
 
 char *

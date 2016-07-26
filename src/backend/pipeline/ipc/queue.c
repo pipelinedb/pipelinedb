@@ -332,6 +332,9 @@ ipc_queue_wait_non_empty(ipc_queue *ipcq, int timeoutms)
 		if (r & WL_POSTMASTER_DEATH)
 			break;
 
+		if (r & WL_TIMEOUT)
+			break;
+
 		if (ShouldTerminateContQueryProcess())
 			break;
 

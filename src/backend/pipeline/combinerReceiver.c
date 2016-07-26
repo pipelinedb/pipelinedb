@@ -24,6 +24,7 @@
 #include "pipeline/stream.h"
 #include "miscadmin.h"
 #include "storage/shm_alloc.h"
+#include "utils/hashfuncs.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
@@ -59,30 +60,6 @@ combiner_startup(DestReceiver *self, int operation,
 
 }
 
-static uint64
-hash_group(TupleTableSlot *slot, CombinerState *state)
-{
-	ListCell *lc;
-	Datum result;
-	int i = 0;
-
-	foreach(lc, state->hash->args)
-	{
-		AttrNumber attno = ((Var *) lfirst(lc))->varattno;
-		bool isnull;
-		Datum d;
-
-		d = slot_getattr(slot, attno, &isnull);
-		state->hash_fcinfo->arg[i] = d;
-		state->hash_fcinfo->argnull[i] = isnull;
-		i++;
-	}
-
-	result = FunctionCallInvoke(state->hash_fcinfo);
-
-	return DatumGetInt64(result);
-}
-
 static void
 combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
@@ -115,11 +92,11 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 
 	/* Shard by groups or id if no grouping. */
 	if (c->hash_fcinfo)
-		pts->hash = hash_group(slot, c);
+		pts->hash = hash_group_for_combiner(slot, c->hash, c->hash_fcinfo);
 	else
 		pts->hash = c->cv_name_hash;
 
-	idx = pts->hash % continuous_query_num_combiners;
+	idx = get_combiner_for_group_hash(pts->hash);
 	c->partials[idx] = lappend(c->partials[idx], pts);
 
 	MemoryContextSwitchTo(old);
@@ -245,7 +222,7 @@ CombinerDestReceiverFlush(DestReceiver *self)
 						(pts->nacks * sizeof(InsertBatchAck)));
 
 				if (ipcq == NULL)
-					ipcq = get_combiner_queue_with_lock(pts->hash % continuous_query_num_combiners);
+					ipcq = get_combiner_queue_with_lock(get_combiner_for_group_hash(pts->hash));
 
 				Assert(ipcq);
 				ipc_queue_push_nolock(ipcq, pts, len, true);

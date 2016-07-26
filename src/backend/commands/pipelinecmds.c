@@ -245,7 +245,7 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 }
 
 static void
-record_cv_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
+record_cv_dependencies(Oid cvoid, Oid matreloid, Oid osreloid, Oid seqreloid, Oid viewoid,
 		Oid indexoid, Oid pkey_idxoid, SelectStmt *stmt, Query *query)
 {
 	ObjectAddress referenced;
@@ -258,6 +258,17 @@ record_cv_dependencies(Oid cvoid, Oid matreloid, Oid seqreloid, Oid viewoid,
 	/* Record a dependency between matrel and view. */
 	dependent.classId = RelationRelationId;
 	dependent.objectId = matreloid;
+	dependent.objectSubId = 0;
+
+	referenced.classId = RelationRelationId;
+	referenced.objectId = viewoid;
+	referenced.objectSubId = 0;
+
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
+
+	/* Record dependency between output stream and view */
+	dependent.classId = RelationRelationId;
+	dependent.objectId = osreloid;
 	dependent.objectSubId = 0;
 
 	referenced.classId = RelationRelationId;
@@ -453,7 +464,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ListCell *lc;
 	Oid matrelid;
 	Oid seqrelid;
-	Oid cvrelid;
+	Oid overlayid;
 	Oid pqoid;
 	Oid indexoid;
 	Oid pkey_idxoid;
@@ -466,6 +477,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	Query *cont_query;
 	bool saveAllowSystemTableMods;
 	Relation pipeline_query;
+	Relation overlayrel;
 	ContAnalyzeContext *context;
 	ContQuery *cv;
 	Oid cvid;
@@ -473,6 +485,10 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	DefElem *pk;
 	ColumnDef *pk_coldef = NULL;
 	ObjectAddress address;
+	ColumnDef *old;
+	ColumnDef *new;
+	CreateStreamStmt *create_osrel;
+	Oid osrelid;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -626,13 +642,43 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	address = DefineView(view_stmt, cont_select_sql);
 	CommandCounterIncrement();
 
-	cvrelid = address.objectId;
-	UpdateContViewRelId(cvid, cvrelid);
+	overlayid = address.objectId;
+
+	/*
+	 * Create the output stream
+	 */
+	overlayrel = heap_open(overlayid, NoLock);
+
+	old = makeNode(ColumnDef);
+	old->colname = "old";
+	old->typeName = makeNode(TypeName);
+	old->typeName->typeOid = overlayrel->rd_rel->reltype;
+
+	new = copyObject(old);
+	new->colname = "new";
+
+	heap_close(overlayrel, NoLock);
+
+	create_osrel = makeNode(CreateStreamStmt);
+	create_osrel->ft.servername = PIPELINE_STREAM_SERVER;
+	create_osrel->ft.base.stream = true;
+	create_osrel->ft.base.tableElts = list_make2(old, new);
+	create_osrel->ft.base.relation = makeRangeVar(view->schemaname, CVNameToOSRelName(view->relname), -1);
+	transformCreateStreamStmt(create_osrel);
+
+	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_STREAM, InvalidOid, NULL);
+	CreateForeignTable((CreateForeignTableStmt *) create_osrel, address.objectId);
+	CreatePipelineStreamEntry((CreateStreamStmt *) create_osrel, address.objectId);
+
+	osrelid = address.objectId;
+
+	UpdateContViewRelIds(cvid, overlayid, osrelid);
+	CommandCounterIncrement();
 
 	/* Create group look up index and record dependencies */
 	indexoid = create_lookup_index(view, matrelid, matrel, query, context->is_sw);
 	pkey_idxoid = create_pkey_index(view, matrelid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
-	record_cv_dependencies(pqoid, matrelid, seqrelid, cvrelid, indexoid, pkey_idxoid, workerselect, query);
+	record_cv_dependencies(pqoid, matrelid, osrelid, seqrelid, overlayid, indexoid, pkey_idxoid, workerselect, query);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
 

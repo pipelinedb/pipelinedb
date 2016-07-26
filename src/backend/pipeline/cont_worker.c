@@ -195,9 +195,9 @@ ContinuousQueryWorkerMain(void)
 		if (ShouldTerminateContQueryProcess())
 			break;
 
-		ContExecutorStartBatch(cont_exec);
+		ContExecutorStartBatch(cont_exec, 0);
 
-		while ((query_id = ContExecutorStartNextQuery(cont_exec)) != InvalidOid)
+		while ((query_id = ContExecutorStartNextQuery(cont_exec, 0)) != InvalidOid)
 		{
 			Plan *plan = NULL;
 			EState *estate = NULL;
