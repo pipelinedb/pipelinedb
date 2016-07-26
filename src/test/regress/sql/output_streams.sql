@@ -139,3 +139,36 @@ SELECT x, new, y FROM os3_output ORDER BY x, new, y;
 
 DROP TABLE os_t0;
 DROP CONTINUOUS VIEW os3 CASCADE;
+
+-- Final functions should be applied to output stream tuples where necessary
+CREATE CONTINUOUS VIEW os3 AS SELECT x::integer, avg(y::integer), count(distinct z::integer)
+FROM os_stream GROUP BY x;
+
+CREATE CONTINUOUS VIEW os3_output AS SELECT
+  arrival_timestamp,
+  CASE WHEN old IS NULL THEN (new).x ELSE (old).x END AS x,
+  old, new
+FROM os3_osrel;
+
+INSERT INTO os_stream (x, y, z) VALUES (0, 2, 0);
+SELECT pg_sleep(2);
+
+SELECT x, old, new FROM os3_output ORDER BY x, old, new;
+
+INSERT INTO os_stream (x, y, z) VALUES (0, 4, 1);
+SELECT pg_sleep(2);
+
+SELECT x, old, new FROM os3_output ORDER BY x, old, new;
+
+INSERT INTO os_stream (x, y, z) VALUES (1, 8, 2);
+SELECT pg_sleep(2);
+
+SELECT x, old, new FROM os3_output ORDER BY x, old, new;
+
+INSERT INTO os_stream (x, y, z) VALUES (1, 16, 2);
+SELECT pg_sleep(2);
+
+SELECT x, old, new FROM os3_output ORDER BY x, old, new;
+
+DROP CONTINUOUS VIEW os3 CASCADE;
+

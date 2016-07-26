@@ -1045,18 +1045,11 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	AttrNumber *group_idx;
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
-	Relation overlay;
 	ColumnRef *cref;
 	int n_group_attr = 0;
 
 	if (!state->isagg)
 		return;
-
-	overlay = heap_open(state->base.query->relid, NoLock);
-	state->overlay_desc = CreateTupleDescCopy(RelationGetDescr(overlay));
-	state->overlay_slot = MakeSingleTupleTableSlot(state->overlay_desc);
-	state->overlay_prev_slot = MakeSingleTupleTableSlot(state->overlay_desc);
-	heap_close(overlay, NoLock);
 
 	cref = GetWindowTimeColumn(state->base.query->name);
 	Assert(cref);
@@ -1450,13 +1443,24 @@ assign_output_stream_projection(ContQueryCombinerState *state)
 {
 	ListCell *lc;
 	bool needs_proj = false;
-	PlannedStmt *overlay = GetContinuousViewOverlayPlan(state->base.query);
-	EState *estate = CreateExecutorState();
-	ExprContext *context = CreateStandaloneExprContext();
+	PlannedStmt *overlay;
+	EState *estate;
+	ExprContext *context;
+	Relation rel;
 
 	/* Non-sliding windows not supported */
-	if (GetWindowTimeColumn(state->base.query->name))
+	if (!state->base.query->is_sw && GetWindowTimeColumn(state->base.query->name))
 		return;
+
+	overlay = GetContinuousViewOverlayPlan(state->base.query);
+	estate = CreateExecutorState();
+	context = CreateStandaloneExprContext();
+
+	rel = heap_open(state->base.query->relid, NoLock);
+	state->overlay_desc = CreateTupleDescCopy(RelationGetDescr(rel));
+	state->overlay_slot = MakeSingleTupleTableSlot(state->overlay_desc);
+	state->overlay_prev_slot = MakeSingleTupleTableSlot(state->overlay_desc);
+	heap_close(rel, NoLock);
 
 	foreach(lc, overlay->planTree->targetlist)
 	{

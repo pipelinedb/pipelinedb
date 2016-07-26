@@ -51,7 +51,6 @@ CQOSRelOpen(Relation osrel)
 void
 CQOSRelClose(ResultRelInfo *rinfo)
 {
-	ExecCloseIndices(rinfo);
 	pfree(rinfo);
 }
 
