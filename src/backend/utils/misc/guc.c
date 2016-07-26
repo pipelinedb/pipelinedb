@@ -59,7 +59,6 @@
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/stream.h"
 #include "pipeline/update.h"
-#include "pipeline/trigger/trigger.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
 #include "postmaster/bgwriter.h"
@@ -1685,16 +1684,6 @@ static struct config_bool ConfigureNamesBool[] =
 		false,
 		NULL, NULL, NULL
 	},
-
-	{
-		{"continuous_triggers_enabled", PGC_POSTMASTER, DEVELOPER_OPTIONS,
-		 gettext_noop("Enable execution of continuous triggers."),
-		 NULL,
-		},
-		&continuous_triggers_enabled,
-		false,
-		NULL, NULL, NULL
-	},
 	{
 		{"track_continuous_queries", PGC_POSTMASTER, STATS_COLLECTOR,
 			gettext_noop("Collects statistics on continuous query activiy."),
@@ -2855,7 +2844,6 @@ static struct config_int ConfigureNamesInt[] =
 		50, 1, 100,
 		NULL, NULL, NULL
 	},
-
 	{
 		{"continuous_query_commit_interval", PGC_BACKEND, QUERY_TUNING_OTHER,
 		 gettext_noop("Sets the number of milliseconds that combiners will keep combining in memory before committing the result."),
@@ -2863,25 +2851,6 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&continuous_query_commit_interval,
 		50, 0, 60000,
-		NULL, NULL, NULL
-	},
-	{
-		{"alert_socket_mem", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
-			gettext_noop("Amount of memory to buffer alert server writes per socket."),
-			NULL,
-			GUC_UNIT_KB
-		},
-		&alert_socket_mem,
-		1024, 1024, 8192,
-		NULL, NULL, NULL
-	},
-	{
-		{"alert_server_port", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
-			gettext_noop("Base port to start assigning alert servers ports."),
-			NULL
-		},
-		&alert_server_port,
-		7432, 7432, 65535,
 		NULL, NULL, NULL
 	},
 	/* End-of-list marker */

@@ -2328,7 +2328,6 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				 "-c \"continuous_query_ipc_shared_mem=65536\" "
 				 "-c \"anonymous_update_checks=off\" "
 				 "-c \"continuous_query_max_wait=5\" "
-				 "-c \"continuous_triggers_enabled=on\" "
 				 "-c \"max_wal_senders=4\" "
 				 "-c \"max_replication_slots=4\" "
 				 "-c \"wal_level=logical\" "

@@ -18,6 +18,8 @@
 #include "nodes/relation.h"
 #include "utils/rel.h"
 
+#define REENTRANT_STREAM_INSERT 0x1
+
 typedef struct StreamProjectionInfo StreamProjectionInfo;
 
 typedef struct StreamScanState
@@ -28,6 +30,26 @@ typedef struct StreamScanState
 	Size nbytes;
 	int ntuples;
 } StreamScanState;
+
+typedef struct StreamInsertState
+{
+	Bitmapset *targets;
+
+	long count;
+	long bytes;
+	int num_batches;
+
+	InsertBatch *batch;
+	InsertBatchAck *ack;
+
+	TupleDesc desc;
+	bytea *packed_desc;
+
+	ipc_queue *worker_queue;
+	AdhocInsertState *adhoc_state;
+
+	int flags;
+} StreamInsertState;
 
 extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);
 

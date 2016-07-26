@@ -18,7 +18,6 @@ ROOT = '../../../'
 INSTALL_FORMAT = './.pdb-%d'
 SERVER = os.path.join(ROOT, 'src', 'backend', 'pipelinedb')
 CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/pipeline'
-TRIGGER_OUTPUT_LOGFILE = '/tmp/.pipelinedb_trigger_test.log'
 
 class PipelineDB(object):
     def __init__(self):
@@ -65,12 +64,6 @@ class PipelineDB(object):
         self.recv_alerts = os.path.join(self.bin_dir, 'pipeline-recv-alerts')
         self.engine = None
 
-    def load_private_function(self, cur, name, returns):
-        mod_path = '$libdir/pipeline_triggers'
-        s = ("CREATE function %s() RETURNS %s AS '%s' LANGUAGE C IMMUTABLE;"
-                % (name, returns, mod_path))
-        cur.execute(s)
-
     def run(self, params=None):
         """
         Runs a test instance of PipelineDB within our temporary directory on
@@ -88,7 +81,6 @@ class PipelineDB(object):
         default_params = {
           'synchronous_stream_insert': 'on',
           'continuous_queries_adhoc_enabled': 'on',
-          'continuous_triggers_enabled': 'on',
           'continuous_query_num_combiners': 2,
           'continuous_query_num_workers': 2,
           'continuous_query_ipc_shared_mem': 65536,
@@ -160,11 +152,6 @@ class PipelineDB(object):
         self.stop()
         shutil.rmtree(self.tmp_dir)
 
-        try:
-            os.remove(TRIGGER_OUTPUT_LOGFILE)
-        except OSError:
-            pass
-
     @property
     def tmp_dir(self):
         """
@@ -189,20 +176,6 @@ class PipelineDB(object):
           self.execute('DROP CONTINUOUS TRANSFORM %s CASCADE' % transform['name'])
         for view in self.execute('SELECT name FROM pipeline_views()'):
           self.execute('DROP CONTINUOUS VIEW %s CASCADE' % view['name'])
-
-    def create_cv_trigger(self, name, view, when, proc, ttype='INSERT OR UPDATE'):
-        """
-        Create a trigger on a continuous view
-        """
-        result = self.execute('CREATE TRIGGER %s AFTER %s ON %s FOR ROW WHEN (%s) EXECUTE PROCEDURE %s()' % (name, ttype, view, when, proc))
-        return result
-
-    def drop_cv_trigger(self, name, view):
-        """
-        Drop a trigger
-        """
-        result = self.execute('DROP TRIGGER %s ON %s' % (name, view))
-        return result
 
     def create_cv(self, name, stmt, **kw):
         """
@@ -315,14 +288,6 @@ class PipelineDB(object):
     def get_recv_alerts(self):
         return self.recv_alerts
 
-    def read_trigger_output(self):
-        """
-        Read the trigger output file and format its contents as a list of rows
-        """
-        with open(TRIGGER_OUTPUT_LOGFILE) as f:
-          lines = f.readlines()
-
-        return map(lambda x: x.rstrip('\n').split('\t'), lines)
 
 @pytest.fixture
 def clean_db(request):
@@ -331,7 +296,7 @@ def clean_db(request):
     """
     pdb = request.module.pipeline
     request.addfinalizer(pdb.drop_all_queries)
-    pdb.execute("select pipeline_trigger_debug()")
+
 
 @pytest.fixture(scope='module')
 def pipeline(request):

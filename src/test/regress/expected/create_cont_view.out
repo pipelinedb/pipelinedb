@@ -26,6 +26,14 @@ Indexes:
     "cqcreate0_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
+\d+ cqcreate0_osrel;
+              Stream "public.cqcreate0_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqcreate0(0)                | extended
+ new               | cqcreate0(0)                | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
+
 SELECT pipeline_get_overlay_viewdef('cqcreate0');
  pipeline_get_overlay_viewdef 
 ------------------------------
@@ -58,6 +66,14 @@ View definition:
 Indexes:
     "cqcreate1_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
+
+\d+ cqcreate1_osrel;
+              Stream "public.cqcreate1_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqcreate1(0)                | extended
+ new               | cqcreate1(0)                | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate1');
     pipeline_get_overlay_viewdef    
@@ -94,6 +110,14 @@ View definition:
 Indexes:
     "cqcreate2_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
+
+\d+ cqcreate2_osrel;
+              Stream "public.cqcreate2_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqcreate2(0)                | extended
+ new               | cqcreate2(0)                | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate2');
  pipeline_get_overlay_viewdef 
@@ -138,6 +162,14 @@ Indexes:
     "cqcreate3_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
+\d+ cqcreate3_osrel;
+              Stream "public.cqcreate3_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqcreate3(0)                | extended
+ new               | cqcreate3(0)                | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
+
 SELECT pipeline_get_overlay_viewdef('cqcreate3');
                      pipeline_get_overlay_viewdef                     
 ----------------------------------------------------------------------
@@ -179,6 +211,14 @@ Indexes:
     "cqcreate4_mrel_expr_idx" btree (hash_group(_0))
 Options: fillfactor=50
 
+\d+ cqcreate4_osrel;
+              Stream "public.cqcreate4_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqcreate4(0)                | extended
+ new               | cqcreate4(0)                | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
+
 SELECT pipeline_get_overlay_viewdef('cqcreate4');
                      pipeline_get_overlay_viewdef                     
 ----------------------------------------------------------------------
@@ -216,6 +256,14 @@ Indexes:
     "cqcreate5_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqcreate5_mrel_arrival_timestamp_idx" btree (arrival_timestamp)
 Options: fillfactor=50
+
+\d+ cqcreate5_osrel;
+              Stream "public.cqcreate5_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqcreate5(0)                | extended
+ new               | cqcreate5(0)                | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate5');
                                pipeline_get_overlay_viewdef                               
@@ -255,6 +303,14 @@ Indexes:
     "cqcreate6_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqcreate6_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, _0))
 Options: fillfactor=50
+
+\d+ cqcreate6_osrel;
+              Stream "public.cqcreate6_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqcreate6(0)                | extended
+ new               | cqcreate6(0)                | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate6');
                               pipeline_get_overlay_viewdef                               
@@ -297,6 +353,14 @@ Indexes:
     "cvavg_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
+\d+ cvavg_osrel;
+                Stream "public.cvavg_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cvavg(0)                    | extended
+ new               | cvavg(0)                    | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
+
 SELECT pipeline_get_overlay_viewdef('cvavg');
                pipeline_get_overlay_viewdef                
 -----------------------------------------------------------
@@ -327,6 +391,14 @@ Indexes:
     "cvjson_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
+\d+ cvjson_osrel;
+                Stream "public.cvjson_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cvjson(0)                   | extended
+ new               | cvjson(0)                   | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
+
 SELECT pipeline_get_overlay_viewdef('cvjson');
                           pipeline_get_overlay_viewdef                          
 --------------------------------------------------------------------------------
@@ -353,6 +425,14 @@ View definition:
 Indexes:
     "cvjsonobj_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
+
+\d+ cvjsonobj_osrel;
+              Stream "public.cvjsonobj_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cvjsonobj(0)                | extended
+ new               | cvjsonobj(0)                | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvjsonobj');
                                      pipeline_get_overlay_viewdef                                     
@@ -382,6 +462,14 @@ Indexes:
     "cvcount_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
+\d+ cvcount_osrel;
+               Stream "public.cvcount_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cvcount(0)                  | extended
+ new               | cvcount(0)                  | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
+
 SELECT pipeline_get_overlay_viewdef('cvcount');
  pipeline_get_overlay_viewdef 
 ------------------------------
@@ -408,6 +496,14 @@ View definition:
 Indexes:
     "cvarray_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
+
+\d+ cvarray_osrel;
+               Stream "public.cvarray_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cvarray(0)                  | extended
+ new               | cvarray(0)                  | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvarray');
   pipeline_get_overlay_viewdef  
@@ -441,6 +537,14 @@ Indexes:
     "cvtext_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
+\d+ cvtext_osrel;
+                Stream "public.cvtext_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cvtext(0)                   | extended
+ new               | cvtext(0)                   | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
+
 SELECT pipeline_get_overlay_viewdef('cvtext');
                            pipeline_get_overlay_viewdef                           
 ----------------------------------------------------------------------------------
@@ -470,6 +574,14 @@ View definition:
 Indexes:
     "cqaggexpr1_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
+
+\d+ cqaggexpr1_osrel;
+              Stream "public.cqaggexpr1_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqaggexpr1(0)               | extended
+ new               | cqaggexpr1(0)               | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
            pipeline_get_overlay_viewdef            
@@ -503,6 +615,14 @@ Indexes:
     "cqaggexpr2_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqaggexpr2_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
+
+\d+ cqaggexpr2_osrel;
+              Stream "public.cqaggexpr2_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqaggexpr2(0)               | extended
+ new               | cqaggexpr2(0)               | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
                               pipeline_get_overlay_viewdef                              
@@ -539,6 +659,14 @@ Indexes:
     "cqaggexpr3_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
 Options: fillfactor=50
 
+\d+ cqaggexpr3_osrel;
+              Stream "public.cqaggexpr3_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqaggexpr3(0)               | extended
+ new               | cqaggexpr3(0)               | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
+
 SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
                                pipeline_get_overlay_viewdef                               
 ------------------------------------------------------------------------------------------
@@ -573,6 +701,14 @@ Indexes:
     "cqaggexpr4_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqaggexpr4_mrel_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
+
+\d+ cqaggexpr4_osrel;
+              Stream "public.cqaggexpr4_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqaggexpr4(0)               | extended
+ new               | cqaggexpr4(0)               | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
             pipeline_get_overlay_viewdef            
@@ -609,6 +745,14 @@ Indexes:
     "cqgroupby_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqgroupby_mrel_expr_idx" btree (hash_group(k0, k1))
 Options: fillfactor=50
+
+\d+ cqgroupby_osrel;
+              Stream "public.cqgroupby_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | cqgroupby(0)                | extended
+ new               | cqgroupby(0)                | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqgroupby');
  pipeline_get_overlay_viewdef 
@@ -656,6 +800,14 @@ Indexes:
     "multigroupindex_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "multigroupindex_mrel_expr_idx" btree (hash_group(a, b, c, d, e))
 Options: fillfactor=50
+
+\d+ multigroupindex_osrel;
+           Stream "public.multigroupindex_osrel"
+      Column       |            Type             | Storage  
+-------------------+-----------------------------+----------
+ old               | multigroupindex(0)          | extended
+ new               | multigroupindex(0)          | extended
+ arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('multigroupindex');
     pipeline_get_overlay_viewdef    

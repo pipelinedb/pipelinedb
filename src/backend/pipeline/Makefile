@@ -20,6 +20,6 @@ OBJS = combinerReceiver.o cont_plan.o update.o stream.o \
 			 fss.o cont_adhoc_format.o stream_fdw.o cont_execute.o \
 			 adhocReceiver.o cont_adhoc.o transformReceiver.o
 
-SUBDIRS = ipc trigger
+SUBDIRS = ipc
 
 include $(top_srcdir)/src/backend/common.mk

@@ -475,7 +475,7 @@ ContExecutorDestroy(ContExecutor *exec)
 }
 
 void
-ContExecutorStartBatch(ContExecutor *exec)
+ContExecutorStartBatch(ContExecutor *exec, int timeout)
 {
 	bool is_empty;
 
@@ -491,14 +491,12 @@ ContExecutorStartBatch(ContExecutor *exec)
 			char *proc_name = GetContQueryProcName(MyContQueryProc);
 
 			pgstat_report_cqstat(true);
-
 			pgstat_report_activity(STATE_IDLE, proc_name);
 
 			if (exec->ptype == WORKER)
-				ipc_multi_queue_wait_non_empty(exec->ipcmq, 0);
+				ipc_multi_queue_wait_non_empty(exec->ipcmq, timeout);
 			else
-				ipc_queue_wait_non_empty(exec->ipcq, 0);
-
+				ipc_queue_wait_non_empty(exec->ipcq, timeout);
 
 			pgstat_report_activity(STATE_RUNNING, proc_name);
 
@@ -638,7 +636,7 @@ get_query_state(ContExecutor *exec)
 }
 
 Oid
-ContExecutorStartNextQuery(ContExecutor *exec)
+ContExecutorStartNextQuery(ContExecutor *exec, int timeout)
 {
 	MemoryContextSwitchTo(exec->exec_cxt);
 
@@ -655,6 +653,14 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 		exec->current_query_id = id;
 
 		if (!exec->peek_timedout)
+			break;
+
+		/*
+		 * If we have a timeout, we want to force an execution of this
+		 * query regardless of whether or not it actually has data. This
+		 * is primarly used for ticking SW queries that are writing to output streams.
+		 */
+		if (timeout)
 			break;
 
 		if (bms_is_member(exec->current_query_id, exec->queries_seen))
@@ -674,7 +680,7 @@ ContExecutorStartNextQuery(ContExecutor *exec)
 			MemoryContextSwitchTo(old);
 		}
 		else
-			debug_query_string = exec->current_query->query->relname;
+			debug_query_string = exec->current_query->query->name->relname;
 	}
 
 	if (exec->current_query)

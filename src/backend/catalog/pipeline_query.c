@@ -278,7 +278,7 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, bool g
 }
 
 void
-UpdateContViewRelId(Oid cvid, Oid cvrelid)
+UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
 {
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
@@ -295,7 +295,9 @@ UpdateContViewRelId(Oid cvid, Oid cvrelid)
 	MemSet(replace, 0 , sizeof(replace));
 	MemSet(nulls, 0 , sizeof(nulls));
 	replace[Anum_pipeline_query_relid - 1] = true;
+	replace[Anum_pipeline_query_osrelid - 1] = true;
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(cvrelid);
+	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 
 	new = heap_modify_tuple(tup, RelationGetDescr(pipeline_query), values, nulls, replace);
 
@@ -548,10 +550,11 @@ GetContQueryForId(Oid id)
 	cq->type = row->type == PIPELINE_QUERY_TRANSFORM ? CONT_TRANSFORM : CONT_VIEW;
 
 	cq->relid = row->relid;
-	cq->relname = get_rel_name(row->relid);
+	cq->name = makeRangeVar(get_namespace_name(get_rel_namespace(row->relid)), get_rel_name(row->relid), -1);
 	cq->seqrelid = row->seqrelid;
 	cq->matrelid = row->matrelid;
 	cq->active = row->active;
+	cq->osrelid = row->osrelid;
 
 	if (cq->type == CONT_VIEW)
 	{
@@ -565,7 +568,18 @@ GetContQueryForId(Oid id)
 	tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 	cq->sql = deparse_query_def(query);
-	cq->sw_step_factor = query->swStepFactor;
+
+	if (row->gc)
+	{
+		Interval *i;
+
+		cq->is_sw = row->gc;
+		cq->sw_step_factor = query->swStepFactor;
+		i = GetSWInterval(cq->name);
+		cq->sw_interval_ms = 1000 * (int) DatumGetFloat8(
+				DirectFunctionCall2(interval_part, CStringGetTextDatum("epoch"), (Datum) i));
+		cq->sw_step_ms = (int) (cq->sw_interval_ms * cq->sw_step_factor / 100.0);
+	}
 
 	cq->tgfn = row->tgfn;
 	cq->tgnargs = row->tgnargs;

@@ -168,3 +168,33 @@ hash_group(PG_FUNCTION_ARGS)
 
 	PG_RETURN_INT32(result);
 }
+
+
+/*
+ * hash_group_for_combiner
+ *
+ * Hashes a tuple's group in order to determine which combiner it belongs to
+ */
+uint64
+hash_group_for_combiner(TupleTableSlot *slot, FuncExpr *hash, FunctionCallInfo fcinfo)
+{
+	ListCell *lc;
+	Datum result;
+	int i = 0;
+
+	foreach(lc, hash->args)
+	{
+		AttrNumber attno = ((Var *) lfirst(lc))->varattno;
+		bool isnull;
+		Datum d;
+
+		d = slot_getattr(slot, attno, &isnull);
+		fcinfo->arg[i] = d;
+		fcinfo->argnull[i] = isnull;
+		i++;
+	}
+
+	result = FunctionCallInvoke(fcinfo);
+
+	return DatumGetInt64(result);
+}

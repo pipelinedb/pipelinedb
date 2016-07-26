@@ -635,7 +635,7 @@ CleanupAdhocContinuousView(ContQuery *view)
 	Portal portal;
 
 	stmt->objects = list_make1(
-			list_make2(makeString(get_namespace_name(get_rel_namespace(view->relid))), makeString(view->relname)));
+			list_make2(makeString(view->name->schemaname), makeString(view->name->relname)));
 	stmt->removeType = OBJECT_CONTVIEW;
 
 	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",
