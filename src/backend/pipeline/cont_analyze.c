@@ -50,7 +50,6 @@
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
-#include "pipeline/trigger/trigger.h"
 #include "rewrite/rewriteHandler.h"
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
@@ -3811,48 +3810,4 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 	}
 	else
 		select->swStepFactor = sliding_window_step_factor;
-}
-
-void
-ValidateContTrigger(CreateTrigStmt *stmt)
-{
-	if (!continuous_triggers_enabled)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("triggers on continuous views are not enabled"),
-				 errhint("Set continuous_triggers_enabled to \"on\" at server startup.")));
-	}
-
-	if (!XLogLogicalInfoActive())
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("WAL level not sufficient for using continuous triggers"),
-				 errhint("Continuous triggers require wal_level \"logical\".")));
-	}
-
-	if (!stmt->row)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is a continuous view", stmt->relation->relname),
-				 errdetail("Continuous views can only have row-level AFTER triggers.")));
-
-	if (TRIGGER_FOR_TRUNCATE(stmt->events))
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				errmsg("\"%s\" is a continuous view", stmt->relation->relname),
-				errdetail("Continuous views cannot have TRUNCATE triggers.")));
-
-	if (!TRIGGER_FOR_AFTER(stmt->timing))
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				errmsg("\"%s\" is a continuous view", stmt->relation->relname),
-				errdetail("Continuous views can only have AFTER triggers.")));
-
-	if (TRIGGER_FOR_DELETE(stmt->events) && !GetGCFlag(stmt->relation))
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				errmsg("\"%s\" is not a sliding window continuous view", stmt->relation->relname),
-				errdetail("Only sliding window continuous views can have DELETE triggers.")));
 }

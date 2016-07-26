@@ -27,7 +27,6 @@ typedef enum
 	COMBINER = 0,
 	WORKER,
 	ADHOC,
-	TRIG,
 	SCHEDULER /* unused */
 } ContQueryProcType;
 

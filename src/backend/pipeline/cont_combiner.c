@@ -43,7 +43,6 @@
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
 #include "pipeline/sw_vacuum.h"
-#include "pipeline/trigger/util.h"
 #include "storage/ipc.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -547,7 +546,26 @@ build_existing_hashtable(ContQueryCombinerState *state)
 }
 
 /*
- * project_current_tuple
+ * build_projection
+ */
+static ProjectionInfo *
+build_projection(List *tlist, EState *estate, ExprContext *econtext,
+		TupleDesc input_desc)
+{
+	TupleTableSlot *result_slot;
+	TupleDesc result_desc;
+	List *targetlist;
+
+	result_desc = ExecTypeFromTL(tlist, false);
+	result_slot = MakeSingleTupleTableSlot(result_desc);
+	targetlist = (List *) ExecPrepareExpr((Expr *) tlist, estate);
+
+	return ExecBuildProjectionInfo(targetlist, econtext,
+								   result_slot, input_desc);
+}
+
+/*
+ * project_overlay
  */
 static Datum
 project_overlay(ContQueryCombinerState *state, HeapTuple tup, bool *isnull)

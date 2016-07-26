@@ -244,12 +244,6 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 				 errmsg("\"%s\" is a continuous transform",
 						RelationGetRelationName(rel)),
 		  errdetail("Continuous transforms don't support triggers.")));
-
-	else if (rel->rd_rel->relkind == RELKIND_CONTVIEW)
-	{
-		ValidateContTrigger(stmt);
-		SetReplicaIdentityFull(rel);
-	}
 	else
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),

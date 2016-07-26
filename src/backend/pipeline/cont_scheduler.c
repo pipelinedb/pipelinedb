@@ -47,11 +47,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timeout.h"
-#include "pipeline/trigger/trigger.h"
-#include "pipeline/trigger/triggerfuncs.h"
-#include "replication/walsender.h"
-#include "replication/walsender_private.h"
-#include "replication/slot.h"
 
 #define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners)
 #define NUM_LOCKS_PER_DB (NUM_BG_WORKERS_PER_DB + 1) /* single lock for all adhoc processes */
@@ -74,7 +69,6 @@ ContQueryProc *MyContQueryProc = NULL;
 static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
 static bool am_cont_adhoc = false;
-static bool am_cont_trigger = false;
 bool am_cont_combiner = false;
 
 /* guc parameters */
@@ -184,9 +178,6 @@ GetContQueryProcName(ContQueryProc *proc)
 		case ADHOC:
 			sprintf(buf, "adhoc [%s]", NameStr(proc->db_meta->db_name));
 			break;
-		case TRIG:
-			sprintf(buf, "trigger [%s]", NameStr(proc->db_meta->db_name));
-			break;
 		case SCHEDULER:
 			return pstrdup("scheduler");
 			break;
@@ -212,12 +203,6 @@ bool
 IsContQueryAdhocProcess(void)
 {
 	return am_cont_adhoc;
-}
-
-bool
-IsContQueryTriggerProcess(void)
-{
-	return am_cont_trigger;
 }
 
 bool
@@ -428,10 +413,6 @@ cont_bgworker_main(Datum arg)
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
 			break;
-		case TRIG:
-			am_cont_trigger = true;
-			run = &trigger_main;
-			break;
 		case ADHOC:
 			/* Clean up and die. */
 			purge_adhoc_queries();
@@ -440,11 +421,8 @@ cont_bgworker_main(Datum arg)
 			elog(ERROR, "invalid continuous query process type: %d", proc->type);
 	}
 
-	if (proc->type != TRIG)
-	{
-		pgstat_init_cqstat(MyProcStatCQEntry, 0, MyProcPid);
-		acquire_my_ipc_queue();
-	}
+	pgstat_init_cqstat(MyProcStatCQEntry, 0, MyProcPid);
+	acquire_my_ipc_queue();
 
 	elog(LOG, "continuous query process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);
 	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(proc));
@@ -455,11 +433,8 @@ cont_bgworker_main(Datum arg)
 	/* Run the continuous execution function. */
 	run();
 
-	if (proc->type != TRIG)
-	{
-		pgstat_send_cqpurge(0, MyProcPid, proc->type);
-		release_my_ipc_queue();
-	}
+	pgstat_send_cqpurge(0, MyProcPid, proc->type);
+	release_my_ipc_queue();
 
 	/* If this isn't a clean termination, exit with a non-zero status code */
 	if (!proc->db_meta->terminate)
@@ -541,11 +516,6 @@ wait_for_db_workers(ContQueryDatabaseMetadata *db_meta, BgwHandleStatus state)
 			elog(WARNING, "timed out waiting for continuous query process \"%s\" to reach state %d",
 					GetContQueryProcName(cqproc), state);
 	}
-
-	cqproc = &db_meta->trigger_proc;
-	if (!wait_for_bg_worker_state(cqproc->bgw_handle, state, BG_PROC_STATUS_TIMEOUT))
-		elog(WARNING, "timed out waiting for continuous query process \"%s\" to reach state %d",
-				GetContQueryProcName(cqproc), state);
 }
 
 static void
@@ -564,16 +534,10 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 	for (i = 0; i < NUM_BG_WORKERS_PER_DB; i++)
 		TerminateBackgroundWorker(db_meta->db_procs[i].bgw_handle);
 
-	if (db_meta->trigger_proc.bgw_handle)
-		TerminateBackgroundWorker(db_meta->trigger_proc.bgw_handle);
-
 	wait_for_db_workers(db_meta, BGWH_STOPPED);
 
 	for (i = 0; i < NUM_BG_WORKERS_PER_DB; i++)
 		pfree(db_meta->db_procs[i].bgw_handle);
-
-	if (db_meta->trigger_proc.bgw_handle)
-		pfree(db_meta->trigger_proc.bgw_handle);
 
 	db_meta->terminate = false;
 	db_meta->running = false;
@@ -642,26 +606,6 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	proc->db_meta = db_meta;
 
 	success &= run_cont_bgworker(proc);
-
-	/* Start a single trigger process */
-	proc = &db_meta->trigger_proc;
-	MemSet(proc, 0, sizeof(ContQueryProc));
-
-	/*
-	 * XXX - jasonm
-	 * Currently this will spit out a warning, but everything will still
-	 * proceed. The semantic should be to not activate the database.
-	 */
-
-	if (continuous_triggers_enabled &&
-			CheckContinuousTriggerRequirements(WARNING))
-	{
-		proc->type = TRIG;
-		proc->group_id = 1;
-		proc->db_meta = db_meta;
-
-		success &= run_cont_bgworker(proc);
-	}
 
 	SpinLockRelease(&db_meta->mutex);
 
@@ -1133,71 +1077,4 @@ GetContQueryAdhocProcs(void)
 	SpinLockRelease(&db_meta->mutex);
 
 	return procs;
-}
-
-bool
-CheckContinuousTriggerRequirements(int elevel)
-{
-	int i = 0;
-	bool free_wal_sender = false;
-	bool free_repl_slot = false;
-
-	if (!XLogLogicalInfoActive())
-	{
-		elog(elevel, "continuous triggers require wal_level set to logical");
-		return false;
-	}
-
-	if (max_wal_senders == 0)
-	{
-		elog(elevel, "continuous triggers require a wal sender for each database. max_wal_senders is currently %d", max_wal_senders);
-		return false;
-	}
-
-	if (max_replication_slots == 0)
-	{
-		elog(elevel, "continuous triggers require a replication slot for each database. max_replication_slots is currently %d", max_replication_slots);
-		return false;
-	}
-
-	for (i = 0; i < max_wal_senders; i++)
-	{
-		/* use volatile pointer to prevent code rearrangement */
-		volatile WalSnd *walsnd = &WalSndCtl->walsnds[i];
-
-		SpinLockAcquire(&walsnd->mutex);
-		free_wal_sender = (walsnd->pid == 0);
-		SpinLockRelease(&walsnd->mutex);
-
-		if (free_wal_sender)
-			break;
-	}
-
-	if (!free_wal_sender)
-	{
-		elog(elevel, "continuous trigger require a wal sender for each database. max_wal_senders is currently %d", max_wal_senders);
-		return false;
-	}
-
-	LWLockAcquire(ReplicationSlotControlLock, LW_SHARED);
-
-	for (i = 0; i < max_replication_slots; i++)
-	{
-		ReplicationSlot *s = &ReplicationSlotCtl->replication_slots[i];
-
-		if (!s->in_use)
-		{
-			free_repl_slot = true;
-			break;
-		}
-	}
-	LWLockRelease(ReplicationSlotControlLock);
-
-	if (!free_repl_slot)
-	{
-		elog(elevel, "continuous triggers require a replication slot for each database. max_replication_slots is currently %d", max_replication_slots);
-		return false;
-	}
-
-	return true;
 }

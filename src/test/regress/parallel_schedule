@@ -183,7 +183,7 @@ test: create_combinable_agg pipeline_regress cont_fss_agg cont_matrel cont_set_a
 # ----------
 # Another group of parallel tests
 # ----------
-test: cont_transform cont_trigger cont_activate output_streams
+test: cont_transform cont_activate output_streams
 
 # ----------
 # Another group of parallel tests
