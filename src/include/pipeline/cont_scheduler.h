@@ -24,10 +24,10 @@
 
 typedef enum
 {
-	COMBINER = 0,
-	WORKER,
-	ADHOC,
-	SCHEDULER /* unused */
+	Combiner = 0,
+	Worker,
+	AdhocVacuumer,
+	Scheduler /* unused */
 } ContQueryProcType;
 
 typedef struct ContQueryDatabaseMetadata ContQueryDatabaseMetadata;
@@ -40,8 +40,6 @@ typedef struct ContQueryProc
 
 	int id; /* unique across all cont query processes */
 	volatile int group_id; /* unqiue [0, n) for each db_oid, type pair */
-
-	dsm_handle dsm_handle; /* only valid for adhoc processes */
 
 	BackgroundWorkerHandle *bgw_handle;
 
@@ -64,12 +62,7 @@ struct ContQueryDatabaseMetadata
 	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
 	ContQueryProc *db_procs;
 
-	int adhoc_counter;
-	/* Number of entries is equal to max_worker_processes. */
-	ContQueryProc *adhoc_procs;
-
-	ContQueryProc trigger_proc;
-	int alert_server_port;
+	ContQueryProc adhoc_vacuumer;
 };
 
 typedef struct ContQueryRunParams
@@ -86,7 +79,6 @@ extern char *GetContQueryProcName(ContQueryProc *proc);
 /* guc parameters */
 extern bool continuous_queries_enabled;
 extern bool continuous_query_crash_recovery;
-extern bool continuous_queries_adhoc_enabled;
 extern int  continuous_query_num_combiners;
 extern int  continuous_query_num_workers;
 extern int  continuous_query_batch_size;
@@ -111,11 +103,10 @@ extern bool am_cont_combiner;
 extern bool IsContQuerySchedulerProcess(void);
 extern bool IsContQueryWorkerProcess(void);
 extern bool IsContQueryCombinerProcess(void);
-extern bool IsContQueryAdhocProcess(void);
 extern bool IsContQueryTriggerProcess(void);
 
 #define IsContQueryProcess() \
-	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess())
+	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess())
 
 /* functions to start the scheduler process */
 extern pid_t StartContQueryScheduler(void);
@@ -128,14 +119,5 @@ extern void SignalContQuerySchedulerDropDB(Oid db_oid);
 extern void SignalContQuerySchedulerRefreshDBList(void);
 
 extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
-
-/* Adhoc Process Management */
-extern void SetAmContQueryAdhoc(bool value);
-extern void AdhocContQueryProcAcquire(void);
-extern void AdhocContQueryProcRelease(void);
-
-extern ContQueryProc *GetContQueryAdhocProcs(void);
-
-extern bool CheckContinuousTriggerRequirements(int elevel);
 
 #endif   /* CONT_SCHEDULER_H */

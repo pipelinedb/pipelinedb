@@ -5607,7 +5607,7 @@ pgstat_init_cqstat(PgStat_StatCQEntry *entry, Oid viewid, pid_t pid)
 
 	SetStatCQEntryViewId(entry->key, viewid);
 	SetStatCQEntryProcPid(entry->key, pid);
-	SetStatCQEntryProcType(entry->key, IsContQueryWorkerProcess() ? WORKER : COMBINER);
+	SetStatCQEntryProcType(entry->key, IsContQueryWorkerProcess() ? Worker : Combiner);
 }
 
 /*
@@ -5754,7 +5754,7 @@ pgstat_report_create_drop_cv(bool create)
 		stats->cv_drop = 1;
 
 	/* we arbitrarily choose to report create/drop stats under the combiner */
-	SetStatCQEntryProcType(stats->key, COMBINER);
+	SetStatCQEntryProcType(stats->key, Combiner);
 	cq_stat_report_entry(stats);
 }
 

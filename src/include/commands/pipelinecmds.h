@@ -37,6 +37,5 @@ extern void ExecActivateStmt(ActivateStmt *stmt);
 extern void ExecDeactivateStmt(DeactivateStmt *stmt);
 
 extern void ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring);
-extern void SetReplicaIdentityFull(Relation rel);
 
 #endif   /* PIPELINECMDS_H */

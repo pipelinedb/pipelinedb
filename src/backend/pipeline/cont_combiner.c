@@ -1532,7 +1532,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 			ALLOCSET_DEFAULT_MAXSIZE);
 
 	matrel = heap_openrv_extended(base->query->matrel, AccessShareLock, true);
-	pstmt = GetContPlan(base->query, COMBINER);
+	pstmt = GetContPlan(base->query, Combiner);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	state->combined = tuplestore_begin_heap(false, false, continuous_query_combiner_work_mem);
@@ -1696,7 +1696,7 @@ need_sync(ContExecutor *cont_exec, TimestampTz last_sync)
 void
 ContinuousQueryCombinerMain(void)
 {
-	ContExecutor *cont_exec = ContExecutorNew(COMBINER, &init_query_state);
+	ContExecutor *cont_exec = ContExecutorNew(Combiner, &init_query_state);
 	Oid query_id;
 	TimestampTz first_seen = GetCurrentTimestamp();
 	bool do_commit = false;

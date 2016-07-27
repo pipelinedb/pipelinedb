@@ -1675,15 +1675,6 @@ static struct config_bool ConfigureNamesBool[] =
 		NULL, NULL, NULL
 	},
 	{
-		{"continuous_queries_adhoc_enabled", PGC_POSTMASTER, DEVELOPER_OPTIONS,
-		 gettext_noop("Enable execution of adhoc continuous queries."),
-		 NULL,
-		},
-		&continuous_queries_adhoc_enabled,
-		false,
-		NULL, NULL, NULL
-	},
-	{
 		{"track_continuous_queries", PGC_POSTMASTER, STATS_COLLECTOR,
 			gettext_noop("Collects statistics on continuous query activiy."),
 			NULL

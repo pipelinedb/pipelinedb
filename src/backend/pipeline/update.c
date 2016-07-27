@@ -176,7 +176,7 @@ get_stats(HTAB *all_dbs, bool startup, ContQueryProcType ptype)
 	StringInfoData payload;
 	struct utsname mname;
 	char name[64];
-	char proc = ptype == COMBINER ? 'c' : 'w';
+	char proc = ptype == Combiner ? 'c' : 'w';
 	char *etype = startup ? "s" : "h";
 	long rows_in = 0;
 	long bytes_in = 0;
@@ -235,8 +235,8 @@ void
 UpdateCheck(HTAB *all_dbs, bool startup)
 {
 	StringInfoData payload;
-	char *combiner = get_stats(all_dbs, startup, COMBINER);
-	char *worker = get_stats(all_dbs, startup, WORKER);
+	char *combiner = get_stats(all_dbs, startup, Combiner);
+	char *worker = get_stats(all_dbs, startup, Worker);
 	char buf[4096];
 
 	if (combiner == NULL)

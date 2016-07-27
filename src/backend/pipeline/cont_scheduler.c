@@ -24,7 +24,6 @@
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "pgstat.h"
-#include "pipeline/cont_adhoc.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/ipc/broker.h"
@@ -49,7 +48,7 @@
 #include "utils/timeout.h"
 
 #define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners)
-#define NUM_LOCKS_PER_DB (NUM_BG_WORKERS_PER_DB + 1) /* single lock for all adhoc processes */
+#define NUM_LOCKS_PER_DB NUM_BG_WORKERS_PER_DB
 
 #define BG_PROC_STATUS_TIMEOUT 1000
 #define CQ_STATE_CHANGE_TIMEOUT 5000
@@ -68,12 +67,10 @@ ContQueryProc *MyContQueryProc = NULL;
 /* flags to tell if we are in a continuous query process */
 static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
-static bool am_cont_adhoc = false;
 bool am_cont_combiner = false;
 
 /* guc parameters */
 bool continuous_queries_enabled;
-bool continuous_queries_adhoc_enabled;
 bool continuous_query_crash_recovery;
 int  continuous_query_num_combiners;
 int  continuous_query_num_workers;
@@ -169,16 +166,16 @@ GetContQueryProcName(ContQueryProc *proc)
 
 	switch (proc->type)
 	{
-		case COMBINER:
-			sprintf(buf, "combiner%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
+		case Combiner:
+			snprintf(buf, NAMEDATALEN, "combiner%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
 			break;
-		case WORKER:
-			sprintf(buf, "worker%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
+		case Worker:
+			snprintf(buf, NAMEDATALEN, "worker%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
 			break;
-		case ADHOC:
-			sprintf(buf, "adhoc [%s]", NameStr(proc->db_meta->db_name));
+		case AdhocVacuumer:
+			snprintf(buf, NAMEDATALEN, "adhoc vacuumer [%s]", NameStr(proc->db_meta->db_name));
 			break;
-		case SCHEDULER:
+		case Scheduler:
 			return pstrdup("scheduler");
 			break;
 	}
@@ -197,12 +194,6 @@ bool
 IsContQueryWorkerProcess(void)
 {
 	return am_cont_worker;
-}
-
-bool
-IsContQueryAdhocProcess(void)
-{
-	return am_cont_adhoc;
 }
 
 bool
@@ -363,6 +354,51 @@ refresh_database_list(void)
 }
 
 static void
+purge_adhoc_query(ContQuery *view)
+{
+	DestReceiver *receiver = 0;
+	DropStmt *stmt = makeNode(DropStmt);
+	List *querytree_list;
+	Node *plan;
+	Portal portal;
+
+	stmt->objects = list_make1(
+			list_make2(makeString(view->name->schemaname), makeString(view->name->relname)));
+	stmt->removeType = OBJECT_CONTVIEW;
+
+	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",
+			NULL, 0);
+
+	plan = ((Query *) linitial(querytree_list))->utilityStmt;
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	portal = CreatePortal("__cleanup_cont_view__", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+			NULL,
+			"DROP",
+			"DROP",
+			list_make1(plan),
+			NULL);
+
+	receiver = CreateDestReceiver(DestNone);
+
+	PortalStart(portal, NULL, 0, GetActiveSnapshot());
+
+	(void) PortalRun(portal,
+			FETCH_ALL,
+			true,
+			receiver,
+			receiver,
+			NULL);
+
+	(*receiver->rDestroy) (receiver);
+	PortalDrop(portal, false);
+	PopActiveSnapshot();
+}
+
+static void
 purge_adhoc_queries(void)
 {
 	int id;
@@ -375,7 +411,7 @@ purge_adhoc_queries(void)
 	while ((id = bms_first_member(view_ids)) >= 0)
 	{
 		ContQuery *cv = GetContQueryForViewId(id);
-		CleanupAdhocContinuousView(cv);
+		purge_adhoc_query(cv);
 	}
 
 	CommitTransactionCommand();
@@ -405,15 +441,15 @@ cont_bgworker_main(Datum arg)
 
 	switch (proc->type)
 	{
-		case COMBINER:
+		case Combiner:
 			am_cont_combiner = true;
 			run = &ContinuousQueryCombinerMain;
 			break;
-		case WORKER:
+		case Worker:
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
 			break;
-		case ADHOC:
+		case AdhocVacuumer:
 			/* Clean up and die. */
 			purge_adhoc_queries();
 			return;
@@ -575,7 +611,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 		proc = &db_meta->db_procs[slot_idx];
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		proc->type = WORKER;
+		proc->type = Worker;
 		proc->id = slot_idx;
 		proc->group_id = group_id;
 		proc->db_meta = db_meta;
@@ -589,7 +625,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 		proc = &db_meta->db_procs[slot_idx];
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		proc->type = COMBINER;
+		proc->type = Combiner;
 		proc->id = slot_idx;
 		proc->group_id = group_id;
 		proc->db_meta = db_meta;
@@ -598,10 +634,10 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	}
 
 	/* Start a single adhoc process for initial state clean up. */
-	proc = db_meta->adhoc_procs;
+	proc = &db_meta->adhoc_vacuumer;
 	MemSet(proc, 0, sizeof(ContQueryProc));
 
-	proc->type = ADHOC;
+	proc->type = AdhocVacuumer;
 	proc->group_id = 1;
 	proc->db_meta = db_meta;
 
@@ -681,7 +717,6 @@ reaper(void)
 			pos += sizeof(ContQueryDatabaseMetadata);
 			db_meta->db_procs = (ContQueryProc *) pos;
 			pos += sizeof(ContQueryProc) * NUM_BG_WORKERS_PER_DB;
-			db_meta->adhoc_procs = (ContQueryProc *) pos;
 
 			start_database_workers(db_meta);
 		}
@@ -974,107 +1009,4 @@ void
 SignalContQuerySchedulerRefreshDBList(void)
 {
 	signal_cont_query_scheduler(SIGINT);
-}
-
-void
-SetAmContQueryAdhoc(bool value)
-{
-	am_cont_adhoc = value;
-}
-
-void
-AdhocContQueryProcAcquire(void)
-{
-	bool found;
-	ContQueryDatabaseMetadata *db_meta;
-	int i;
-	int idx;
-	ContQueryProc *proc = NULL;
-
-	db_meta = (ContQueryDatabaseMetadata *) hash_search(
-				ContQuerySchedulerShmem->db_table, &MyDatabaseId, HASH_FIND, &found);
-
-	if (!found)
-		elog(ERROR, "failed to find database metadata for continuous queries");
-
-	SpinLockAcquire(&db_meta->mutex);
-
-	for (i = 0; i < max_worker_processes; i++)
-	{
-		idx = (db_meta->adhoc_counter + i) % max_worker_processes;
-
-		/* We use group_idx > 0 as a slot occupied check. */
-		if (db_meta->adhoc_procs[idx].group_id == 0)
-		{
-			proc = &db_meta->adhoc_procs[idx];
-			proc->group_id = 0xdeadbeef;
-			db_meta->adhoc_counter++;
-			break;
-		}
-	}
-
-	SpinLockRelease(&db_meta->mutex);
-
-	if (proc)
-	{
-		MemSet(proc, 0, sizeof(ContQueryProc));
-
-		proc->type = ADHOC;
-		proc->id = rand();
-		proc->latch = MyLatch;
-		proc->db_meta = db_meta;
-	}
-	else
-		elog(ERROR, "no free slot for running adhoc continuous query process");
-
-	MyContQueryProc = proc;
-}
-
-void
-AdhocContQueryProcRelease(void)
-{
-	bool found;
-	ContQueryDatabaseMetadata *db_meta;
-	ContQueryProc *proc;
-
-	Assert(MyContQueryProc);
-	proc = MyContQueryProc;
-
-	Assert(proc->type == ADHOC);
-	Assert(proc->group_id > 0);
-
-	db_meta = (ContQueryDatabaseMetadata *) hash_search(
-				ContQuerySchedulerShmem->db_table, &MyDatabaseId, HASH_FIND, &found);
-
-	if (!found)
-		elog(ERROR, "failed to find database metadata for continuous queries");
-
-	SpinLockAcquire(&db_meta->mutex);
-
-	/* Mark ContQueryProc struct as free. */
-	MemSet(proc, 0, sizeof(ContQueryProc));
-
-	SpinLockRelease(&db_meta->mutex);
-
-	MyContQueryProc = NULL;
-}
-
-ContQueryProc *
-GetContQueryAdhocProcs(void)
-{
-	bool found;
-	ContQueryDatabaseMetadata *db_meta;
-	ContQueryProc *procs;
-
-	db_meta = (ContQueryDatabaseMetadata *) hash_search(
-			ContQuerySchedulerShmem->db_table, &MyDatabaseId, HASH_FIND, &found);
-
-	if (!found)
-		elog(ERROR, "failed to find database metadata for continuous queries");
-
-	SpinLockAcquire(&db_meta->mutex);
-	procs = db_meta->adhoc_procs;
-	SpinLockRelease(&db_meta->mutex);
-
-	return procs;
 }

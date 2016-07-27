@@ -27,7 +27,6 @@
 #include "parser/parse_coerce.h"
 #include "parser/parsetree.h"
 #include "pgstat.h"
-#include "pipeline/cont_adhoc.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/miscutils.h"
@@ -450,12 +449,7 @@ IterateStreamScan(ForeignScanState *node)
 	bytea *piraw;
 	bytea *tupraw;
 
-	if (state->cont_executor)
-		sts = (StreamTupleState *) ContExecutorYieldNextMessage(state->cont_executor, &len);
-	else if (state->adhoc_executor)
-		sts = AdhocExecutorYieldItem(state->adhoc_executor, &len);
-	else
-		elog(ERROR, "streams can only be read from worker or adhoc processes");
+	sts = (StreamTupleState *) ContExecutorYieldNextMessage(state->cont_executor, &len);
 
 	if (sts == NULL)
 		return NULL;
@@ -490,11 +484,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	Relation stream = result_info->ri_RelationDesc;
 	Oid streamid = RelationGetRelid(stream);
 	StreamInsertState *sis = palloc0(sizeof(StreamInsertState));
-	Bitmapset *all_targets = GetLocalStreamReaders(streamid);
-	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
-	Bitmapset *worker_targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ?
-			bms_difference(all_targets, worker_targets) : NULL;
+	Bitmapset *targets = GetLocalStreamReaders(streamid);
 	InsertBatchAck *ack = NULL;
 	InsertBatch *batch = NULL;
 	List *insert_tl = NIL;
@@ -502,7 +492,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	if (fdw_private)
 		insert_tl = linitial(fdw_private);
 
-	if (!bms_is_empty(worker_targets))
+	if (!bms_is_empty(targets))
 	{
 		if (synchronous_stream_insert)
 		{
@@ -530,11 +520,8 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 		Assert(sis->worker_queue);
 	}
 
-	if (!bms_is_empty(adhoc_targets))
-		sis->adhoc_state = AdhocInsertStateCreate(adhoc_targets);
-
 	sis->flags = eflags;
-	sis->targets = worker_targets;
+	sis->targets = targets;
 	sis->ack = ack;
 	sis->batch = batch;
 	sis->count = 0;
@@ -599,9 +586,6 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 
 	}
 
-	if (sis->adhoc_state)
-		AdhocInsertStateSend(sis->adhoc_state, sts, len);
-
 	pfree(sts);
 
 	sis->count++;
@@ -626,7 +610,4 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 		if (!(sis->flags & REENTRANT_STREAM_INSERT) && synchronous_stream_insert)
 			InsertBatchWaitAndRemove(sis->batch, sis->count);
 	}
-
-	if (sis->adhoc_state)
-		AdhocInsertStateDestroy(sis->adhoc_state);
 }

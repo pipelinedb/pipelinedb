@@ -442,7 +442,7 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 	exec->current_query_id = InvalidOid;
 	exec->initfn = initfn;
 
-	if (exec->ptype == WORKER)
+	if (exec->ptype == Worker)
 	{
 		exec->ipcmq = ipc_multi_queue_init(acquire_my_broker_ipc_queue(), acquire_my_ipc_queue());
 		ipc_multi_queue_set_priority_queue(exec->ipcmq, 0);
@@ -466,7 +466,7 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 void
 ContExecutorDestroy(ContExecutor *exec)
 {
-	if (exec->ptype == WORKER)
+	if (exec->ptype == Worker)
 		ipc_multi_queue_pop_peeked(exec->ipcmq);
 	else
 		ipc_queue_pop_peeked(exec->ipcq);
@@ -479,7 +479,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 {
 	bool is_empty;
 
-	if (exec->ptype == WORKER)
+	if (exec->ptype == Worker)
 		is_empty = ipc_multi_queue_is_empty(exec->ipcmq);
 	else
 		is_empty = ipc_queue_is_empty(exec->ipcq);
@@ -493,7 +493,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 			pgstat_report_cqstat(true);
 			pgstat_report_activity(STATE_IDLE, proc_name);
 
-			if (exec->ptype == WORKER)
+			if (exec->ptype == Worker)
 				ipc_multi_queue_wait_non_empty(exec->ipcmq, timeout);
 			else
 				ipc_queue_wait_non_empty(exec->ipcq, timeout);
@@ -714,7 +714,7 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 static inline bool
 should_yield_item(ContExecutor *exec, void *ptr)
 {
-	if (exec->ptype == WORKER)
+	if (exec->ptype == Worker)
 	{
 		StreamTupleState *sts = (StreamTupleState *) ptr;
 		bool succ = bms_is_member(exec->current_query_id, sts->queries);
@@ -799,7 +799,7 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 			return NULL;
 		}
 
-		if (exec->ptype == WORKER)
+		if (exec->ptype == Worker)
 			ptr = ipc_multi_queue_peek_next(exec->ipcmq, &mlen);
 		else
 			ptr = ipc_queue_peek_next(exec->ipcq, &mlen);
@@ -825,7 +825,7 @@ ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
 
 			old = MemoryContextSwitchTo(exec->exec_cxt);
 
-			if (exec->ptype == WORKER)
+			if (exec->ptype == Worker)
 			{
 				StreamTupleState *sts = (StreamTupleState *) ptr;
 				exec->queries_seen = bms_add_members(exec->queries_seen, sts->queries);
@@ -904,7 +904,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	if (exec->peeked_any)
 	{
-		if (exec->ptype == WORKER)
+		if (exec->ptype == Worker)
 			ipc_multi_queue_pop_peeked(exec->ipcmq);
 		else
 			ipc_queue_pop_peeked(exec->ipcq);
@@ -913,7 +913,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	{
 		Assert(bms_num_members(exec->queries) == 0);
 
-		if (exec->ptype == WORKER)
+		if (exec->ptype == Worker)
 			ipc_multi_queue_pop_inserted_before(exec->ipcmq, exec->last_queries_load);
 		else
 			ipc_queue_pop_inserted_before(exec->ipcq, exec->last_queries_load);

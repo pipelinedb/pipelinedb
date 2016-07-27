@@ -93,9 +93,6 @@ typedef struct broker_db_meta
 
 	/* in local memory */
 	local_queue *lqueues;
-
-	/* ephemeral segments used by adhoc query processes */
-	dsm_segment_slot ephemeral_seg_slots[1]; /* max_worker_processes total slots */
 } broker_db_meta;
 
 typedef struct BrokerMeta
@@ -1008,12 +1005,6 @@ get_db_meta(Oid dbid)
 		db_meta->dbid = MyDatabaseId;
 		db_meta->lock_idx = -1;
 
-		for (i = 0; i < max_worker_processes; i++)
-		{
-			dsm_segment_slot *seg_slot = &db_meta->ephemeral_seg_slots[i];
-			pg_atomic_init_flag(&seg_slot->used);
-		}
-
 		/* Create per-database dsm_segment used by all worker and combiner processes. */
 		segment = dsm_create_and_pin(db_dsm_segment_size);
 
@@ -1149,7 +1140,7 @@ acquire_my_ipc_queue(void)
 	broker_db_meta *db_meta;
 	MemoryContext old;
 
-	Assert(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess());
+	Assert(IsContQueryProcess());
 
 	if (my_ipc_meta)
 		return my_ipc_meta->queue;
@@ -1160,51 +1151,17 @@ acquire_my_ipc_queue(void)
 
 	my_ipc_meta = palloc0(sizeof(ipc_meta));
 
-	if (IsContQueryAdhocProcess())
-	{
-		int i;
-		dsm_segment *segment;
+	/*
+	 * For worker and combiner processes, we simply connect to the DB's primary dsm_segment
+	 * and find the correct ipc_queue(s) within that dsm_segment.
+	 */
+	my_ipc_meta->segment = dsm_attach_and_pin(db_meta->handle);
+	my_ipc_meta->seg_slot = NULL;
 
-		for (i = 0; i < max_worker_processes; i++)
-		{
-			dsm_segment_slot *slot = &db_meta->ephemeral_seg_slots[i];
-
-			if (pg_atomic_test_set_flag(&slot->used))
-			{
-				my_ipc_meta->seg_slot = slot;
-				break;
-			}
-		}
-
-		/* XXX(usmanm): Is this totally kosher? */
-		Assert(my_ipc_meta->seg_slot);
-
-		segment = dsm_create_and_pin(ipc_queue_size);
-		my_ipc_meta->seg_slot->handle = dsm_segment_handle(segment);
-		my_ipc_meta->segment = segment;
-		my_ipc_meta->queue = (ipc_queue *) dsm_segment_address(my_ipc_meta->segment);
-
-		ipc_queue_init(my_ipc_meta->queue, ipc_queue_size,
-				&broker_meta->locks[db_meta->lock_idx + num_bg_workers_per_db].lock);
-		ipc_queue_set_handlers(my_ipc_meta->queue, StreamTupleStatePeekFn, StreamTupleStatePopFn, StreamTupleStateCopyFn);
-
-		MyContQueryProc->dsm_handle = dsm_segment_handle(segment);
-	}
+	if (IsContQueryCombinerProcess())
+		my_ipc_meta->queue = get_combiner_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id);
 	else
-	{
-		/*
-		 * For worker and combiner processes, we simply connect to the DB's primary dsm_segment
-		 * and find the correct ipc_queue(s) within that dsm_segment.
-		 */
-		my_ipc_meta->segment = dsm_attach_and_pin(db_meta->handle);
-		my_ipc_meta->seg_slot = NULL;
-
-		if (IsContQueryCombinerProcess())
-			my_ipc_meta->queue = get_combiner_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id);
-		else
-			my_ipc_meta->queue = get_worker_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id, false, false);
-
-	}
+		my_ipc_meta->queue = get_worker_ipcq(my_ipc_meta->segment, MyContQueryProc->group_id, false, false);
 
 	MemoryContextSwitchTo(old);
 
@@ -1214,16 +1171,10 @@ acquire_my_ipc_queue(void)
 void
 release_my_ipc_queue()
 {
-	Assert(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryAdhocProcess());
+	Assert(IsContQueryProcess());
 	Assert(my_ipc_meta);
 
 	dsm_detach(my_ipc_meta->segment);
-
-	if (IsContQueryAdhocProcess())
-	{
-		Assert(!pg_atomic_unlocked_test_flag(&my_ipc_meta->seg_slot->used));
-		pg_atomic_clear_flag(&my_ipc_meta->seg_slot->used);
-	}
 
 	pfree(my_ipc_meta);
 	my_ipc_meta = NULL;

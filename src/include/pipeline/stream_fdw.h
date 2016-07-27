@@ -12,7 +12,6 @@
 
 #include "foreign/foreign.h"
 #include "lib/stringinfo.h"
-#include "pipeline/cont_adhoc.h"
 #include "nodes/execnodes.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
@@ -25,7 +24,6 @@ typedef struct StreamProjectionInfo StreamProjectionInfo;
 typedef struct StreamScanState
 {
 	ContExecutor *cont_executor;
-	AdhocExecutor *adhoc_executor;
 	StreamProjectionInfo *pi;
 	Size nbytes;
 	int ntuples;
@@ -46,7 +44,6 @@ typedef struct StreamInsertState
 	bytea *packed_desc;
 
 	ipc_queue *worker_queue;
-	AdhocInsertState *adhoc_state;
 
 	int flags;
 } StreamInsertState;
