@@ -118,7 +118,7 @@ get_worker_select_stmt(ContQuery* view, SelectStmt** viewptr)
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt->swStepFactor = view->sw_step_factor;
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt,
-												   viewptr, WORKER);
+												   viewptr, Worker);
 
 	return selectstmt;
 }
@@ -196,7 +196,7 @@ get_combiner_plan(ContQuery *view)
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt->swStepFactor = view->sw_step_factor;
-	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, COMBINER);
+	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Combiner);
 	join_search_hook = get_combiner_join_rel;
 
 	return get_plan_with_hook(view->id, (Node*) selectstmt, view->sql, true);
@@ -207,11 +207,11 @@ GetContPlan(ContQuery *view, ContQueryProcType type)
 {
 	PlannedStmt *plan = NULL;
 
-	Assert(type == WORKER || type == COMBINER);
+	Assert(type == Worker || type == Combiner);
 
-	if (type == WORKER)
+	if (type == Worker)
 		plan = get_worker_plan(view);
-	else if (type == COMBINER)
+	else if (type == Combiner)
 		plan = get_combiner_plan(view);
 
 	return plan;

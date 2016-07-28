@@ -935,7 +935,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 	Assert(sis);
 
 	/* If nothing is reading from this output stream, there is nothing to do */
-	if (sis->targets == NULL)
+	if (sis->queries == NULL)
 	{
 		EndStreamModify(NULL, osri);
 		CQOSRelClose(osri);
@@ -1222,7 +1222,7 @@ sync_combine(ContQueryCombinerState *state)
 		sis = (StreamInsertState *) osri->ri_FdwState;
 		Assert(sis);
 
-		os_targets = sis->targets;
+		os_targets = sis->queries;
 
 		/* If nothing is reading from the output stream, close it immediately */
 		if (os_targets == NULL)
@@ -1532,7 +1532,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 			ALLOCSET_DEFAULT_MAXSIZE);
 
 	matrel = heap_openrv_extended(base->query->matrel, AccessShareLock, true);
-	pstmt = GetContPlan(base->query, COMBINER);
+	pstmt = GetContPlan(base->query, Combiner);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	state->combined = tuplestore_begin_heap(false, false, continuous_query_combiner_work_mem);
@@ -1696,7 +1696,7 @@ need_sync(ContExecutor *cont_exec, TimestampTz last_sync)
 void
 ContinuousQueryCombinerMain(void)
 {
-	ContExecutor *cont_exec = ContExecutorNew(COMBINER, &init_query_state);
+	ContExecutor *cont_exec = ContExecutorNew(Combiner, &init_query_state);
 	Oid query_id;
 	TimestampTz first_seen = GetCurrentTimestamp();
 	bool do_commit = false;

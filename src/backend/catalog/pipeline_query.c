@@ -678,9 +678,6 @@ get_cont_query_ids(char type)
 		if (type && row->type != type)
 			continue;
 
-		if (row->adhoc)
-			continue;
-
 		result = bms_add_member(result, id);
 	}
 
@@ -795,7 +792,7 @@ GetContQueryId(RangeVar *name)
 }
 
 Oid
-DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, List *args)
+DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, bool adhoc, List *args)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -878,7 +875,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, List *
 	/* unused */
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(InvalidOid);
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(false);
-	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(false);
+	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);
 
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);

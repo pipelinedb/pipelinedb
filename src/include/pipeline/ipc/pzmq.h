@@ -6,8 +6,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef IPC_ZMQ_H
-#define IPC_ZMQ_H
+#ifndef PZMQ_H
+#define PZMQ_H
 
 #include "postgres.h"
 

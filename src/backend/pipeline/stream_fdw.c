@@ -27,7 +27,6 @@
 #include "parser/parse_coerce.h"
 #include "parser/parsetree.h"
 #include "pgstat.h"
-#include "pipeline/cont_adhoc.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/miscutils.h"
@@ -450,12 +449,7 @@ IterateStreamScan(ForeignScanState *node)
 	bytea *piraw;
 	bytea *tupraw;
 
-	if (state->cont_executor)
-		sts = (StreamTupleState *) ContExecutorYieldNextMessage(state->cont_executor, &len);
-	else if (state->adhoc_executor)
-		sts = AdhocExecutorYieldItem(state->adhoc_executor, &len);
-	else
-		elog(ERROR, "streams can only be read from worker or adhoc processes");
+	sts = (StreamTupleState *) ContExecutorYieldNextMessage(state->cont_executor, &len);
 
 	if (sts == NULL)
 		return NULL;
@@ -487,73 +481,53 @@ void
 BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 						   List *fdw_private, int subplan_index, int eflags)
 {
-	Relation stream = result_info->ri_RelationDesc;
-	Oid streamid = RelationGetRelid(stream);
+	Relation rel = result_info->ri_RelationDesc;
 	StreamInsertState *sis = palloc0(sizeof(StreamInsertState));
-	Bitmapset *all_targets = GetLocalStreamReaders(streamid);
-	Bitmapset *all_adhoc = GetAdhocContinuousViewIds();
-	Bitmapset *worker_targets = bms_difference(all_targets, all_adhoc);
-	Bitmapset *adhoc_targets = continuous_queries_adhoc_enabled ?
-			bms_difference(all_targets, worker_targets) : NULL;
-	InsertBatchAck *ack = NULL;
-	InsertBatch *batch = NULL;
-	List *insert_tl = NIL;
-
-	if (fdw_private)
-		insert_tl = linitial(fdw_private);
-
-	if (!bms_is_empty(worker_targets))
-	{
-		if (synchronous_stream_insert)
-		{
-			batch = InsertBatchCreate();
-			ack = palloc0(sizeof(InsertBatchAck));
-
-			ack->batch_id = batch->id;
-			ack->batch = batch;
-		}
-
-		/*
-		 * We always write to the same worker from a combiner process to prevent
-		 * unnecessary reordering
-		 */
-		if (IsContQueryCombinerProcess())
-		{
-			int idx = MyContQueryProc->group_id % continuous_query_num_workers;
-			sis->worker_queue = get_worker_queue_with_lock(idx, false);
-		}
-		else
-		{
-			sis->worker_queue = get_any_worker_queue_with_lock();
-		}
-
-		Assert(sis->worker_queue);
-	}
-
-	if (!bms_is_empty(adhoc_targets))
-		sis->adhoc_state = AdhocInsertStateCreate(adhoc_targets);
+	Bitmapset *queries = GetLocalStreamReaders(RelationGetRelid(rel));
 
 	sis->flags = eflags;
-	sis->targets = worker_targets;
-	sis->ack = ack;
-	sis->batch = batch;
-	sis->count = 0;
-	sis->bytes = 0;
+	sis->queries = queries;
 	sis->num_batches = 1;
 
-	if (is_inferred_stream_relation(stream))
+	if (is_inferred_stream_relation(rel))
 	{
-		Assert(insert_tl);
-		sis->desc = ExecTypeFromTL(insert_tl, false);
+		Assert(fdw_private);
+		sis->desc = ExecTypeFromTL(linitial(fdw_private), false);
+	}
+	else
+		sis->desc = RelationGetDescr(rel);
+
+	if (!bms_is_empty(queries))
+	{
+		sis->batch = microbatch_new(WorkerTuple, queries, sis->desc, 0);
+
+		if (synchronous_stream_insert)
+		{
+			sis->ack = microbatch_ack_new();
+			microbatch_add_ack(sis->batch, sis->ack);
+		}
+	}
+
+	result_info->ri_FdwState = sis;
+}
+
+static inline void
+microbatch_send_to_worker(microbatch_t *mb)
+{
+	int len;
+	char *buf = microbatch_pack(mb, &len);
+	int idx;
+
+	if (IsContQueryCombinerProcess())
+	{
+		idx = MyContQueryProc->group_id % continuous_query_num_workers;
 	}
 	else
 	{
-		sis->desc = RelationGetDescr(stream);
+		static int last_idx = -1;
 	}
 
-	sis->packed_desc = PackTupleDesc(sis->desc);
-
-	result_info->ri_FdwState = sis;
+	microbatch_reset(mb);
 }
 
 /*
@@ -565,47 +539,17 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 {
 	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
 	HeapTuple tup = ExecMaterializeSlot(slot);
-	StreamTupleState *sts;
-	int len;
 
-	sts = StreamTupleStateCreate(tup, sis->desc, sis->packed_desc, sis->targets, sis->ack, sis->ack ? 1 : 0, &len);
+	if (bms_is_empty(sis->queries))
+		return slot;
 
-	if (sis->worker_queue)
+	if (!microbatch_add_tuple(sis->batch, tup))
 	{
-		/*
-		 * If we've written a batch to a worker process, start writing to
-		 * the next worker process.
-		 */
-		if (sis->count && (sis->count % continuous_query_batch_size == 0))
-		{
-			ipc_queue_unlock(sis->worker_queue);
-			sis->worker_queue = get_any_worker_queue_with_lock();
-			sis->num_batches++;
-		}
-
-		if (!ipc_queue_push_nolock(sis->worker_queue, sts, len, false))
-		{
-			int ntries = 0;
-			sis->num_batches++;
-
-			do
-			{
-				ntries++;
-				ipc_queue_unlock(sis->worker_queue);
-				sis->worker_queue = get_any_worker_queue_with_lock();
-			}
-			while (!ipc_queue_push_nolock(sis->worker_queue, sts, len, ntries == continuous_query_num_workers));
-		}
-
+		microbatch_send_to_worker(sis->batch);
+		microbatch_add_tuple(sis->batch, tup);
 	}
 
-	if (sis->adhoc_state)
-		AdhocInsertStateSend(sis->adhoc_state, sts, len);
-
-	pfree(sts);
-
 	sis->count++;
-	sis->bytes += len;
 
 	return slot;
 }
@@ -617,16 +561,19 @@ void
 EndStreamModify(EState *estate, ResultRelInfo *result_info)
 {
 	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
+	Relation rel = result_info->ri_RelationDesc;
 
-	pgstat_increment_stream_insert(RelationGetRelid(result_info->ri_RelationDesc), sis->count, sis->num_batches, sis->bytes);
+	if (bms_is_empty(sis->queries))
+		return;
 
-	if (sis->worker_queue)
+	if (!microbatch_is_empty(sis->batch))
+		microbatch_send_to_worker(sis->batch);
+
+	pgstat_increment_stream_insert(RelationGetRelid(rel), sis->count, sis->num_batches, sis->bytes);
+
+	if (synchronous_stream_insert)
 	{
-		ipc_queue_unlock(sis->worker_queue);
-		if (!(sis->flags & REENTRANT_STREAM_INSERT) && synchronous_stream_insert)
-			InsertBatchWaitAndRemove(sis->batch, sis->count);
+		microbatch_ack_increment_wtups(sis->ack, sis->count);
+//		microbatch_ack_wait_and_free(sis->ack);
 	}
-
-	if (sis->adhoc_state)
-		AdhocInsertStateDestroy(sis->adhoc_state);
 }

@@ -12,10 +12,10 @@
 
 #include "foreign/foreign.h"
 #include "lib/stringinfo.h"
-#include "pipeline/cont_adhoc.h"
 #include "nodes/execnodes.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
+#include "pipeline/ipc/microbatch.h"
 #include "utils/rel.h"
 
 #define REENTRANT_STREAM_INSERT 0x1
@@ -25,7 +25,6 @@ typedef struct StreamProjectionInfo StreamProjectionInfo;
 typedef struct StreamScanState
 {
 	ContExecutor *cont_executor;
-	AdhocExecutor *adhoc_executor;
 	StreamProjectionInfo *pi;
 	Size nbytes;
 	int ntuples;
@@ -33,20 +32,16 @@ typedef struct StreamScanState
 
 typedef struct StreamInsertState
 {
-	Bitmapset *targets;
+	Bitmapset *queries;
 
 	long count;
 	long bytes;
 	int num_batches;
 
-	InsertBatch *batch;
-	InsertBatchAck *ack;
+	microbatch_t *batch;
+	microbatch_ack_t *ack;
 
 	TupleDesc desc;
-	bytea *packed_desc;
-
-	ipc_queue *worker_queue;
-	AdhocInsertState *adhoc_state;
 
 	int flags;
 } StreamInsertState;

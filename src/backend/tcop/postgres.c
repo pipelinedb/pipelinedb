@@ -96,7 +96,6 @@
 #include "utils/tqual.h"
 #include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
-#include "pipeline/cont_adhoc.h"
 #include "nodes/nodeFuncs.h"
 #include "catalog/namespace.h"
 
@@ -981,12 +980,6 @@ exec_simple_query(const char *query_string)
 		{
 			tmp_list = parsetree_list;
 			break;
-		}
-
-		if (IsAdhocQuery(parsetree))
-		{
-			ExecAdhocQuery(parsetree);
-			continue;
 		}
 
 		tmp_list = lappend(tmp_list, parsetree);

@@ -11,7 +11,7 @@
 #include "postgres.h"
 
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/ipc/zmq.h"
+#include "pipeline/ipc/pzmq.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 

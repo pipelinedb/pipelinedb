@@ -182,7 +182,7 @@ streams_to_meta(Relation pipeline_query)
 		parsetree = (Node *) lfirst(parsetree_list->head);
 		sel = (SelectStmt *) parsetree;
 
-		context = MakeContAnalyzeContext(make_parsestate(NULL), sel, WORKER);
+		context = MakeContAnalyzeContext(make_parsestate(NULL), sel, Worker);
 		collect_rels_and_streams((Node *) sel->fromClause, context);
 		collect_types_and_cols((Node *) sel, context);
 

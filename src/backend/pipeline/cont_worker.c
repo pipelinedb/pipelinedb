@@ -98,7 +98,7 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 		SetTransformDestReceiverParams(state->dest, exec, base->query);
 	}
 
-	pstmt = GetContPlan(base->query, WORKER);
+	pstmt = GetContPlan(base->query, Worker);
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot, InvalidSnapshot, state->dest, NULL, 0);
 	state->query_desc->snapshot = GetTransactionSnapshot();
 	state->query_desc->snapshot->copied = true;
@@ -180,7 +180,7 @@ flush_tuples(ContQueryWorkerState *state)
 void
 ContinuousQueryWorkerMain(void)
 {
-	ContExecutor *cont_exec = ContExecutorNew(WORKER, &init_query_state);
+	ContExecutor *cont_exec = ContExecutorNew(Worker, &init_query_state);
 	Oid query_id;
 
 	WorkerResOwner = ResourceOwnerCreate(NULL, "WorkerResOwner");

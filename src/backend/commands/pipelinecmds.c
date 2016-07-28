@@ -523,14 +523,14 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	cont_select_sql = deparse_query_def(cont_query);
 	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
 	cont_select->swStepFactor = ((SelectStmt *) stmt->query)->swStepFactor;
-	context = MakeContAnalyzeContext(NULL, cont_select, WORKER);
+	context = MakeContAnalyzeContext(NULL, cont_select, Worker);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying matrel.
 	 */
-	workerselect = TransformSelectStmtForContProcess(matrel, copyObject(cont_select), &viewselect, WORKER);
+	workerselect = TransformSelectStmtForContProcess(matrel, copyObject(cont_select), &viewselect, Worker);
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
 
@@ -630,8 +630,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
 	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, context->is_sw,
-								 IsContQueryAdhocProcess(),
-								 &cvid);
+								 false, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
@@ -687,8 +686,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * we know now rather than at execution time.
 	 */
 	cv = GetContQueryForViewId(cvid);
-	GetContPlan(cv, COMBINER);
-	GetContPlan(cv, WORKER);
+	GetContPlan(cv, Combiner);
+	GetContPlan(cv, Worker);
 	GetCombinerLookupPlan(cv);
 
 	heap_close(pipeline_query, NoLock);
@@ -876,11 +875,11 @@ ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
 
 	cq = GetContQueryForId(cq_id);
 
-	explain_cont_plan("Worker Plan", GetContPlan(cq, WORKER), es, desc, dest);
+	explain_cont_plan("Worker Plan", GetContPlan(cq, Worker), es, desc, dest);
 
 	if (stmt->objType == OBJECT_CONTVIEW)
 	{
-		plan = GetContPlan(cq, COMBINER);
+		plan = GetContPlan(cq, Combiner);
 		tupstore = tuplestore_begin_heap(false, false, work_mem);
 		scan = SetCombinerPlanTuplestorestate(plan, tupstore);
 		rel = relation_openrv(cq->matrel, NoLock);
@@ -1115,56 +1114,11 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	relid = relobj.objectId;
 	CommandCounterIncrement();
 
-	pqoid = DefineContinuousTransform(relid, query, relid, tgfnid, stmt->args);
+	pqoid = DefineContinuousTransform(relid, query, relid, tgfnid, false, stmt->args);
 	CommandCounterIncrement();
 
 	record_ct_dependencies(pqoid, relid, tgfnid, (SelectStmt *) stmt->query, query, stmt->args);
 	CommandCounterIncrement();
 
 	heap_close(pipeline_query, NoLock);
-}
-
-static void
-set_replica_identity_full(Oid matrel_oid, RangeVar *matrel)
-{
-	AlterTableStmt *stmt = makeNode(AlterTableStmt);
-	AlterTableCmd *cmd = makeNode(AlterTableCmd);
-
-	ReplicaIdentityStmt *rep = makeNode(ReplicaIdentityStmt);
-	rep->identity_type = REPLICA_IDENTITY_FULL;
-
-	cmd->subtype = AT_ReplicaIdentity;
-	cmd->def = (Node*) rep;
-
-	stmt->relation = matrel;
-	stmt->cmds = list_make1(cmd);
-
-	LockRelationOid(matrel_oid, AccessExclusiveLock);
-	AlterTable(matrel_oid, AccessExclusiveLock, stmt);
-	UnlockRelationOid(matrel_oid, AccessExclusiveLock);
-}
-
-void
-SetReplicaIdentityFull(Relation rel)
-{
-	RangeVar *matrel_rv;
-	Oid namespace = RelationGetNamespace(rel);
-	char *name = RelationGetRelationName(rel);
-
-	RangeVar *cvname = makeRangeVar(get_namespace_name(namespace),
-			pstrdup(name), -1);
-
-	ContQuery *cq = GetContQueryForView(cvname);
-
-	if (!cq)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
-				 errmsg("continuous view \"%s\" does not exist", name)));
-	}
-
-	matrel_rv = makeRangeVar(get_namespace_name(namespace),
-			get_rel_name(cq->matrelid), -1);
-
-	set_replica_identity_full(cq->matrelid, matrel_rv);
 }

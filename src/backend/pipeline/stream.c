@@ -58,9 +58,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples,
 		int ntuples, InsertBatchAck *acks, int nacks)
 {
 	ipc_queue *ipcq;
-	Bitmapset *all_targets = GetLocalStreamReaders(RelationGetRelid(stream));
-	Bitmapset *adhoc = GetAdhocContinuousViewIds();
-	Bitmapset *targets = bms_difference(all_targets, adhoc);
+	Bitmapset *targets = GetLocalStreamReaders(RelationGetRelid(stream));
 	bytea *packed_desc;
 	int i;
 	int free;
@@ -70,9 +68,6 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples,
 	uint64 size = 0;
 	int ninserted;
 	TimestampTz now = GetCurrentTimestamp();
-
-	bms_free(all_targets);
-	bms_free(adhoc);
 
 	/* No reader? Noop. */
 	if (bms_is_empty(targets))

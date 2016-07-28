@@ -48,8 +48,6 @@ extern Datum pipeline_get_worker_querydef(PG_FUNCTION_ARGS);
 
 extern Datum pipeline_get_combiner_querydef(PG_FUNCTION_ARGS);
 
-extern Datum pipeline_exec_adhoc_query(PG_FUNCTION_ARGS);
-
 extern Datum pipeline_combine_table(PG_FUNCTION_ARGS);
 
 extern Datum json_object_int_sum_transfn(PG_FUNCTION_ARGS);

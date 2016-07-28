@@ -926,7 +926,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 	select = (SelectStmt *) copyObject(node);
 	validate_target_list(select);
 
-	context = MakeContAnalyzeContext(make_parsestate(NULL), select, WORKER);
+	context = MakeContAnalyzeContext(make_parsestate(NULL), select, Worker);
 	context->pstate->p_sourcetext = sql;
 
 	/* No support for CTEs */
@@ -1351,7 +1351,7 @@ parserGetStreamDescr(Oid relid, ContAnalyzeContext *context)
 void
 transformContSelectStmt(ParseState *pstate, SelectStmt *select)
 {
-	ContQueryProcType ptype = IsContQueryCombinerProcess() ? COMBINER : WORKER;
+	ContQueryProcType ptype = IsContQueryCombinerProcess() ? Combiner : Worker;
 	ContAnalyzeContext *context = MakeContAnalyzeContext(pstate, select, ptype);
 
 	collect_rels_and_streams((Node *) select->fromClause, context);
@@ -2089,7 +2089,7 @@ hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContex
 
 	if (!found)
 	{
-		if (context->proc_type == COMBINER)
+		if (context->proc_type == Combiner)
 			proc->groupClause = lappend(proc->groupClause, cref);
 		else
 			proc->groupClause = lappend(proc->groupClause, time);
@@ -2134,7 +2134,7 @@ proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContex
 
 			if (!found)
 			{
-				if (context->proc_type == COMBINER)
+				if (context->proc_type == Combiner)
 					proc->groupClause = lappend(proc->groupClause, cref);
 				else
 					proc->groupClause = lappend(proc->groupClause, node);
@@ -2245,7 +2245,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	ListCell *lc;
 	int i;
 
-	Assert(proc_type == WORKER || proc_type == COMBINER);
+	Assert(proc_type == Worker || proc_type == Combiner);
 
 	proc = (SelectStmt *) copyObject(stmt);
 	view = makeNode(SelectStmt);
@@ -2315,7 +2315,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 				view->groupClause = lappend(view->groupClause, cref);
 
 			/* The entire grouping set will be added to the worker's group clause later */
-			if (IsA(group_node, GroupingSet) && proc_type == WORKER)
+			if (IsA(group_node, GroupingSet) && proc_type == Worker)
 				continue;
 
 			/*
@@ -2323,13 +2323,13 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 			 * there is an id column in t for the query below:
 			 *   CREATE CONTINUOUS VIEW v AS SELECT s.id, t.str, sum(s.val + t.val) FROM s JOIN t ON s.id = t.id GROUP BY s.id;
 			 */
-			if (proc_type == COMBINER)
+			if (proc_type == Combiner)
 				tmp_list = lappend(tmp_list, cref);
 			else
 				tmp_list = lappend(tmp_list, node);
 		}
 
-		if (IsA(group_node, GroupingSet) && proc_type == WORKER)
+		if (IsA(group_node, GroupingSet) && proc_type == Worker)
 			tmp_list = lappend(tmp_list, group_node);
 	}
 
@@ -2491,7 +2491,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 		view->targetList = lappend(view->targetList, create_res_target_for_node(res_val, name));
 	}
 
-	if (proc_type == COMBINER)
+	if (proc_type == Combiner)
 	{
 		Assert(mat_relation != NULL);
 		tmp_list = select_from_matrel(tmp_list);
@@ -2521,7 +2521,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	/* Overlay view reads from matrel */
 	view->fromClause = list_make1(mat_relation);
 
-	if (proc_type == COMBINER)
+	if (proc_type == Combiner)
 	{
 		/*
 		 * Combiner shouldn't have to re-do the filtering work of the WHERE clause.
@@ -2582,7 +2582,7 @@ GetContViewQuery(RangeVar *rv)
 	ContAnalyzeContext *context;
 
 	sel = get_cont_query_select_stmt(rv);
-	context = MakeContAnalyzeContext(NULL, sel, WORKER);
+	context = MakeContAnalyzeContext(NULL, sel, Worker);
 	rewrite_streaming_aggs(sel, context);
 
 	MakeSelectsContinuous(sel);
@@ -2601,7 +2601,7 @@ GetContWorkerQuery(RangeVar *rv)
 
 	matrel = GetMatRelName(rv);
 	sel = get_cont_query_select_stmt(rv);
-	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, WORKER);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Worker);
 
 	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
@@ -2617,7 +2617,7 @@ GetContCombinerQuery(RangeVar *rv)
 
 	matrel = GetMatRelName(rv);
 	sel = get_cont_query_select_stmt(rv);
-	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, COMBINER);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Combiner);
 	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
@@ -2730,7 +2730,7 @@ get_worker_query_for_id(Oid id)
 
 	ReleaseSysCache(tup);
 
-	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, WORKER);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Worker);
 	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
@@ -3461,7 +3461,7 @@ GetSWExpr(RangeVar *cv)
 	SelectStmt *sel;
 
 	sel = get_cont_query_select_stmt(cv);
-	TransformSelectStmtForContProcess(cv, sel, &view, WORKER);
+	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
 
 	return view->whereClause;
 }
@@ -3539,7 +3539,7 @@ GetWindowTimeColumn(RangeVar *cv)
 	ContAnalyzeContext context;
 
 	sel = get_cont_query_select_stmt(cv);
-	TransformSelectStmtForContProcess(cv, sel, &view, WORKER);
+	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
 
 	if (view->whereClause)
 	{
