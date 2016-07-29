@@ -38,7 +38,6 @@
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/ipc/broker.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/postmaster.h"
 #include "replication/walsender.h"
@@ -657,9 +656,6 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 
 	/* The continuous query scheduler is done here */
 	if (IsContQuerySchedulerProcess())
-		return;
-
-	if (IsIPCMessageBrokerProcess())
 		return;
 
 	/*

@@ -11,7 +11,6 @@
 
 #include "miscadmin.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/ipc/broker.h"
 #include "pipeline/ipc/queue.h"
 #include "port/atomics.h"
 #include "storage/latch.h"
@@ -216,9 +215,9 @@ ipc_queue_update_tail(ipc_queue *ipcq, uint64 tail)
 	pg_atomic_write_u64(&ipcq->tail, tail);
 	pg_write_barrier();
 
-	if (ipcq->produced_by_broker)
-		signal_ipc_broker_process();
-	else
+//	if (ipcq->produced_by_broker)
+//		signal_ipc_broker_process();
+//	else
 	{
 		Latch *latch = (Latch *) pg_atomic_read_u64(&ipcq->producer_latch);
 		if (latch != NULL)
@@ -384,9 +383,9 @@ ipc_queue_update_head(ipc_queue *ipcq, uint64 head)
 	pg_atomic_write_u64(&ipcq->head, head);
 	pg_write_barrier();
 
-	if (ipcq->consumed_by_broker)
-		signal_ipc_broker_process();
-	else
+//	if (ipcq->consumed_by_broker)
+//		signal_ipc_broker_process();
+//	else
 	{
 		Latch *latch = (Latch *) pg_atomic_read_u64(&ipcq->consumer_latch);
 		if (latch)

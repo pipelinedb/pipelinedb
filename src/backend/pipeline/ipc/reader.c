@@ -15,6 +15,7 @@
 #include "pipeline/ipc/reader.h"
 #include "pipeline/miscutils.h"
 #include "utils/memutils.h"
+#include "utils/timestamp.h"
 
 typedef struct ipc_tuple_reader_scan
 {
