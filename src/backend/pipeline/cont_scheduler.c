@@ -26,8 +26,7 @@
 #include "pgstat.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/ipc/broker.h"
-#include "pipeline/ipc/pzmq.h"
+#include "pipeline/ipc/reader.h"
 #include "pipeline/miscutils.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -430,21 +429,16 @@ cont_bgworker_main(Datum arg)
 			elog(ERROR, "unknown continuous process type: %d", proc->type);
 	}
 
-	pgstat_init_cqstat(MyProcStatCQEntry, 0, MyProcPid);
-
-	/* Set up ZMQ messaging */
-	pzmq_init();
-
 	elog(LOG, "continuous query process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);
 	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(proc));
 
-	/* Be nice! Give up some CPU. */
-	SetNicePriority();
+	pgstat_init_cqstat(MyProcStatCQEntry, 0, MyProcPid);
+	ipc_tuple_reader_init(proc->pzmq_id);
+	set_nice_priority();
 
-	/* Run the continuous execution function. */
 	run();
 
-	pzmq_destroy();
+	ipc_tuple_reader_destroy();
 	pgstat_send_cqpurge(0, MyProcPid, proc->type);
 
 	/* If this isn't a clean termination, exit with a non-zero status code */
@@ -453,8 +447,8 @@ cont_bgworker_main(Datum arg)
 		elog(LOG, "continuous query process \"%s\" was killed", GetContQueryProcName(proc));
 		proc_exit(1);
 	}
-	else
-		elog(LOG, "continuous query process \"%s\" shutting down", GetContQueryProcName(proc));
+
+	elog(LOG, "continuous query process \"%s\" shutting down", GetContQueryProcName(proc));
 }
 
 /*
@@ -853,7 +847,6 @@ ContQuerySchedulerMain(int argc, char *argv[])
 	ereport(LOG, (errmsg("continuous query scheduler shutting down")));
 
 	ContQuerySchedulerShmem->pid = 0;
-
 	proc_exit(0); /* done */
 }
 

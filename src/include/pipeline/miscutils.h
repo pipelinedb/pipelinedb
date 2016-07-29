@@ -32,7 +32,6 @@ extern void SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *at
 extern void DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf);
 
 /* for backends / bg workers to yield cpu */
-extern int SetNicePriority(void);
-extern int SetDefaultPriority(void);
+extern int set_nice_priority(void);
 
 #endif   /* MISCUTILS_H */

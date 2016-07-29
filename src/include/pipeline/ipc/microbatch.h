@@ -16,6 +16,7 @@
 #include "lib/stringinfo.h"
 #include "nodes/bitmapset.h"
 #include "nodes/pg_list.h"
+#include "pipeline/cont_scheduler.h"
 #include "port/atomics.h"
 
 /* guc */
@@ -45,14 +46,15 @@ extern microbatch_ack_t *microbatch_ack_new(void);
 extern void microbatch_ack_wait_and_free(microbatch_ack_t *ack);
 #define microbatch_ack_increment_wtups(ack, n) pg_atomic_fetch_add_u32(&(ack)->num_wtups, (n));
 #define microbatch_ack_increment_ctups(ack, n) pg_atomic_fetch_add_u32(&(ack)->num_ctups, (n));
-#define microbatch_ack_increment_ack(ack, n) \
+#define microbatch_ack_increment_acks(ack, n) \
 	do \
 	{ \
 		if (IsContQueryWorkerProcess()) \
 			pg_atomic_fetch_add_u32(&(ack)->num_wacks, (n)); \
 		else \
 			pg_atomic_fetch_add_u32(&(ack)->num_cacks, (n)); \
-	while (0)
+	} \
+	while (0);
 #define microbatch_ack_is_acked(ack) \
 	(pg_atomic_read_u32(&(ack)->num_wacks) >= pg_atomic_read_u32(&(ack)->num_wtups) && \
 			pg_atomic_read_u32(&(ack)->num_cacks) >= pg_atomic_read_u32(&(ack)->num_ctups))
@@ -86,8 +88,5 @@ extern bool microbatch_add_tuple(microbatch_t *mb, HeapTuple tup);
 
 extern char *microbatch_pack(microbatch_t *mb, int *len);
 extern microbatch_t *microbatch_unpack(char *buf, int len);
-
-typedef ListCell microbatch_iter_t;
-extern HeapTuple microbatch_scan(microbatch_t *mb, microbatch_iter_t it);
 
 #endif

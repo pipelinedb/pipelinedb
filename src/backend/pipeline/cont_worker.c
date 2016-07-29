@@ -180,7 +180,7 @@ flush_tuples(ContQueryWorkerState *state)
 void
 ContinuousQueryWorkerMain(void)
 {
-	ContExecutor *cont_exec = ContExecutorNew(Worker, &init_query_state);
+	ContExecutor *cont_exec = ContExecutorNew(&init_query_state);
 	Oid query_id;
 
 	WorkerResOwner = ResourceOwnerCreate(NULL, "WorkerResOwner");
@@ -201,7 +201,7 @@ ContinuousQueryWorkerMain(void)
 		{
 			Plan *plan = NULL;
 			EState *estate = NULL;
-			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->current_query;
+			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->curr_query;
 
 			PG_TRY();
 			{
@@ -252,7 +252,7 @@ ContinuousQueryWorkerMain(void)
 				AbortCurrentTransaction();
 				StartTransactionCommand();
 
-				MemoryContextSwitchTo(cont_exec->exec_cxt);
+				MemoryContextSwitchTo(cont_exec->tmp_cxt);
 			}
 			PG_END_TRY();
 

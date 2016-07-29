@@ -31,7 +31,6 @@ typedef struct pzmq_state_t
 	MemoryContext mem_cxt;
 	pzmq_socket_t *me;
 	HTAB *dests;
-	char *buf;
 } pzmq_state_t;
 
 static pzmq_state_t *zmq_state = NULL;
@@ -40,23 +39,25 @@ void
 pzmq_init(void)
 {
 	MemoryContext old;
+	MemoryContext cxt;
 	pzmq_state_t *zs;
 	HASHCTL ctl;
 
-	if (zmq_state != NULL)
+	if (zmq_state)
 	{
-		elog(WARNING, "pzmq is already initialized");
 		return;
+		//elog(ERROR, "pzmq is already initialized");;
 	}
 
-	old = MemoryContextSwitchTo(TopMemoryContext);
+	cxt = AllocSetContextCreate(TopMemoryContext, "pzmq MemoryContext",
+				ALLOCSET_DEFAULT_MINSIZE,
+				ALLOCSET_DEFAULT_INITSIZE,
+				ALLOCSET_DEFAULT_MAXSIZE);
+
+	old = MemoryContextSwitchTo(cxt);
 
 	zs = palloc0(sizeof(pzmq_state_t));
-	zs->mem_cxt = AllocSetContextCreate(TopMemoryContext, "pzmq MemoryContext",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-	zs->buf = palloc0(sizeof(continuous_query_batch_size));
+	zs->mem_cxt = cxt;
 
 	MemSet(&ctl, 0, sizeof(HASHCTL));
 	ctl.keysize = sizeof(uint64);
@@ -79,9 +80,8 @@ pzmq_destroy(void)
 	HASH_SEQ_STATUS iter;
 	pzmq_socket_t *zsock;
 
-	if (zmq_state == NULL)
+	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
-
 
 	hash_seq_init(&iter, zmq_state->dests);
 	while ((zsock = (pzmq_socket_t *) hash_seq_search(&iter)) != NULL)
@@ -98,7 +98,6 @@ pzmq_destroy(void)
 	zmq_ctx_term(zmq_state->zmq_cxt);
 
 	MemoryContextDelete(zmq_state->mem_cxt);
-	pfree(zmq_state);
 
 	zmq_state = NULL;
 }
@@ -108,11 +107,12 @@ pzmq_bind(uint64 id)
 {
 	MemoryContext old;
 	pzmq_socket_t *zsock;
+	int optval = -1;
 
-	if (zmq_state == NULL)
+	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
 
-	if (zmq_state->me != NULL)
+	if (zmq_state->me)
 		elog(ERROR, "pzmq is already binded");
 
 	old = MemoryContextSwitchTo(zmq_state->mem_cxt);
@@ -121,13 +121,15 @@ pzmq_bind(uint64 id)
 	zsock->id = id;
 	zsock->type = ZMQ_PULL;
 	sprintf(zsock->addr, "ipc:///tmp/%ld", id);
-	zsock->sock = zmq_socket(zmq_state->zmq_cxt, zsock->type);
+	zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PULL);
+	if (zmq_setsockopt(zsock->sock, ZMQ_RCVTIMEO, &optval, sizeof(int)) != 0)
+		elog(WARNING, "pzmq_connect failed to set recvtimeo: %s", zmq_strerror(errno));
 
 	if (zmq_bind(zsock->sock, zsock->addr) != 0)
 	{
 		zmq_close(zsock->sock);
 		pfree(zsock);
-		elog(ERROR, "pzmq_bind failed: %m");
+		elog(ERROR, "pzmq_bind failed: %s", zmq_strerror(errno));
 	}
 
 	MemoryContextSwitchTo(old);
@@ -141,7 +143,7 @@ pzmq_connect(uint64 id, int hwm)
 	pzmq_socket_t *zsock;
 	bool found;
 
-	if (zmq_state == NULL)
+	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
 
 	zsock = (pzmq_socket_t *) hash_search(zmq_state->dests, &id, HASH_ENTER, &found);
@@ -153,44 +155,86 @@ pzmq_connect(uint64 id, int hwm)
 		zsock->id = id;
 		zsock->type = ZMQ_PUSH;
 		sprintf(zsock->addr, "ipc:///tmp/%ld", id);
-		zsock->sock = zmq_socket(zmq_state->zmq_cxt, zsock->type);
+		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
+		if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &hwm, sizeof(int)) != 0)
+			elog(WARNING, "pzmq_connect failed to set hwm: %s", zmq_strerror(errno));
 
 		if (zmq_connect(zsock->sock, zsock->addr) != 0)
 		{
 			zmq_close(zsock->sock);
 			hash_search(zmq_state->dests, &id, HASH_REMOVE, &found);
-			elog(ERROR, "pzmq_connect failed: %m");
+			elog(ERROR, "pzmq_connect failed: %s", zmq_strerror(errno));
 		}
-
-		zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &hwm, sizeof(int));
 	}
 }
 
-char *
-pzmq_recv(int *len, bool wait)
+bool
+pzmq_poll(int timeout)
 {
-	int ret;
+	zmq_pollitem_t item;
+	int rc;
 
-	if (zmq_state == NULL)
+	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
 
-	if (zmq_state->me != NULL)
+	if (!zmq_state->me)
 		elog(ERROR, "pzmq is not binded");
 
-	ret = zmq_recv(zmq_state->me->sock, zmq_state->buf, continuous_query_batch_size, wait ? 0 : ZMQ_DONTWAIT);
+	item.events = ZMQ_POLLIN;
+	item.revents = 0;
+	item.socket = zmq_state->me->sock;
 
+	if (!timeout)
+		timeout = -1;
+
+	rc = zmq_poll(&item, 1, timeout);
+
+	if (rc == -1 && !ERRNO_IS_SAFE())
+		elog(ERROR, "pzmq failed to poll: %s", zmq_strerror(errno));
+
+	return item.revents & ZMQ_POLLIN;
+}
+
+char *
+pzmq_recv(int *len, int timeout)
+{
+	int ret;
+	char *buf;
+	zmq_msg_t msg;
+
+	if (!zmq_state)
+		elog(ERROR, "pzmq is not initialized");
+
+	if (!zmq_state->me)
+		elog(ERROR, "pzmq is not binded");
+
+	zmq_msg_init(&msg);
+
+	if (timeout && !pzmq_poll(timeout))
+	{
+		*len = 0;
+		return NULL;
+	}
+
+	ret = zmq_msg_recv(&msg, zmq_state->me->sock, ZMQ_DONTWAIT);
 	if (ret == -1)
 	{
 		if (!ERRNO_IS_SAFE())
-			elog(ERROR, "pzmq failed to recv msg: %m");
+			elog(ERROR, "pzmq failed to recv msg: %s %d", zmq_strerror(errno), errno);
 
 		*len = 0;
 		return NULL;
 	}
 
 	Assert(ret <= continuous_query_batch_size);
+	Assert(ret == zmq_msg_size(&msg));
+
 	*len = ret;
-	return zmq_state->buf;
+	buf = palloc(ret);
+	memcpy(buf, zmq_msg_data(&msg), ret);
+	zmq_msg_close(&msg);
+
+	return buf;
 }
 
 bool
@@ -202,7 +246,7 @@ pzmq_send(uint64 id, char *msg, int len, bool wait)
 
 	Assert(len <= continuous_query_batch_size);
 
-	if (zmq_state == NULL)
+	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
 
 	zsock = (pzmq_socket_t *) hash_search(zmq_state->dests, &id, HASH_ENTER, &found);
@@ -215,7 +259,7 @@ pzmq_send(uint64 id, char *msg, int len, bool wait)
 	if (ret == -1)
 	{
 		if (!ERRNO_IS_SAFE())
-			elog(ERROR, "pzmq failed to send msg: %m");
+			elog(ERROR, "pzmq failed to send msg: %s", zmq_strerror(errno));
 
 		return false;
 	}

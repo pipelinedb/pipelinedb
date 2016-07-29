@@ -29,6 +29,8 @@
 #include "pgstat.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/ipc/pzmq.h"
+#include "pipeline/ipc/reader.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
@@ -47,21 +49,14 @@ struct StreamProjectionInfo {
 	 * Temporary context to use during stream projections,
 	 * reset after each stream scan batch
 	 */
-	MemoryContext ctxt;
+	MemoryContext mcxt;
+
 	/* expression context for evaluating stream event cast expressions */
-	ExprContext *econtext;
-	/*
-	 * Descriptor for the event currently being projected,
-	 * may be cached across projections
-	 */
-	TupleDesc eventdesc;
-	/*
-	 * Descriptor for the projection result, used for all projections
-	 * performed by this StreamProjectionInfo
-	 */
-	TupleDesc resultdesc;
-	/* slot to store the current stream event in, may be cached across projections */
-	TupleTableSlot *curslot;
+	ExprContext *ecxt;
+
+	/* slot to store the current stream event in */
+	TupleTableSlot *slot;
+
 	/*
 	 * Mapping from event attribute to result attribute position,
 	 * may be cached across projections
@@ -69,12 +64,14 @@ struct StreamProjectionInfo {
 	int *attrmap;
 
 	/*
-	 * Serialized event descriptor used to detect when a new event descriptor
-	 * has arrived without having to fully unpack it
+	 * Descriptor for the incoming tuples, will change between micro batches. We need to
+	 * reset the projection info every time this changes
 	 */
-	bytea *raweventdesc;
-};
+	TupleDesc indesc;
 
+	/* Descriptor for the tuples being output by this scan */
+	TupleDesc outdesc;
+};
 
 /*
  * stream_fdw_handler
@@ -188,25 +185,25 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 	state = palloc0(sizeof(StreamScanState));
 
 	state->pi = palloc(sizeof(StreamProjectionInfo));
-	state->pi->ctxt = AllocSetContextCreate(CurrentMemoryContext,
-													 "ExecProjectContext",
-													 ALLOCSET_DEFAULT_MINSIZE,
-													 ALLOCSET_DEFAULT_INITSIZE,
-													 ALLOCSET_DEFAULT_MAXSIZE);
+	state->pi->mcxt = AllocSetContextCreate(CurrentMemoryContext,
+			"ExecProjectContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
 
-	state->pi->econtext = CreateStandaloneExprContext();
-	state->pi->resultdesc = ExecTypeFromTL(physical_tlist, false);
-	state->pi->raweventdesc = NULL;
+	state->pi->ecxt = CreateStandaloneExprContext();
+	state->pi->outdesc = ExecTypeFromTL(physical_tlist, false);
+	state->pi->indesc = NULL;
 
-	Assert(state->pi->resultdesc->natts == list_length(colnames));
+	Assert(state->pi->outdesc->natts == list_length(colnames));
 
 	foreach(lc, colnames)
 	{
 		Value *v = (Value *) lfirst(lc);
-		namestrcpy(&(state->pi->resultdesc->attrs[i++]->attname), strVal(v));
+		namestrcpy(&(state->pi->outdesc->attrs[i++]->attname), strVal(v));
 	}
 
-	ExecAssignScanType(&node->ss, state->pi->resultdesc);
+	ExecAssignScanType(&node->ss, state->pi->outdesc);
 
 	/*
 	 * Override result tuple type and projection info.
@@ -223,7 +220,7 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 void
 ReScanStreamScan(ForeignScanState *node)
 {
-
+	/* Ephemeral data anyone? x_x */
 }
 
 /*
@@ -234,13 +231,12 @@ EndStreamScan(ForeignScanState *node)
 {
 	StreamScanState *ss = (StreamScanState *) node->fdw_state;
 
-	MemoryContextReset(ss->pi->ctxt);
+	MemoryContextReset(ss->pi->mcxt);
 
 	/* the next event's descriptor will be used if this is NULL */
-	ss->pi->raweventdesc = NULL;
+	ss->pi->indesc = NULL;
 
 	reset_record_type_cache();
-
 	pgstat_increment_cq_read(ss->ntuples, ss->nbytes);
 }
 
@@ -278,31 +274,23 @@ map_field_positions(TupleDesc evdesc, TupleDesc desc)
  * may only change after many event projections.
  */
 static void
-init_proj_info(StreamProjectionInfo *pi, StreamTupleState *sts)
+init_proj_info(StreamProjectionInfo *pi, ipc_tuple *itup)
 {
 	MemoryContext old;
+	ListCell *lc;
 
-	old = MemoryContextSwitchTo(pi->ctxt);
+	old = MemoryContextSwitchTo(pi->mcxt);
 
-	pi->eventdesc = UnpackTupleDesc(sts->desc);
-	pi->attrmap = map_field_positions(pi->eventdesc, pi->resultdesc);
-	pi->curslot = MakeSingleTupleTableSlot(pi->eventdesc);
-
-	pi->raweventdesc = palloc0(VARSIZE(sts->desc) + VARHDRSZ);
-	memcpy(pi->raweventdesc, sts->desc, VARSIZE(sts->desc) + VARHDRSZ);
+	pi->indesc = itup->desc;
+	pi->attrmap = map_field_positions(pi->indesc, pi->outdesc);
+	pi->slot = MakeSingleTupleTableSlot(pi->indesc);
 
 	/*
 	 * Load RECORDOID tuple descriptors in the cache.
 	 */
-	if (sts->num_record_descs)
+	foreach(lc, itup->record_descs)
 	{
-		int i;
-
-		for (i = 0; i < sts->num_record_descs; i++)
-		{
-			RecordTupleDesc *rdesc = &sts->record_descs[i];
-			set_record_type_typemod(rdesc->typmod, UnpackTupleDesc(rdesc->desc));
-		}
+		/* TODO */
 	}
 
 	MemoryContextSwitchTo(old);
@@ -332,61 +320,61 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype)
 }
 
 static HeapTuple
-exec_stream_project(StreamTupleState *sts, StreamScanState *node)
+exec_stream_project(StreamScanState *node, ipc_tuple *itup)
 {
 	HeapTuple decoded;
-	MemoryContext oldcontext;
+	MemoryContext old;
 	Datum *values;
 	bool *nulls;
 	int i;
 	StreamProjectionInfo *pi = node->pi;
-	TupleDesc evdesc = pi->eventdesc;
-	TupleDesc desc = pi->resultdesc;
+	TupleDesc indesc = pi->indesc;
+	TupleDesc outdesc = pi->outdesc;
 
-	values = palloc0(sizeof(Datum) * desc->natts);
-	nulls = palloc0(sizeof(bool) * desc->natts);
+	values = palloc0(sizeof(Datum) * outdesc->natts);
+	nulls = palloc0(sizeof(bool) * outdesc->natts);
 
 	/* assume every element in the output tuple is null until we actually see values */
-	MemSet(nulls, true, desc->natts);
+	MemSet(nulls, true, outdesc->natts);
 
-	ExecStoreTuple(sts->tup, pi->curslot, InvalidBuffer, false);
+	ExecStoreTuple(itup->tup, pi->slot, InvalidBuffer, false);
 
 	/*
 	 * For each field in the event, place it in the corresponding field in the
 	 * output tuple, coercing types if necessary.
 	 */
-	for (i = 0; i < evdesc->natts; i++)
+	for (i = 0; i < indesc->natts; i++)
 	{
 		Datum v;
 		bool isnull;
-		int outatt = pi->attrmap[i];
-		Form_pg_attribute evatt;
+		int outattno = pi->attrmap[i];
+		Form_pg_attribute inattr;
 
-		if (outatt < 0)
+		if (outattno < 0)
 			continue;
 
 		/* this is the append-time value */
-		v = slot_getattr(pi->curslot, i + 1, &isnull);
+		v = slot_getattr(pi->slot, i + 1, &isnull);
 
 		if (isnull)
 			continue;
 
-		evatt = evdesc->attrs[i];
-		nulls[outatt] = false;
+		inattr = indesc->attrs[i];
+		nulls[outattno] = false;
 
 		/* if the append-time value's type is different from the target type, try to coerce it */
-		if (evatt->atttypid != desc->attrs[outatt]->atttypid)
+		if (inattr->atttypid != outdesc->attrs[outattno]->atttypid)
 		{
-			Const *c = makeConst(evatt->atttypid, evatt->atttypmod, evatt->attcollation,
-					evatt->attlen, v, false, evatt->attbyval);
-			Node *n = coerce_to_target_type(NULL, (Node *) c, evatt->atttypid, desc->attrs[outatt]->atttypid,
-					desc->attrs[outatt]->atttypmod, COERCION_ASSIGNMENT, COERCE_IMPLICIT_CAST, -1);
+			Const *c = makeConst(inattr->atttypid, inattr->atttypmod, inattr->attcollation,
+					inattr->attlen, v, false, inattr->attbyval);
+			Node *n = coerce_to_target_type(NULL, (Node *) c, inattr->atttypid, outdesc->attrs[outattno]->atttypid,
+					outdesc->attrs[outattno]->atttypmod, COERCION_ASSIGNMENT, COERCE_IMPLICIT_CAST, -1);
 
 			/* if the coercion is possible, do it */
 			if (n != NULL)
 			{
 				ExprState *estate = ExecInitExpr((Expr *) n, NULL);
-				v = ExecEvalExpr(estate, pi->econtext, &nulls[outatt], NULL);
+				v = ExecEvalExpr(estate, pi->ecxt, &nulls[outattno], NULL);
 			}
 			else
 			{
@@ -394,32 +382,30 @@ exec_stream_project(StreamTupleState *sts, StreamScanState *node)
 				 * Slow path, fall back to the original user input and try to
 				 * coerce that to the target type
 				 */
-				v = coerce_raw_input(v, evatt->atttypid,
-						desc->attrs[outatt]->atttypid);
+				v = coerce_raw_input(v, inattr->atttypid, outdesc->attrs[outattno]->atttypid);
 			}
 		}
 
-		values[outatt] = v;
+		values[outattno] = v;
 	}
 
-	/* If arrival_timestamp is requested, pull value from StreamEvent and
-	 * update the HeapTuple. */
-	for (i = 0; i < desc->natts; i++)
+	/* Assign arrival_timestamp to this tuple! */
+	for (i = 0; i < outdesc->natts; i++)
 	{
-		if (pg_strcasecmp(NameStr(desc->attrs[i]->attname), ARRIVAL_TIMESTAMP) == 0)
+		if (pg_strcasecmp(NameStr(outdesc->attrs[i]->attname), ARRIVAL_TIMESTAMP) == 0)
 		{
-			values[i] = TimestampGetDatum(sts->arrival_time);
+			values[i] = TimestampGetDatum(GetCurrentTimestamp());
 			nulls[i] = false;
 			break;
 		}
 	}
 
-	oldcontext = MemoryContextSwitchTo(ContQueryBatchContext);
+	old = MemoryContextSwitchTo(ContQueryBatchContext);
 
 	/* our result tuple needs to live for the duration of this query execution */
-	decoded = heap_form_tuple(desc, values, nulls);
+	decoded = heap_form_tuple(outdesc, values, nulls);
 
-	MemoryContextSwitchTo(oldcontext);
+	MemoryContextSwitchTo(old);
 
 	return decoded;
 }
@@ -440,35 +426,23 @@ PlanStreamModify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int
 TupleTableSlot *
 IterateStreamScan(ForeignScanState *node)
 {
-	StreamTupleState *sts;
-	int len;
+	ipc_tuple *itup;
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	StreamScanState *state = (StreamScanState *) node->fdw_state;
-
 	HeapTuple tup;
-	bytea *piraw;
-	bytea *tupraw;
 
-	sts = (StreamTupleState *) ContExecutorYieldNextMessage(state->cont_executor, &len);
+	itup = (ipc_tuple *) ipc_tuple_reader_next(state->cont_executor->curr_query_id);
 
-	if (sts == NULL)
+	if (itup == NULL)
 		return NULL;
 
 	state->ntuples++;
-	state->nbytes += len;
+	state->nbytes += itup->tup->t_len + HEAPTUPLESIZE;
 
-	/*
-	 * Check if the incoming event descriptor is different from the one we're
-	 * currently using before fully unpacking it.
-	 */
-	piraw = state->pi->raweventdesc;
-	tupraw = sts->desc;
+	if (state->pi->indesc != itup->desc)
+		init_proj_info(state->pi, itup);
 
-	if (piraw == NULL || VARSIZE(piraw) != VARSIZE(tupraw) ||
-			memcmp(VARDATA(piraw), VARDATA(tupraw), VARSIZE(piraw)))
-		init_proj_info(state->pi, sts);
-
-	tup = exec_stream_project(sts, state);
+	tup = exec_stream_project(state, itup);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	return slot;
@@ -509,6 +483,8 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	}
 
 	result_info->ri_FdwState = sis;
+
+	pzmq_init();
 }
 
 static inline void
@@ -516,17 +492,28 @@ microbatch_send_to_worker(microbatch_t *mb)
 {
 	int len;
 	char *buf = microbatch_pack(mb, &len);
-	int idx;
+	static int worker_id = 0;
+	static ContQueryDatabaseMetadata *db_meta = NULL;
+	int recv_id;
+
+	if (!db_meta)
+		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
 
 	if (IsContQueryCombinerProcess())
-	{
-		idx = MyContQueryProc->group_id % continuous_query_num_workers;
-	}
+		worker_id = MyContQueryProc->group_id % continuous_query_num_workers;
 	else
 	{
-		static int last_idx = -1;
+		/* TODO(usmanm): Poll all workers and send to first non-blocking one? */
+		worker_id = (worker_id + 1) % continuous_query_num_workers;
 	}
 
+	recv_id = db_meta->db_procs[worker_id].pzmq_id;
+	pzmq_connect(recv_id, IsContQueryProcess() ? 0 : 1);
+
+	/* TODO(usmanm): What to do if interrupted? */
+	pzmq_send(recv_id, buf, len, true);
+
+	pfree(buf);
 	microbatch_reset(mb);
 }
 

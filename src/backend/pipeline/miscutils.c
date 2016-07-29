@@ -271,22 +271,15 @@ SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringI
 	}
 }
 
-static int default_priority = 0;
 #define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
 int
-SetNicePriority()
+set_nice_priority()
 {
 	int priority = 0;
-	default_priority = getpriority(PRIO_PROCESS, MyProcPid);
+	int default_priority = getpriority(PRIO_PROCESS, MyProcPid);
 	priority = Max(default_priority, MAX_PRIORITY - 
 			ceil(continuous_query_proc_priority * (MAX_PRIORITY - default_priority)));
 
 	return nice(priority);
-}
-
-int
-SetDefaultPriority()
-{
-	return nice(default_priority);
 }

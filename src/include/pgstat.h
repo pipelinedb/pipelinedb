@@ -1189,7 +1189,8 @@ extern HTAB *pgstat_fetch_cqstat_all(void);
 
 extern void pgstat_start_cq(PgStat_StatCQEntry *entry);
 extern void pgstat_end_cq(PgStat_StatCQEntry *entry);
-extern void pgstat_end_cq_batch(PgStat_StatCQEntry *entry, uint64 nrows, Size nbytes);
+#define pgstat_start_cq_batch() (pgstat_start_cq(MyProcStatCQEntry))
+extern void pgstat_end_cq_batch(uint64 nrows, Size nbytes);
 
 typedef struct PgStat_StatStreamEntry
 {

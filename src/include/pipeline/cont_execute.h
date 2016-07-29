@@ -21,7 +21,7 @@
 #include "nodes/pg_list.h"
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/ipc/queue.h"
+#include "pipeline/ipc/reader.h"
 #include "port/atomics.h"
 #include "storage/spin.h"
 #include "utils/timestamp.h"
@@ -122,43 +122,28 @@ typedef struct ipc_message
 struct ContExecutor
 {
 	MemoryContext cxt;
-	MemoryContext exec_cxt;
+	MemoryContext tmp_cxt;
 
 	ContQueryProcType ptype;
+	char *pname;
 
-	ipc_queue *ipcq;
-	ipc_multi_queue *ipcmq;
-	Bitmapset *queries;
-	bool update_queries;
-
-	TimestampTz last_queries_load;
+	Bitmapset *all_queries;
 	Bitmapset *exec_queries;
 
-	Timestamp peek_start;
-	bool peeked_any;
-	bool peek_timedout;
-	bool depleted;
-	List *yielded_msgs;
-	ipc_message *peeked_msgs;
-	int max_msgs;
-	int curr_msg;
-	int num_msgs;
-	Size nbytes;
+	ipc_tuple_reader_batch *batch;
 
-	Bitmapset *queries_seen;
-
-	Oid current_query_id;
-	ContQueryState *current_query;
+	Oid curr_query_id;
+	ContQueryState *curr_query;
 	ContQueryState *states[MAX_CQS];
 	ContQueryStateInit initfn;
 };
 
-extern ContExecutor *ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn);
+extern ContExecutor *ContExecutorNew(ContQueryStateInit initfn);
 extern void ContExecutorDestroy(ContExecutor *exec);
 extern void ContExecutorStartBatch(ContExecutor *exec, int timeout);
 extern Oid ContExecutorStartNextQuery(ContExecutor *exec, int timeout);
 extern void ContExecutorPurgeQuery(ContExecutor *exec);
-extern void *ContExecutorYieldNextMessage(ContExecutor *exec, int *len);
+extern void *ContExecutorIterate(ContExecutor *exec, int *len);
 extern void ContExecutorEndQuery(ContExecutor *exec);
 extern void ContExecutorEndBatch(ContExecutor *exec, bool commit);
 

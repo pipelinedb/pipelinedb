@@ -6096,11 +6096,11 @@ pgstat_increment_cq_read(uint64 nrows, Size nbytes)
 }
 
 void
-pgstat_end_cq_batch(PgStat_StatCQEntry *entry, uint64 nrows, Size nbytes)
+pgstat_end_cq_batch(uint64 nrows, Size nbytes)
 {
 	FILE *fp = fopen("/proc/self/statm", "r");
 	uint64 mem = 0;
-	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
+	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) MyProcStatCQEntry;
 
 	if (fp)
 	{
@@ -6115,7 +6115,7 @@ pgstat_end_cq_batch(PgStat_StatCQEntry *entry, uint64 nrows, Size nbytes)
 	lentry->avgstat.tuples[lentry->avgstat.i] += nrows;
 	lentry->avgstat.bytes[lentry->avgstat.i] += nbytes;
 
-	pgstat_end_cq(entry);
+	pgstat_end_cq(MyProcStatCQEntry);
 }
 
 void

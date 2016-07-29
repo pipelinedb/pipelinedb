@@ -1363,7 +1363,7 @@ sync_combine(ContQueryCombinerState *state)
 static void
 sync_all(ContExecutor *cont_exec)
 {
-	Bitmapset *tmp = bms_copy(cont_exec->queries);
+	Bitmapset *tmp = bms_copy(cont_exec->all_queries);
 	ContQueryCombinerState **states = (ContQueryCombinerState **) cont_exec->states;
 	int id;
 
@@ -1647,20 +1647,20 @@ read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
 	int len;
 	Size nbytes = 0;
 	int count = 0;
-
-	while ((pts = (PartialTupleState *) ContExecutorYieldNextMessage(cont_exec, &len)) != NULL)
-	{
-		if (!TupIsNull(state->slot))
-			ExecClearTuple(state->slot);
-
-		ExecStoreTuple(heap_copytuple(pts->tup), state->slot, InvalidBuffer, false);
-		tuplestore_puttupleslot(state->batch, state->slot);
-
-		set_group_hash(state, count, pts->hash);
-
-		nbytes += len;
-		count++;
-	}
+//
+//	while ((pts = (PartialTupleState *) ContExecutorIterate(cont_exec, &len)) != NULL)
+//	{
+//		if (!TupIsNull(state->slot))
+//			ExecClearTuple(state->slot);
+//
+//		ExecStoreTuple(heap_copytuple(pts->tup), state->slot, InvalidBuffer, false);
+//		tuplestore_puttupleslot(state->batch, state->slot);
+//
+//		set_group_hash(state, count, pts->hash);
+//
+//		nbytes += len;
+//		count++;
+//	}
 
 	if (!TupIsNull(state->slot))
 		ExecClearTuple(state->slot);
@@ -1676,7 +1676,7 @@ read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
 static bool
 need_sync(ContExecutor *cont_exec, TimestampTz last_sync)
 {
-	Bitmapset *tmp = bms_copy(cont_exec->queries);
+	Bitmapset *tmp = bms_copy(cont_exec->all_queries);
 	ContQueryCombinerState **states = (ContQueryCombinerState **) cont_exec->states;
 	int id;
 
@@ -1696,7 +1696,7 @@ need_sync(ContExecutor *cont_exec, TimestampTz last_sync)
 void
 ContinuousQueryCombinerMain(void)
 {
-	ContExecutor *cont_exec = ContExecutorNew(Combiner, &init_query_state);
+	ContExecutor *cont_exec;// = ContExecutorNew(Combiner, &init_query_state);
 	Oid query_id;
 	TimestampTz first_seen = GetCurrentTimestamp();
 	bool do_commit = false;
@@ -1704,6 +1704,8 @@ ContinuousQueryCombinerMain(void)
 	int min_tick_ms = 0;
 	Bitmapset *queries;
 	int id;
+
+	proc_exit(0);
 
 	/*
 	 * Get the minimum timeout we can use to ensure SW queries
@@ -1742,7 +1744,7 @@ ContinuousQueryCombinerMain(void)
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, min_tick_ms)) != InvalidOid)
 		{
 			int count = 0;
-			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->current_query;
+			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->curr_query;
 
 			PG_TRY();
 			{
@@ -1786,7 +1788,7 @@ ContinuousQueryCombinerMain(void)
 				if (!continuous_query_crash_recovery)
 					proc_exit(1);
 
-				MemoryContextSwitchTo(cont_exec->exec_cxt);
+				MemoryContextSwitchTo(cont_exec->tmp_cxt);
 			}
 			PG_END_TRY();
 
@@ -1838,7 +1840,7 @@ GetCombinerLookupPlan(ContQuery *view)
 	bool save = am_cont_combiner;
 
 	exec.cxt = CurrentMemoryContext;
-	exec.current_query_id = view->id;
+	exec.curr_query_id = view->id;
 
 	base = palloc0(sizeof(ContQueryState));
 
@@ -1965,8 +1967,8 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 				text_to_cstring(relname), quote_qualified_identifier(cv->matrel->schemaname, cv->matrel->relname));
 
 	exec.cxt = CurrentMemoryContext;
-	exec.current_query_id = cv->id;
-	exec.queries = bms_make_singleton(cv->id);
+	exec.curr_query_id = cv->id;
+	exec.all_queries = bms_make_singleton(cv->id);
 
 	base = palloc0(sizeof(ContQueryState));
 

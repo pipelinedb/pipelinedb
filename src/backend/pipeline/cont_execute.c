@@ -23,6 +23,7 @@
 #include "pgstat.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/ipc/reader.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "storage/shm_alloc.h"
@@ -411,7 +412,7 @@ InsertBatchAckCreate(List *sts, int *nacksptr)
 }
 
 ContExecutor *
-ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
+ContExecutorNew(ContQueryStateInit initfn)
 {
 	ContExecutor *exec;
 	MemoryContext cxt;
@@ -427,32 +428,18 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 
 	exec = palloc0(sizeof(ContExecutor));
 	exec->cxt = cxt;
-	exec->exec_cxt = AllocSetContextCreate(cxt, "ContExecutor Exec Context",
+	exec->tmp_cxt = AllocSetContextCreate(cxt, "ContExecutor Exec Context",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	exec->ptype = type;
-	exec->current_query_id = InvalidOid;
 	exec->initfn = initfn;
-
-	if (exec->ptype == Worker)
-	{
-		exec->ipcmq = ipc_multi_queue_init(acquire_my_broker_ipc_queue(), acquire_my_ipc_queue());
-		ipc_multi_queue_set_priority_queue(exec->ipcmq, 0);
-		ipc_multi_queue_unpeek_all(exec->ipcmq);
-	}
-	else
-	{
-		exec->ipcq = acquire_my_ipc_queue();
-		ipc_queue_unpeek_all(exec->ipcq);
-	}
-
-	exec->peeked_msgs = palloc0(sizeof(ipc_message) * continuous_query_batch_size);
-	exec->max_msgs = continuous_query_batch_size;
-	exec->num_msgs = 0;
+	exec->ptype = MyContQueryProc->type;
+	exec->pname = GetContQueryProcName(MyContQueryProc);
 
 	MemoryContextSwitchTo(old);
+
+	pgstat_report_activity(STATE_RUNNING, exec->pname);
 
 	return exec;
 }
@@ -460,76 +447,53 @@ ContExecutorNew(ContQueryProcType type, ContQueryStateInit initfn)
 void
 ContExecutorDestroy(ContExecutor *exec)
 {
-	if (exec->ptype == Worker)
-		ipc_multi_queue_pop_peeked(exec->ipcmq);
-	else
-		ipc_queue_pop_peeked(exec->ipcq);
-
 	MemoryContextDelete(exec->cxt);
 }
 
 void
 ContExecutorStartBatch(ContExecutor *exec, int timeout)
 {
-	bool is_empty;
+	exec->batch = NULL;
 
-	if (exec->ptype == Worker)
-		is_empty = ipc_multi_queue_is_empty(exec->ipcmq);
-	else
-		is_empty = ipc_queue_is_empty(exec->ipcq);
+	if (IsTransactionState())
+		timeout = Min(5000, timeout);
 
-	if (is_empty)
+	/* TODO(usmanm): report activity */
+	if (ipc_tuple_reader_poll(timeout))
 	{
 		if (!IsTransactionState())
 		{
-			char *proc_name = GetContQueryProcName(MyContQueryProc);
-
-			pgstat_report_cqstat(true);
-			pgstat_report_activity(STATE_IDLE, proc_name);
-
-			if (exec->ptype == Worker)
-				ipc_multi_queue_wait_non_empty(exec->ipcmq, timeout);
-			else
-				ipc_queue_wait_non_empty(exec->ipcq, timeout);
-
-			pgstat_report_activity(STATE_RUNNING, proc_name);
-
-			pfree(proc_name);
+			StartTransactionCommand();
+			PushActiveSnapshot(GetTransactionSnapshot());
 		}
-		else
-			pg_usleep(500);
+
+		exec->batch = ipc_tuple_reader_pull();
 	}
 
-	if (bms_is_empty(exec->queries) && !IsTransactionState())
+	if (exec->batch && bms_is_empty(exec->all_queries))
 	{
 		MemoryContext old = CurrentMemoryContext;
 
-		StartTransactionCommand();
 		MemoryContextSwitchTo(exec->cxt);
 
-		/* Combiners only execute queries for continuous views */
-		if (IsContQueryCombinerProcess())
-			exec->queries = GetContinuousViewIds();
+		/* Combiners only need to execute view queries */
+		if (exec->ptype == Combiner)
+			exec->all_queries = GetContinuousViewIds();
 		else
-			exec->queries = GetContinuousQueryIds();
-
-		exec->last_queries_load = GetCurrentTransactionStartTimestamp();
-
-		CommitTransactionCommand();
+			exec->all_queries = GetContinuousQueryIds();
 
 		MemoryContextSwitchTo(old);
 	}
 
-	if (!IsTransactionState())
-		StartTransactionCommand();
+	MemoryContextSwitchTo(exec->tmp_cxt);
+	ContQueryBatchContext = exec->tmp_cxt;
 
-	MemoryContextSwitchTo(exec->exec_cxt);
-	ContQueryBatchContext = exec->exec_cxt;
+	if (exec->batch)
+		exec->exec_queries = bms_copy(exec->batch->queries);
+	else
+		exec->exec_queries = NULL;
 
-	exec->exec_queries = bms_copy(exec->queries);
-	exec->update_queries = true;
-
-	pgstat_start_cq(MyProcStatCQEntry);
+	pgstat_start_cq_batch();
 }
 
 static ContQueryState *
@@ -545,9 +509,9 @@ init_query_state(ContExecutor *exec, ContQueryState *state)
 
 	old_cxt = MemoryContextSwitchTo(state_cxt);
 
-	state->query_id = exec->current_query_id;
+	state->query_id = exec->curr_query_id;
 	state->state_cxt = state_cxt;
-	state->query = GetContQueryForId(exec->current_query_id);
+	state->query = GetContQueryForId(exec->curr_query_id);
 	state->tmp_cxt = AllocSetContextCreate(state_cxt, "QueryStateTmpCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
@@ -558,6 +522,7 @@ init_query_state(ContExecutor *exec, ContQueryState *state)
 
 	pgstat_init_cqstat((PgStat_StatCQEntry *) &state->stats, state->query->id, 0);
 	state = exec->initfn(exec, state);
+	MemSet(exec->states, 0, sizeof(exec->states));
 
 	MemoryContextSwitchTo(old_cxt);
 
@@ -567,7 +532,7 @@ init_query_state(ContExecutor *exec, ContQueryState *state)
 static ContQueryState *
 get_query_state(ContExecutor *exec)
 {
-	ContQueryState *state = exec->states[exec->current_query_id];
+	ContQueryState *state = exec->states[exec->curr_query_id];
 	HeapTuple tup;
 
 	MyStatCQEntry = NULL;
@@ -581,7 +546,7 @@ get_query_state(ContExecutor *exec)
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	tup = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(exec->current_query_id));
+	tup = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(exec->curr_query_id));
 
 	/* Was the continuous view removed? */
 	if (!HeapTupleIsValid(tup))
@@ -597,7 +562,7 @@ get_query_state(ContExecutor *exec)
 		if (HeapTupleGetOid(tup) != state->query->oid)
 		{
 			MemoryContextDelete(state->state_cxt);
-			exec->states[exec->current_query_id] = NULL;
+			exec->states[exec->curr_query_id] = NULL;
 			state = NULL;
 		}
 		else
@@ -614,7 +579,7 @@ get_query_state(ContExecutor *exec)
 		MemoryContext old_cxt = MemoryContextSwitchTo(exec->cxt);
 		state = palloc0(sizeof(ContQueryState));
 		state = init_query_state(exec, state);
-		exec->states[exec->current_query_id] = state;
+		exec->states[exec->curr_query_id] = state;
 		MemoryContextSwitchTo(old_cxt);
 
 		if (state->query == NULL)
@@ -632,7 +597,7 @@ get_query_state(ContExecutor *exec)
 Oid
 ContExecutorStartNextQuery(ContExecutor *exec, int timeout)
 {
-	MemoryContextSwitchTo(exec->exec_cxt);
+	MemoryContextSwitchTo(exec->tmp_cxt);
 
 	for (;;)
 	{
@@ -640,242 +605,84 @@ ContExecutorStartNextQuery(ContExecutor *exec, int timeout)
 
 		if (id == -1)
 		{
-			exec->current_query_id = InvalidOid;
+			exec->curr_query_id = InvalidOid;
 			break;
 		}
 
-		exec->current_query_id = id;
-
-		if (!exec->peek_timedout)
-			break;
+		exec->curr_query_id = id;
 
 		/*
 		 * If we have a timeout, we want to force an execution of this
 		 * query regardless of whether or not it actually has data. This
-		 * is primarly used for ticking SW queries that are writing to output streams.
+		 * is primarily used for ticking SW queries that are writing to output streams.
 		 */
 		if (timeout)
 			break;
 
-		if (bms_is_member(exec->current_query_id, exec->queries_seen))
+		if (!exec->batch)
+		{
+			exec->curr_query_id = InvalidOid;
+			break;
+		}
+
+		if (bms_is_member(exec->curr_query_id, exec->batch->queries))
 			break;
 	}
 
-	if (exec->current_query_id == InvalidOid)
-		exec->current_query = NULL;
+	if (exec->curr_query_id == InvalidOid)
+		exec->curr_query = NULL;
 	else
 	{
-		exec->current_query = get_query_state(exec);
-
-		if (exec->current_query == NULL)
+		exec->curr_query = get_query_state(exec);
+		if (exec->curr_query)
 		{
-			MemoryContext old = MemoryContextSwitchTo(exec->cxt);
-			exec->queries = bms_del_member(exec->queries, exec->current_query_id);
-			MemoryContextSwitchTo(old);
+			debug_query_string = exec->curr_query->query->name->relname;
+			MyStatCQEntry = (PgStat_StatCQEntry *) &exec->curr_query->stats;
+			pgstat_start_cq(MyStatCQEntry);
 		}
-		else
-			debug_query_string = exec->current_query->query->name->relname;
 	}
 
-	if (exec->current_query)
-	{
-		MyStatCQEntry = (PgStat_StatCQEntry *) &exec->current_query->stats;
-		pgstat_start_cq(MyStatCQEntry);
-	}
-
-	return exec->current_query_id;
+	return exec->curr_query_id;
 }
 
 void
 ContExecutorPurgeQuery(ContExecutor *exec)
 {
-	MemoryContext old = MemoryContextSwitchTo(exec->cxt);
-	ContQueryState *state = exec->states[exec->current_query_id];
+	MemoryContext old;
+	ContQueryState *state = exec->states[exec->curr_query_id];
 
-	exec->queries = bms_del_member(exec->queries, exec->current_query_id);
+	old = MemoryContextSwitchTo(exec->cxt);
+	exec->all_queries = bms_del_member(exec->all_queries, exec->curr_query_id);
+	MemoryContextSwitchTo(old);
 
 	if (state)
 	{
 		MemoryContextDelete(state->state_cxt);
-		exec->states[exec->current_query_id] = NULL;
+		exec->states[exec->curr_query_id] = NULL;
 	}
 
-	exec->current_query = NULL;
-
-	MemoryContextSwitchTo(old);
-}
-
-static inline bool
-should_yield_item(ContExecutor *exec, void *ptr)
-{
-	if (exec->ptype == Worker)
-	{
-		StreamTupleState *sts = (StreamTupleState *) ptr;
-		bool succ = bms_is_member(exec->current_query_id, sts->queries);
-
-		if (synchronous_stream_insert && succ)
-		{
-			MemoryContext old = MemoryContextSwitchTo(exec->exec_cxt);
-			exec->yielded_msgs = lappend(exec->yielded_msgs, sts);
-			MemoryContextSwitchTo(old);
-		}
-
-		return succ;
-	}
-	else
-	{
-		PartialTupleState *pts = (PartialTupleState *) ptr;
-		return exec->current_query_id == pts->query_id;
-	}
-}
-
-void *
-ContExecutorYieldNextMessage(ContExecutor *exec, int *len)
-{
-	/* We've yielded all items belonging to the CQ in this batch? */
-	if (exec->depleted)
-		return NULL;
-
-	if (exec->peek_timedout)
-	{
-		if (exec->num_msgs == 0)
-		{
-			exec->depleted = true;
-			return NULL;
-		}
-
-		for (;;)
-		{
-			void *ptr;
-			int mlen;
-
-			if (exec->depleted)
-				return NULL;
-
-			ptr = exec->peeked_msgs[exec->curr_msg].msg;
-			mlen = exec->peeked_msgs[exec->curr_msg].len;
-			exec->curr_msg++;
-
-			if (exec->curr_msg == exec->num_msgs)
-				exec->depleted = true;
-
-			if (should_yield_item(exec, ptr))
-			{
-				*len = mlen;
-				return ptr;
-			}
-		}
-	}
-
-	if (!exec->peeked_any)
-	{
-		exec->peeked_any = true;
-		exec->peek_start = GetCurrentTimestamp();
-	}
-
-	for (;;)
-	{
-		void *ptr;
-		int mlen;
-
-		/* We've read a full batch or waited long enough? */
-		if (exec->num_msgs == continuous_query_num_batch ||
-				TimestampDifferenceExceeds(exec->peek_start, GetCurrentTimestamp(), continuous_query_max_wait) ||
-				MyContQueryProc->db_meta->terminate)
-		{
-			exec->peek_timedout = true;
-			exec->depleted = true;
-			return NULL;
-		}
-
-		if (exec->ptype == Worker)
-			ptr = ipc_multi_queue_peek_next(exec->ipcmq, &mlen);
-		else
-			ptr = ipc_queue_peek_next(exec->ipcq, &mlen);
-
-		if (ptr)
-		{
-			MemoryContext old;
-
-			exec->peeked_msgs[exec->curr_msg].msg = ptr;
-			exec->peeked_msgs[exec->curr_msg].len = mlen;
-
-			exec->curr_msg++;
-			exec->num_msgs++;
-
-			/* This can happen is continuous_query_batch_size was increased at runtime */
-			if (exec->num_msgs == exec->max_msgs)
-			{
-				exec->max_msgs *= 2;
-				exec->peeked_msgs = repalloc(exec->peeked_msgs, sizeof(ipc_message) * exec->max_msgs);
-			}
-
-			exec->nbytes += mlen;
-
-			old = MemoryContextSwitchTo(exec->exec_cxt);
-
-			if (exec->ptype == Worker)
-			{
-				StreamTupleState *sts = (StreamTupleState *) ptr;
-				exec->queries_seen = bms_add_members(exec->queries_seen, sts->queries);
-			}
-			else
-			{
-				PartialTupleState *pts = (PartialTupleState *) ptr;
-				exec->queries_seen = bms_add_member(exec->queries_seen, pts->query_id);
-			}
-
-			MemoryContextSwitchTo(old);
-
-			if (should_yield_item(exec, ptr))
-			{
-				*len = mlen;
-				return ptr;
-			}
-		}
-		else
-			pg_usleep(SLEEP_MS * 1000);
-	}
+	exec->curr_query = NULL;
 }
 
 void
 ContExecutorEndQuery(ContExecutor *exec)
 {
-	pgstat_increment_cq_exec(1);
-
-	if (!exec->peeked_any)
+	if (!exec->batch)
 		return;
 
-	if (!bms_is_empty(exec->queries_seen) && exec->update_queries)
-	{
-		MemoryContext old = MemoryContextSwitchTo(exec->cxt);
-		exec->queries = bms_add_members(exec->queries, exec->queries_seen);
+	pgstat_increment_cq_exec(1);
 
-		MemoryContextSwitchTo(exec->exec_cxt);
-		exec->exec_queries = bms_add_members(exec->exec_queries, exec->queries_seen);
-		exec->exec_queries = bms_del_member(exec->exec_queries, exec->current_query_id);
-
-		MemoryContextSwitchTo(old);
-
-		exec->update_queries = false;
-	}
-
-	exec->current_query_id = InvalidOid;
-	exec->curr_msg = 0;
-	exec->depleted = false;
-
-	list_free(exec->yielded_msgs);
-	exec->yielded_msgs = NIL;
-
-	if (exec->current_query)
+	exec->curr_query_id = InvalidOid;
+	if (exec->curr_query)
 	{
 		pgstat_end_cq(MyStatCQEntry);
-		if (IsContQueryWorkerProcess())
+		if (exec->ptype == Worker)
 			pgstat_report_cqstat(false);
 	}
 	else
-		pgstat_send_cqpurge(exec->current_query_id, 0, exec->ptype);
+		pgstat_send_cqpurge(exec->curr_query_id, 0, exec->ptype);
 
+	ipc_tuple_reader_rewind();
 	debug_query_string = NULL;
 }
 
@@ -885,35 +692,18 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	Assert(IsTransactionState());
 
 	if (commit)
+	{
+		PopActiveSnapshot();
 		CommitTransactionCommand();
-
-	pgstat_end_cq_batch(MyProcStatCQEntry, exec->num_msgs, exec->nbytes);
-
-	MemoryContextResetAndDeleteChildren(exec->exec_cxt);
-
-	if (exec->peeked_any)
-	{
-		if (exec->ptype == Worker)
-			ipc_multi_queue_pop_peeked(exec->ipcmq);
-		else
-			ipc_queue_pop_peeked(exec->ipcq);
-	}
-	else
-	{
-		Assert(bms_num_members(exec->queries) == 0);
-
-		if (exec->ptype == Worker)
-			ipc_multi_queue_pop_inserted_before(exec->ipcmq, exec->last_queries_load);
-		else
-			ipc_queue_pop_inserted_before(exec->ipcq, exec->last_queries_load);
 	}
 
-	exec->curr_msg = 0;
-	exec->num_msgs = 0;
-	exec->nbytes = 0;
-	exec->peeked_any = false;
-	exec->peek_timedout = false;
-	exec->depleted = false;
-	exec->queries_seen = NULL;
+	if (exec->batch)
+		pgstat_end_cq_batch(exec->batch->ntups, exec->batch->nbytes);
+
+	ipc_tuple_reader_ack();
+	ipc_tuple_reader_reset();
+
+	MemoryContextResetAndDeleteChildren(exec->tmp_cxt);
 	exec->exec_queries = NULL;
+	exec->batch = NULL;
 }

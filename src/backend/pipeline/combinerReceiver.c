@@ -71,19 +71,12 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	int idx;
 
 	if (c->cont_query == NULL)
-		c->cont_query = c->cont_exec->current_query->query;
+		c->cont_query = c->cont_exec->curr_query->query;
 
 	Assert(c->cont_query->type == CONT_VIEW);
 
-	if (synchronous_stream_insert)
-	{
-		if (c->acks == NULL)
-			c->acks = InsertBatchAckCreate(c->cont_exec->yielded_msgs, &c->nacks);
 
-		c->ntups++;
-		acks = c->acks;
-		nacks = c->nacks;
-	}
+	print_slot(slot);
 
 	pts->tup = ExecCopySlotTuple(slot);
 	pts->query_id = c->cont_query->id;
@@ -158,7 +151,7 @@ SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash)
 	FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
 
 	fcinfo->flinfo = palloc0(sizeof(FmgrInfo));
-	fcinfo->flinfo->fn_mcxt = c->cont_exec->exec_cxt;
+	fcinfo->flinfo->fn_mcxt = c->cont_exec->tmp_cxt;
 
 	fmgr_info(hash->funcid, fcinfo->flinfo);
 	fmgr_info_set_expr((Node *) hash, fcinfo->flinfo);

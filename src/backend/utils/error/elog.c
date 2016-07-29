@@ -246,7 +246,7 @@ errstart(int elevel, const char *filename, int lineno,
 		 */
 		if (CritSectionCount > 0)
 			elevel = PANIC;
-
+pg_usleep(20*1000*1000);
 		/*
 		 * Check reasons for treating ERROR as FATAL:
 		 *
