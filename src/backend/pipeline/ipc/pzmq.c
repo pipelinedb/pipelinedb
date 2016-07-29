@@ -92,7 +92,7 @@ pzmq_destroy(void)
 	}
 
 	if (zmq_state->me)
-		zmq_close(zsock->sock);
+		zmq_close(zmq_state->me->sock);
 
 	zmq_ctx_shutdown(zmq_state->zmq_cxt);
 	zmq_ctx_term(zmq_state->zmq_cxt);

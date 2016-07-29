@@ -192,6 +192,7 @@ ipc_tuple_reader_next(Oid query_id)
 	mb = lfirst(my_rscan.batch);
 	Assert(mb->allow_iter);
 
+	/* If this microbatch isn't for the desired query, skip it */
 	if (!bms_is_member(query_id, mb->queries))
 	{
 		my_rscan.batch = lnext(my_rscan.batch);
@@ -202,6 +203,8 @@ ipc_tuple_reader_next(Oid query_id)
 	if (!my_rscan.batch_started)
 	{
 		Assert(my_rscan.tup == NULL);
+
+		my_rscan.batch_started = true;
 		my_rscan.tup = list_head(mb->tups);
 		my_rscan_tup.desc = mb->desc;
 	}

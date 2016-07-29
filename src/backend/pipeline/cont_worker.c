@@ -203,6 +203,8 @@ ContinuousQueryWorkerMain(void)
 			EState *estate = NULL;
 			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->curr_query;
 
+			elog(LOG, "fuck");
+
 			PG_TRY();
 			{
 				if (state == NULL)

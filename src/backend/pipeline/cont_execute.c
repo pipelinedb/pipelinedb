@@ -453,36 +453,51 @@ ContExecutorDestroy(ContExecutor *exec)
 void
 ContExecutorStartBatch(ContExecutor *exec, int timeout)
 {
+	bool success;
+
 	exec->batch = NULL;
 
 	if (IsTransactionState())
 		timeout = Min(5000, timeout);
 
 	/* TODO(usmanm): report activity */
-	if (ipc_tuple_reader_poll(timeout))
+	success = ipc_tuple_reader_poll(timeout);
+
+	if (!IsTransactionState())
+		StartTransactionCommand();
+
+	if (success)
 	{
-		if (!IsTransactionState())
+		exec->batch = ipc_tuple_reader_pull();
+
+		if (bms_is_empty(exec->all_queries))
 		{
-			StartTransactionCommand();
-			PushActiveSnapshot(GetTransactionSnapshot());
+			MemoryContext old;
+
+			old = MemoryContextSwitchTo(exec->cxt);
+
+			/* Combiners only need to execute view queries */
+			if (exec->ptype == Combiner)
+				exec->all_queries = GetContinuousViewIds();
+			else
+				exec->all_queries = GetContinuousQueryIds();
+
+			MemoryContextSwitchTo(old);
 		}
 
-		exec->batch = ipc_tuple_reader_pull();
-	}
+		if (!bms_is_subset(exec->batch->queries, exec->all_queries))
+		{
+			Bitmapset *queries;
+			MemoryContext old;
 
-	if (exec->batch && bms_is_empty(exec->all_queries))
-	{
-		MemoryContext old = CurrentMemoryContext;
+			old = MemoryContextSwitchTo(exec->cxt);
 
-		MemoryContextSwitchTo(exec->cxt);
+			queries = exec->all_queries;
+			exec->all_queries = bms_union(queries, exec->batch->queries);
+			bms_free(queries);
 
-		/* Combiners only need to execute view queries */
-		if (exec->ptype == Combiner)
-			exec->all_queries = GetContinuousViewIds();
-		else
-			exec->all_queries = GetContinuousQueryIds();
-
-		MemoryContextSwitchTo(old);
+			MemoryContextSwitchTo(old);
+		}
 	}
 
 	MemoryContextSwitchTo(exec->tmp_cxt);
@@ -692,10 +707,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	Assert(IsTransactionState());
 
 	if (commit)
-	{
-		PopActiveSnapshot();
 		CommitTransactionCommand();
-	}
 
 	if (exec->batch)
 		pgstat_end_cq_batch(exec->batch->ntups, exec->batch->nbytes);
