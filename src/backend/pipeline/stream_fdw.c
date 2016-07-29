@@ -458,57 +458,54 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	Relation rel = result_info->ri_RelationDesc;
 	StreamInsertState *sis = palloc0(sizeof(StreamInsertState));
 	Bitmapset *queries = GetLocalStreamReaders(RelationGetRelid(rel));
+	List *acks = NIL;
 
 	sis->flags = eflags;
 	sis->queries = queries;
 	sis->num_batches = 1;
 
-	if (is_inferred_stream_relation(rel))
+	if (IsContQueryCombinerProcess())
 	{
-		Assert(fdw_private);
-		sis->desc = ExecTypeFromTL(linitial(fdw_private), false);
-	}
-	else
+		Assert(!is_inferred_stream_relation(rel));
+
 		sis->desc = RelationGetDescr(rel);
 
-	if (!bms_is_empty(queries))
+		if (synchronous_stream_insert)
+			acks = fdw_private;
+	}
+	else
 	{
-		sis->batch = microbatch_new(WorkerTuple, queries, sis->desc);
+		if (is_inferred_stream_relation(rel))
+		{
+			Assert(fdw_private);
+			sis->desc = ExecTypeFromTL(linitial(fdw_private), false);
+		}
+		else
+			sis->desc = RelationGetDescr(rel);
 
 		if (synchronous_stream_insert)
 		{
 			sis->ack = microbatch_ack_new();
-			microbatch_add_ack(sis->batch, sis->ack);
+			acks = list_make1(sis->ack);
+		}
+	}
+
+	if (!bms_is_empty(queries))
+	{
+		ListCell *lc;
+
+		sis->batch = microbatch_new(WorkerTuple, queries, sis->desc);
+
+		foreach(lc, acks)
+		{
+			microbatch_ack_t *ack = lfirst(lc);
+			microbatch_add_ack(sis->batch, ack);
 		}
 	}
 
 	result_info->ri_FdwState = sis;
 
 	pzmq_init();
-}
-
-static inline void
-microbatch_send_to_worker(microbatch_t *mb)
-{
-	static int worker_id = 0;
-	static ContQueryDatabaseMetadata *db_meta = NULL;
-	int recv_id;
-
-	if (!db_meta)
-		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
-
-	if (IsContQueryCombinerProcess())
-		worker_id = MyContQueryProc->group_id % continuous_query_num_workers;
-	else
-	{
-		/* TODO(usmanm): Poll all workers and send to first non-blocking one? */
-		worker_id = (worker_id + 1) % continuous_query_num_workers;
-	}
-
-	recv_id = db_meta->db_procs[worker_id].pzmq_id;
-
-	microbatch_send(mb, recv_id);
-	microbatch_reset(mb);
 }
 
 /*
@@ -528,6 +525,7 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 	{
 		microbatch_send_to_worker(sis->batch);
 		microbatch_add_tuple(sis->batch, tup, 0);
+		sis->num_batches++;
 	}
 
 	sis->count++;
@@ -552,9 +550,11 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 
 	pgstat_increment_stream_insert(RelationGetRelid(rel), sis->count, sis->num_batches, sis->bytes);
 
-	if (synchronous_stream_insert)
+	if (sis->ack)
 	{
 		microbatch_ack_increment_wtups(sis->ack, sis->count);
 		microbatch_ack_wait_and_free(sis->ack);
 	}
+
+	microbatch_destroy(sis->batch);
 }

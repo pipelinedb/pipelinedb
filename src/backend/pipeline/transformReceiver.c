@@ -44,8 +44,6 @@ typedef struct TransformState
 	HeapTuple *tups;
 	int nmaxtups;
 	int ntups;
-	int nacks;
-//	InsertBatchAck *acks;
 } TransformState;
 
 static void
@@ -101,11 +99,7 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 			t->tups = repalloc(t->tups, sizeof(HeapTuple) * t->nmaxtups);
 		}
 
-		t->tups[t->ntups] = ExecCopySlotTuple(slot);
-		t->ntups++;
-
-//		if (synchronous_stream_insert && t->acks == NULL)
-//			t->acks = InsertBatchAckCreate(t->cont_exec->yielded_msgs, &t->nacks);
+		t->tups[t->ntups++] = ExecCopySlotTuple(slot);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -197,19 +191,15 @@ pipeline_stream_insert_batch(TransformState *t)
 		RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(t->cont_query->tgargs[i]));
 		Relation rel = heap_openrv(rv, AccessShareLock);
 		Size size;
+		ListCell *lc;
 
-//		if (t->acks)
-//		{
-//			int i;
-//
-//			for (i = 0; i < t->nacks; i++)
-//			{
-////				InsertBatchAck *ack = &t->acks[i];
-////				InsertBatchIncrementNumWTuples(ack->batch, t->ntups);
-//			}
-//		}
+		foreach(lc, t->cont_exec->batch->acks)
+		{
+			tagged_ref_t *ref = lfirst(lc);
+			microbatch_ack_check_and_exec(ref->tag, ref->ptr, microbatch_ack_increment_wtups, t->ntups);
+		}
 
-//		size = SendTuplesToContWorkers(rel, RelationGetDescr(t->tg_rel), t->tups, t->ntups, t->acks, t->nacks);
+		size = SendTuplesToContWorkers(rel, RelationGetDescr(t->tg_rel), t->tups, t->ntups, t->cont_exec->batch->acks);
 
 		heap_close(rel, NoLock);
 
@@ -219,13 +209,6 @@ pipeline_stream_insert_batch(TransformState *t)
 			pgstat_report_streamstat(false);
 		}
 	}
-
-//	if (t->acks)
-//	{
-//		pfree(t->acks);
-//		t->acks = NULL;
-//		t->nacks = 0;
-//	}
 
 	if (t->ntups)
 	{

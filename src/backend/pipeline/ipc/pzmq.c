@@ -46,7 +46,7 @@ pzmq_init(void)
 	if (zmq_state)
 	{
 		return;
-		//elog(ERROR, "pzmq is already initialized");;
+		//elog(ERROR, "pzmq is already initialized");
 	}
 
 	cxt = AllocSetContextCreate(TopMemoryContext, "pzmq MemoryContext",

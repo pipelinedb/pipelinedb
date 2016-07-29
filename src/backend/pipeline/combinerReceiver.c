@@ -178,14 +178,7 @@ CombinerDestReceiverFlush(DestReceiver *self)
 	ListCell *lc;
 
 	mb = microbatch_new(CombinerTuple, bms_make_singleton(c->cont_query->id), NULL);
-
-	foreach(lc, c->cont_exec->batch->acks)
-	{
-		tagged_ref_t *ref = lfirst(lc);
-		microbatch_ack_t *ack = (microbatch_ack_t *) ref->ptr;
-		if (ref->tag == ack->id)
-			microbatch_add_ack(mb, ack);
-	}
+	microbatch_add_acks(mb, c->cont_exec->batch->acks);
 
 	for (i = 0; i < continuous_query_num_combiners; i++)
 	{
@@ -228,6 +221,6 @@ CombinerDestReceiverFlush(DestReceiver *self)
 	foreach(lc, c->cont_exec->batch->acks)
 	{
 		tagged_ref_t *ref = lfirst(lc);
-//		microbatch_ack_check_and_exec(ref->tag, ref->ptr, microbatch_ack_increment_ctups, ntups);
+		microbatch_ack_check_and_exec(ref->tag, ref->ptr, microbatch_ack_increment_ctups, ntups);
 	}
 }

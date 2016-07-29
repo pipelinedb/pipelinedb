@@ -33,11 +33,11 @@ extern void *copy_iter_arg;
 #define PlanIsStreaming(stmt) ((stmt)->isContinuous)
 #define ARRIVAL_TIMESTAMP "arrival_timestamp"
 
-/* Whether or not to wait on the inserted event to be consumed by the CV*/
+/* Whether or not to wait on the inserted event to be consumed by the CV */
 extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
-//extern uint64 SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, InsertBatchAck *acks, int nacks);
+extern Size SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, List *acks);
 extern void CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 extern Datum pipeline_stream_insert(PG_FUNCTION_ARGS);

@@ -424,3 +424,41 @@ microbatch_send(microbatch_t *mb, uint64 recv_id)
 
 	pfree(buf);
 }
+
+void
+microbatch_add_acks(microbatch_t *mb, List *acks)
+{
+	ListCell *lc;
+
+	foreach(lc, acks)
+	{
+		tagged_ref_t *ref = lfirst(lc);
+		microbatch_ack_t *ack = (microbatch_ack_t *) ref->ptr;
+		if (ref->tag == ack->id)
+			microbatch_add_ack(mb, ack);
+	}
+}
+
+void
+microbatch_send_to_worker(microbatch_t *mb)
+{
+	static int worker_id = 0;
+	static ContQueryDatabaseMetadata *db_meta = NULL;
+	int recv_id;
+
+	if (!db_meta)
+		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
+
+	if (IsContQueryCombinerProcess())
+		worker_id = MyContQueryProc->group_id % continuous_query_num_workers;
+	else
+	{
+		/* TODO(usmanm): Poll all workers and send to first non-blocking one? */
+		worker_id = (worker_id + 1) % continuous_query_num_workers;
+	}
+
+	recv_id = db_meta->db_procs[worker_id].pzmq_id;
+
+	microbatch_send(mb, recv_id);
+	microbatch_reset(mb);
+}
