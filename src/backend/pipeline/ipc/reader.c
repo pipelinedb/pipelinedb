@@ -37,7 +37,7 @@ typedef struct ipc_tuple_reader
 static ipc_tuple_reader *my_reader = NULL;
 
 void
-ipc_tuple_reader_init(uint64 id)
+ipc_tuple_reader_init(void)
 {
 	MemoryContext cxt;
 	MemoryContext old;
@@ -56,16 +56,11 @@ ipc_tuple_reader_init(uint64 id)
 	MemoryContextSwitchTo(old);
 
 	my_reader = reader;
-
-	pzmq_init();
-	pzmq_bind(id);
 }
 
 void
 ipc_tuple_reader_destroy(void)
 {
-	pzmq_destroy();
-
 	ipc_tuple_reader_ack();
 	ipc_tuple_reader_reset();
 
@@ -83,7 +78,7 @@ ipc_tuple_reader_pull(void)
 	int ntups = 0;
 	int nbytes = 0;
 	List *acks = NIL;
-	Bitmapset *queries;
+	Bitmapset *queries = NULL;
 
 	Assert(my_reader->batches == NIL);
 
@@ -149,8 +144,8 @@ ipc_tuple_reader_ack(void)
 
 		foreach(lc2, mb->acks)
 		{
-			microbatch_ack_t *ack = lfirst(lc);
-			microbatch_ack_increment_acks(ack, mb->ntups);
+			tagged_ref_t *ref = lfirst(lc2);
+			microbatch_ack_check_and_exec(ref->tag, ref->ptr, microbatch_ack_increment_acks, mb->ntups);
 		}
 	}
 }

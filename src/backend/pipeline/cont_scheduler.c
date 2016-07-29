@@ -26,7 +26,7 @@
 #include "pgstat.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/ipc/reader.h"
+#include "pipeline/ipc/pzmq.h"
 #include "pipeline/miscutils.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -71,7 +71,6 @@ bool am_cont_combiner = false;
 
 /* guc parameters */
 bool continuous_queries_enabled;
-bool continuous_query_crash_recovery;
 int  continuous_query_num_combiners;
 int  continuous_query_num_workers;
 int  continuous_query_max_wait;
@@ -430,15 +429,16 @@ cont_bgworker_main(Datum arg)
 	}
 
 	elog(LOG, "continuous query process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);
-	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(proc));
 
 	pgstat_init_cqstat(MyProcStatCQEntry, 0, MyProcPid);
-	ipc_tuple_reader_init(proc->pzmq_id);
+	pzmq_init();
+	pzmq_bind(MyContQueryProc->pzmq_id);
+
 	set_nice_priority();
 
 	run();
 
-	ipc_tuple_reader_destroy();
+	pzmq_destroy();
 	pgstat_send_cqpurge(0, MyProcPid, proc->type);
 
 	/* If this isn't a clean termination, exit with a non-zero status code */

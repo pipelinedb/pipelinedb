@@ -29,7 +29,7 @@ typedef struct ipc_tuple_reader_batch
 	Size nbytes;
 } ipc_tuple_reader_batch;
 
-extern void ipc_tuple_reader_init(uint64 id);
+extern void ipc_tuple_reader_init(void);
 extern void ipc_tuple_reader_destroy(void);
 
 #define ipc_tuple_reader_poll(timeout) (pzmq_poll(timeout))

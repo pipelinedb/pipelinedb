@@ -1040,54 +1040,54 @@ get_db_meta(Oid dbid)
 		ptr = dsm_segment_address(segment);
 		MemSet(ptr, 0, db_dsm_segment_size);
 
-		for (i = 0; i < continuous_query_num_workers; i++)
-		{
-			ipc_queue_pop_fn popfn = synchronous_stream_insert ? StreamTupleStatePopFn : NULL;
-			ipc_queue *ipcq;
-
-			/*
-			 * We have three queues per worker process, two are multi producer queues which requires a LWLock,
-			 * the other two are single producer queues and don't require a LWLock. The MP queue is used by the
-			 * insert processes to write tuples to the worker process. One SP queue is used by the worker process to
-			 * write data to itself (or by other worker processes to write data to it). The last SP queue is used
-			 * by the IPC broker to copy data from the first two queues so that the worker can read the data being
-			 * sent to it.
-			 */
-
-			/* broker->worker queue */
-			ipcq = (ipc_queue *) ptr;
-			ipc_queue_init(ptr, ipc_queue_size, NULL);
-			ipc_queue_set_handlers(ipcq, StreamTupleStatePeekFn, popfn, NULL);
-			ipcq->produced_by_broker = true;
-			ptr += ipc_queue_size;
-
-			/* We use the same lock for these two producer queues */
-
-			/* worker->broker queue */
-			ipcq = (ipc_queue *) ptr;
-			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock);
-			ipc_queue_set_handlers(ipcq, NULL, NULL, StreamTupleStateCopyFn);
-			ipcq->consumed_by_broker = true;
-			ptr += ipc_queue_size;
-			lock_slot++;
-
-			/* insert->worker queue */
-			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock);
-			ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, popfn, StreamTupleStateCopyFn);
-			ptr += ipc_queue_size;
-			lock_slot++;
-		}
-
-		for (i = 0; i < continuous_query_num_combiners; i++)
-		{
-			ipc_queue_pop_fn popfn = synchronous_stream_insert ? PartialTupleStatePopFn : NULL;
-
-			/* worker->combiner queue */
-			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock);
-			ipc_queue_set_handlers((ipc_queue *) ptr, PartialTupleStatePeekFn, popfn, PartialTupleStateCopyFn);
-			ptr += ipc_queue_size;
-			lock_slot++;
-		}
+//		for (i = 0; i < continuous_query_num_workers; i++)
+//		{
+//			ipc_queue_pop_fn popfn = synchronous_stream_insert ? StreamTupleStatePopFn : NULL;
+//			ipc_queue *ipcq;
+//
+//			/*
+//			 * We have three queues per worker process, two are multi producer queues which requires a LWLock,
+//			 * the other two are single producer queues and don't require a LWLock. The MP queue is used by the
+//			 * insert processes to write tuples to the worker process. One SP queue is used by the worker process to
+//			 * write data to itself (or by other worker processes to write data to it). The last SP queue is used
+//			 * by the IPC broker to copy data from the first two queues so that the worker can read the data being
+//			 * sent to it.
+//			 */
+//
+//			/* broker->worker queue */
+//			ipcq = (ipc_queue *) ptr;
+//			ipc_queue_init(ptr, ipc_queue_size, NULL);
+//			ipc_queue_set_handlers(ipcq, StreamTupleStatePeekFn, popfn, NULL);
+//			ipcq->produced_by_broker = true;
+//			ptr += ipc_queue_size;
+//
+//			/* We use the same lock for these two producer queues */
+//
+//			/* worker->broker queue */
+//			ipcq = (ipc_queue *) ptr;
+//			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock);
+//			ipc_queue_set_handlers(ipcq, NULL, NULL, StreamTupleStateCopyFn);
+//			ipcq->consumed_by_broker = true;
+//			ptr += ipc_queue_size;
+//			lock_slot++;
+//
+//			/* insert->worker queue */
+//			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock);
+//			ipc_queue_set_handlers((ipc_queue *) ptr, StreamTupleStatePeekFn, popfn, StreamTupleStateCopyFn);
+//			ptr += ipc_queue_size;
+//			lock_slot++;
+//		}
+//
+//		for (i = 0; i < continuous_query_num_combiners; i++)
+//		{
+//			ipc_queue_pop_fn popfn = synchronous_stream_insert ? PartialTupleStatePopFn : NULL;
+//
+//			/* worker->combiner queue */
+//			ipc_queue_init(ptr, ipc_queue_size, &lock_slot->lock);
+//			ipc_queue_set_handlers((ipc_queue *) ptr, PartialTupleStatePeekFn, popfn, PartialTupleStateCopyFn);
+//			ptr += ipc_queue_size;
+//			lock_slot++;
+//		}
 	}
 
 	LWLockRelease(IPCMessageBrokerIndexLock);

@@ -473,7 +473,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 
 	if (!bms_is_empty(queries))
 	{
-		sis->batch = microbatch_new(WorkerTuple, queries, sis->desc, 0);
+		sis->batch = microbatch_new(WorkerTuple, queries, sis->desc);
 
 		if (synchronous_stream_insert)
 		{
@@ -490,8 +490,6 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 static inline void
 microbatch_send_to_worker(microbatch_t *mb)
 {
-	int len;
-	char *buf = microbatch_pack(mb, &len);
 	static int worker_id = 0;
 	static ContQueryDatabaseMetadata *db_meta = NULL;
 	int recv_id;
@@ -508,12 +506,8 @@ microbatch_send_to_worker(microbatch_t *mb)
 	}
 
 	recv_id = db_meta->db_procs[worker_id].pzmq_id;
-	pzmq_connect(recv_id, IsContQueryProcess() ? 0 : 1);
 
-	/* TODO(usmanm): What to do if interrupted? */
-	pzmq_send(recv_id, buf, len, true);
-
-	pfree(buf);
+	microbatch_send(mb, recv_id);
 	microbatch_reset(mb);
 }
 
@@ -561,6 +555,6 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 	if (synchronous_stream_insert)
 	{
 		microbatch_ack_increment_wtups(sis->ack, sis->count);
-//		microbatch_ack_wait_and_free(sis->ack);
+		microbatch_ack_wait_and_free(sis->ack);
 	}
 }

@@ -1641,71 +1641,54 @@ set_group_hash(ContQueryCombinerState *state, int index, int64 hash)
 }
 
 static int
-read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
+read_batch(ContQueryCombinerState *state, Oid query_id)
 {
-	PartialTupleState *pts;
-	int len;
+	ipc_tuple *itup;
 	Size nbytes = 0;
-	int count = 0;
-//
-//	while ((pts = (PartialTupleState *) ContExecutorIterate(cont_exec, &len)) != NULL)
-//	{
-//		if (!TupIsNull(state->slot))
-//			ExecClearTuple(state->slot);
-//
-//		ExecStoreTuple(heap_copytuple(pts->tup), state->slot, InvalidBuffer, false);
-//		tuplestore_puttupleslot(state->batch, state->slot);
-//
-//		set_group_hash(state, count, pts->hash);
-//
-//		nbytes += len;
-//		count++;
-//	}
+	int ntups = 0;
+
+	while ((itup = ipc_tuple_reader_next(query_id)) != NULL)
+	{
+		if (!TupIsNull(state->slot))
+			ExecClearTuple(state->slot);
+
+		ExecStoreTuple(heap_copytuple(itup->tup), state->slot, InvalidBuffer, false);
+		tuplestore_puttupleslot(state->batch, state->slot);
+
+		set_group_hash(state, ntups, itup->hash);
+
+		nbytes += itup->tup->t_len + HEAPTUPLESIZE;
+		ntups++;
+	}
+
+	ipc_tuple_reader_rewind();
 
 	if (!TupIsNull(state->slot))
 		ExecClearTuple(state->slot);
 
-	pgstat_increment_cq_read(count, nbytes);
+	pgstat_increment_cq_read(ntups, nbytes);
 
-	return count;
+	return ntups;
 }
 
 /*
  * need_sync
  */
 static bool
-need_sync(ContExecutor *cont_exec, TimestampTz last_sync)
+need_sync(TimestampTz last_sync)
 {
-	Bitmapset *tmp = bms_copy(cont_exec->all_queries);
-	ContQueryCombinerState **states = (ContQueryCombinerState **) cont_exec->states;
-	int id;
-
-	while ((id = bms_first_member(tmp)) >= 0)
-	{
-		ContQueryCombinerState *state = states[id];
-		if (state == NULL)
-			continue;
-	}
-
-	if (synchronous_stream_insert || continuous_query_commit_interval == 0)
+	if (synchronous_stream_insert || !continuous_query_commit_interval)
 		return true;
 
 	return TimestampDifferenceExceeds(last_sync, GetCurrentTimestamp(), continuous_query_commit_interval);
 }
 
-void
-ContinuousQueryCombinerMain(void)
+static int
+get_min_tick_ms(void)
 {
-	ContExecutor *cont_exec;// = ContExecutorNew(Combiner, &init_query_state);
-	Oid query_id;
-	TimestampTz first_seen = GetCurrentTimestamp();
-	bool do_commit = false;
-	long total_pending = 0;
-	int min_tick_ms = 0;
 	Bitmapset *queries;
+	int min_tick_ms = 0;
 	int id;
-
-	proc_exit(0);
 
 	/*
 	 * Get the minimum timeout we can use to ensure SW queries
@@ -1728,6 +1711,21 @@ ContinuousQueryCombinerMain(void)
 	}
 
 	CommitTransactionCommand();
+
+	return min_tick_ms;
+}
+
+void
+ContinuousQueryCombinerMain(void)
+{
+	ContExecutor *cont_exec = ContExecutorNew(&init_query_state);
+	Oid query_id;
+	TimestampTz first_seen = 0;
+	bool do_commit = false;
+	long total_pending = 0;
+	int min_tick_ms;
+
+	min_tick_ms = get_min_tick_ms();
 
 	/* Set the commit level */
 	synchronous_commit = continuous_query_combiner_synchronous_commit;
@@ -1753,7 +1751,7 @@ ContinuousQueryCombinerMain(void)
 
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 
-				count = read_batch(state, cont_exec);
+				count = read_batch(state, query_id);
 
 				if (count)
 				{
@@ -1762,7 +1760,7 @@ ContinuousQueryCombinerMain(void)
 
 					combine(state);
 
-					if (first_seen == 0)
+					if (!first_seen)
 						first_seen = GetCurrentTimestamp();
 				}
 
@@ -1785,9 +1783,6 @@ ContinuousQueryCombinerMain(void)
 				ContExecutorPurgeQuery(cont_exec);
 				pgstat_increment_cq_error(1);
 
-				if (!continuous_query_crash_recovery)
-					proc_exit(1);
-
 				MemoryContextSwitchTo(cont_exec->tmp_cxt);
 			}
 			PG_END_TRY();
@@ -1798,7 +1793,7 @@ next:
 
 		if (total_pending == 0)
 			do_commit = true;
-		else if (need_sync(cont_exec, first_seen))
+		else if (need_sync(first_seen))
 		{
 			sync_all(cont_exec);
 			do_commit = true;

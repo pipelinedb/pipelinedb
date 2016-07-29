@@ -32,7 +32,7 @@ typedef enum microbatch_type_t
 
 typedef struct microbatch_ack_t
 {
-	int id;
+	volatile int id;
 	/* Number of acks from workers */
 	pg_atomic_uint32 num_wacks;
 	/* Number of acks from combiners */
@@ -56,6 +56,14 @@ extern void microbatch_ack_wait_and_free(microbatch_ack_t *ack);
 			pg_atomic_fetch_add_u32(&(ack)->num_cacks, (n)); \
 	} \
 	while (0);
+#define microbatch_ack_check_and_exec(aid, ack, fn, arg) \
+	do \
+	{ \
+		if ((aid) == ((microbatch_ack_t *) (ack))->id) \
+			fn((microbatch_ack_t *) (ack), (arg)); \
+	} \
+	while (0);
+
 #define microbatch_ack_is_acked(ack) \
 	(pg_atomic_read_u32(&(ack)->num_wacks) >= pg_atomic_read_u32(&(ack)->num_wtups) && \
 			pg_atomic_read_u32(&(ack)->num_cacks) >= pg_atomic_read_u32(&(ack)->num_ctups))
@@ -77,7 +85,7 @@ typedef struct microbatch_t
 	StringInfo buf;
 } microbatch_t;
 
-extern microbatch_t *microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc, uint64 hash);
+extern microbatch_t *microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc);
 extern void microbatch_destroy(microbatch_t *mb);
 extern void microbatch_reset(microbatch_t *mb);
 
@@ -88,5 +96,6 @@ extern bool microbatch_add_tuple(microbatch_t *mb, HeapTuple tup, uint64 group_h
 
 extern char *microbatch_pack(microbatch_t *mb, int *len);
 extern microbatch_t *microbatch_unpack(char *buf, int len);
+extern void microbatch_send(microbatch_t *mb, uint64 recv_id);
 
 #endif

@@ -13,6 +13,7 @@
 #include "miscadmin.h"
 #include "nodes/value.h"
 #include "pipeline/ipc/microbatch.h"
+#include "pipeline/ipc/pzmq.h"
 #include "pipeline/miscutils.h"
 #include "storage/shm_alloc.h"
 #include "utils/typcache.h"
@@ -49,7 +50,7 @@ microbatch_ack_wait_and_free(microbatch_ack_t *ack)
 }
 
 microbatch_t *
-microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc, uint64 hash)
+microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc)
 {
 	microbatch_t *mb = palloc0(sizeof(microbatch_t));
 
@@ -67,7 +68,6 @@ microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc, uint6
 		int i;
 
 		Assert(bms_num_members(queries) >= 1);
-		Assert(!hash);
 
 		mb->packed_size += BITMAPSET_SIZE(queries->nwords); /* queries */
 		mb->packed_size += sizeof(int); /* number of record descs */
@@ -83,7 +83,7 @@ microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc, uint6
 			if (attr->atttypid != RECORDOID)
 				continue;
 
-
+			Assert(attr->atttypmod != -1);
 			rdesc = lookup_rowtype_tupdesc(RECORDOID, attr->atttypmod);
 
 			ref = palloc(sizeof(tagged_ref_t));
@@ -100,10 +100,8 @@ microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc, uint6
 		Assert(desc == NULL);
 		Assert(type == CombinerTuple);
 		Assert(bms_num_members(queries) == 1);
-		Assert(hash);
 
 		mb->packed_size += sizeof(Oid); /* query id */
-		mb->packed_size += sizeof(uint64); /* group hash */
 	}
 
 	return mb;
@@ -412,4 +410,17 @@ microbatch_unpack(char *buf, int len)
 	Assert(mb->packed_size == len);
 
 	return mb;
+}
+
+void
+microbatch_send(microbatch_t *mb, uint64 recv_id)
+{
+	int len;
+	char *buf = microbatch_pack(mb, &len);
+
+	pzmq_connect(recv_id, 0);
+	/* TODO(usmanm): What to do if interrupted? */
+	pzmq_send(recv_id, buf, len, true);
+
+	pfree(buf);
 }

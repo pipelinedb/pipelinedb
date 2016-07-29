@@ -203,8 +203,6 @@ ContinuousQueryWorkerMain(void)
 			EState *estate = NULL;
 			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->curr_query;
 
-			elog(LOG, "fuck");
-
 			PG_TRY();
 			{
 				if (state == NULL)
@@ -247,9 +245,6 @@ ContinuousQueryWorkerMain(void)
 
 				ContExecutorPurgeQuery(cont_exec);
 				pgstat_increment_cq_error(1);
-
-				if (!continuous_query_crash_recovery)
-					proc_exit(1);
 
 				AbortCurrentTransaction();
 				StartTransactionCommand();

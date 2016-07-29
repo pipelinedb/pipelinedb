@@ -53,113 +53,113 @@ char *stream_targets;
 int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;
 void *copy_iter_arg = NULL;
 
-uint64
-SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples,
-		int ntuples, InsertBatchAck *acks, int nacks)
-{
-	ipc_queue *ipcq;
-	Bitmapset *targets = GetLocalStreamReaders(RelationGetRelid(stream));
-	bytea *packed_desc;
-	int i;
-	int free;
-	uint64 tail;
-	uint64 head;
-	int nbatches = 1;
-	uint64 size = 0;
-	int ninserted;
-	TimestampTz now = GetCurrentTimestamp();
-
-	/* No reader? Noop. */
-	if (bms_is_empty(targets))
-		return 0;
-
-	packed_desc = PackTupleDesc(desc);
-
-	ipcq = get_any_worker_queue_with_lock();
-	head = pg_atomic_read_u64(&ipcq->head);
-	tail = pg_atomic_read_u64(&ipcq->tail);
-	free = ipc_queue_free_size(ipcq, head, tail);
-	ninserted = 0;
-
-	Assert(free >= 0);
-
-	for (i = 0; i < ntuples; i++)
-	{
-		HeapTuple tup = tuples[i];
-		int len;
-		StreamTupleState *sts = StreamTupleStateCreate(tup, desc, packed_desc, targets, acks, nacks, &len);
-		ipc_queue_slot *slot = ipc_queue_slot_get(ipcq, head);
-		int len_needed = sizeof(ipc_queue_slot) + len;
-		bool needs_wrap = ipc_queue_needs_wrap(ipcq, head, len_needed);
-		char *dest_bytes;
-
-		Assert(IsContQueryWorkerProcess() ? ipcq->consumed_by_broker : true);
-		Assert(tail <= head);
-
-		if (needs_wrap)
-			len_needed = len + ipcq->size - ipc_queue_offset(ipcq, head);
-
-		if (free < len_needed)
-		{
-			tail = pg_atomic_read_u64(&ipcq->tail);
-			free = ipc_queue_free_size(ipcq, head, tail);
-		}
-
-		if (free < len_needed || ninserted >= continuous_query_batch_size)
-		{
-			ipc_queue_update_head(ipcq, head);
-			ipc_queue_unlock(ipcq);
-
-			ipcq = get_any_worker_queue_with_lock();
-
-			head = pg_atomic_read_u64(&ipcq->head);
-			tail = pg_atomic_read_u64(&ipcq->tail);
-			free = ipc_queue_free_size(ipcq, head, tail);
-
-			if (ninserted)
-				nbatches++;
-
-			now = GetCurrentTimestamp();
-			ninserted = 0;
-
-			/* retry this tuple */
-			i--;
-
-			continue;
-		}
-
-		size += len;
-		ninserted++;
-
-		free -= len_needed;
-		head += len_needed;
-
-		slot->time = now;
-		slot->len = len;
-		slot->peeked = false;
-		slot->wraps = needs_wrap;
-		slot->next = head;
-
-		dest_bytes = needs_wrap ? ipcq->bytes : slot->bytes;
-		ipc_queue_check_overflow(ipcq, dest_bytes, len);
-
-		StreamTupleStateCopyFn(dest_bytes, sts, len);
-
-		if (sts->record_descs)
-			pfree(sts->record_descs);
-		pfree(sts);
-	}
-
-	ipc_queue_update_head(ipcq, head);
-	ipc_queue_unlock(ipcq);
-
-	pgstat_increment_stream_insert(RelationGetRelid(stream), ntuples, nbatches, size);
-
-	bms_free(targets);
-	pfree(packed_desc);
-
-	return size;
-}
+//uint64
+//SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples,
+//		int ntuples, InsertBatchAck *acks, int nacks)
+//{
+//	ipc_queue *ipcq;
+//	Bitmapset *targets = GetLocalStreamReaders(RelationGetRelid(stream));
+//	bytea *packed_desc;
+//	int i;
+//	int free;
+//	uint64 tail;
+//	uint64 head;
+//	int nbatches = 1;
+//	uint64 size = 0;
+//	int ninserted;
+//	TimestampTz now = GetCurrentTimestamp();
+//
+//	/* No reader? Noop. */
+//	if (bms_is_empty(targets))
+//		return 0;
+//
+//	packed_desc = PackTupleDesc(desc);
+//
+//	ipcq = get_any_worker_queue_with_lock();
+//	head = pg_atomic_read_u64(&ipcq->head);
+//	tail = pg_atomic_read_u64(&ipcq->tail);
+//	free = ipc_queue_free_size(ipcq, head, tail);
+//	ninserted = 0;
+//
+//	Assert(free >= 0);
+//
+//	for (i = 0; i < ntuples; i++)
+//	{
+//		HeapTuple tup = tuples[i];
+//		int len;
+//		StreamTupleState *sts = StreamTupleStateCreate(tup, desc, packed_desc, targets, acks, nacks, &len);
+//		ipc_queue_slot *slot = ipc_queue_slot_get(ipcq, head);
+//		int len_needed = sizeof(ipc_queue_slot) + len;
+//		bool needs_wrap = ipc_queue_needs_wrap(ipcq, head, len_needed);
+//		char *dest_bytes;
+//
+//		Assert(IsContQueryWorkerProcess() ? ipcq->consumed_by_broker : true);
+//		Assert(tail <= head);
+//
+//		if (needs_wrap)
+//			len_needed = len + ipcq->size - ipc_queue_offset(ipcq, head);
+//
+//		if (free < len_needed)
+//		{
+//			tail = pg_atomic_read_u64(&ipcq->tail);
+//			free = ipc_queue_free_size(ipcq, head, tail);
+//		}
+//
+//		if (free < len_needed || ninserted >= continuous_query_batch_size)
+//		{
+//			ipc_queue_update_head(ipcq, head);
+//			ipc_queue_unlock(ipcq);
+//
+//			ipcq = get_any_worker_queue_with_lock();
+//
+//			head = pg_atomic_read_u64(&ipcq->head);
+//			tail = pg_atomic_read_u64(&ipcq->tail);
+//			free = ipc_queue_free_size(ipcq, head, tail);
+//
+//			if (ninserted)
+//				nbatches++;
+//
+//			now = GetCurrentTimestamp();
+//			ninserted = 0;
+//
+//			/* retry this tuple */
+//			i--;
+//
+//			continue;
+//		}
+//
+//		size += len;
+//		ninserted++;
+//
+//		free -= len_needed;
+//		head += len_needed;
+//
+//		slot->time = now;
+//		slot->len = len;
+//		slot->peeked = false;
+//		slot->wraps = needs_wrap;
+//		slot->next = head;
+//
+//		dest_bytes = needs_wrap ? ipcq->bytes : slot->bytes;
+//		ipc_queue_check_overflow(ipcq, dest_bytes, len);
+//
+//		StreamTupleStateCopyFn(dest_bytes, sts, len);
+//
+//		if (sts->record_descs)
+//			pfree(sts->record_descs);
+//		pfree(sts);
+//	}
+//
+//	ipc_queue_update_head(ipcq, head);
+//	ipc_queue_unlock(ipcq);
+//
+//	pgstat_increment_stream_insert(RelationGetRelid(stream), ntuples, nbatches, size);
+//
+//	bms_free(targets);
+//	pfree(packed_desc);
+//
+//	return size;
+//}
 
 /*
  * CopyIntoStream
@@ -169,31 +169,31 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples,
 void
 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	InsertBatchAck *ack = NULL;
-	InsertBatch *batch = NULL;
-	bool snap = ActiveSnapshotSet();
-
-	if (snap)
-		PopActiveSnapshot();
-
-	if (synchronous_stream_insert)
-	{
-		batch = InsertBatchCreate();
-		ack = palloc0(sizeof(InsertBatchAck));
-		ack->batch_id = batch->id;
-		ack->batch = batch;
-	}
-
-	SendTuplesToContWorkers(stream, desc, tuples, ntuples, ack, ack ? 1 : 0);
-
-	if (batch)
-	{
-		pfree(ack);
-		InsertBatchWaitAndRemove(batch, ntuples);
-	}
-
-	if (snap)
-		PushActiveSnapshot(GetTransactionSnapshot());
+//	InsertBatchAck *ack = NULL;
+//	InsertBatch *batch = NULL;
+//	bool snap = ActiveSnapshotSet();
+//
+//	if (snap)
+//		PopActiveSnapshot();
+//
+//	if (synchronous_stream_insert)
+//	{
+//		batch = InsertBatchCreate();
+//		ack = palloc0(sizeof(InsertBatchAck));
+//		ack->batch_id = batch->id;
+//		ack->batch = batch;
+//	}
+//
+//	SendTuplesToContWorkers(stream, desc, tuples, ntuples, ack, ack ? 1 : 0);
+//
+//	if (batch)
+//	{
+//		pfree(ack);
+//		InsertBatchWaitAndRemove(batch, ntuples);
+//	}
+//
+//	if (snap)
+//		PushActiveSnapshot(GetTransactionSnapshot());
 }
 
 Datum
@@ -249,7 +249,7 @@ pipeline_stream_insert(PG_FUNCTION_ARGS)
 		rel = heap_openrv(stream, AccessShareLock);
 
 		tups[0] = tup;
-		SendTuplesToContWorkers(rel, desc, tups, 1, NULL, 0);
+//		SendTuplesToContWorkers(rel, desc, tups, 1, NULL, 0);
 
 		heap_close(rel, AccessShareLock);
 	}

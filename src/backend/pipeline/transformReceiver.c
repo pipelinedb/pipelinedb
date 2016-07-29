@@ -45,7 +45,7 @@ typedef struct TransformState
 	int nmaxtups;
 	int ntups;
 	int nacks;
-	InsertBatchAck *acks;
+//	InsertBatchAck *acks;
 } TransformState;
 
 static void
@@ -104,8 +104,8 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 		t->tups[t->ntups] = ExecCopySlotTuple(slot);
 		t->ntups++;
 
-		if (synchronous_stream_insert && t->acks == NULL)
-			t->acks = InsertBatchAckCreate(t->cont_exec->yielded_msgs, &t->nacks);
+//		if (synchronous_stream_insert && t->acks == NULL)
+//			t->acks = InsertBatchAckCreate(t->cont_exec->yielded_msgs, &t->nacks);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -198,18 +198,18 @@ pipeline_stream_insert_batch(TransformState *t)
 		Relation rel = heap_openrv(rv, AccessShareLock);
 		Size size;
 
-		if (t->acks)
-		{
-			int i;
+//		if (t->acks)
+//		{
+//			int i;
+//
+//			for (i = 0; i < t->nacks; i++)
+//			{
+////				InsertBatchAck *ack = &t->acks[i];
+////				InsertBatchIncrementNumWTuples(ack->batch, t->ntups);
+//			}
+//		}
 
-			for (i = 0; i < t->nacks; i++)
-			{
-				InsertBatchAck *ack = &t->acks[i];
-				InsertBatchIncrementNumWTuples(ack->batch, t->ntups);
-			}
-		}
-
-		size = SendTuplesToContWorkers(rel, RelationGetDescr(t->tg_rel), t->tups, t->ntups, t->acks, t->nacks);
+//		size = SendTuplesToContWorkers(rel, RelationGetDescr(t->tg_rel), t->tups, t->ntups, t->acks, t->nacks);
 
 		heap_close(rel, NoLock);
 
@@ -220,12 +220,12 @@ pipeline_stream_insert_batch(TransformState *t)
 		}
 	}
 
-	if (t->acks)
-	{
-		pfree(t->acks);
-		t->acks = NULL;
-		t->nacks = 0;
-	}
+//	if (t->acks)
+//	{
+//		pfree(t->acks);
+//		t->acks = NULL;
+//		t->nacks = 0;
+//	}
 
 	if (t->ntups)
 	{
