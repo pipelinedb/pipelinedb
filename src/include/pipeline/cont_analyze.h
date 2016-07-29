@@ -38,6 +38,8 @@ typedef struct ContAnalyzeContext
 	ContQueryProcType proc_type;
 } ContAnalyzeContext;
 
+#define OUTPUT_OF "output_of"
+
 #define MATREL_COMBINE "combine"
 #define MATREL_FINALIZE "finalize"
 

@@ -1,5 +1,5 @@
 CREATE CONTINUOUS VIEW os0 AS SELECT COUNT(*) FROM os_stream;
-CREATE CONTINUOUS VIEW os0_output AS SELECT (old).count AS old_count, (new).count AS new_count FROM os0_osrel;
+CREATE CONTINUOUS VIEW os0_output AS SELECT (old).count AS old_count, (new).count AS new_count FROM output_of('os0');
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
  pg_sleep 
@@ -71,7 +71,7 @@ CREATE CONTINUOUS VIEW os1_output AS SELECT
   (new).g,
   (old).count AS old_count, (new).count AS new_count,
   (old).sum AS old_sum, (new).sum AS new_sum
-FROM os1_osrel;
+FROM output_of('os1');
 INSERT INTO os_stream (x) VALUES (10);
 SELECT pg_sleep(2);
  pg_sleep 
@@ -205,7 +205,7 @@ CREATE CONTINUOUS VIEW os2_output AS SELECT
   arrival_timestamp,
   CASE WHEN old IS NULL THEN (new).x ELSE (old).x END AS x,
   old, new
-FROM os2_osrel;
+FROM output_of('os2');
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
  pg_sleep 
@@ -276,9 +276,9 @@ INSERT INTO os_t0 (x, y) VALUES (0, 42);
 CREATE CONTINUOUS VIEW os3 AS SELECT x::integer, COUNT(*)
 FROM os_stream GROUP BY x;
 CREATE CONTINUOUS VIEW os3_output AS SELECT
-  CASE WHEN (s.old) IS NULL THEN (s.new).x ELSE (s.old).x END AS x,
-  s.new, t.y
-  FROM os3_osrel s JOIN os_t0 t ON x = t.x;
+  CASE WHEN (old) IS NULL THEN (new).x ELSE (old).x END AS x,
+  new, t.y
+  FROM output_of('os3') JOIN os_t0 t ON x = t.x;
 NOTICE:  consider creating an index on t.x for improved stream-table join performance
 INSERT INTO os_stream (x) VALUES (0);
 SELECT pg_sleep(2);
@@ -335,7 +335,7 @@ CREATE CONTINUOUS VIEW os3_output AS SELECT
   arrival_timestamp,
   CASE WHEN old IS NULL THEN (new).x ELSE (old).x END AS x,
   old, new
-FROM os3_osrel;
+FROM output_of('os3');
 INSERT INTO os_stream (x, y, z) VALUES (0, 2, 0);
 SELECT pg_sleep(2);
  pg_sleep 

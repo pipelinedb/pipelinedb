@@ -49,6 +49,7 @@
 #include "parser/parse_type.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/stream.h"
 #include "rewrite/rewriteHandler.h"
 #include "storage/lock.h"
@@ -1592,12 +1593,104 @@ create_inferred_streams(Node *node, void *context)
 }
 
 /*
+ * rewrite_from_clause
+ */
+static Node *
+rewrite_from_clause(Node *from)
+{
+	Node *new_from = from;
+
+	if (IsA(from, RangeSubselect))
+	{
+		RangeSubselect *sub = (RangeSubselect *) from;
+		sub->subquery = rewrite_from_clause(sub->subquery);
+
+		if (IsA(sub->subquery, SelectStmt))
+		{
+			SelectStmt *s = (SelectStmt *) sub->subquery;
+			s->fromClause = (List *) rewrite_from_clause((Node *) s->fromClause);
+		}
+		new_from = from;
+	}
+	else if (IsA(from, JoinExpr))
+	{
+		JoinExpr *join = (JoinExpr *) from;
+		join->larg = rewrite_from_clause(join->larg);
+		join->rarg = rewrite_from_clause(join->rarg);
+		new_from = from;
+	}
+	else if (IsA(from, List))
+	{
+		List *result = NIL;
+		ListCell *lc;
+
+		foreach(lc, (List *) from)
+		{
+			Node *node = (Node *) lfirst(lc);
+			result = lappend(result, rewrite_from_clause(node));
+		}
+		new_from = (Node *) result;
+	}
+	else if (IsA(from, RangeFunction))
+	{
+		 /*
+		  * If this is a from item of the form:
+		  *
+		  * ... FROM output_of('cv_name')
+		  *
+		  * We rewrite it to refer to the target CV's underlying
+		  * output stream.
+		  */
+		 RangeFunction *rf = (RangeFunction *) from;
+		 FuncCall *fn;
+		 RangeVar *rv;
+		 Relation cvrel;
+		 A_Const *arg;
+		 char *cv_name;
+
+		 /* Functions here are represented by a lists of length 2 */
+		 if (list_length(rf->functions) != 1 || list_length(linitial(rf->functions)) != 2)
+			 return from;
+
+		 fn = (FuncCall *) linitial(linitial(rf->functions));
+		 if (list_length(fn->funcname) != 1)
+			 return from;
+
+		 if (pg_strcasecmp(strVal(linitial(fn->funcname)), OUTPUT_OF) != 0)
+			 return from;
+
+		 if (list_length(fn->args) != 1)
+			 return from;
+
+		 if (!IsA(linitial(fn->args), A_Const))
+			 return from;
+
+		 arg = (A_Const *) linitial(fn->args);
+		 if (!IsA(&arg->val, String))
+			 return from;
+
+		 cv_name = strVal(&arg->val);
+		 rv = makeRangeVarFromNameList(textToQualifiedNameList((text *) CStringGetTextDatum(cv_name)));
+
+		 /* Just fail if the target CV doesn't exist */
+		 cvrel = heap_openrv(rv, NoLock);
+		 heap_close(cvrel, NoLock);
+
+		 rv->relname = CVNameToOSRelName(rv->relname);
+		 new_from = (Node *) rv;
+	}
+
+	return new_from;
+}
+
+/*
  * CreateInferredStreams
  */
 void
 CreateInferredStreams(SelectStmt *stmt)
 {
 	create_inferred_streams(copyObject(stmt->fromClause), NULL);
+	stmt->fromClause = (List *) rewrite_from_clause((Node *) stmt->fromClause);
 }
 
 /*
