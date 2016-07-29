@@ -18,6 +18,7 @@ typedef struct ipc_tuple
 	TupleDesc desc;
 	List *record_descs;
 	HeapTuple tup;
+	uint64 hash;
 } ipc_tuple;
 
 typedef struct ipc_tuple_reader_batch

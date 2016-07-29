@@ -23,13 +23,6 @@ int continuous_query_batch_size;
 #define MAX_PACKED_SIZE ((continuous_query_batch_size * 1024) - 2048) /* subtract 2kb for buffer for acks */
 #define MAX_TUPDESC_SIZE(desc) ((desc)->natts * (sizeof(NameData) + (3 * sizeof(int))))
 
-typedef struct tagged_ref_t
-{
-	void *ptr;
-	int tag;
-} tagged_ref_t;
-
-
 microbatch_ack_t *
 microbatch_ack_new(void)
 {
@@ -63,7 +56,6 @@ microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc, uint6
 	mb->type = type;
 	mb->queries = queries;
 	mb->desc = desc;
-	mb->group_hash = hash;
 	mb->buf = makeStringInfo();
 
 	mb->packed_size = sizeof(microbatch_type_t);
@@ -120,18 +112,22 @@ microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc, uint6
 void
 microbatch_reset(microbatch_t *mb)
 {
-	list_free(mb->tups);
-	mb->tups = NIL;
+	if (mb->tups)
+		pfree(mb->tups);
+
+	mb->tups = NULL;
+	mb->ntups = 0;
+
 	resetStringInfo(mb->buf);
 }
 
 void
 microbatch_destroy(microbatch_t *mb)
 {
+	microbatch_reset(mb);
+
 	list_free_deep(mb->record_descs);
 	list_free_deep(mb->acks);
-	list_free(mb->tups);
-	mb->ntups = 0;
 	pfree(mb->buf->data);
 	pfree(mb->buf);
 	pfree(mb);
@@ -149,7 +145,7 @@ microbatch_add_ack(microbatch_t *mb, microbatch_ack_t *ack)
 }
 
 bool
-microbatch_add_tuple(microbatch_t *mb, HeapTuple tup)
+microbatch_add_tuple(microbatch_t *mb, HeapTuple tup, uint64 hash)
 {
 	int tup_size = HEAPTUPLESIZE + tup->t_len;
 
@@ -164,6 +160,13 @@ microbatch_add_tuple(microbatch_t *mb, HeapTuple tup)
 
 	appendBinaryStringInfo(mb->buf, (char *) tup, HEAPTUPLESIZE);
 	appendBinaryStringInfo(mb->buf, (char *) tup->t_data, tup->t_len);
+
+	if (mb->type == CombinerTuple)
+	{
+		Assert(hash);
+		appendBinaryStringInfo(mb->buf, (char *) &hash, sizeof(uint64));
+	}
+
 	mb->ntups++;
 
 	return true;
@@ -253,7 +256,7 @@ microbatch_pack(microbatch_t *mb, int *len)
 	ListCell *lc;
 
 	Assert(!mb->allow_iter);
-	Assert(mb->tups == NIL);
+	Assert(mb->tups == NULL);
 
 	Assert(mb->packed_size + mb->buf->len <= MAX_PACKED_SIZE);
 
@@ -310,11 +313,6 @@ microbatch_pack(microbatch_t *mb, int *len)
 		Oid id = bms_next_member(mb->queries, -1);
 		memcpy(pos, &id, sizeof(Oid));
 		pos += sizeof(Oid);
-
-		/* Pack group hash */
-		Assert(mb->group_hash);
-		memcpy(pos, &mb->group_hash, sizeof(uint64));
-		pos += sizeof(uint64);
 	}
 
 	packed_size = (uintptr_t) pos - (uintptr_t) buf;
@@ -353,13 +351,25 @@ microbatch_unpack(char *buf, int len)
 	memcpy(&mb->ntups, pos, sizeof(int));
 	pos += sizeof(int);
 
+	mb->tups = palloc(sizeof(tagged_ref_t) * mb->ntups);
+
 	for (i = 0; i < mb->ntups; i++)
 	{
+		tagged_ref_t *ref = &mb->tups[i];
 		HeapTuple tup = (HeapTuple) pos;
 		pos += HEAPTUPLESIZE;
 		tup->t_data = (HeapTupleHeader) pos;
 		pos += tup->t_len;
-		mb->tups = lappend(mb->tups, tup);
+
+		ref->ptr = tup;
+
+		if (mb->type == CombinerTuple)
+		{
+			memcpy(&ref->tag, pos, sizeof(uint64));
+			pos += sizeof(uint64);
+		}
+		else
+			ref->tag = 0;
 	}
 
 	if (mb->type == WorkerTuple)
@@ -395,11 +405,6 @@ microbatch_unpack(char *buf, int len)
 		memcpy(&query_id, pos, sizeof(Oid));
 		pos += sizeof(Oid);
 		mb->queries = bms_make_singleton(query_id);
-
-		/* Unpack group hash */
-		memcpy(&mb->group_hash, pos, sizeof(uint64));
-		pos += sizeof(uint64);
-		Assert(mb->group_hash);
 	}
 
 	mb->packed_size = (uintptr_t) pos - (uintptr_t) buf;

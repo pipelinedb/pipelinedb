@@ -17,6 +17,7 @@
 #include "nodes/bitmapset.h"
 #include "nodes/pg_list.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/miscutils.h"
 #include "port/atomics.h"
 
 /* guc */
@@ -68,11 +69,10 @@ typedef struct microbatch_t
 	TupleDesc desc;
 	Bitmapset *queries;
 
-	List *tups;
 	List *acks;
 	List *record_descs;
-	uint64 group_hash; /* only valid for CombinerTuple tupe */
 
+	tagged_ref_t *tups;
 	int ntups;
 	StringInfo buf;
 } microbatch_t;
@@ -82,7 +82,7 @@ extern void microbatch_destroy(microbatch_t *mb);
 extern void microbatch_reset(microbatch_t *mb);
 
 extern void microbatch_add_ack(microbatch_t *mb, microbatch_ack_t *ack);
-extern bool microbatch_add_tuple(microbatch_t *mb, HeapTuple tup);
+extern bool microbatch_add_tuple(microbatch_t *mb, HeapTuple tup, uint64 group_hash);
 #define microbatch_is_empty(mb) ((mb)->ntups == 0)
 #define microbatch_is_writable(mb) (!(mb)->readonly)
 

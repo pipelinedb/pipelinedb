@@ -18,6 +18,12 @@
 #include "storage/dsm.h"
 #include "utils/typcache.h"
 
+typedef struct tagged_ref_t
+{
+	void *ptr;
+	int tag;
+} tagged_ref_t;
+
 #define ptr_difference(begin, end) ((void *) (((char *) end) - ((char *) begin)))
 #define ptr_offset(begin, offset) ((void *) (((char *) begin) + ((uintptr_t) offset)))
 

@@ -13,30 +13,24 @@
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/ipc/pzmq.h"
 #include "pipeline/ipc/reader.h"
+#include "pipeline/miscutils.h"
 #include "utils/memutils.h"
 
 typedef struct ipc_tuple_reader_scan
 {
 	ListCell *batch;
-	ListCell *tup;
-
-	bool batch_started;
+	int tup_idx;
 	bool scan_started;
 	bool exhausted;
 } ipc_tuple_reader_scan;
 
-static ipc_tuple_reader_scan my_rscan = { NULL, NULL, false };
-static ipc_tuple_reader_batch my_rbatch = { NULL, 0, 0 };
+static ipc_tuple_reader_scan my_rscan = { NULL, -1, false, false };
+static ipc_tuple_reader_batch my_rbatch = { NULL, NULL, 0, 0 };
 static ipc_tuple my_rscan_tup;
 
 typedef struct ipc_tuple_reader
 {
 	MemoryContext cxt;
-
-	int num_tuples;
-	Size num_bytes;
-
-	Bitmapset *queries;
 	List *batches;
 } ipc_tuple_reader;
 
@@ -89,6 +83,7 @@ ipc_tuple_reader_pull(void)
 	int ntups = 0;
 	int nbytes = 0;
 	List *acks = NIL;
+	Bitmapset *queries;
 
 	Assert(my_reader->batches == NIL);
 
@@ -101,16 +96,14 @@ ipc_tuple_reader_pull(void)
 		microbatch_t *mb;
 		int timeout;
 
-		if (my_reader->num_tuples >= continuous_query_num_batch ||
-				my_reader->num_bytes >= (continuous_query_batch_size * 1024))
+		if (ntups >= continuous_query_num_batch ||
+				nbytes >= (continuous_query_batch_size * 1024))
 			break;
 
 		TimestampDifference(start, GetCurrentTimestamp(), &secs, &usecs);
 		timeout = continuous_query_max_wait - (secs * 1000 + usecs / 1000);
 		if (timeout <= 0)
 			break;
-
-		elog(LOG, "recv");
 
 		buf = pzmq_recv(&len, timeout);
 		if (!buf)
@@ -121,20 +114,17 @@ ipc_tuple_reader_pull(void)
 		nbytes += len;
 
 		my_reader->batches = lappend(my_reader->batches, mb);
-		my_reader->queries = bms_union(my_reader->queries, mb->queries);
+
+		queries = bms_union(queries, mb->queries);
 		acks = list_concat(acks, mb->acks);
 	}
-
-	elog(LOG, "done recv");
 
 	MemoryContextSwitchTo(old);
 
 	my_rbatch.ntups = ntups;
 	my_rbatch.nbytes = nbytes;
-	my_rbatch.queries = my_reader->queries;
+	my_rbatch.queries = queries;
 	my_rbatch.acks = acks;
-
-	elog(LOG, "pull msgs: %s,  %d", bms_print(my_reader->queries), ntups);
 
 	return &my_rbatch;
 }
@@ -143,9 +133,7 @@ void
 ipc_tuple_reader_reset(void)
 {
 	MemoryContextReset(my_reader->cxt);
-	my_reader->queries = NULL;
 	my_reader->batches = NIL;
-
 	ipc_tuple_reader_rewind();
 }
 
@@ -167,10 +155,19 @@ ipc_tuple_reader_ack(void)
 	}
 }
 
+static inline ipc_tuple *
+read_from_next_batch(Oid query_id)
+{
+	my_rscan.batch = lnext(my_rscan.batch);
+	my_rscan.tup_idx = -1;
+	return ipc_tuple_reader_next(query_id);
+}
+
 ipc_tuple *
 ipc_tuple_reader_next(Oid query_id)
 {
 	microbatch_t *mb;
+	tagged_ref_t *ref;
 
 	if (my_rscan.exhausted)
 		return NULL;
@@ -191,37 +188,31 @@ ipc_tuple_reader_next(Oid query_id)
 
 	mb = lfirst(my_rscan.batch);
 	Assert(mb->allow_iter);
+	Assert(mb->ntups >= my_rscan.tup_idx);
 
 	/* If this microbatch isn't for the desired query, skip it */
-	if (!bms_is_member(query_id, mb->queries))
-	{
-		my_rscan.batch = lnext(my_rscan.batch);
-		return ipc_tuple_reader_next(query_id);
-	}
+	if (!bms_is_member(query_id, mb->queries) || !mb->ntups)
+		return read_from_next_batch(query_id);
 
 	/* Have we started reading this microbatch? */
-	if (!my_rscan.batch_started)
+	if (my_rscan.tup_idx == -1)
 	{
-		Assert(my_rscan.tup == NULL);
-
-		my_rscan.batch_started = true;
-		my_rscan.tup = list_head(mb->tups);
+		my_rscan.tup_idx = 0;
 		my_rscan_tup.desc = mb->desc;
 	}
 	else
-		my_rscan.tup = lnext(my_rscan.tup);
-
-	/* Have we exhausted this microbatch? */
-	if (my_rscan.tup == NULL)
 	{
-		my_rscan.batch = lnext(my_rscan.batch);
-
-		my_rscan.tup = NULL;
-		my_rscan.batch_started = false;
-		return ipc_tuple_reader_next(query_id);
+		my_rscan.tup_idx++;
+		if (my_rscan.tup_idx == mb->ntups)
+			return read_from_next_batch(query_id);
 	}
 
-	my_rscan_tup.tup = lfirst(my_rscan.tup);
+	Assert(my_rscan.tup_idx < mb->ntups);
+	ref = &mb->tups[my_rscan.tup_idx];
+
+	my_rscan_tup.tup = (HeapTuple) ref->ptr;
+	my_rscan_tup.hash = ref->tag;
+
 	return &my_rscan_tup;
 }
 
@@ -229,4 +220,5 @@ void
 ipc_tuple_reader_rewind(void)
 {
 	MemSet(&my_rscan, 0, sizeof(ipc_tuple_reader_scan));
+	my_rscan.tup_idx = -1;
 }

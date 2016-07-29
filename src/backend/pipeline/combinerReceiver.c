@@ -78,19 +78,19 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 
 	print_slot(slot);
 
-	pts->tup = ExecCopySlotTuple(slot);
-	pts->query_id = c->cont_query->id;
-	pts->nacks = nacks;
-	pts->acks = acks;
-
-	/* Shard by groups or id if no grouping. */
-	if (c->hash_fcinfo)
-		pts->hash = hash_group_for_combiner(slot, c->hash, c->hash_fcinfo);
-	else
-		pts->hash = c->cv_name_hash;
-
-	idx = get_combiner_for_group_hash(pts->hash);
-	c->partials[idx] = lappend(c->partials[idx], pts);
+//	pts->tup = ExecCopySlotTuple(slot);
+//	pts->query_id = c->cont_query->id;
+//	pts->nacks = nacks;
+//	pts->acks = acks;
+//
+//	/* Shard by groups or id if no grouping. */
+//	if (c->hash_fcinfo)
+//		pts->hash = hash_group_for_combiner(slot, c->hash, c->hash_fcinfo);
+//	else
+//		pts->hash = c->cv_name_hash;
+//
+//	idx = get_combiner_for_group_hash(pts->hash);
+//	c->partials[idx] = lappend(c->partials[idx], pts);
 
 	MemoryContextSwitchTo(old);
 }

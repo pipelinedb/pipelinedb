@@ -530,10 +530,10 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 	if (bms_is_empty(sis->queries))
 		return slot;
 
-	if (!microbatch_add_tuple(sis->batch, tup))
+	if (!microbatch_add_tuple(sis->batch, tup, 0))
 	{
 		microbatch_send_to_worker(sis->batch);
-		microbatch_add_tuple(sis->batch, tup);
+		microbatch_add_tuple(sis->batch, tup, 0);
 	}
 
 	sis->count++;
