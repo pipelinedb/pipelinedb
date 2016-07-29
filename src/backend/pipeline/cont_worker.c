@@ -229,11 +229,11 @@ ContinuousQueryWorkerMain(void)
 				/* flush tuples to combiners or transform out functions */
 				flush_tuples(state);
 
-				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
-				MemoryContextSwitchTo(state->base.state_cxt);
-
 				UnsetEStateSnapshot(estate);
 				state->query_desc->estate = estate = NULL;
+
+				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
+				MemoryContextSwitchTo(state->base.state_cxt);
 			}
 			PG_CATCH();
 			{

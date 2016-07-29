@@ -426,7 +426,7 @@ microbatch_send(microbatch_t *mb, uint64 recv_id)
 }
 
 void
-microbatch_add_acks(microbatch_t *mb, List *acks)
+microbatch_add_tagged_acks(microbatch_t *mb, List *acks)
 {
 	ListCell *lc;
 

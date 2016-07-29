@@ -18,8 +18,6 @@
 #include "pipeline/ipc/microbatch.h"
 #include "utils/rel.h"
 
-#define REENTRANT_STREAM_INSERT 0x1
-
 typedef struct StreamProjectionInfo StreamProjectionInfo;
 
 typedef struct StreamScanState
@@ -39,11 +37,11 @@ typedef struct StreamInsertState
 	int num_batches;
 
 	microbatch_t *batch;
-	microbatch_ack_t *ack;
+	List *acks;
 
 	TupleDesc desc;
 
-	int flags;
+	bool sync;
 } StreamInsertState;
 
 extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);

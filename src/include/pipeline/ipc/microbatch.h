@@ -97,7 +97,7 @@ extern bool microbatch_add_tuple(microbatch_t *mb, HeapTuple tup, uint64 group_h
 extern char *microbatch_pack(microbatch_t *mb, int *len);
 extern microbatch_t *microbatch_unpack(char *buf, int len);
 extern void microbatch_send(microbatch_t *mb, uint64 recv_id);
-extern void microbatch_add_acks(microbatch_t *mb, List *acks);
+extern void microbatch_add_tagged_acks(microbatch_t *mb, List *acks);
 extern void microbatch_send_to_worker(microbatch_t *mb);
 
 #endif

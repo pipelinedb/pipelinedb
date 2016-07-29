@@ -30,6 +30,7 @@ typedef struct ContQueryState
 {
 	Oid query_id;
 	ContQuery *query;
+	List *acks;
 	MemoryContext state_cxt;
 	MemoryContext tmp_cxt;
 	PgStat_StatCQEntryLocal stats;

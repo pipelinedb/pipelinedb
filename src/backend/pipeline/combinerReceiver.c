@@ -178,7 +178,7 @@ CombinerDestReceiverFlush(DestReceiver *self)
 	ListCell *lc;
 
 	mb = microbatch_new(CombinerTuple, bms_make_singleton(c->cont_query->id), NULL);
-	microbatch_add_acks(mb, c->cont_exec->batch->acks);
+	microbatch_add_tagged_acks(mb, c->cont_exec->batch->acks);
 
 	for (i = 0; i < continuous_query_num_combiners; i++)
 	{

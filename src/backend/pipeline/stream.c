@@ -67,7 +67,7 @@ SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int 
 		return 0;
 
 	mb = microbatch_new(WorkerTuple, queries, desc);
-	microbatch_add_acks(mb, acks);
+	microbatch_add_tagged_acks(mb, acks);
 
 	for (i = 0; i < ntuples; i++)
 	{

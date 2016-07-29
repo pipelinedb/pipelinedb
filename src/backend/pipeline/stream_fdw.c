@@ -458,20 +458,17 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	Relation rel = result_info->ri_RelationDesc;
 	StreamInsertState *sis = palloc0(sizeof(StreamInsertState));
 	Bitmapset *queries = GetLocalStreamReaders(RelationGetRelid(rel));
-	List *acks = NIL;
 
-	sis->flags = eflags;
 	sis->queries = queries;
 	sis->num_batches = 1;
+	sis->sync = false;
 
 	if (IsContQueryCombinerProcess())
 	{
 		Assert(!is_inferred_stream_relation(rel));
 
 		sis->desc = RelationGetDescr(rel);
-
-		if (synchronous_stream_insert)
-			acks = fdw_private;
+		sis->acks = fdw_private;
 	}
 	else
 	{
@@ -485,22 +482,21 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 
 		if (synchronous_stream_insert)
 		{
-			sis->ack = microbatch_ack_new();
-			acks = list_make1(sis->ack);
+			microbatch_ack_t *ack = microbatch_ack_new();
+			tagged_ref_t *ref = palloc(sizeof(tagged_ref_t));
+
+			ref->tag = ack->id;
+			ref->ptr = ack;
+
+			sis->acks = list_make1(ref);
+			sis->sync = true;
 		}
 	}
 
 	if (!bms_is_empty(queries))
 	{
-		ListCell *lc;
-
 		sis->batch = microbatch_new(WorkerTuple, queries, sis->desc);
-
-		foreach(lc, acks)
-		{
-			microbatch_ack_t *ack = lfirst(lc);
-			microbatch_add_ack(sis->batch, ack);
-		}
+		microbatch_add_tagged_acks(sis->batch, sis->acks);
 	}
 
 	result_info->ri_FdwState = sis;
@@ -541,6 +537,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 {
 	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
 	Relation rel = result_info->ri_RelationDesc;
+	ListCell *lc;
 
 	if (bms_is_empty(sis->queries))
 		return;
@@ -550,10 +547,23 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 
 	pgstat_increment_stream_insert(RelationGetRelid(rel), sis->count, sis->num_batches, sis->bytes);
 
-	if (sis->ack)
+	foreach(lc, sis->acks)
 	{
-		microbatch_ack_increment_wtups(sis->ack, sis->count);
-		microbatch_ack_wait_and_free(sis->ack);
+		tagged_ref_t *ref = lfirst(lc);
+		microbatch_ack_check_and_exec(ref->tag, ref->ptr, microbatch_ack_increment_wtups, sis->count);
+	}
+
+	if (sis->sync)
+	{
+		tagged_ref_t *ref;
+		microbatch_ack_t *ack;
+
+		Assert(list_length(sis->acks) == 1);
+
+		ref = linitial(sis->acks);
+		ack = (microbatch_ack_t *) ref->ptr;
+
+		microbatch_ack_wait_and_free(ack);
 	}
 
 	microbatch_destroy(sis->batch);

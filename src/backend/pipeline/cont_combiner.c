@@ -930,7 +930,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 
 	osri = CQOSRelOpen(osrel);
 
-	BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
+	BeginStreamModify(NULL, osri, state->base.acks, 0, 0);
 	sis = (StreamInsertState *) osri->ri_FdwState;
 	Assert(sis);
 
@@ -1218,7 +1218,7 @@ sync_combine(ContQueryCombinerState *state)
 
 		osri = CQOSRelOpen(osrel);
 
-		BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
+		BeginStreamModify(NULL, osri, state->base.acks, 0, 0);
 		sis = (StreamInsertState *) osri->ri_FdwState;
 		Assert(sis);
 
@@ -1767,7 +1767,8 @@ ContinuousQueryCombinerMain(void)
 				if (state->sw)
 				{
 					tick_sw_groups(state, NULL, false);
-					min_tick_ms = min_tick_ms ? Min(min_tick_ms, state->base.query->sw_step_ms) : state->base.query->sw_step_ms;
+					min_tick_ms = min_tick_ms ? Min(min_tick_ms, state->base.query->sw_step_ms) :
+							state->base.query->sw_step_ms;
 				}
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);

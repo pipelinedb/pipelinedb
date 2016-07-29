@@ -280,6 +280,7 @@ ContExecutorStartNextQuery(ContExecutor *exec, int timeout)
 			debug_query_string = exec->curr_query->query->name->relname;
 			MyStatCQEntry = (PgStat_StatCQEntry *) &exec->curr_query->stats;
 			pgstat_start_cq(MyStatCQEntry);
+			exec->curr_query->acks = exec->batch->acks;
 		}
 	}
 
