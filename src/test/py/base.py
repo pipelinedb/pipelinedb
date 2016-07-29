@@ -82,7 +82,6 @@ class PipelineDB(object):
           'synchronous_stream_insert': 'on',
           'continuous_query_num_combiners': 2,
           'continuous_query_num_workers': 2,
-          'continuous_query_ipc_shared_mem': 65536,
           'anonymous_update_checks': 'off',
           'continuous_query_max_wait': 5,
         }
