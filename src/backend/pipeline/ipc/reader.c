@@ -214,7 +214,5 @@ ipc_tuple_reader_rewind(void)
 {
 	MemSet(&my_rscan, 0, sizeof(ipc_tuple_reader_scan));
 	my_rscan.tup_idx = -1;
-
-	list_free(my_rbatch.acks);
 	my_rbatch.acks = NIL;
 }

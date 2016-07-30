@@ -3,22 +3,18 @@ CREATE CONTINUOUS VIEW os0 AS SELECT COUNT(*) FROM os_stream;
 CREATE CONTINUOUS VIEW os0_output AS SELECT (old).count AS old_count, (new).count AS new_count FROM output_of('os0');
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(2);
 
 SELECT * FROM os0_output ORDER BY old_count, new_count;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(2);
 
 SELECT * FROM os0_output ORDER BY old_count, new_count;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(2);
 
 SELECT * FROM os0_output ORDER BY old_count, new_count;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(2);
 
 SELECT * FROM os0_output ORDER BY old_count, new_count;
 
@@ -38,40 +34,32 @@ CREATE CONTINUOUS VIEW os1_output AS SELECT
 FROM output_of('os1');
 
 INSERT INTO os_stream (x) VALUES (10);
-SELECT pg_sleep(2);
 
 SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (20);
-SELECT pg_sleep(2);
 
 SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (30);
-SELECT pg_sleep(2);
 
 SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (40);
-SELECT pg_sleep(2);
 
 INSERT INTO os_stream (x) VALUES (-40);
-SELECT pg_sleep(2);
 
 SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (-30);
-SELECT pg_sleep(2);
 
 SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (-20);
-SELECT pg_sleep(2);
 
 SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
 INSERT INTO os_stream (x) VALUES (-10);
-SELECT pg_sleep(2);
 
 SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 
@@ -171,4 +159,3 @@ SELECT pg_sleep(2);
 SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 
 DROP CONTINUOUS VIEW os3 CASCADE;
-

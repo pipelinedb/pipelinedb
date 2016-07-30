@@ -134,6 +134,7 @@ typedef struct
 	/* Sliding-window state */
 	SWOutputState *sw;
 
+	List *acks;
 } ContQueryCombinerState;
 
 /*
@@ -930,7 +931,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 
 	osri = CQOSRelOpen(osrel);
 
-	BeginStreamModify(NULL, osri, list_make1(state->base.acks), 0, REENTRANT_STREAM_INSERT);
+	BeginStreamModify(NULL, osri, list_make1(state->acks), 0, REENTRANT_STREAM_INSERT);
 	sis = (StreamInsertState *) osri->ri_FdwState;
 	Assert(sis);
 
@@ -1218,7 +1219,7 @@ sync_combine(ContQueryCombinerState *state)
 
 		osri = CQOSRelOpen(osrel);
 
-		BeginStreamModify(NULL, osri, list_make1(state->base.acks), 0, REENTRANT_STREAM_INSERT);
+		BeginStreamModify(NULL, osri, list_make1(state->acks), 0, REENTRANT_STREAM_INSERT);
 		sis = (StreamInsertState *) osri->ri_FdwState;
 		Assert(sis);
 
@@ -1642,7 +1643,7 @@ set_group_hash(ContQueryCombinerState *state, int index, int64 hash)
 }
 
 static int
-read_batch(ContQueryCombinerState *state, Oid query_id)
+read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 {
 	ipc_tuple *itup;
 	Size nbytes = 0;
@@ -1662,6 +1663,7 @@ read_batch(ContQueryCombinerState *state, Oid query_id)
 		ntups++;
 	}
 
+	state->acks = exec->batch->acks;
 	ipc_tuple_reader_rewind();
 
 	if (!TupIsNull(state->slot))
@@ -1752,7 +1754,7 @@ ContinuousQueryCombinerMain(void)
 
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 
-				count = read_batch(state, query_id);
+				count = read_batch(cont_exec, state, query_id);
 
 				if (count)
 				{
