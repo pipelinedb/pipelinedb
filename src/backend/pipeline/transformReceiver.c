@@ -200,7 +200,7 @@ pipeline_stream_insert_batch(TransformState *t)
 
 		rinfo.ri_RelationDesc = rel;
 
-		BeginStreamModify(NULL, &rinfo, list_make2(t->cont_exec->batch->acks, RelationGetDescr(rel)),
+		BeginStreamModify(NULL, &rinfo, list_make2(t->cont_exec->batch->acks, RelationGetDescr(t->tg_rel)),
 				0, REENTRANT_STREAM_INSERT);
 		sis = (StreamInsertState *) rinfo.ri_FdwState;
 		Assert(sis);
@@ -212,7 +212,7 @@ pipeline_stream_insert_batch(TransformState *t)
 
 			for (j = 0; j < t->ntups; j++)
 			{
-				ExecStoreTuple(t->tups[i], slot, InvalidBuffer, false);
+				ExecStoreTuple(t->tups[j], slot, InvalidBuffer, false);
 				ExecStreamInsert(NULL, &rinfo, slot, NULL);
 				ExecClearTuple(slot);
 			}
