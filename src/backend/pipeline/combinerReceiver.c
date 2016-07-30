@@ -175,10 +175,9 @@ CombinerDestReceiverFlush(DestReceiver *self)
 	int ntups = 0;
 	Size size = 0;
 	microbatch_t *mb;
-	ListCell *lc;
 
 	mb = microbatch_new(CombinerTuple, bms_make_singleton(c->cont_query->id), NULL);
-	microbatch_add_tagged_acks(mb, c->cont_exec->batch->acks);
+	microbatch_add_acks(mb, c->cont_exec->batch->acks);
 
 	for (i = 0; i < continuous_query_num_combiners; i++)
 	{
@@ -215,12 +214,8 @@ CombinerDestReceiverFlush(DestReceiver *self)
 		c->tups_per_combiner[i] = NIL;
 	}
 
+	microbatch_acks_check_and_exec(mb->acks, microbatch_ack_increment_ctups, ntups);
+
 	microbatch_destroy(mb);
 	pgstat_increment_cq_write(ntups, size);
-
-	foreach(lc, c->cont_exec->batch->acks)
-	{
-		tagged_ref_t *ref = lfirst(lc);
-		microbatch_ack_check_and_exec(ref->tag, ref->ptr, microbatch_ack_increment_ctups, ntups);
-	}
 }

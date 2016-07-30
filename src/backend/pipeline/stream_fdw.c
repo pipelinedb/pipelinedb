@@ -458,17 +458,30 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	Relation rel = result_info->ri_RelationDesc;
 	StreamInsertState *sis = palloc0(sizeof(StreamInsertState));
 	Bitmapset *queries = GetLocalStreamReaders(RelationGetRelid(rel));
+	List *acks = NIL;
 
 	sis->queries = queries;
-	sis->num_batches = 1;
+	sis->nbatches = 1;
 	sis->sync = false;
 
-	if (IsContQueryCombinerProcess())
+	if (eflags & REENTRANT_STREAM_INSERT)
 	{
-		Assert(!is_inferred_stream_relation(rel));
+		Assert(IsContQueryProcess());
+		Assert(list_length(fdw_private) == 1 || list_length(fdw_private) == 2);
 
-		sis->desc = RelationGetDescr(rel);
-		sis->acks = fdw_private;
+		sis->ack = NULL;
+		acks = linitial(fdw_private);
+
+		if (list_length(fdw_private) == 2)
+		{
+			Assert(IsContQueryWorkerProcess());
+			sis->desc = lsecond(fdw_private);
+		}
+		else
+		{
+			Assert(!is_inferred_stream_relation(rel));
+			sis->desc = RelationGetDescr(rel);
+		}
 	}
 	else
 	{
@@ -482,13 +495,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 
 		if (synchronous_stream_insert)
 		{
-			microbatch_ack_t *ack = microbatch_ack_new();
-			tagged_ref_t *ref = palloc(sizeof(tagged_ref_t));
-
-			ref->tag = ack->id;
-			ref->ptr = ack;
-
-			sis->acks = list_make1(ref);
+			sis->ack = microbatch_ack_new();
 			sis->sync = true;
 		}
 	}
@@ -496,7 +503,18 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	if (!bms_is_empty(queries))
 	{
 		sis->batch = microbatch_new(WorkerTuple, queries, sis->desc);
-		microbatch_add_tagged_acks(sis->batch, sis->acks);
+
+		if (sis->ack)
+		{
+			Assert(!acks);
+			microbatch_add_ack(sis->batch, sis->ack);
+		}
+		else if (acks)
+		{
+			Assert(!sis->ack);
+			Assert(!sis->sync);
+			microbatch_add_acks(sis->batch, acks);
+		}
 	}
 
 	result_info->ri_FdwState = sis;
@@ -521,10 +539,10 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 	{
 		microbatch_send_to_worker(sis->batch);
 		microbatch_add_tuple(sis->batch, tup, 0);
-		sis->num_batches++;
+		sis->nbatches++;
 	}
 
-	sis->count++;
+	sis->ntups++;
 
 	return slot;
 }
@@ -537,7 +555,6 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 {
 	StreamInsertState *sis = (StreamInsertState *) result_info->ri_FdwState;
 	Relation rel = result_info->ri_RelationDesc;
-	ListCell *lc;
 
 	if (bms_is_empty(sis->queries))
 		return;
@@ -545,25 +562,13 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 	if (!microbatch_is_empty(sis->batch))
 		microbatch_send_to_worker(sis->batch);
 
-	pgstat_increment_stream_insert(RelationGetRelid(rel), sis->count, sis->num_batches, sis->bytes);
-
-	foreach(lc, sis->acks)
-	{
-		tagged_ref_t *ref = lfirst(lc);
-		microbatch_ack_check_and_exec(ref->tag, ref->ptr, microbatch_ack_increment_wtups, sis->count);
-	}
+	pgstat_increment_stream_insert(RelationGetRelid(rel), sis->ntups, sis->nbatches, sis->nbytes);
+	microbatch_acks_check_and_exec(sis->batch->acks, microbatch_ack_increment_wtups, sis->ntups);
 
 	if (sis->sync)
 	{
-		tagged_ref_t *ref;
-		microbatch_ack_t *ack;
-
-		Assert(list_length(sis->acks) == 1);
-
-		ref = linitial(sis->acks);
-		ack = (microbatch_ack_t *) ref->ptr;
-
-		microbatch_ack_wait_and_free(ack);
+		Assert(sis->ack);
+		microbatch_ack_wait_and_destroy(sis->ack);
 	}
 
 	microbatch_destroy(sis->batch);

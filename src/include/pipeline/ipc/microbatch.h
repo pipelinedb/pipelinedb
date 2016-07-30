@@ -32,7 +32,7 @@ typedef enum microbatch_type_t
 
 typedef struct microbatch_ack_t
 {
-	volatile int id;
+	volatile uint64 id;
 	/* Number of acks from workers */
 	pg_atomic_uint32 num_wacks;
 	/* Number of acks from combiners */
@@ -44,7 +44,7 @@ typedef struct microbatch_ack_t
 } microbatch_ack_t;
 
 extern microbatch_ack_t *microbatch_ack_new(void);
-extern void microbatch_ack_wait_and_free(microbatch_ack_t *ack);
+extern void microbatch_ack_wait_and_destroy(microbatch_ack_t *ack);
 #define microbatch_ack_increment_wtups(ack, n) pg_atomic_fetch_add_u32(&(ack)->num_wtups, (n));
 #define microbatch_ack_increment_ctups(ack, n) pg_atomic_fetch_add_u32(&(ack)->num_ctups, (n));
 #define microbatch_ack_increment_acks(ack, n) \
@@ -56,11 +56,17 @@ extern void microbatch_ack_wait_and_free(microbatch_ack_t *ack);
 			pg_atomic_fetch_add_u32(&(ack)->num_cacks, (n)); \
 	} \
 	while (0);
-#define microbatch_ack_check_and_exec(aid, ack, fn, arg) \
+#define microbatch_acks_check_and_exec(acks, fn, arg) \
 	do \
 	{ \
-		if ((aid) == ((microbatch_ack_t *) (ack))->id) \
-			fn((microbatch_ack_t *) (ack), (arg)); \
+		ListCell *lc; \
+		foreach(lc, (acks)) \
+		{ \
+			tagged_ref_t *ref = lfirst(lc); \
+			microbatch_ack_t *ack = (microbatch_ack_t *) ref->ptr; \
+			if (ref->tag == ack->id) \
+				fn(ack, (arg)); \
+		}\
 	} \
 	while (0);
 
@@ -97,7 +103,7 @@ extern bool microbatch_add_tuple(microbatch_t *mb, HeapTuple tup, uint64 group_h
 extern char *microbatch_pack(microbatch_t *mb, int *len);
 extern microbatch_t *microbatch_unpack(char *buf, int len);
 extern void microbatch_send(microbatch_t *mb, uint64 recv_id);
-extern void microbatch_add_tagged_acks(microbatch_t *mb, List *acks);
+extern void microbatch_add_acks(microbatch_t *mb, List *acks);
 extern void microbatch_send_to_worker(microbatch_t *mb);
 
 #endif

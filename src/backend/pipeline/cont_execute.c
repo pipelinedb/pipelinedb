@@ -163,7 +163,6 @@ init_query_state(ContExecutor *exec, ContQueryState *state)
 
 	pgstat_init_cqstat((PgStat_StatCQEntry *) &state->stats, state->query->id, 0);
 	state = exec->initfn(exec, state);
-	MemSet(exec->states, 0, sizeof(exec->states));
 
 	MemoryContextSwitchTo(old_cxt);
 

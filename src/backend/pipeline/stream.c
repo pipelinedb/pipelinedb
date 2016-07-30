@@ -53,47 +53,6 @@ char *stream_targets;
 int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;
 void *copy_iter_arg = NULL;
 
-Size
-SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, List *acks)
-{
-	Bitmapset *queries = GetLocalStreamReaders(RelationGetRelid(stream));
-	int nbatches = 1;
-	uint64 size = 0;
-	int i;
-	microbatch_t *mb;
-
-	/* No reader? Noop. */
-	if (bms_is_empty(queries))
-		return 0;
-
-	mb = microbatch_new(WorkerTuple, queries, desc);
-	microbatch_add_tagged_acks(mb, acks);
-
-	for (i = 0; i < ntuples; i++)
-	{
-		HeapTuple tup = tuples[i];
-
-		if (!microbatch_add_tuple(mb, tup, 0))
-		{
-			microbatch_send_to_worker(mb);
-			microbatch_add_tuple(mb, tup, 0);
-			nbatches++;
-		}
-
-		size += tup->t_len + HEAPTUPLESIZE;
-	}
-
-	if (!microbatch_is_empty(mb))
-		microbatch_send_to_worker(mb);
-
-	microbatch_destroy(mb);
-
-	pgstat_increment_stream_insert(RelationGetRelid(stream), ntuples, nbatches, size);
-
-	bms_free(queries);
-	return size;
-}
-
 /*
  * CopyIntoStream
  *
@@ -111,12 +70,12 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	if (synchronous_stream_insert)
 		ack = microbatch_ack_new();
 
-	SendTuplesToContWorkers(stream, desc, tuples, ntuples, ack ? list_make1(ack) : NIL);
+//	SendTuplesToContWorkers(stream, desc, tuples, ntuples, ack ? list_make1(ack) : NIL);
 
 	if (ack)
 	{
 		microbatch_ack_increment_wtups(ack, ntuples);
-		microbatch_ack_wait_and_free(ack);
+		microbatch_ack_wait_and_destroy(ack);
 	}
 
 	if (snap)
@@ -176,7 +135,7 @@ pipeline_stream_insert(PG_FUNCTION_ARGS)
 		rel = heap_openrv(stream, AccessShareLock);
 
 		tups[0] = tup;
-		SendTuplesToContWorkers(rel, desc, tups, 1, NIL);
+//		SendTuplesToContWorkers(rel, desc, tups, 1, NIL);
 
 		heap_close(rel, AccessShareLock);
 	}

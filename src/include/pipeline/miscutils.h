@@ -21,7 +21,7 @@
 typedef struct tagged_ref_t
 {
 	void *ptr;
-	int tag;
+	uint64 tag;
 } tagged_ref_t;
 
 #define ptr_difference(begin, end) ((void *) (((char *) end) - ((char *) begin)))

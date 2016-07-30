@@ -78,7 +78,6 @@ ipc_tuple_reader_pull(void)
 	int usecs;
 	int ntups = 0;
 	int nbytes = 0;
-	List *acks = NIL;
 	Bitmapset *queries = NULL;
 
 	Assert(my_reader->batches == NIL);
@@ -112,7 +111,6 @@ ipc_tuple_reader_pull(void)
 		my_reader->batches = lappend(my_reader->batches, mb);
 
 		queries = bms_union(queries, mb->queries);
-		acks = list_concat(acks, mb->acks);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -120,7 +118,7 @@ ipc_tuple_reader_pull(void)
 	my_rbatch.ntups = ntups;
 	my_rbatch.nbytes = nbytes;
 	my_rbatch.queries = queries;
-	my_rbatch.acks = acks;
+	my_rbatch.acks = NIL;
 
 	return &my_rbatch;
 }
@@ -141,13 +139,7 @@ ipc_tuple_reader_ack(void)
 	foreach(lc, my_reader->batches)
 	{
 		microbatch_t *mb = lfirst(lc);
-		ListCell *lc2;
-
-		foreach(lc2, mb->acks)
-		{
-			tagged_ref_t *ref = lfirst(lc2);
-			microbatch_ack_check_and_exec(ref->tag, ref->ptr, microbatch_ack_increment_acks, mb->ntups);
-		}
+		microbatch_acks_check_and_exec(mb->acks, microbatch_ack_increment_acks, mb->ntups);
 	}
 }
 
@@ -193,8 +185,13 @@ ipc_tuple_reader_next(Oid query_id)
 	/* Have we started reading this microbatch? */
 	if (my_rscan.tup_idx == -1)
 	{
+		MemoryContext old;
 		my_rscan.tup_idx = 0;
 		my_rscan_tup.desc = mb->desc;
+
+		old = MemoryContextSwitchTo(ContQueryBatchContext);
+		my_rbatch.acks = list_union(my_rbatch.acks, mb->acks);
+		MemoryContextSwitchTo(old);
 	}
 	else
 	{
@@ -217,4 +214,7 @@ ipc_tuple_reader_rewind(void)
 {
 	MemSet(&my_rscan, 0, sizeof(ipc_tuple_reader_scan));
 	my_rscan.tup_idx = -1;
+
+	list_free(my_rbatch.acks);
+	my_rbatch.acks = NIL;
 }

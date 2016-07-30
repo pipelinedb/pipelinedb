@@ -16,6 +16,7 @@
 #include "pipeline/ipc/pzmq.h"
 #include "pipeline/miscutils.h"
 #include "storage/shm_alloc.h"
+#include "utils/memutils.h"
 #include "utils/typcache.h"
 
 int continuous_query_num_batch;
@@ -37,7 +38,7 @@ microbatch_ack_new(void)
 }
 
 void
-microbatch_ack_wait_and_free(microbatch_ack_t *ack)
+microbatch_ack_wait_and_destroy(microbatch_ack_t *ack)
 {
 	while (!microbatch_ack_is_acked(ack))
 	{
@@ -426,9 +427,12 @@ microbatch_send(microbatch_t *mb, uint64 recv_id)
 }
 
 void
-microbatch_add_tagged_acks(microbatch_t *mb, List *acks)
+microbatch_add_acks(microbatch_t *mb, List *acks)
 {
 	ListCell *lc;
+	MemoryContext old;
+
+	old = MemoryContextSwitchTo(ContQueryBatchContext);
 
 	foreach(lc, acks)
 	{
@@ -437,6 +441,8 @@ microbatch_add_tagged_acks(microbatch_t *mb, List *acks)
 		if (ref->tag == ack->id)
 			microbatch_add_ack(mb, ack);
 	}
+
+	MemoryContextSwitchTo(old);
 }
 
 void

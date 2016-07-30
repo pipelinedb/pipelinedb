@@ -930,7 +930,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 
 	osri = CQOSRelOpen(osrel);
 
-	BeginStreamModify(NULL, osri, state->base.acks, 0, 0);
+	BeginStreamModify(NULL, osri, list_make1(state->base.acks), 0, REENTRANT_STREAM_INSERT);
 	sis = (StreamInsertState *) osri->ri_FdwState;
 	Assert(sis);
 
@@ -1218,7 +1218,7 @@ sync_combine(ContQueryCombinerState *state)
 
 		osri = CQOSRelOpen(osrel);
 
-		BeginStreamModify(NULL, osri, state->base.acks, 0, 0);
+		BeginStreamModify(NULL, osri, list_make1(state->base.acks), 0, REENTRANT_STREAM_INSERT);
 		sis = (StreamInsertState *) osri->ri_FdwState;
 		Assert(sis);
 
@@ -1370,6 +1370,7 @@ sync_all(ContExecutor *cont_exec)
 	while ((id = bms_first_member(tmp)) >= 0)
 	{
 		ContQueryCombinerState *state = states[id];
+
 		if (!state)
 			continue;
 

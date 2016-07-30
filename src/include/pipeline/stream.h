@@ -37,7 +37,6 @@ extern void *copy_iter_arg;
 extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
-extern Size SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, List *acks);
 extern void CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 extern Datum pipeline_stream_insert(PG_FUNCTION_ARGS);

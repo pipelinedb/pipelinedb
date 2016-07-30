@@ -18,6 +18,8 @@
 #include "pipeline/ipc/microbatch.h"
 #include "utils/rel.h"
 
+#define REENTRANT_STREAM_INSERT 0x10000
+
 typedef struct StreamProjectionInfo StreamProjectionInfo;
 
 typedef struct StreamScanState
@@ -32,15 +34,13 @@ typedef struct StreamInsertState
 {
 	Bitmapset *queries;
 
-	long count;
-	long bytes;
-	int num_batches;
+	int ntups;
+	long nbytes;
+	int nbatches;
 
 	microbatch_t *batch;
-	List *acks;
-
 	TupleDesc desc;
-
+	microbatch_ack_t *ack;
 	bool sync;
 } StreamInsertState;
 

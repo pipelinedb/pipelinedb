@@ -25,6 +25,7 @@
 #include "pipeline/cont_execute.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
+#include "pipeline/stream_fdw.h"
 #include "miscadmin.h"
 #include "storage/shm_alloc.h"
 #include "utils/builtins.h"
@@ -180,6 +181,11 @@ static void
 pipeline_stream_insert_batch(TransformState *t)
 {
 	int i;
+	ResultRelInfo rinfo;
+
+	MemSet(&rinfo, 0, sizeof(ResultRelInfo));
+	rinfo.ri_RangeTableIndex = 1; /* dummy */
+	rinfo.ri_TrigDesc = NULL;
 
 	if (t->ntups == 0)
 		return;
@@ -190,24 +196,35 @@ pipeline_stream_insert_batch(TransformState *t)
 	{
 		RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(t->cont_query->tgargs[i]));
 		Relation rel = heap_openrv(rv, AccessShareLock);
-		Size size;
-		ListCell *lc;
+		StreamInsertState *sis;
 
-		foreach(lc, t->cont_exec->batch->acks)
+		rinfo.ri_RelationDesc = rel;
+
+		BeginStreamModify(NULL, &rinfo, list_make2(t->cont_exec->batch->acks, RelationGetDescr(rel)),
+				0, REENTRANT_STREAM_INSERT);
+		sis = (StreamInsertState *) rinfo.ri_FdwState;
+		Assert(sis);
+
+		if (sis->queries)
 		{
-			tagged_ref_t *ref = lfirst(lc);
-			microbatch_ack_check_and_exec(ref->tag, ref->ptr, microbatch_ack_increment_wtups, t->ntups);
+			TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
+			int j;
+
+			for (j = 0; j < t->ntups; j++)
+			{
+				ExecStoreTuple(t->tups[i], slot, InvalidBuffer, false);
+				ExecStreamInsert(NULL, &rinfo, slot, NULL);
+				ExecClearTuple(slot);
+			}
+
+			ExecDropSingleTupleTableSlot(slot);
+			pgstat_increment_cq_write(t->ntups, sis->nbytes);
 		}
 
-		size = SendTuplesToContWorkers(rel, RelationGetDescr(t->tg_rel), t->tups, t->ntups, t->cont_exec->batch->acks);
+		EndStreamModify(NULL, &rinfo);
+		pgstat_report_streamstat(false);
 
 		heap_close(rel, NoLock);
-
-		if (size)
-		{
-			pgstat_increment_cq_write(t->ntups, size);
-			pgstat_report_streamstat(false);
-		}
 	}
 
 	if (t->ntups)
