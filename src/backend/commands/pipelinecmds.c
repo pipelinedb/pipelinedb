@@ -1186,10 +1186,6 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	Oid tgfnid;
 	Oid funcrettype;
 	CreateStmt *create;
-	bool save_binary_upgrade;
-
-	save_binary_upgrade = IsBinaryUpgrade;
-	IsBinaryUpgrade = false;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -1233,8 +1229,6 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	CommandCounterIncrement();
 
 	heap_close(pipeline_query, NoLock);
-
-	IsBinaryUpgrade = save_binary_upgrade;
 }
 
 /*

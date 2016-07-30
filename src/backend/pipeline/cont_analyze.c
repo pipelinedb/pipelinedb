@@ -1575,6 +1575,14 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 }
 
 static void
+save_next_oids(Oid *type, Oid *arraytype, Oid *class)
+{
+	*type = binary_upgrade_next_pg_type_oid;
+	*arraytype = binary_upgrade_next_array_pg_type_oid;
+	*class = binary_upgrade_next_heap_pg_class_oid;
+}
+
+static void
 set_next_oids_for_inferred_stream(void)
 {
 	binary_upgrade_next_pg_type_oid = 100000 * GetNewObjectId();
@@ -1595,6 +1603,10 @@ create_inferred_streams(Node *node, void *context)
 
 		if (!OidIsValid(relid))
 		{
+			Oid save_type;
+			Oid save_arraytype;
+			Oid save_class;
+
 			/*
 			 * XXX(derekjn) If this is a binary upgrade, all OIDs need to be explicitly
 			 * set so that they align with the old database files. However, since
@@ -1611,8 +1623,19 @@ create_inferred_streams(Node *node, void *context)
 			 * and restoring that relation, but even that is very unlikely to be necessary.
 			 */
 			if (IsBinaryUpgrade)
+			{
+				save_next_oids(&save_type, &save_arraytype, &save_class);
 				set_next_oids_for_inferred_stream();
+			}
+
 			CreateInferredStream(rv);
+
+			if (IsBinaryUpgrade)
+			{
+				binary_upgrade_next_pg_type_oid = save_type;
+				binary_upgrade_next_array_pg_type_oid = save_arraytype;
+				binary_upgrade_next_heap_pg_class_oid = save_class;
+			}
 		}
 
 		return false;

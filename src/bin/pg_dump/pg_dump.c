@@ -304,12 +304,12 @@ is_matrel_user_index(Archive *fout, Oid index_oid)
 	PGresult *res;
 
 	/* TODO(derekjn) Just look it up in pipeline_query once we store index OIDs there */
-	appendPQExpBuffer(pq, "	SELECT matrel.relname, index.relname, i.indisprimary FROM pg_index i "
-		"JOIN pg_class index ON i.indexrelid = index.oid "
-		"JOIN pipeline_query pq ON pq.matrelid = i.indrelid "
-		"JOIN pg_class matrel ON pq.matrelid = matrel.oid "
-		"WHERE i.indexrelid = %u AND i.indisprimary = false "
-		"AND index.relname != matrel.relname || '_expr_idx';", index_oid);
+	appendPQExpBuffer(pq, "SELECT matrel.relname, index.relname, i.indisprimary FROM pg_index i "
+	"JOIN pg_class index ON i.indexrelid = index.oid "
+	"JOIN pipeline_query pq ON pq.matrelid = i.indrelid "
+	"JOIN pg_class matrel ON pq.matrelid = matrel.oid "
+	"WHERE i.indexrelid = %u AND i.indisprimary = false "
+	"AND index.relname != matrel.relname || '_expr_idx';", index_oid);
 
 	res = ExecuteSqlQuery(fout, pq->data, PGRES_TUPLES_OK);
 	destroyPQExpBuffer(pq);
@@ -509,12 +509,7 @@ dumpContinuousView(Archive *fout, TableInfo *ti, PQExpBuffer delq)
 	qdef = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "query")));
 
 	if (fout->dopt->binary_upgrade)
-	{
-		/*
-		 *
-		 */
 		binary_upgrade_set_oids_for_create_cv(fout, q, ti->dobj.namespace->dobj.name, ti->dobj.name);
-	}
 
 	appendPQExpBuffer(q, "CREATE CONTINUOUS VIEW %s.%s AS %s;\n\n", ti->dobj.namespace->dobj.name, ti->dobj.name, qdef);
 
@@ -578,6 +573,12 @@ dumpContinuousTransform(Archive *fout, TableInfo *ti, PQExpBuffer delq)
 	char *qdef;
 	char *tgfn;
 	char *tgargs;
+
+	if (fout->dopt->binary_upgrade)
+	{
+		binary_upgrade_set_type_oids_by_rel_oid(fout, q, ti->dobj.catId.oid);
+		binary_upgrade_set_pg_class_oids(fout, q, ti->dobj.catId.oid, false);
+	}
 
 	appendPQExpBuffer(pq, "SELECT tgfn, query FROM pipeline_transforms() WHERE schema = '%s' AND name = '%s'",
 			ti->dobj.namespace->dobj.name, ti->dobj.name);
@@ -6053,7 +6054,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 			 * We only dump user-created indices on matrels, otherwise they're
 			 * created by CREATE CONTINUOUS VIEW
 			 */
-			if (!is_matrel_user_index(fout, indxinfo[j].dobj.catId.oid))
+			if (is_matrel(fout, tbinfo, 0) && !is_matrel_user_index(fout, indxinfo[j].dobj.catId.oid))
 				continue;
 
 			AssignDumpId(&indxinfo[j].dobj);
