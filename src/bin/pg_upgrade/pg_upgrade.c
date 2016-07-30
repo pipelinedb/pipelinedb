@@ -152,7 +152,7 @@ main(int argc, char **argv)
 
 	prep_status("Sync data directory to disk");
 	exec_prog(UTILITY_LOG_FILE, NULL, true,
-			  "\"%s/initdb\" --sync-only \"%s\"", new_cluster.bindir,
+			  "\"%s/pipeline-init\" --sync-only \"%s\"", new_cluster.bindir,
 			  new_cluster.pgdata);
 	check_ok();
 
@@ -318,7 +318,7 @@ create_new_objects(void)
 		 */
 		parallel_exec_prog(log_file_name,
 						   NULL,
-						   "\"%s/pg_restore\" %s --exit-on-error --verbose --dbname \"%s\" \"%s\"",
+						   "\"%s/pipeline-restore\" %s --exit-on-error --verbose --dbname \"%s\" \"%s\"",
 						   new_cluster.bindir,
 						   cluster_conn_opts(&new_cluster),
 						   old_db->db_name,

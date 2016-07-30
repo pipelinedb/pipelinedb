@@ -152,7 +152,7 @@ export EXTRA_REGRESS_OPTS
 set -x
 
 standard_initdb "$oldbindir"/initdb
-"$oldbindir"/pg_ctl start -l "$logdir/postmaster1.log" -o "$POSTMASTER_OPTS" -w
+"$oldbindir"/pipeline-ctl start -l "$logdir/postmaster1.log" -o "$POSTMASTER_OPTS" -w
 if "$MAKE" -C "$oldsrc" installcheck; then
 	pg_dumpall -f "$temp_root"/dump1.sql || pg_dumpall1_status=$?
 	if [ "$newsrc" != "$oldsrc" ]; then
@@ -177,7 +177,7 @@ if "$MAKE" -C "$oldsrc" installcheck; then
 else
 	make_installcheck_status=$?
 fi
-"$oldbindir"/pg_ctl -m fast stop
+"$oldbindir"/pipeline-ctl -m fast stop
 if [ -n "$make_installcheck_status" ]; then
 	exit 1
 fi
@@ -195,7 +195,7 @@ standard_initdb 'initdb'
 
 pg_upgrade $PG_UPGRADE_OPTS -d "${PGDATA}.old" -D "${PGDATA}" -b "$oldbindir" -B "$bindir" -p "$PGPORT" -P "$PGPORT"
 
-pg_ctl start -l "$logdir/postmaster2.log" -o "$POSTMASTER_OPTS" -w
+pipeline-ctl start -l "$logdir/postmaster2.log" -o "$POSTMASTER_OPTS" -w
 
 case $testhost in
 	MINGW*)	cmd /c analyze_new_cluster.bat ;;
@@ -203,7 +203,7 @@ case $testhost in
 esac
 
 pg_dumpall -f "$temp_root"/dump2.sql || pg_dumpall2_status=$?
-pg_ctl -m fast stop
+pipeline-ctl -m fast stop
 
 # no need to echo commands anymore
 set +x

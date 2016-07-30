@@ -168,7 +168,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if ((ret = find_other_exec(argv[0], "pg_dump", PGDUMP_VERSIONSTR,
+	if ((ret = find_other_exec(argv[0], "pipeline-dump", PGDUMP_VERSIONSTR,
 							   pg_dump_bin)) < 0)
 	{
 		char		full_path[MAXPGPATH];

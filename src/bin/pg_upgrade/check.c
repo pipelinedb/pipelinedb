@@ -153,7 +153,7 @@ report_clusters_compatible(void)
 	}
 
 	pg_log(PG_REPORT, "\n"
-		   "If pg_upgrade fails after this point, you must re-initdb the\n"
+		   "If pipeline-upgrade fails after this point, you must re-pipeline-init the\n"
 		   "new cluster before continuing.\n");
 }
 
@@ -178,7 +178,7 @@ output_completion_banner(char *analyze_script_file_name,
 	/* Did we copy the free space files? */
 	if (GET_MAJOR_VERSION(old_cluster.major_version) >= 804)
 		pg_log(PG_REPORT,
-			   "Optimizer statistics are not transferred by pg_upgrade so,\n"
+			   "Optimizer statistics are not transferred by pipeline-upgrade so,\n"
 			   "once you start the new server, consider running:\n"
 			   "    %s\n\n", analyze_script_file_name);
 	else
@@ -930,7 +930,7 @@ check_for_reg_data_type_usage(ClusterInfo *cluster)
 		pg_log(PG_REPORT, "fatal\n");
 		pg_fatal("Your installation contains one of the reg* data types in user tables.\n"
 		 "These data types reference system OIDs that are not preserved by\n"
-		"pg_upgrade, so this cluster cannot currently be upgraded.  You can\n"
+		"pipeline-upgrade, so this cluster cannot currently be upgraded.  You can\n"
 				 "remove the problem tables and restart the upgrade.  A list of the problem\n"
 				 "columns is in the file:\n"
 				 "    %s\n\n", output_path);
@@ -1039,7 +1039,7 @@ get_bin_version(ClusterInfo *cluster)
 	int			pre_dot,
 				post_dot;
 
-	snprintf(cmd, sizeof(cmd), "\"%s/pg_ctl\" --version", cluster->bindir);
+	snprintf(cmd, sizeof(cmd), "\"%s/pipeline-ctl\" --version", cluster->bindir);
 
 	if ((output = popen(cmd, "r")) == NULL ||
 		fgets(cmd_output, sizeof(cmd_output), output) == NULL)
