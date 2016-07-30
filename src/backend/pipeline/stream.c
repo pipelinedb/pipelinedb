@@ -32,6 +32,7 @@
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
+#include "pipeline/stream_fdw.h"
 #include "storage/shm_alloc.h"
 #include "storage/ipc.h"
 #include "tcop/pquery.h"
@@ -59,24 +60,41 @@ void *copy_iter_arg = NULL;
  * COPY events to a stream from an input source
  */
 void
-CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
+CopyIntoStream(Relation rel, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
 	bool snap = ActiveSnapshotSet();
-	microbatch_ack_t *ack = NULL;
+	ResultRelInfo rinfo;
+	StreamInsertState *sis;
+
+	MemSet(&rinfo, 0, sizeof(ResultRelInfo));
+	rinfo.ri_RangeTableIndex = 1; /* dummy */
+	rinfo.ri_TrigDesc = NULL;
+	rinfo.ri_RelationDesc = rel;
 
 	if (snap)
 		PopActiveSnapshot();
 
-	if (synchronous_stream_insert)
-		ack = microbatch_ack_new();
+	BeginStreamModify(NULL, &rinfo, NIL, 0, 0);
+	sis = (StreamInsertState *) rinfo.ri_FdwState;
+	Assert(sis);
 
-//	SendTuplesToContWorkers(stream, desc, tuples, ntuples, ack ? list_make1(ack) : NIL);
-
-	if (ack)
+	if (sis->queries)
 	{
-		microbatch_ack_increment_wtups(ack, ntuples);
-		microbatch_ack_wait_and_destroy(ack);
+		TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
+		int i;
+
+		for (i = 0; i < ntuples; i++)
+		{
+			ExecStoreTuple(tuples[i], slot, InvalidBuffer, false);
+			ExecStreamInsert(NULL, &rinfo, slot, NULL);
+			ExecClearTuple(slot);
+		}
+
+		ExecDropSingleTupleTableSlot(slot);
+		pgstat_increment_cq_write(ntuples, sis->nbytes);
 	}
+
+	EndStreamModify(NULL, &rinfo);
 
 	if (snap)
 		PushActiveSnapshot(GetTransactionSnapshot());

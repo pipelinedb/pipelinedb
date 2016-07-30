@@ -519,7 +519,8 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 
 	result_info->ri_FdwState = sis;
 
-	pzmq_init();
+	if (!(eflags & REENTRANT_STREAM_INSERT))
+		pzmq_init();
 }
 
 /*
