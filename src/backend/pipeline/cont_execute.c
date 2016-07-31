@@ -491,6 +491,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 			char *proc_name = GetContQueryProcName(MyContQueryProc);
 
 			pgstat_report_cqstat(true);
+			pgstat_report_stat(true);
 			pgstat_report_activity(STATE_IDLE, proc_name);
 
 			if (exec->ptype == Worker)
