@@ -177,6 +177,45 @@ flush_tuples(ContQueryWorkerState *state)
 	}
 }
 
+/*
+ * init_plan
+ */
+static void
+init_plan(QueryDesc *query_desc)
+{
+	Plan *plan = query_desc->plannedstmt->planTree;
+	ListCell *lc;
+
+	foreach(lc, query_desc->plannedstmt->subplans)
+	{
+		Plan *subplan = (Plan *) lfirst(lc);
+		PlanState  *subplanstate;
+
+		subplanstate = ExecInitNode(subplan, query_desc->estate, EXEC_NO_STREAM_LOCKING);
+		query_desc->estate->es_subplanstates = lappend(query_desc->estate->es_subplanstates, subplanstate);
+	}
+
+	query_desc->planstate = ExecInitNode(plan, query_desc->estate, EXEC_NO_STREAM_LOCKING);
+}
+
+/*
+ * end_plan
+ */
+static void
+end_plan(QueryDesc *query_desc)
+{
+	ListCell *lc;
+
+	ExecEndNode(query_desc->planstate);
+	foreach(lc, query_desc->estate->es_subplanstates)
+	{
+		PlanState *ps = (PlanState *) lfirst(lc);
+		ExecEndNode(ps);
+	}
+
+	query_desc->planstate = NULL;
+}
+
 void
 ContinuousQueryWorkerMain(void)
 {
@@ -199,7 +238,6 @@ ContinuousQueryWorkerMain(void)
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, 0)) != InvalidOid)
 		{
-			Plan *plan = NULL;
 			EState *estate = NULL;
 			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->current_query;
 
@@ -215,16 +253,14 @@ ContinuousQueryWorkerMain(void)
 				CurrentResourceOwner = WorkerResOwner;
 
 				/* initialize the plan for execution within this xact */
-				plan = state->query_desc->plannedstmt->planTree;
-				state->query_desc->planstate = ExecInitNode(plan, state->query_desc->estate, EXEC_NO_STREAM_LOCKING);
+				init_plan(state->query_desc);
 				set_cont_executor(state->query_desc->planstate, cont_exec);
 
 				ExecutePlan(estate, state->query_desc->planstate, state->query_desc->operation,
 						true, 0, ForwardScanDirection, state->dest);
 
 				/* free up any resources used by this plan before committing */
-				ExecEndNode(state->query_desc->planstate);
-				state->query_desc->planstate = NULL;
+				end_plan(state->query_desc);
 
 				/* flush tuples to combiners or transform out functions */
 				flush_tuples(state);
@@ -301,7 +337,7 @@ next:
 				InstrStopNode(query_desc->totaltime, estate->es_processed);
 
 			if (query_desc->planstate == NULL)
-				query_desc->planstate = ExecInitNode(query_desc->plannedstmt->planTree, state->query_desc->estate, EXEC_NO_STREAM_LOCKING);
+				init_plan(query_desc);
 
 			/* Clean up. */
 			ExecutorFinish(query_desc);

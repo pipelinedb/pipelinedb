@@ -99,3 +99,34 @@ SELECT * FROM test_cont_sub_v6;
 DROP CONTINUOUS VIEW test_cont_sub_v6;
 DROP TABLE test_cont_sub_t0;
 DROP STREAM test_cont_sub_s0;
+
+-- Regression test
+CREATE STREAM connection_data_stream(payload jsonb);
+
+CREATE TABLE ip_to_monitor (
+  ip varchar(15) not null,
+  created timestamp default clock_timestamp(),
+  constraint ip_to_monitor_pkey PRIMARY KEY(ip)
+);
+
+INSERT INTO ip_to_monitor(ip) VALUES ('127.0.0.1');
+
+CREATE CONTINUOUS VIEW tracked_ips_1_hour AS
+  SELECT MAX((payload->>'Contact')::TIMESTAMP) _max_age_contact,
+    MIN((payload->>'Contact')::TIMESTAMP) _min_age_contact,
+    COUNT(*) _cnt_hits,
+    SUBSTRING(payload->>'Url','(\.[^.]*$|$)'::text) _requested_extension,
+    COUNT(ip) _cnt_ip
+  FROM connection_data_stream cds LEFT JOIN ip_to_monitor itm ON (payload->>'Ip' = ip)
+    WHERE (arrival_timestamp > clock_timestamp() - interval '60 minutes')
+    GROUP BY SUBSTRING(payload->>'Url','(\.[^.]*$|$)'::text);
+
+INSERT INTO connection_data_stream (payload) SELECT '{"Id":"c7f4172d-7e79-441b-a074-e8b61f918940","Ip":"127.0.0.1","Url":"/RTWUSHUITR/PEZOKSGKJGPWQTEGLCEH/DUODKCTABQPRWOSTYPUT.zip","Contact":"2016-05-31T08:47:51.8506109+02:00"}' FROM generate_series(1, 100);
+INSERT INTO connection_data_stream (payload) SELECT '{"Id":"c7f4172d-7e79-441b-a074-e8b61f918940","Ip":"127.0.0.1","Url":"/RTWUSHUITR/PEZOKSGKJGPWQTEGLCEH/DUODKCTABQPRWOSTYPUT.zip","Contact":"2016-05-31T08:47:51.8506109+02:00"}' FROM generate_series(1, 100);
+INSERT INTO connection_data_stream (payload) SELECT '{"Id":"c7f4172d-7e79-441b-a074-e8b61f918940","Ip":"127.0.0.1","Url":"/RTWUSHUITR/PEZOKSGKJGPWQTEGLCEH/DUODKCTABQPRWOSTYPUT.zip","Contact":"2016-05-31T08:47:51.8506109+02:00"}' FROM generate_series(1, 100);
+
+SELECT * FROM tracked_ips_1_hour;
+
+DROP CONTINUOUS VIEW tracked_ips_1_hour;
+DROP STREAM connection_data_stream;
+DROP TABLE ip_to_monitor;
