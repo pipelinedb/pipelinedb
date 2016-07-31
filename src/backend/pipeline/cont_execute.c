@@ -576,6 +576,7 @@ get_query_state(ContExecutor *exec)
 {
 	ContQueryState *state = exec->states[exec->current_query_id];
 	HeapTuple tup;
+	bool commit = false;
 
 	MyStatCQEntry = NULL;
 
@@ -584,6 +585,7 @@ get_query_state(ContExecutor *exec)
 	{
 		CommitTransactionCommand();
 		StartTransactionCommand();
+		commit = true;
 	}
 
 	PushActiveSnapshot(GetTransactionSnapshot());
@@ -632,6 +634,12 @@ get_query_state(ContExecutor *exec)
 	}
 
 	PopActiveSnapshot();
+
+	if (commit)
+	{
+		CommitTransactionCommand();
+		StartTransactionCommand();
+	}
 
 	return state;
 }
