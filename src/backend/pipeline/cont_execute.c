@@ -33,7 +33,7 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-#define MAX_IN_XACT_TIMEOUT 5000
+#define MAX_IN_XACT_TIMEOUT 5
 
 ContExecutor *
 ContExecutorNew(ContQueryStateInit initfn)
@@ -84,7 +84,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 	exec->batch = NULL;
 
 	if (IsTransactionState())
-		timeout = Min(MAX_IN_XACT_TIMEOUT, timeout);
+		timeout = timeout ? Min(MAX_IN_XACT_TIMEOUT, timeout) : MAX_IN_XACT_TIMEOUT;
 
 	/* TODO(usmanm): report activity */
 	success = ipc_tuple_reader_poll(timeout);
