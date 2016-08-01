@@ -92,6 +92,8 @@
 										 * failed statistics collector; in
 										 * seconds. */
 
+#define PIPELINE_STAT_INTERVAL  1000    /* Minimum time between stats file updates for continuous procs */
+
 #define PGSTAT_POLL_LOOP_COUNT	(PGSTAT_MAX_WAIT_TIME / PGSTAT_RETRY_DELAY)
 #define PGSTAT_INQ_LOOP_COUNT	(PGSTAT_INQ_INTERVAL / PGSTAT_RETRY_DELAY)
 
@@ -5603,7 +5605,7 @@ pgstat_init_cqstat(PgStat_StatCQEntry *entry, Oid viewid, pid_t pid)
 	MemSet(entry, 0, sizeof(PgStat_StatCQEntryLocal));
 
 	entry->start_ts = GetCurrentTimestamp();
-	entry->last_report = GetCurrentTimestamp();
+	entry->last_report = 0;
 
 	SetStatCQEntryViewId(entry->key, viewid);
 	SetStatCQEntryProcPid(entry->key, pid);
@@ -5774,12 +5776,14 @@ pgstat_report_cqstat(bool force)
 	 * msec since we last sent one, or the caller wants to force stats out.
 	 */
 	if (!force && MyStatCQEntry &&
-			!TimestampDifferenceExceeds(MyStatCQEntry->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
+			!TimestampDifferenceExceeds(MyStatCQEntry->last_report, GetCurrentTimestamp(),
+					PIPELINE_STAT_INTERVAL))
 		return;
 
 	cq_stat_report_entry(MyProcStatCQEntry);
 	if (MyStatCQEntry)
 		cq_stat_report_entry(MyStatCQEntry);
+	pgstat_report_stat(true);
 }
 
 /*
