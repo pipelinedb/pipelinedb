@@ -1649,6 +1649,9 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 	Size nbytes = 0;
 	int ntups = 0;
 
+	if (!exec->batch)
+		return 0;
+
 	while ((itup = ipc_tuple_reader_next(query_id)) != NULL)
 	{
 		if (!TupIsNull(state->slot))

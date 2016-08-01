@@ -189,9 +189,17 @@ ipc_tuple_reader_next(Oid query_id)
 		my_rscan.tup_idx = 0;
 		my_rscan_tup.desc = mb->desc;
 
-		old = MemoryContextSwitchTo(ContQueryBatchContext);
-		my_rbatch.acks = list_union(my_rbatch.acks, mb->acks);
-		MemoryContextSwitchTo(old);
+		if (mb->acks)
+		{
+			ListCell *lc;
+
+			old = MemoryContextSwitchTo(ContQueryBatchContext);
+
+			foreach(lc, mb->acks)
+				my_rbatch.acks = lappend(my_rbatch.acks, lfirst(lc));
+
+			MemoryContextSwitchTo(old);
+		}
 	}
 	else
 	{

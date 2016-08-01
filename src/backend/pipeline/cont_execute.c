@@ -129,10 +129,8 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 	MemoryContextSwitchTo(exec->tmp_cxt);
 	ContQueryBatchContext = exec->tmp_cxt;
 
-	if (exec->batch)
-		exec->exec_queries = bms_copy(exec->batch->queries);
-	else
-		exec->exec_queries = NULL;
+	exec->exec_queries = bms_copy(exec->all_queries);
+	debug_query_string = NULL;
 
 	pgstat_start_cq_batch();
 }
@@ -354,4 +352,5 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	MemoryContextResetAndDeleteChildren(exec->tmp_cxt);
 	exec->exec_queries = NULL;
 	exec->batch = NULL;
+	debug_query_string = NULL;
 }

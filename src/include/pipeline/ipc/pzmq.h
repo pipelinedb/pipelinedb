@@ -15,7 +15,7 @@ extern void pzmq_init(void);
 extern void pzmq_destroy(void);
 
 extern void pzmq_bind(uint64 id);
-extern void pzmq_connect(uint64 id, int hwm);
+extern void pzmq_connect(uint64 id);
 
 extern bool pzmq_poll(int timeout);
 extern char *pzmq_recv(int *len, int timeout);

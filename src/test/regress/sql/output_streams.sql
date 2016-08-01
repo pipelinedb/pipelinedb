@@ -77,22 +77,19 @@ CREATE CONTINUOUS VIEW os2_output AS SELECT
 FROM output_of('os2');
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os2_output ORDER BY x, old, new;
 
 INSERT INTO os_stream (x) VALUES (1);
-SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os2_output ORDER BY x, old, new;
 
 INSERT INTO os_stream (x) VALUES (2);
-SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os2_output ORDER BY x, old, new;
 
 INSERT INTO os_stream (x) VALUES (3);
-SELECT pg_sleep(20);
+SELECT pg_sleep(12);
 
 SELECT x, old, new FROM os2_output ORDER BY x, old, new;
 
@@ -111,17 +108,14 @@ CREATE CONTINUOUS VIEW os3_output AS SELECT
   FROM output_of('os3') JOIN os_t0 t ON x = t.x;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(2);
 
 SELECT x, new, y FROM os3_output ORDER BY x, new, y;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(2);
 
 SELECT x, new, y FROM os3_output ORDER BY x, new, y;
 
 INSERT INTO os_stream (x) VALUES (0);
-SELECT pg_sleep(2);
 
 SELECT x, new, y FROM os3_output ORDER BY x, new, y;
 
@@ -139,22 +133,18 @@ CREATE CONTINUOUS VIEW os3_output AS SELECT
 FROM output_of('os3');
 
 INSERT INTO os_stream (x, y, z) VALUES (0, 2, 0);
-SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 
 INSERT INTO os_stream (x, y, z) VALUES (0, 4, 1);
-SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 
 INSERT INTO os_stream (x, y, z) VALUES (1, 8, 2);
-SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 
 INSERT INTO os_stream (x, y, z) VALUES (1, 16, 2);
-SELECT pg_sleep(2);
 
 SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 

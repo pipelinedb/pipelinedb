@@ -138,10 +138,11 @@ pzmq_bind(uint64 id)
 }
 
 void
-pzmq_connect(uint64 id, int hwm)
+pzmq_connect(uint64 id)
 {
 	pzmq_socket_t *zsock;
 	bool found;
+	int optval;
 
 	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
@@ -156,8 +157,23 @@ pzmq_connect(uint64 id, int hwm)
 		zsock->type = ZMQ_PUSH;
 		sprintf(zsock->addr, "ipc:///tmp/%ld", id);
 		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
-		if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &hwm, sizeof(int)) != 0)
-			elog(WARNING, "pzmq_connect failed to set hwm: %s", zmq_strerror(errno));
+
+		if (!IsContQueryProcess())
+		{
+			optval = 1;
+			if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &optval, sizeof(int)) != 0)
+				elog(WARNING, "pzmq_connect failed to set hwm: %s", zmq_strerror(errno));
+
+			optval = 5000;
+			if (zmq_setsockopt(zsock->sock, ZMQ_LINGER, &optval, sizeof(int)) != 0)
+				elog(WARNING, "pzmq_connect failed to set linger: %s", zmq_strerror(errno));
+		}
+		else
+		{
+			optval = 0;
+			if (zmq_setsockopt(zsock->sock, ZMQ_LINGER, &optval, sizeof(int)) != 0)
+				elog(WARNING, "pzmq_connect failed to set linger: %s", zmq_strerror(errno));
+		}
 
 		if (zmq_connect(zsock->sock, zsock->addr) != 0)
 		{
