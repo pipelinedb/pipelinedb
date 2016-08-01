@@ -5712,7 +5712,7 @@ cq_stat_report_entry(PgStat_StatCQEntry *entry)
 	 * If we consumed no tuples, saw no errors, and didn't create/drop any CVs,
 	 * there's no need to send a msg to the stats collector.
 	 */
-	if (entry->input_rows == 0 && entry->errors == 0 &&
+	if (entry->input_rows == 0 && entry->output_rows == 0 && entry->errors == 0 &&
 			entry->cv_create == 0 && entry->cv_drop == 0)
 		return;
 
@@ -5783,7 +5783,6 @@ pgstat_report_cqstat(bool force)
 	cq_stat_report_entry(MyProcStatCQEntry);
 	if (MyStatCQEntry)
 		cq_stat_report_entry(MyStatCQEntry);
-	pgstat_report_stat(true);
 }
 
 /*

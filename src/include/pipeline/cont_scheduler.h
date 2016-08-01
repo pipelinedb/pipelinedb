@@ -24,7 +24,7 @@
 
 typedef enum
 {
-	Combiner = 1,
+	Combiner = 0,
 	Worker,
 	AdhocVacuumer,
 	Scheduler /* unused */

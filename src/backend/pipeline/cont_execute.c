@@ -343,7 +343,10 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 		CommitTransactionCommand();
 
 	if (exec->batch)
+	{
 		pgstat_end_cq_batch(exec->batch->ntups, exec->batch->nbytes);
+		pgstat_report_stat(false);
+	}
 
 	ipc_tuple_reader_ack();
 	ipc_tuple_reader_reset();
