@@ -20,6 +20,8 @@
 #include "pipeline/miscutils.h"
 #include "port/atomics.h"
 
+#define MAX_MICROBATCH_SIZE (continuous_query_batch_size * 1024)
+
 /* guc */
 extern int continuous_query_num_batch;
 extern int continuous_query_batch_size;

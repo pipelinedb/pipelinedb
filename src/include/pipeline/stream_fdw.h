@@ -32,6 +32,7 @@ typedef struct StreamScanState
 
 typedef struct StreamInsertState
 {
+	int flags;
 	Bitmapset *queries;
 
 	int ntups;

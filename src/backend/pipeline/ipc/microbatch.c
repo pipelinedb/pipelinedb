@@ -22,7 +22,7 @@
 int continuous_query_num_batch;
 int continuous_query_batch_size;
 
-#define MAX_PACKED_SIZE ((continuous_query_batch_size * 1024) - 2048) /* subtract 2kb for buffer for acks */
+#define MAX_PACKED_SIZE (MAX_MICROBATCH_SIZE - 2048) /* subtract 2kb for buffer for acks */
 #define MAX_TUPDESC_SIZE(desc) ((desc)->natts * (sizeof(NameData) + (3 * sizeof(int))))
 
 microbatch_ack_t *
@@ -316,6 +316,7 @@ microbatch_pack(microbatch_t *mb, int *len)
 
 	packed_size = (uintptr_t) pos - (uintptr_t) buf;
 	Assert(packed_size <= mb->packed_size + mb->buf->len);
+	Assert(packed_size <= MAX_MICROBATCH_SIZE);
 	mb->packed_size = packed_size;
 	*len = packed_size;
 

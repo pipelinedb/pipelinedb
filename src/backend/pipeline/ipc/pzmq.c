@@ -226,7 +226,7 @@ pzmq_recv(int *len, int timeout)
 		return NULL;
 	}
 
-	Assert(ret <= continuous_query_batch_size);
+	Assert(ret <= MAX_MICROBATCH_SIZE);
 	Assert(ret == zmq_msg_size(&msg));
 
 	*len = ret;
@@ -244,7 +244,7 @@ pzmq_send(uint64 id, char *msg, int len, bool wait)
 	bool found;
 	int ret;
 
-	Assert(len <= continuous_query_batch_size);
+	Assert(len <= MAX_MICROBATCH_SIZE);
 
 	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");

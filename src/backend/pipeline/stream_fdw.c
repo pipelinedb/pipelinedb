@@ -460,6 +460,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	Bitmapset *queries = GetLocalStreamReaders(RelationGetRelid(rel));
 	List *acks = NIL;
 
+	sis->flags = eflags;
 	sis->queries = queries;
 	sis->nbatches = 1;
 	sis->sync = false;
