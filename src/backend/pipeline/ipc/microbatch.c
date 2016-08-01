@@ -420,7 +420,7 @@ microbatch_send(microbatch_t *mb, uint64 recv_id)
 	int len;
 	char *buf = microbatch_pack(mb, &len);
 
-	pzmq_connect(recv_id, 0);
+	pzmq_connect(recv_id);
 	/* TODO(usmanm): What to do if interrupted? */
 	pzmq_send(recv_id, buf, len, true);
 

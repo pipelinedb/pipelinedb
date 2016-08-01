@@ -1396,6 +1396,11 @@ sync_all(ContExecutor *cont_exec)
 
 		state->pending_tuples = 0;
 		state->existing = NULL;
+		/*
+		 * Set acks to NIL here so we don't try to access them for future ticks
+		 * that happen in a different transaction.
+		 */
+		state->acks = NIL;
 		MemSet(state->group_hashes, 0, state->group_hashes_len);
 		MemoryContextResetAndDeleteChildren(state->combine_cxt);
 	}

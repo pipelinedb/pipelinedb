@@ -193,10 +193,19 @@ ipc_tuple_reader_next(Oid query_id)
 		{
 			ListCell *lc;
 
-			old = MemoryContextSwitchTo(ContQueryBatchContext);
+			/*
+			 * Instead of using the ContQueryTransactionContext we use the TopTransactionContext
+			 * since these acks could be used by the combiner across batches when in async mode.
+			 */
+			old = MemoryContextSwitchTo(TopTransactionContext);
 
 			foreach(lc, mb->acks)
+			{
+				tagged_ref_t *ref = palloc(sizeof(tagged_ref_t));
+				*ref = *(tagged_ref_t *) lfirst(lc);
+
 				my_rbatch.acks = lappend(my_rbatch.acks, lfirst(lc));
+			}
 
 			MemoryContextSwitchTo(old);
 		}
