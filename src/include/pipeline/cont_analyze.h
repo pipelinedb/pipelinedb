@@ -61,7 +61,8 @@ extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt
 extern void CreateInferredStreams(SelectStmt *stmt);
 extern void MakeSelectsContinuous(SelectStmt *stmt);
 extern void ValidateSubselect(Node *subquery, char *objdesc);
-extern void ValidateContQuery(RangeVar *name, Node *node, const char *sql);
+extern void ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql);
+extern void ValidateContQuery(Query *query);
 extern void ValidateContTrigger(CreateTrigStmt *stmt);
 
 extern void transformContSelectStmt(ParseState *pstate, SelectStmt *select);
