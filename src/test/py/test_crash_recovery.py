@@ -164,7 +164,7 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
   result = None
   backend_pid = 0
 
-  while not result and attempts < 10:
+  while not result and attempts < 20:
     result = pipeline.execute("""SELECT pid, query FROM pg_stat_activity WHERE lower(query) LIKE '%%pg_sleep%%'""").first()
     time.sleep(1)
     attempts += 1
