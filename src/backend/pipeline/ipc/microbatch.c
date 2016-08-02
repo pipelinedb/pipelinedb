@@ -457,7 +457,13 @@ microbatch_send_to_worker(microbatch_t *mb)
 		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
 
 	if (IsContQueryCombinerProcess())
+	{
+		/*
+		 * Combiners need to shard over works so that updates to a specific group are always
+		 * written in order to the output stream.
+		 */
 		worker_id = MyContQueryProc->group_id % continuous_query_num_workers;
+	}
 	else
 	{
 		/* TODO(usmanm): Poll all workers and send to first non-blocking one? */

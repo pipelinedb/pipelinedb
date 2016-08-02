@@ -467,7 +467,6 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 
 	if (eflags & REENTRANT_STREAM_INSERT)
 	{
-		Assert(IsContQueryProcess());
 		Assert(list_length(fdw_private) == 1 || list_length(fdw_private) == 2);
 
 		sis->ack = NULL;

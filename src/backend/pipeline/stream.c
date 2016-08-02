@@ -106,8 +106,9 @@ pipeline_stream_insert(PG_FUNCTION_ARGS)
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
 	Trigger *trig = trigdata->tg_trigger;
 	HeapTuple tup;
-	TupleDesc desc;
+	List *fdw_private;
 	int i;
+	ResultRelInfo rinfo;
 
 	if (trig->tgnargs < 1)
 		elog(ERROR, "pipeline_stream_insert: must be provided a stream name");
@@ -141,20 +142,40 @@ pipeline_stream_insert(PG_FUNCTION_ARGS)
 	else
 		tup = trigdata->tg_trigtuple;
 
-	desc = RelationGetDescr(trigdata->tg_relation);
+	fdw_private = list_make1(RelationGetDescr(trigdata->tg_relation));
+
+	MemSet(&rinfo, 0, sizeof(ResultRelInfo));
+	rinfo.ri_RangeTableIndex = 1; /* dummy */
+	rinfo.ri_TrigDesc = NULL;
 
 	for (i = 0; i < trig->tgnargs; i++)
 	{
 		RangeVar *stream;
 		Relation rel;
-		HeapTuple tups[1];
+		StreamInsertState *sis;
 
 		stream = makeRangeVarFromNameList(textToQualifiedNameList(cstring_to_text(trig->tgargs[i])));
 		rel = heap_openrv(stream, AccessShareLock);
 
-		tups[0] = tup;
-//		SendTuplesToContWorkers(rel, desc, tups, 1, NIL);
+		rinfo.ri_RelationDesc = rel;
 
+		BeginStreamModify(NULL, &rinfo, fdw_private, 0, 0);
+		sis = (StreamInsertState *) rinfo.ri_FdwState;
+		Assert(sis);
+
+		if (sis->queries)
+		{
+			TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
+
+			ExecStoreTuple(tup, slot, InvalidBuffer, false);
+			ExecStreamInsert(NULL, &rinfo, slot, NULL);
+			ExecClearTuple(slot);
+
+			ExecDropSingleTupleTableSlot(slot);
+			pgstat_report_streamstat(true);
+		}
+
+		EndStreamModify(NULL, &rinfo);
 		heap_close(rel, AccessShareLock);
 	}
 
