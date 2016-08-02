@@ -550,12 +550,12 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	RangeVar *view;
 	List *tableElts = NIL;
 	ListCell *lc;
-	Oid matrelid;
-	Oid seqrelid;
-	Oid overlayid;
-	Oid pqoid;
-	Oid indexoid;
-	Oid pkey_idxoid;
+	Oid matrelid = InvalidOid;
+	Oid seqrelid = InvalidOid;
+	Oid overlayid = InvalidOid;
+	Oid pqoid = InvalidOid;
+	Oid lookup_idx_oid = InvalidOid;
+	Oid pkey_idx_oid = InvalidOid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
@@ -776,17 +776,18 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CommandCounterIncrement();
 
 	/* Create group look up index and record dependencies */
-
 	if (IsBinaryUpgrade)
 		set_next_oids_for_lookup_index();
-	indexoid = create_lookup_index(view, matrelid, matrel, query, context->is_sw);
+	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, query, context->is_sw);
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_pk_index();
-	pkey_idxoid = create_pkey_index(view, matrelid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
+	pkey_idx_oid = create_pkey_index(view, matrelid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
 
-	record_cv_dependencies(pqoid, matrelid, osrelid, seqrelid, overlayid, indexoid, pkey_idxoid, workerselect, query);
+	UpdateContViewIndexIds(cvid, pkey_idx_oid, lookup_idx_oid);
+	CommandCounterIncrement();
 
+	record_cv_dependencies(pqoid, matrelid, osrelid, seqrelid, overlayid, lookup_idx_oid, pkey_idx_oid, workerselect, query);
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	/*
