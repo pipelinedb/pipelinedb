@@ -73,6 +73,9 @@ ContExecutorNew(ContQueryStateInit initfn)
 	ipc_tuple_reader_init();
 	pgstat_report_activity(STATE_RUNNING, exec->pname);
 
+	debug_query_string = NULL;
+	MyStatCQEntry = NULL;
+
 	return exec;
 }
 
@@ -146,7 +149,6 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 	MemoryContextSwitchTo(ContQueryBatchContext);
 
 	exec->exec_queries = bms_copy(exec->all_queries);
-	debug_query_string = NULL;
 
 	pgstat_start_cq_batch();
 }
@@ -346,6 +348,7 @@ ContExecutorEndQuery(ContExecutor *exec)
 
 	ipc_tuple_reader_rewind();
 	debug_query_string = NULL;
+	MyStatCQEntry = NULL;
 }
 
 void
@@ -371,5 +374,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 	exec->exec_queries = NULL;
 	exec->batch = NULL;
+
 	debug_query_string = NULL;
+	MyStatCQEntry = NULL;
 }

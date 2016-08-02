@@ -69,8 +69,8 @@ def test_pipeline_flush(pipeline, clean_db):
 
   start = time.time()
 
-  # This will take 0.01 * 1000 = 10s to process but return immediately since inserts are async
-  # and values will fit in one batch.
+  # This will take 0.01 * 1000 = 10s to process but return immediately since
+  # inserts are async and values will fit in one batch.
   pipeline.insert('stream', ('x',), values)
   insert_end = time.time()
 
