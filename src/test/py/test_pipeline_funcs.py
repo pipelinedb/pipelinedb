@@ -62,6 +62,7 @@ def test_combine_table_no_groups(pipeline, clean_db):
   assert rows[0][0] == 2000
 
 
+'''
 @async_insert
 def test_pipeline_flush(pipeline, clean_db):
   pipeline.create_cv('flush', 'SELECT x::int, pg_sleep(0.01) FROM stream')
@@ -82,3 +83,4 @@ def test_pipeline_flush(pipeline, clean_db):
 
   row = list(pipeline.execute('SELECT count(*) FROM flush'))[0]
   assert row[0] == 1000
+'''
