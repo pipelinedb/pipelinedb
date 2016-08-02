@@ -604,7 +604,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/* Apply any CQ storage options like max_age, step_factor */
 	ApplyStorageOptions(stmt);
 
-	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
+	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
 
 	/* Deparse query so that analyzer always see the same canonicalized SelectStmt */
 	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
@@ -621,6 +621,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	workerselect = TransformSelectStmtForContProcess(matrel, copyObject(cont_select), &viewselect, Worker);
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
+	ValidateContQuery(query);
 
 	foreach(lc, query->groupClause)
 	{
@@ -1206,7 +1207,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	CreateInferredStreams((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
-	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
+	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
 	ValidateSubselect(stmt->query, "continuous transforms");
 
 	query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);

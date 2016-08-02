@@ -910,10 +910,10 @@ validate_target_list(SelectStmt *stmt)
 }
 
 /*
- * ValidateContQuery
+ * ValidateParsedContQuery
  */
 void
-ValidateContQuery(RangeVar *name, Node *node, const char *sql)
+ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 {
 	SelectStmt *select;
 	ContAnalyzeContext *context;
@@ -953,7 +953,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 		RangeSubselect *sub = (RangeSubselect *) linitial(select->fromClause);
 
 		ValidateSubselect(sub->subquery, "subqueries in continuous views");
-		ValidateContQuery(name, sub->subquery, sql);
+		ValidateParsedContQuery(name, sub->subquery, sql);
 		return;
 	}
 
@@ -1421,6 +1421,60 @@ pull_var_and_aggs(Node *node)
 	List *varlist = NIL;
 	pull_var_and_aggs_walker(node, &varlist);
 	return varlist;
+}
+
+/*
+ * validate_agg
+ */
+static void
+validate_agg(Node *node)
+{
+	Oid aggfnoid = InvalidOid;
+	HeapTuple	aggtup;
+	HeapTuple combtup;
+	Form_pg_aggregate aggform;
+
+	Assert(IsA(node, Aggref) || IsA(node, WindowFunc));
+
+	if (IsA(node, Aggref))
+		aggfnoid = ((Aggref *) node)->aggfnoid;
+	else
+		aggfnoid = ((WindowFunc *) node)->winfnoid;
+
+	aggtup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(aggfnoid));
+	Assert(HeapTupleIsValid(aggtup));
+
+	aggform = (Form_pg_aggregate) GETSTRUCT(aggtup);
+	ReleaseSysCache(aggtup);
+
+	combtup = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+			ObjectIdGetDatum(aggform->aggfinalfn), ObjectIdGetDatum(aggform->aggtransfn));
+
+	if (!HeapTupleIsValid(combtup))
+	{
+		if (aggform->aggtranstype == INTERNALOID)
+			elog(ERROR, "aggregate %u requires a pipeline_combine record but does not have one", aggfnoid);
+		return;
+	}
+
+	ReleaseSysCache(combtup);
+}
+
+/*
+ * ValidateContQuery
+ */
+void
+ValidateContQuery(Query *query)
+{
+	List *aggs = pull_var_and_aggs((Node *) query->targetList);
+	ListCell *lc;
+
+	foreach(lc, aggs)
+	{
+		Node *n = (Node *) lfirst(lc);
+		if (IsA(n, Aggref) || IsA(n, WindowFunc))
+			validate_agg(n);
+	}
 }
 
 static Oid
