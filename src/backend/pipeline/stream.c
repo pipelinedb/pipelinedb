@@ -74,7 +74,7 @@ CopyIntoStream(Relation rel, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	if (snap)
 		PopActiveSnapshot();
 
-	BeginStreamModify(NULL, &rinfo, NIL, 0, 0);
+	BeginStreamModify(NULL, &rinfo, list_make1(desc), 0, 0);
 	sis = (StreamInsertState *) rinfo.ri_FdwState;
 	Assert(sis);
 

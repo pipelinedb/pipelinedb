@@ -488,8 +488,15 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	{
 		if (is_inferred_stream_relation(rel))
 		{
+			void *incoming;
+
 			Assert(fdw_private);
-			sis->desc = ExecTypeFromTL(linitial(fdw_private), false);
+			incoming = linitial(fdw_private);
+
+			if (IsA(incoming, List))
+				sis->desc = ExecTypeFromTL(incoming, false);
+			else
+				sis->desc = (TupleDesc) incoming;
 		}
 		else
 			sis->desc = RelationGetDescr(rel);
