@@ -278,6 +278,38 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, bool g
 }
 
 void
+UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid)
+{
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
+	bool replace[Natts_pipeline_query];
+	bool nulls[Natts_pipeline_query];
+	Datum values[Natts_pipeline_query];
+	HeapTuple new;
+
+	if (!HeapTupleIsValid(tup))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view with id \"%d\" does not exist", cvid)));
+
+	MemSet(replace, 0 , sizeof(replace));
+	MemSet(nulls, 0 , sizeof(nulls));
+	replace[Anum_pipeline_query_pkindid - 1] = true;
+	replace[Anum_pipeline_query_lookupindid - 1] = true;
+	values[Anum_pipeline_query_pkindid - 1] = ObjectIdGetDatum(pkindid);
+	values[Anum_pipeline_query_lookupindid - 1] = ObjectIdGetDatum(lookupindid);
+
+	new = heap_modify_tuple(tup, RelationGetDescr(pipeline_query), values, nulls, replace);
+
+	simple_heap_update(pipeline_query, &tup->t_self, new);
+	CatalogUpdateIndexes(pipeline_query, new);
+	CommandCounterIncrement();
+
+	ReleaseSysCache(tup);
+	heap_close(pipeline_query, RowExclusiveLock);
+}
+
+void
 UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
 {
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
@@ -296,6 +328,8 @@ UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
 	MemSet(nulls, 0 , sizeof(nulls));
 	replace[Anum_pipeline_query_relid - 1] = true;
 	replace[Anum_pipeline_query_osrelid - 1] = true;
+	replace[Anum_pipeline_query_pkindid - 1] = true;
+	replace[Anum_pipeline_query_lookupindid - 1] = true;
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(cvrelid);
 	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 
@@ -306,7 +340,7 @@ UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
 	CommandCounterIncrement();
 
 	ReleaseSysCache(tup);
-	heap_close(pipeline_query, NoLock);
+	heap_close(pipeline_query, RowExclusiveLock);
 }
 
 /*
@@ -825,6 +859,9 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, bool a
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
 	values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(fnoid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(typoid); /* HACK(usmanm): So matrel index works */
+	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(InvalidOid);
+	values[Anum_pipeline_query_pkindid - 1] = ObjectIdGetDatum(InvalidOid);
+	values[Anum_pipeline_query_lookupindid - 1] = ObjectIdGetDatum(InvalidOid);
 
 	/* This code is copied from trigger.c:CreateTrigger */
 	if (list_length(args))

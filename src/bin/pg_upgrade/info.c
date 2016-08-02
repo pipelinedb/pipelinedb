@@ -90,7 +90,7 @@ gen_db_file_maps(DbInfo *old_db, DbInfo *new_db,
 			if (strcmp(new_rel->nspname, "pg_toast") == 0)
 				continue;
 			else
-				pg_fatal("Mismatch of relation OID in database \"%s\": old OID %d, new OID %d\n",
+				pg_log(PG_REPORT, "Mismatch of relation OID in database \"%s\": old OID %d, new OID %d\n",
 						 old_db->db_name, old_rel->reloid, new_rel->reloid);
 		}
 

@@ -30,8 +30,8 @@ Options: fillfactor=50
               Stream "public.cqcreate0_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqcreate0(0)                | extended
- new               | cqcreate0(0)                | extended
+ old               | cqcreate0                   | extended
+ new               | cqcreate0                   | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate0');
@@ -71,8 +71,8 @@ Options: fillfactor=50
               Stream "public.cqcreate1_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqcreate1(0)                | extended
- new               | cqcreate1(0)                | extended
+ old               | cqcreate1                   | extended
+ new               | cqcreate1                   | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate1');
@@ -115,8 +115,8 @@ Options: fillfactor=50
               Stream "public.cqcreate2_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqcreate2(0)                | extended
- new               | cqcreate2(0)                | extended
+ old               | cqcreate2                   | extended
+ new               | cqcreate2                   | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate2');
@@ -166,8 +166,8 @@ Options: fillfactor=50
               Stream "public.cqcreate3_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqcreate3(0)                | extended
- new               | cqcreate3(0)                | extended
+ old               | cqcreate3                   | extended
+ new               | cqcreate3                   | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate3');
@@ -215,8 +215,8 @@ Options: fillfactor=50
               Stream "public.cqcreate4_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqcreate4(0)                | extended
- new               | cqcreate4(0)                | extended
+ old               | cqcreate4                   | extended
+ new               | cqcreate4                   | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate4');
@@ -261,8 +261,8 @@ Options: fillfactor=50
               Stream "public.cqcreate5_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqcreate5(0)                | extended
- new               | cqcreate5(0)                | extended
+ old               | cqcreate5                   | extended
+ new               | cqcreate5                   | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate5');
@@ -308,8 +308,8 @@ Options: fillfactor=50
               Stream "public.cqcreate6_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqcreate6(0)                | extended
- new               | cqcreate6(0)                | extended
+ old               | cqcreate6                   | extended
+ new               | cqcreate6                   | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate6');
@@ -357,8 +357,8 @@ Options: fillfactor=50
                 Stream "public.cvavg_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cvavg(0)                    | extended
- new               | cvavg(0)                    | extended
+ old               | cvavg                       | extended
+ new               | cvavg                       | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvavg');
@@ -395,8 +395,8 @@ Options: fillfactor=50
                 Stream "public.cvjson_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cvjson(0)                   | extended
- new               | cvjson(0)                   | extended
+ old               | cvjson                      | extended
+ new               | cvjson                      | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvjson');
@@ -430,8 +430,8 @@ Options: fillfactor=50
               Stream "public.cvjsonobj_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cvjsonobj(0)                | extended
- new               | cvjsonobj(0)                | extended
+ old               | cvjsonobj                   | extended
+ new               | cvjsonobj                   | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvjsonobj');
@@ -466,8 +466,8 @@ Options: fillfactor=50
                Stream "public.cvcount_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cvcount(0)                  | extended
- new               | cvcount(0)                  | extended
+ old               | cvcount                     | extended
+ new               | cvcount                     | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvcount');
@@ -501,8 +501,8 @@ Options: fillfactor=50
                Stream "public.cvarray_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cvarray(0)                  | extended
- new               | cvarray(0)                  | extended
+ old               | cvarray                     | extended
+ new               | cvarray                     | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvarray');
@@ -541,8 +541,8 @@ Options: fillfactor=50
                 Stream "public.cvtext_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cvtext(0)                   | extended
- new               | cvtext(0)                   | extended
+ old               | cvtext                      | extended
+ new               | cvtext                      | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvtext');
@@ -579,8 +579,8 @@ Options: fillfactor=50
               Stream "public.cqaggexpr1_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqaggexpr1(0)               | extended
- new               | cqaggexpr1(0)               | extended
+ old               | cqaggexpr1                  | extended
+ new               | cqaggexpr1                  | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
@@ -620,8 +620,8 @@ Options: fillfactor=50
               Stream "public.cqaggexpr2_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqaggexpr2(0)               | extended
- new               | cqaggexpr2(0)               | extended
+ old               | cqaggexpr2                  | extended
+ new               | cqaggexpr2                  | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
@@ -663,8 +663,8 @@ Options: fillfactor=50
               Stream "public.cqaggexpr3_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqaggexpr3(0)               | extended
- new               | cqaggexpr3(0)               | extended
+ old               | cqaggexpr3                  | extended
+ new               | cqaggexpr3                  | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
@@ -706,8 +706,8 @@ Options: fillfactor=50
               Stream "public.cqaggexpr4_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqaggexpr4(0)               | extended
- new               | cqaggexpr4(0)               | extended
+ old               | cqaggexpr4                  | extended
+ new               | cqaggexpr4                  | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
@@ -750,8 +750,8 @@ Options: fillfactor=50
               Stream "public.cqgroupby_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | cqgroupby(0)                | extended
- new               | cqgroupby(0)                | extended
+ old               | cqgroupby                   | extended
+ new               | cqgroupby                   | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqgroupby');
@@ -805,8 +805,8 @@ Options: fillfactor=50
            Stream "public.multigroupindex_osrel"
       Column       |            Type             | Storage  
 -------------------+-----------------------------+----------
- old               | multigroupindex(0)          | extended
- new               | multigroupindex(0)          | extended
+ old               | multigroupindex             | extended
+ new               | multigroupindex             | extended
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('multigroupindex');

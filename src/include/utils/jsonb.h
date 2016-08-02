@@ -433,5 +433,9 @@ extern char *JsonbToCString(StringInfo out, JsonbContainer *in,
 extern char *JsonbToCStringIndent(StringInfo out, JsonbContainer *in,
 					 int estimated_len);
 
+extern Datum jsonbaggstatesend(PG_FUNCTION_ARGS);
+extern Datum jsonbaggstaterecv(PG_FUNCTION_ARGS);
+extern Datum jsonb_object_agg_combine(PG_FUNCTION_ARGS);
+extern Datum jsonb_agg_combine(PG_FUNCTION_ARGS);
 
 #endif   /* __JSONB_H__ */

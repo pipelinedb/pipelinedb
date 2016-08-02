@@ -217,7 +217,7 @@ start_postmaster(ClusterInfo *cluster, bool throw_error)
 	 * win on ext4.
 	 */
 	snprintf(cmd, sizeof(cmd),
-		  "\"%s/pg_ctl\" -w -l \"%s\" -D \"%s\" -o \"-p %d%s%s %s%s\" start",
+		  "\"%s/pipeline-ctl\" -w -l \"%s\" -D \"%s\" -o \"-p %d%s%s %s%s\" start",
 		  cluster->bindir, SERVER_LOG_FILE, cluster->pgconfig, cluster->port,
 			 (cluster->controldata.cat_ver >=
 			  BINARY_UPGRADE_SERVER_FLAG_CAT_VER) ? " -b" :
@@ -303,7 +303,7 @@ stop_postmaster(bool fast)
 		return;					/* no cluster running */
 
 	exec_prog(SERVER_STOP_LOG_FILE, NULL, !fast,
-			  "\"%s/pg_ctl\" -w -D \"%s\" -o \"%s\" %s stop",
+			  "\"%s/pipeline-ctl\" -w -D \"%s\" -o \"%s\" %s stop",
 			  cluster->bindir, cluster->pgconfig,
 			  cluster->pgopts ? cluster->pgopts : "",
 			  fast ? "-m fast" : "");

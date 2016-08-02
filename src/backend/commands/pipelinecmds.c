@@ -17,6 +17,7 @@
 #include "access/htup_details.h"
 #include "access/reloptions.h"
 #include "access/xact.h"
+#include "catalog/binary_upgrade.h"
 #include "commands/defrem.h"
 #include "commands/explain.h"
 #include "commands/pipelinecmds.h"
@@ -58,6 +59,7 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/palloc.h"
+#include "utils/pipelinefuncs.h"
 #include "utils/portal.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
@@ -72,6 +74,92 @@ int continuous_view_fillfactor;
 
 /* hooks */
 bool use_ls_hash_group_index = true;
+
+/* for binary upgrades */
+static Oid next_matrel_type = InvalidOid;
+static Oid next_matrel_array_type = InvalidOid;
+static Oid next_matrel_toast_type = InvalidOid;
+static Oid next_matrel_class = InvalidOid;
+static Oid next_matrel_toast_class = InvalidOid;
+static Oid next_matrel_toast_index_class = InvalidOid;
+
+static Oid next_seqrel_type = InvalidOid;
+static Oid next_seqrel_class = InvalidOid;
+
+static Oid next_pk_index_class = InvalidOid;
+static Oid next_lookup_index_class = InvalidOid;
+
+static Oid next_overlay_type = InvalidOid;
+static Oid next_overlay_array_type = InvalidOid;
+static Oid next_overlay_class = InvalidOid;
+
+static Oid next_osrel_type = InvalidOid;
+static Oid next_osrel_array_type = InvalidOid;
+static Oid next_osrel_class = InvalidOid;
+
+static void
+reset_next_oids()
+{
+	binary_upgrade_next_pg_type_oid = InvalidOid;
+	binary_upgrade_next_array_pg_type_oid = InvalidOid;
+	binary_upgrade_next_toast_pg_type_oid = InvalidOid;
+	binary_upgrade_next_heap_pg_class_oid = InvalidOid;
+	binary_upgrade_next_toast_pg_class_oid = InvalidOid;
+	binary_upgrade_next_index_pg_class_oid = InvalidOid;
+}
+
+static void
+set_next_oids_for_matrel(void)
+{
+	reset_next_oids();
+	binary_upgrade_next_pg_type_oid = next_matrel_type;
+	binary_upgrade_next_array_pg_type_oid = next_matrel_array_type;
+	binary_upgrade_next_toast_pg_type_oid = next_matrel_toast_type;
+
+	binary_upgrade_next_heap_pg_class_oid = next_matrel_class;
+	binary_upgrade_next_toast_pg_class_oid = next_matrel_toast_class;
+	binary_upgrade_next_index_pg_class_oid = next_matrel_toast_index_class;
+}
+
+static void
+set_next_oids_for_seqrel(void)
+{
+	reset_next_oids();
+	binary_upgrade_next_pg_type_oid = next_seqrel_type;
+	binary_upgrade_next_heap_pg_class_oid = next_seqrel_class;
+}
+
+static void
+set_next_oids_for_pk_index(void)
+{
+	reset_next_oids();
+	binary_upgrade_next_index_pg_class_oid = next_pk_index_class;
+}
+
+static void
+set_next_oids_for_lookup_index(void)
+{
+	reset_next_oids();
+	binary_upgrade_next_index_pg_class_oid = next_lookup_index_class;
+}
+
+static void
+set_next_oids_for_overlay(void)
+{
+	reset_next_oids();
+	binary_upgrade_next_pg_type_oid = next_overlay_type;
+	binary_upgrade_next_array_pg_type_oid = next_overlay_array_type;
+	binary_upgrade_next_heap_pg_class_oid = next_overlay_class;
+}
+
+static void
+set_next_oids_for_osrel(void)
+{
+	reset_next_oids();
+	binary_upgrade_next_pg_type_oid = next_osrel_type;
+	binary_upgrade_next_array_pg_type_oid = next_osrel_array_type;
+	binary_upgrade_next_heap_pg_class_oid = next_osrel_class;
+}
 
 /*
  * make_default_fillfactor
@@ -462,12 +550,12 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	RangeVar *view;
 	List *tableElts = NIL;
 	ListCell *lc;
-	Oid matrelid;
-	Oid seqrelid;
-	Oid overlayid;
-	Oid pqoid;
-	Oid indexoid;
-	Oid pkey_idxoid;
+	Oid matrelid = InvalidOid;
+	Oid seqrelid = InvalidOid;
+	Oid overlayid = InvalidOid;
+	Oid pqoid = InvalidOid;
+	Oid lookup_idx_oid = InvalidOid;
+	Oid pkey_idx_oid = InvalidOid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
@@ -488,7 +576,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ColumnDef *old;
 	ColumnDef *new;
 	CreateStreamStmt *create_osrel;
-	Oid osrelid;
+	Oid osrelid = InvalidOid;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -516,7 +604,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/* Apply any CQ storage options like max_age, step_factor */
 	ApplyStorageOptions(stmt);
 
-	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
+	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
 
 	/* Deparse query so that analyzer always see the same canonicalized SelectStmt */
 	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
@@ -533,6 +621,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	workerselect = TransformSelectStmtForContProcess(matrel, copyObject(cont_select), &viewselect, Worker);
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
+	ValidateContQuery(query);
 
 	foreach(lc, query->groupClause)
 	{
@@ -596,7 +685,10 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	create_stmt->oncommit = stmt->into->onCommit;
 	create_stmt->options = stmt->into->options;
 
+	if (IsBinaryUpgrade)
+		set_next_oids_for_matrel();
 	address = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid, NULL);
+
 	matrelid = address.objectId;
 	CommandCounterIncrement();
 
@@ -605,7 +697,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options,
 						   true);
-
 	AlterTableCreateToastTable(matrelid, toast_options, AccessExclusiveLock);
 
 	/* Create the sequence for primary keys */
@@ -614,7 +705,10 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		create_seq_stmt = makeNode(CreateSeqStmt);
 		create_seq_stmt->sequence = seqrel;
 
+		if (IsBinaryUpgrade)
+			set_next_oids_for_seqrel();
 		address = DefineSequence(create_seq_stmt);
+
 		seqrelid = address.objectId;
 		CommandCounterIncrement();
 	}
@@ -638,7 +732,11 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
 	viewselect->forContinuousView = true;
+
+	if (IsBinaryUpgrade)
+		set_next_oids_for_overlay();
 	address = DefineView(view_stmt, cont_select_sql);
+
 	CommandCounterIncrement();
 
 	overlayid = address.objectId;
@@ -652,6 +750,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	old->colname = "old";
 	old->typeName = makeNode(TypeName);
 	old->typeName->typeOid = overlayrel->rd_rel->reltype;
+	old->typeName->typemod = -1;
 
 	new = copyObject(old);
 	new->colname = "new";
@@ -665,7 +764,10 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	create_osrel->ft.base.relation = makeRangeVar(view->schemaname, CVNameToOSRelName(view->relname), -1);
 	transformCreateStreamStmt(create_osrel);
 
+	if (IsBinaryUpgrade)
+		set_next_oids_for_osrel();
 	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_STREAM, InvalidOid, NULL);
+
 	CreateForeignTable((CreateForeignTableStmt *) create_osrel, address.objectId);
 	CreatePipelineStreamEntry((CreateStreamStmt *) create_osrel, address.objectId);
 
@@ -675,10 +777,18 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CommandCounterIncrement();
 
 	/* Create group look up index and record dependencies */
-	indexoid = create_lookup_index(view, matrelid, matrel, query, context->is_sw);
-	pkey_idxoid = create_pkey_index(view, matrelid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
-	record_cv_dependencies(pqoid, matrelid, osrelid, seqrelid, overlayid, indexoid, pkey_idxoid, workerselect, query);
+	if (IsBinaryUpgrade)
+		set_next_oids_for_lookup_index();
+	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, query, context->is_sw);
 
+	if (IsBinaryUpgrade)
+		set_next_oids_for_pk_index();
+	pkey_idx_oid = create_pkey_index(view, matrelid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
+
+	UpdateContViewIndexIds(cvid, pkey_idx_oid, lookup_idx_oid);
+	CommandCounterIncrement();
+
+	record_cv_dependencies(pqoid, matrelid, osrelid, seqrelid, overlayid, lookup_idx_oid, pkey_idx_oid, workerselect, query);
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	/*
@@ -1098,7 +1208,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	CreateInferredStreams((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
-	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
+	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
 	ValidateSubselect(stmt->query, "continuous transforms");
 
 	query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
@@ -1121,4 +1231,113 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	CommandCounterIncrement();
 
 	heap_close(pipeline_query, NoLock);
+}
+
+/*
+ * create_cv_set_next_oids_for_matrel
+ */
+Datum
+create_cv_set_next_oids_for_matrel(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_matrel_class = PG_GETARG_OID(0);
+	next_matrel_type = PG_GETARG_OID(1);
+	next_matrel_array_type = PG_GETARG_OID(2);
+
+
+	/* Toast (if necessary) */
+	next_matrel_toast_class = PG_GETARG_OID(3);
+	next_matrel_toast_type = PG_GETARG_OID(4);
+	next_matrel_toast_index_class = PG_GETARG_OID(5);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cv_set_next_oids_for_seqrel
+ */
+Datum
+create_cv_set_next_oids_for_seqrel(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_seqrel_class = PG_GETARG_OID(0);
+	next_seqrel_type = PG_GETARG_OID(1);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cv_set_next_oids_for_pk_index
+ */
+Datum
+create_cv_set_next_oids_for_pk_index(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_pk_index_class = PG_GETARG_OID(0);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cv_set_next_oids_for_lookup_index
+ */
+Datum
+create_cv_set_next_oids_for_lookup_index(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_lookup_index_class = PG_GETARG_OID(0);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cv_set_next_oids_for_overlay
+ */
+Datum
+create_cv_set_next_oids_for_overlay(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_overlay_type = PG_GETARG_OID(0);
+	next_overlay_array_type = PG_GETARG_OID(1);
+	next_overlay_class = PG_GETARG_OID(2);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cv_set_next_oids_for_osrel
+ */
+Datum
+create_cv_set_next_oids_for_osrel(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_osrel_type = PG_GETARG_OID(0);
+	next_osrel_array_type = PG_GETARG_OID(1);
+	next_osrel_class = PG_GETARG_OID(2);
+
+	PG_RETURN_VOID();
 }

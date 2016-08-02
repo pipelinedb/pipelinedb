@@ -16,6 +16,7 @@
 #include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "access/xlog.h"
+#include "catalog/binary_upgrade.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pg_proc.h"
@@ -28,6 +29,7 @@
 #include "commands/pipelinecmds.h"
 #include "executor/executor.h"
 #include "lib/stringinfo.h"
+#include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -908,10 +910,10 @@ validate_target_list(SelectStmt *stmt)
 }
 
 /*
- * ValidateContQuery
+ * ValidateParsedContQuery
  */
 void
-ValidateContQuery(RangeVar *name, Node *node, const char *sql)
+ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 {
 	SelectStmt *select;
 	ContAnalyzeContext *context;
@@ -951,7 +953,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 		RangeSubselect *sub = (RangeSubselect *) linitial(select->fromClause);
 
 		ValidateSubselect(sub->subquery, "subqueries in continuous views");
-		ValidateContQuery(name, sub->subquery, sql);
+		ValidateParsedContQuery(name, sub->subquery, sql);
 		return;
 	}
 
@@ -1421,6 +1423,60 @@ pull_var_and_aggs(Node *node)
 	return varlist;
 }
 
+/*
+ * validate_agg
+ */
+static void
+validate_agg(Node *node)
+{
+	Oid aggfnoid = InvalidOid;
+	HeapTuple	aggtup;
+	HeapTuple combtup;
+	Form_pg_aggregate aggform;
+
+	Assert(IsA(node, Aggref) || IsA(node, WindowFunc));
+
+	if (IsA(node, Aggref))
+		aggfnoid = ((Aggref *) node)->aggfnoid;
+	else
+		aggfnoid = ((WindowFunc *) node)->winfnoid;
+
+	aggtup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(aggfnoid));
+	Assert(HeapTupleIsValid(aggtup));
+
+	aggform = (Form_pg_aggregate) GETSTRUCT(aggtup);
+	ReleaseSysCache(aggtup);
+
+	combtup = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+			ObjectIdGetDatum(aggform->aggfinalfn), ObjectIdGetDatum(aggform->aggtransfn));
+
+	if (!HeapTupleIsValid(combtup))
+	{
+		if (aggform->aggtranstype == INTERNALOID)
+			elog(ERROR, "aggregate %u requires a pipeline_combine record but does not have one", aggfnoid);
+		return;
+	}
+
+	ReleaseSysCache(combtup);
+}
+
+/*
+ * ValidateContQuery
+ */
+void
+ValidateContQuery(Query *query)
+{
+	List *aggs = pull_var_and_aggs((Node *) query->targetList);
+	ListCell *lc;
+
+	foreach(lc, aggs)
+	{
+		Node *n = (Node *) lfirst(lc);
+		if (IsA(n, Aggref) || IsA(n, WindowFunc))
+			validate_agg(n);
+	}
+}
+
 static Oid
 get_combine_state_type(Expr *expr)
 {
@@ -1572,6 +1628,22 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 	}
 }
 
+static void
+save_next_oids(Oid *type, Oid *arraytype, Oid *class)
+{
+	*type = binary_upgrade_next_pg_type_oid;
+	*arraytype = binary_upgrade_next_array_pg_type_oid;
+	*class = binary_upgrade_next_heap_pg_class_oid;
+}
+
+static void
+set_next_oids_for_inferred_stream(void)
+{
+	binary_upgrade_next_pg_type_oid = 100000 * GetNewObjectId();
+	binary_upgrade_next_array_pg_type_oid = 100000 * GetNewObjectId();
+	binary_upgrade_next_heap_pg_class_oid = 100000 * GetNewObjectId();
+}
+
 static bool
 create_inferred_streams(Node *node, void *context)
 {
@@ -1584,7 +1656,41 @@ create_inferred_streams(Node *node, void *context)
 		Oid relid = RangeVarGetRelid(rv, NoLock, true);
 
 		if (!OidIsValid(relid))
+		{
+			Oid save_type;
+			Oid save_arraytype;
+			Oid save_class;
+
+			/*
+			 * XXX(derekjn) If this is a binary upgrade, all OIDs need to be explicitly
+			 * set so that they align with the old database files. However, since
+			 * inferred streams are created lazily, we don't have a good way to deterministically
+			 * assign them an OID during binary upgrades.
+			 *
+			 * But since they don't actually need any storage, all we need to do is assign them an
+			 * OID that isn't claimed by incoming binary upgrade objects. We can't do this
+			 * deterministically either, so we just claim the next available OID, multiply it
+			 * by a huge number and throw a hail mary.
+			 *
+			 * The *worst* possible thing that can happen here is that the binary upgrade will fail
+			 * once it gets to a certain relation, which can be worked around by manually dumping
+			 * and restoring that relation, but even that is very unlikely to be necessary.
+			 */
+			if (IsBinaryUpgrade)
+			{
+				save_next_oids(&save_type, &save_arraytype, &save_class);
+				set_next_oids_for_inferred_stream();
+			}
+
 			CreateInferredStream(rv);
+
+			if (IsBinaryUpgrade)
+			{
+				binary_upgrade_next_pg_type_oid = save_type;
+				binary_upgrade_next_array_pg_type_oid = save_arraytype;
+				binary_upgrade_next_heap_pg_class_oid = save_class;
+			}
+		}
 
 		return false;
 	}

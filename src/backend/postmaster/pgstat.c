@@ -137,8 +137,8 @@ PgStat_MsgBgWriter BgWriterStats;
  * If we're a CQ process, this tracks our various runtime stats
  */
 static PgStat_StatCQEntryLocal MyProcStatCQEntryLocal;
-PgStat_StatCQEntry *MyProcStatCQEntry = (PgStat_StatCQEntry *) &MyProcStatCQEntryLocal;
-PgStat_StatCQEntry *MyStatCQEntry = NULL;
+volatile PgStat_StatCQEntry *MyProcStatCQEntry = (PgStat_StatCQEntry *) &MyProcStatCQEntryLocal;
+volatile PgStat_StatCQEntry *MyStatCQEntry = NULL;
 
 /* ----------
  * Local data
@@ -5635,7 +5635,7 @@ pgstat_fetch_cqstat_all(void)
 }
 
 static void
-calculate_averages(PgStat_StatCQEntry *entry)
+calculate_averages(volatile PgStat_StatCQEntry *entry)
 {
 	int i;
 	PgStat_Counter memory = 0;
@@ -5704,7 +5704,7 @@ calculate_averages(PgStat_StatCQEntry *entry)
 }
 
 static void
-cq_stat_report_entry(PgStat_StatCQEntry *entry)
+cq_stat_report_entry(volatile PgStat_StatCQEntry *entry)
 {
 	PgStat_MsgCQstat msg;
 
