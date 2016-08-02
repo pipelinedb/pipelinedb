@@ -46,7 +46,8 @@ typedef struct microbatch_ack_t
 } microbatch_ack_t;
 
 extern microbatch_ack_t *microbatch_ack_new(void);
-extern void microbatch_ack_wait_and_destroy(microbatch_ack_t *ack);
+extern void microbatch_ack_destroy(microbatch_ack_t *ack);
+
 #define microbatch_ack_increment_wtups(ack, n) pg_atomic_fetch_add_u32(&(ack)->num_wtups, (n));
 #define microbatch_ack_increment_ctups(ack, n) pg_atomic_fetch_add_u32(&(ack)->num_ctups, (n));
 #define microbatch_ack_increment_acks(ack, n) \

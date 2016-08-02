@@ -464,6 +464,8 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	sis->queries = queries;
 	sis->nbatches = 1;
 	sis->sync = false;
+	sis->start_generation = 0;
+	sis->db_meta = NULL;
 
 	if (eflags & REENTRANT_STREAM_INSERT)
 	{
@@ -502,6 +504,9 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 
 		if (synchronous_stream_insert)
 		{
+			sis->db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
+			sis->start_generation = pg_atomic_read_u64(&sis->db_meta->generation);
+
 			sis->ack = microbatch_ack_new();
 			sis->sync = true;
 		}
@@ -575,8 +580,38 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 
 	if (sis->sync)
 	{
+		bool success = false;
+		int64 generation = -1;
+
 		Assert(sis->ack);
-		microbatch_ack_wait_and_destroy(sis->ack);
+		Assert(sis->db_meta);
+
+		while (true)
+		{
+			if (microbatch_ack_is_acked(sis->ack))
+			{
+				success = true;
+				break;
+			}
+
+			generation = pg_atomic_read_u64(&sis->db_meta->generation);
+			if (generation != sis->start_generation)
+			{
+				Assert(generation > sis->start_generation);
+				break;
+			}
+
+			/* TODO(usmanm): Exponential backoff? */
+			pg_usleep(1000);
+			CHECK_FOR_INTERRUPTS();
+		}
+
+		if (!success)
+			ereport(WARNING,
+					(errmsg("a background worker crashed while processing this batch"),
+					errhint("Some of the tuples inserted in this batch might have been lost.")));
+
+		microbatch_ack_destroy(sis->ack);
 	}
 
 	microbatch_destroy(sis->batch);

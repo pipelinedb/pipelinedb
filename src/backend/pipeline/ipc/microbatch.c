@@ -38,15 +38,8 @@ microbatch_ack_new(void)
 }
 
 void
-microbatch_ack_wait_and_destroy(microbatch_ack_t *ack)
+microbatch_ack_destroy(microbatch_ack_t *ack)
 {
-	while (!microbatch_ack_is_acked(ack))
-	{
-		/* TODO(usmanm): Do exponential backoff sleeping */
-		pg_usleep(1000);
-		CHECK_FOR_INTERRUPTS();
-	}
-
 	ShmemDynFree(ack);
 }
 

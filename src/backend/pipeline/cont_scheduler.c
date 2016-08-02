@@ -395,6 +395,7 @@ cont_bgworker_main(Datum arg)
 	ContQueryProc *proc;
 
 	proc = MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
+	pg_atomic_fetch_add_u64(&MyContQueryProc->db_meta->generation, 1);
 
 	pqsignal(SIGTERM, sigterm_handler);
 #define BACKTRACE_SEGFAULTS
@@ -666,6 +667,8 @@ reaper(void)
 			pos = (char *) db_meta;
 			pos += sizeof(ContQueryDatabaseMetadata);
 			db_meta->db_procs = (ContQueryProc *) pos;
+
+			pg_atomic_init_u64(&db_meta->generation, 0);
 
 			start_database_workers(db_meta);
 		}

@@ -43,6 +43,9 @@ typedef struct StreamInsertState
 	TupleDesc desc;
 	microbatch_ack_t *ack;
 	bool sync;
+
+	ContQueryDatabaseMetadata *db_meta;
+	uint64 start_generation;
 } StreamInsertState;
 
 extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);

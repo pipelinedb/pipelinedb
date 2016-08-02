@@ -15,6 +15,7 @@
 
 #include "storage/latch.h"
 #include "pipeline/ipc/microbatch.h"
+#include "port/atomics.h"
 #include "postmaster/bgworker.h"
 #include "storage/dsm.h"
 #include "storage/spin.h"
@@ -49,17 +50,16 @@ struct ContQueryDatabaseMetadata
 	Oid      db_id;
 	NameData db_name;
 
+	pg_atomic_uint64 generation;
+
 	slock_t mutex;
 
 	sig_atomic_t running;
 	sig_atomic_t dropdb;
 	sig_atomic_t terminate;
 
-	int lock_idx; /* ContQuerySchedulerShmem->locks index where the locks for this DB's workers start */
-
 	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
 	ContQueryProc *db_procs;
-
 	ContQueryProc adhoc_vacuumer;
 };
 
