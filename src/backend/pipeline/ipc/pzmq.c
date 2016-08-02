@@ -7,6 +7,8 @@
  *-------------------------------------------------------------------------
  */
 
+#include <dirent.h>
+#include <stdio.h>
 #include <zmq.h>
 #include "postgres.h"
 
@@ -16,14 +18,14 @@
 #include "utils/memutils.h"
 
 #define ERRNO_IS_SAFE() (errno == EINTR || errno == EAGAIN || !errno)
-#define SOCKNAME_STR "ipc:///tmp/pdb_%ld"
+#define SOCKNAME_STR "ipc://%s/pipeline/zmq/%ld.sock"
 
 typedef struct pzmq_socket_t
 {
 	uint64 id;
 	char type;
-	char addr[64];
 	void *sock;
+	char addr[MAXPGPATH];
 } pzmq_socket_t;
 
 typedef struct pzmq_state_t
@@ -93,7 +95,10 @@ pzmq_destroy(void)
 	}
 
 	if (zmq_state->me)
+	{
 		zmq_close(zmq_state->me->sock);
+		remove(zmq_state->me->addr);
+	}
 
 	zmq_ctx_shutdown(zmq_state->zmq_cxt);
 	zmq_ctx_term(zmq_state->zmq_cxt);
@@ -121,7 +126,7 @@ pzmq_bind(uint64 id)
 	zsock = palloc0(sizeof(pzmq_socket_t));
 	zsock->id = id;
 	zsock->type = ZMQ_PULL;
-	sprintf(zsock->addr, SOCKNAME_STR, id);
+	sprintf(zsock->addr, SOCKNAME_STR, DataDir, id);
 	zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PULL);
 	if (zmq_setsockopt(zsock->sock, ZMQ_RCVTIMEO, &optval, sizeof(int)) != 0)
 		elog(WARNING, "pzmq_connect failed to set recvtimeo: %s", zmq_strerror(errno));
@@ -156,7 +161,7 @@ pzmq_connect(uint64 id)
 
 		zsock->id = id;
 		zsock->type = ZMQ_PUSH;
-		sprintf(zsock->addr, SOCKNAME_STR, id);
+		sprintf(zsock->addr, SOCKNAME_STR, DataDir, id);
 		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
 
 		if (!IsContQueryProcess())
@@ -283,4 +288,24 @@ pzmq_send(uint64 id, char *msg, int len, bool wait)
 
 	Assert(ret == len);
 	return true;
+}
+
+void
+pzmq_cleanup(void)
+{
+	char dpath[MAXPGPATH];
+	char fpath[MAXPGPATH];
+	DIR *dir;
+	struct dirent *file;
+
+	sprintf(dpath, "%s/pipeline/zmq", DataDir);
+	dir = opendir(dpath);
+
+	while ((file = readdir(dir)) != NULL)
+	{
+		sprintf(fpath, "%s/%s", dpath, file->d_name);
+		remove(fpath);
+	}
+
+	closedir(dir);
 }

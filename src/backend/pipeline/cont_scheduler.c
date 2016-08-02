@@ -806,6 +806,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 
 	ContQuerySchedulerShmem->pid = MyProcPid;
 
+	pzmq_cleanup();
 	refresh_database_list();
 	if (list_length(DatabaseList) * (NUM_BG_WORKERS_PER_DB + 1) > max_worker_processes)
 		ereport(ERROR,

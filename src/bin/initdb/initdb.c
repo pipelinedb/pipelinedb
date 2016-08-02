@@ -210,7 +210,9 @@ static const char *subdirs[] = {
 	"pg_stat_tmp",
 	"pg_logical",
 	"pg_logical/snapshots",
-	"pg_logical/mappings"
+	"pg_logical/mappings",
+	"pipeline/",
+	"pipeline/zmq/"
 };
 
 
@@ -2257,11 +2259,11 @@ load_plpgsql(void)
  * load PipelineDB extensions
  */
 static void
-load_pipeline_extensions(void)
+load_pipelinedb(void)
 {
 	PG_CMD_DECL;
 
-	fputs(_("loading PipelineDB objects ... "), stdout);
+	fputs(_("loading PipelineDB... "), stdout);
 	fflush(stdout);
 
 	snprintf(cmd, sizeof(cmd),
@@ -3409,7 +3411,7 @@ initialize_data_directory(void)
 
 	load_plpgsql();
 
-	load_pipeline_extensions();
+	load_pipelinedb();
 
 	vacuum_db();
 
