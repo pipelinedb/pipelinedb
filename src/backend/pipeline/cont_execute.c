@@ -53,7 +53,13 @@ ContExecutorNew(ContQueryStateInit initfn)
 
 	exec = palloc0(sizeof(ContExecutor));
 	exec->cxt = cxt;
-	exec->tmp_cxt = AllocSetContextCreate(cxt, "ContExecutor Exec Context",
+
+	ContQueryBatchContext = AllocSetContextCreate(cxt, "ContQueryBatchContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	ContQueryTransactionContext = AllocSetContextCreate(cxt, "ContQueryCombineContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -137,8 +143,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 		}
 	}
 
-	MemoryContextSwitchTo(exec->tmp_cxt);
-	ContQueryBatchContext = exec->tmp_cxt;
+	MemoryContextSwitchTo(ContQueryBatchContext);
 
 	exec->exec_queries = bms_copy(exec->all_queries);
 	debug_query_string = NULL;
@@ -254,7 +259,7 @@ get_query_state(ContExecutor *exec)
 Oid
 ContExecutorStartNextQuery(ContExecutor *exec, int timeout)
 {
-	MemoryContextSwitchTo(exec->tmp_cxt);
+	MemoryContextSwitchTo(ContQueryBatchContext);
 
 	for (;;)
 	{
@@ -349,7 +354,10 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	Assert(IsTransactionState());
 
 	if (commit)
+	{
 		CommitTransactionCommand();
+		MemoryContextReset(ContQueryTransactionContext);
+	}
 
 	if (exec->batch)
 	{
@@ -360,7 +368,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	ipc_tuple_reader_ack();
 	ipc_tuple_reader_reset();
 
-	MemoryContextResetAndDeleteChildren(exec->tmp_cxt);
+	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 	exec->exec_queries = NULL;
 	exec->batch = NULL;
 	debug_query_string = NULL;

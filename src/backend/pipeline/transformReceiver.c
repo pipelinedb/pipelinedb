@@ -151,7 +151,7 @@ SetTransformDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery
 		TriggerData *cxt = palloc0(sizeof(TriggerData));
 		Trigger *trig = palloc0(sizeof(Trigger));
 
-		finfo->fn_mcxt = exec->tmp_cxt;
+		finfo->fn_mcxt = ContQueryBatchContext;
 		fmgr_info(query->tgfn, finfo);
 
 		/* Create mock TriggerData and Trigger */

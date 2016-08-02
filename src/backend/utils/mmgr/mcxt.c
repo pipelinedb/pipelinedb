@@ -53,6 +53,7 @@ MemoryContext TopTransactionContext = NULL;
 MemoryContext CurTransactionContext = NULL;
 
 /* context that lives for the duration of a single execution of a CQ */
+MemoryContext ContQueryTransactionContext = NULL;
 MemoryContext ContQueryBatchContext = NULL;
 
 /* This is a transient link to the active portal's memory context: */

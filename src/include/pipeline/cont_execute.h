@@ -41,7 +41,6 @@ typedef ContQueryState *(*ContQueryStateInit) (ContExecutor *exec, ContQueryStat
 struct ContExecutor
 {
 	MemoryContext cxt;
-	MemoryContext tmp_cxt;
 
 	ContQueryProcType ptype;
 	char *pname;

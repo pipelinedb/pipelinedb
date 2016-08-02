@@ -249,7 +249,7 @@ ContinuousQueryWorkerMain(void)
 				AbortCurrentTransaction();
 				StartTransactionCommand();
 
-				MemoryContextSwitchTo(cont_exec->tmp_cxt);
+				MemoryContextSwitchTo(ContQueryBatchContext);
 			}
 			PG_END_TRY();
 

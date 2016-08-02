@@ -914,6 +914,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 	ResultRelInfo *osri;
 	StreamInsertState *sis;
 	List *to_delete = NIL;
+	List *fdw_private;
 
 	/* Ensure matrel rows are synced into memory */
 	sync_sw_matrel_groups(state, matrel);
@@ -931,7 +932,13 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 
 	osri = CQOSRelOpen(osrel);
 
-	BeginStreamModify(NULL, osri, list_make1(state->acks), 0, REENTRANT_STREAM_INSERT);
+	/*
+	 * No acks for non-forced ticks since they don't get triggered by
+	 * any tuple insertion.
+	 */
+	fdw_private = list_make1(force ? state->acks : NIL);
+
+	BeginStreamModify(NULL, osri, fdw_private, 0, REENTRANT_STREAM_INSERT);
 	sis = (StreamInsertState *) osri->ri_FdwState;
 	Assert(sis);
 
@@ -1800,7 +1807,7 @@ ContinuousQueryCombinerMain(void)
 				ContExecutorPurgeQuery(cont_exec);
 				pgstat_increment_cq_error(1);
 
-				MemoryContextSwitchTo(cont_exec->tmp_cxt);
+				MemoryContextSwitchTo(ContQueryBatchContext);
 			}
 			PG_END_TRY();
 

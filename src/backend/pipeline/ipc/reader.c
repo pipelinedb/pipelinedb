@@ -194,10 +194,11 @@ ipc_tuple_reader_next(Oid query_id)
 			MemoryContext old;
 
 			/*
-			 * Instead of using the ContQueryTransactionContext we use the TopTransactionContext
-			 * since these acks could be used by the combiner across batches when in async mode.
+			 * Instead of using the ContQueryBatchContext we use the CacheMemoryContext
+			 * since these acks could be used by the combiner across batches and transactions
+			 * when in async mode.
 			 */
-			old = MemoryContextSwitchTo(TopTransactionContext);
+			old = MemoryContextSwitchTo(ContQueryTransactionContext);
 
 			foreach(lc, mb->acks)
 			{

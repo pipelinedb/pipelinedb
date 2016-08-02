@@ -140,7 +140,7 @@ SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash)
 	FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
 
 	fcinfo->flinfo = palloc0(sizeof(FmgrInfo));
-	fcinfo->flinfo->fn_mcxt = c->cont_exec->tmp_cxt;
+	fcinfo->flinfo->fn_mcxt = ContQueryBatchContext;
 
 	fmgr_info(hash->funcid, fcinfo->flinfo);
 	fmgr_info_set_expr((Node *) hash, fcinfo->flinfo);
