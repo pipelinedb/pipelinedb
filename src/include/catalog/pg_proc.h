@@ -5929,6 +5929,18 @@ DESCR("serializer for poly numeric aggregation transition states");
 DATA(insert OID = 4493 ( pipeline_flush	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 16 "" _null_ _null_ _null_ _null_ _null_ pipeline_flush _null_ _null_ _null_ ));
 DESCR("flush all continuous process queues");
 
+DATA(insert OID = 4494 (jsonbaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3802 "2281" _null_ _null_ _null_ _null_ _null_ jsonbaggstatesend _null_ _null_ _null_ ));
+DESCR("serializer for json aggregationb transition states");
+
+DATA(insert OID = 4495 (jsonbaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "3802" _null_ _null_ _null_ _null_ _null_ jsonbaggstaterecv _null_ _null_ _null_ ));
+DESCR("deserializer for jsonb aggregation transition states");
+
+DATA(insert OID = 4496 (jsonb_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ jsonb_agg_combine _null_ _null_ _null_ ));
+DESCR("jsonb array aggregation combination function");
+
+DATA(insert OID = 4497 (jsonb_object_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ jsonb_object_agg_combine _null_ _null_ _null_ ));
+DESCR("jsonb object aggregation combination function");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

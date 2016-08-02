@@ -1683,9 +1683,6 @@ jsonb_agg_finalfn(PG_FUNCTION_ARGS)
 	JsonbInState result;
 	Jsonb	   *out;
 
-	/* cannot be called directly because of internal-type argument */
-	Assert(AggCheckCallContext(fcinfo, NULL));
-
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();		/* returns null iff no input values */
 
@@ -1914,9 +1911,6 @@ jsonb_object_agg_finalfn(PG_FUNCTION_ARGS)
 	JsonbInState result;
 	Jsonb	   *out;
 
-	/* cannot be called directly because of internal-type argument */
-	Assert(AggCheckCallContext(fcinfo, NULL));
-
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();		/* returns null iff no input values */
 
@@ -1938,4 +1932,158 @@ jsonb_object_agg_finalfn(PG_FUNCTION_ARGS)
 	out = JsonbValueToJsonb(result.res);
 
 	PG_RETURN_POINTER(out);
+}
+
+Datum
+jsonbaggstatesend(PG_FUNCTION_ARGS)
+{
+	JsonbValue *jsonb;
+	JsonbAggState *state = PG_ARGISNULL(0) ? NULL : (JsonbAggState *) PG_GETARG_POINTER(0);
+	Jsonb *result;
+
+	if (!state)
+		PG_RETURN_NULL();
+
+	jsonb = pushJsonbValue(&state->res->parseState,
+			state->res->parseState->contVal.type ==  jbvArray ? WJB_END_ARRAY : WJB_END_OBJECT, NULL);
+	result = JsonbValueToJsonb(jsonb);
+
+	PG_RETURN_BYTEA_P(result);
+}
+
+Datum
+jsonbaggstaterecv(PG_FUNCTION_ARGS)
+{
+	Jsonb *jsonb;
+	JsonbIterator *it;
+	JsonbAggState *result;
+	MemoryContext context;
+	MemoryContext old;
+	JsonbIteratorToken type;
+	JsonbValue v;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	jsonb = PG_GETARG_JSONB(0);
+
+	old = MemoryContextSwitchTo(context);
+
+	result = palloc(sizeof(JsonbAggState));
+	result->res = palloc0(sizeof(JsonbInState));
+	it = JsonbIteratorInit(&jsonb->root);
+
+	while ((type = JsonbIteratorNext(&it, &v, true)) != WJB_DONE)
+	{
+		switch (type)
+		{
+			case WJB_BEGIN_OBJECT:
+			case WJB_BEGIN_ARRAY:
+				result->res->res = pushJsonbValue(&result->res->parseState, type, NULL);
+				break;
+			case WJB_END_OBJECT:
+			case WJB_END_ARRAY:
+				/* Don't add the end token yet */
+				break;
+			case WJB_KEY:
+			case WJB_VALUE:
+			case WJB_ELEM:
+				result->res->res = pushJsonbValue(&result->res->parseState, type, &v);
+				break;
+			default:
+				elog(ERROR, "unexpected jsonb token type: %d", type);
+		}
+	}
+
+	MemoryContextSwitchTo(old);
+
+
+	PG_RETURN_POINTER(result);
+}
+
+static JsonbAggState *
+jsonb_agg_combine_common(FunctionCallInfo fcinfo, JsonbIteratorToken agg_type)
+{
+	JsonbAggState *state;
+	MemoryContext aggcontext;
+	JsonbIterator *it;
+	MemoryContext old;
+
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
+		elog(ERROR, "jsonb_agg_combine called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(aggcontext);
+
+	if (PG_ARGISNULL(0))
+	{
+		state = palloc0(sizeof(JsonbAggState));
+		state->res = palloc0(sizeof(JsonbInState));
+		state->res->res = NULL;
+		state->res->res = pushJsonbValue(&state->res->parseState, agg_type, NULL);
+	}
+	else
+	{
+		state = (JsonbAggState *) PG_GETARG_POINTER(0);
+	}
+
+	if (!PG_ARGISNULL(1))
+	{
+		JsonbAggState *incoming = (JsonbAggState *) PG_GETARG_POINTER(1);
+		Jsonb *jsonb;
+		JsonbIteratorToken type;
+		JsonbValue v;
+
+		incoming->res->res = pushJsonbValue(&incoming->res->parseState,
+				incoming->res->parseState->contVal.type ==  jbvArray ? WJB_END_ARRAY : WJB_END_OBJECT, NULL);
+		jsonb = JsonbValueToJsonb(incoming->res->res);
+		it = JsonbIteratorInit(&jsonb->root);
+
+		while ((type = JsonbIteratorNext(&it, &v, true)) != WJB_DONE)
+		{
+			switch (type)
+			{
+				case WJB_BEGIN_OBJECT:
+				case WJB_END_OBJECT:
+				case WJB_BEGIN_ARRAY:
+				case WJB_END_ARRAY:
+					break;
+				case WJB_KEY:
+				case WJB_VALUE:
+				case WJB_ELEM:
+					state->res->res = pushJsonbValue(&state->res->parseState, type, &v);
+					break;
+				default:
+					elog(ERROR, "unexpected jsonb token type: %d", type);
+			}
+		}
+	}
+
+	Assert(state->res->parseState);
+	MemoryContextSwitchTo(old);
+
+	return state;
+}
+
+
+/*
+ * jsonb_agg_combine
+ */
+Datum
+jsonb_agg_combine(PG_FUNCTION_ARGS)
+{
+	JsonbAggState *state = jsonb_agg_combine_common(fcinfo, WJB_BEGIN_ARRAY);
+	PG_RETURN_POINTER(state);
+}
+
+/*
+ * jsonb_object_agg_combine
+ */
+Datum
+jsonb_object_agg_combine(PG_FUNCTION_ARGS)
+{
+	JsonbAggState *state = jsonb_agg_combine_common(fcinfo, WJB_BEGIN_OBJECT);
+	PG_RETURN_POINTER(state);
 }
