@@ -114,4 +114,6 @@ extern void SignalContQuerySchedulerRefreshDBList(void);
 
 extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
 
+extern void TerminateContQueryProcesses(void);
+
 #endif   /* CONT_SCHEDULER_H */

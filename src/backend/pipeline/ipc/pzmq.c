@@ -15,7 +15,7 @@
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 
-#define ERRNO_IS_SAFE() (errno == EINTR || errno == EAGAIN)
+#define ERRNO_IS_SAFE() (errno == EINTR || errno == EAGAIN || !errno)
 
 typedef struct pzmq_socket_t
 {

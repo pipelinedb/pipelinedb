@@ -1536,6 +1536,18 @@ DetermineSleepTime(struct timeval * timeout)
 			timeout->tv_sec = Max(timeout->tv_sec, 0);
 			timeout->tv_usec = 0;
 		}
+		/*
+		 * XXX: Even if we have aborted, that doesn't mean that we sent an
+		 * SIGQUIT to lingering workers since that only happens on ImmediateShutdown
+		 * and higher. ZMQ can cause proccesses to sometime miss SIGTERM, so anytime
+		 * we've requested a shutdown, we should sleep for SIGKILL_CHILDREN_AFTER_SECS
+		 * and resend that signal to processes using ZMQ.
+		 */
+		else if (Shutdown > NoShutdown)
+		{
+			timeout->tv_sec = SIGKILL_CHILDREN_AFTER_SECS;
+			timeout->tv_usec = 0;
+		}
 		else
 		{
 			timeout->tv_sec = 60;
@@ -1812,6 +1824,14 @@ ServerLoop(void)
 			/* reset flag so we don't SIGKILL again */
 			AbortStartTime = 0;
 		}
+
+		/*
+		 * XXX: ZMQ sometimes will race against the signal handler and might
+		 * get stuck in pzmq_poll. The postmaster should send all running proceses
+		 * SIGTERM again so they wake up and properly shutdown.
+		 */
+		if (Shutdown > NoShutdown || (FatalError && !SendStop))
+			TerminateContQueryProcesses();
 
 		/*
 		 * Once a minute, verify that postmaster.pid hasn't been removed or

@@ -28,6 +28,7 @@
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/ipc/pzmq.h"
 #include "pipeline/miscutils.h"
+#include "postmaster/bgworker_internals.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
 #include "storage/ipc.h"
@@ -945,4 +946,34 @@ void
 SignalContQuerySchedulerRefreshDBList(void)
 {
 	signal_cont_query_scheduler(SIGINT);
+}
+
+void
+TerminateContQueryProcesses(void)
+{
+	static TimestampTz last_kill = 0;
+	slist_iter siter;
+
+	if (!TimestampDifferenceExceeds(last_kill, GetCurrentTimestamp(), 2000))
+		return;
+
+	last_kill = GetCurrentTimestamp();
+
+	/*
+	 * The continuous query scheduler process handles the launching of its child procs,
+	 * so remove its workers from local memory so we don't try to launch them from
+	 * the Postmaster.
+	 */
+	slist_foreach(siter, &BackgroundWorkerList)
+	{
+		RegisteredBgWorker *rw;
+
+		rw = slist_container(RegisteredBgWorker, rw_lnode, siter.cur);
+		if (rw->rw_worker.bgw_flags & BGWORKER_IS_CONT_QUERY_PROC)
+		{
+			if (rw->rw_pid == 0)
+				continue;
+			kill(rw->rw_pid, SIGTERM);
+		}
+	}
 }
