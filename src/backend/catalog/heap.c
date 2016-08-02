@@ -1201,7 +1201,7 @@ heap_create_with_catalog(const char *relname,
 	 * prevent someone from manually creating a type with a name having the
 	 * underscore prefix that implicitly created array types use.
 	 */
-	if ((relkind == RELKIND_RELATION ||
+	if (!IsBinaryUpgrade && (relkind == RELKIND_RELATION ||
 							  relkind == RELKIND_VIEW ||
 							  relkind == RELKIND_MATVIEW ||
 							  relkind == RELKIND_FOREIGN_TABLE ||

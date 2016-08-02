@@ -825,6 +825,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, bool a
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
 	values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(fnoid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(typoid); /* HACK(usmanm): So matrel index works */
+	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(InvalidOid);
 
 	/* This code is copied from trigger.c:CreateTrigger */
 	if (list_length(args))

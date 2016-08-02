@@ -314,15 +314,15 @@ check_bin_dir(ClusterInfo *cluster)
 		report_status(PG_FATAL, "%s is not a directory\n",
 					  cluster->bindir);
 
-	validate_exec(cluster->bindir, "postgres");
-	validate_exec(cluster->bindir, "pg_ctl");
+	validate_exec(cluster->bindir, "pipelinedb");
+	validate_exec(cluster->bindir, "pipeline-ctl");
 	validate_exec(cluster->bindir, "pg_resetxlog");
 	if (cluster == &new_cluster)
 	{
 		/* these are only needed in the new cluster */
-		validate_exec(cluster->bindir, "psql");
-		validate_exec(cluster->bindir, "pg_dump");
-		validate_exec(cluster->bindir, "pg_dumpall");
+		validate_exec(cluster->bindir, "pipeline");
+		validate_exec(cluster->bindir, "pipeline-dump");
+		validate_exec(cluster->bindir, "pipeline-dumpall");
 	}
 }
 

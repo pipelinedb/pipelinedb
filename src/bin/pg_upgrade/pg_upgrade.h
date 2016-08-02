@@ -29,13 +29,13 @@
 #define GET_MAJOR_VERSION(v)	((v) / 100)
 
 /* contains both global db information and CREATE DATABASE commands */
-#define GLOBALS_DUMP_FILE	"pg_upgrade_dump_globals.sql"
-#define DB_DUMP_FILE_MASK	"pg_upgrade_dump_%u.custom"
+#define GLOBALS_DUMP_FILE	"pipeline-upgrade-dump-globals.sql"
+#define DB_DUMP_FILE_MASK	"pipeline-upgrade-dump-%u.custom"
 
-#define DB_DUMP_LOG_FILE_MASK	"pg_upgrade_dump_%u.log"
-#define SERVER_LOG_FILE		"pg_upgrade_server.log"
-#define UTILITY_LOG_FILE	"pg_upgrade_utility.log"
-#define INTERNAL_LOG_FILE	"pg_upgrade_internal.log"
+#define DB_DUMP_LOG_FILE_MASK	"pipeline-upgrade-dump-%u.log"
+#define SERVER_LOG_FILE		"pipeline-upgrade-pipelinedb.log"
+#define UTILITY_LOG_FILE	"pipeline-upgrade-utility.log"
+#define INTERNAL_LOG_FILE	"pipeline-upgrade-internal.log"
 
 extern char *output_files[];
 

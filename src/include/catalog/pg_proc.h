@@ -5929,6 +5929,20 @@ DESCR("serializer for poly numeric aggregation transition states");
 DATA(insert OID = 4493 ( pipeline_flush	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 16 "" _null_ _null_ _null_ _null_ _null_ pipeline_flush _null_ _null_ _null_ ));
 DESCR("flush all continuous process queues");
 
+/* binary upgrade support */
+DATA(insert OID = 4494 ( create_cv_set_next_oids_for_matrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 6 0 2278 "26 26 26 26 26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_matrel _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4495 ( create_cv_set_next_oids_for_seqrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 2 0 2278 "26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_seqrel _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4496 ( create_cv_set_next_oids_for_pk_index PGNSP PGUID  12 1 0 0 0 f f f f t f v 1 0 2278 "26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_pk_index _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4497 ( create_cv_set_next_oids_for_lookup_index PGNSP PGUID  12 1 0 0 0 f f f f t f v 1 0 2278 "26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_lookup_index _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4498 ( create_cv_set_next_oids_for_overlay PGNSP PGUID  12 1 0 0 0 f f f f t f v 3 0 2278 "26 26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_overlay _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4499 ( create_cv_set_next_oids_for_osrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 3 0 2278 "26 26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_osrel _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

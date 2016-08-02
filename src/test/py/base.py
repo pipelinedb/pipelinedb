@@ -20,13 +20,16 @@ SERVER = os.path.join(ROOT, 'src', 'backend', 'pipelinedb')
 CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/pipeline'
 
 class PipelineDB(object):
-    def __init__(self):
+    def __init__(self, data_dir=None):
         """
         Bootstraps the PipelineDB instance. Note that instead of incurring the
         cost of actually bootstrapping each instance we copy a clean,
         bootstrapped directory to our own directory, creating it once for
         other tests to use if it doesn't already exist.
         """
+        if data_dir:
+          self.data_dir = data_dir
+          return
         do_initdb = False
         if not os.path.exists(BOOTSTRAPPED_BASE):
             os.mkdir(BOOTSTRAPPED_BASE)
@@ -168,10 +171,10 @@ class PipelineDB(object):
         """
         Drop all continuous queries
         """
-        for transform in self.execute('SELECT name FROM pipeline_transforms()'):
-          self.execute('DROP CONTINUOUS TRANSFORM %s CASCADE' % transform['name'])
-        for view in self.execute('SELECT name FROM pipeline_views()'):
-          self.execute('DROP CONTINUOUS VIEW %s CASCADE' % view['name'])
+        for transform in self.execute('SELECT schema, name FROM pipeline_transforms()'):
+          self.execute('DROP CONTINUOUS TRANSFORM %s.%s CASCADE' % (transform['schema'], transform['name']))
+        for view in self.execute('SELECT schema, name FROM pipeline_views()'):
+          self.execute('DROP CONTINUOUS VIEW %s.%s CASCADE' % (view['schema'], view['name']))
 
     def create_cv(self, name, stmt, **kw):
         """
