@@ -601,7 +601,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 				break;
 			}
 
-			/* TODO(usmanm): Exponential backoff? */
+			/* TODO(usmanm): exponential backoff? */
 			pg_usleep(1000);
 			CHECK_FOR_INTERRUPTS();
 		}

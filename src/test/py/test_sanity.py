@@ -144,6 +144,7 @@ def test_concurrent_inserts(pipeline, clean_db):
                   'SELECT x % 100 FROM generate_series(1, 2000) AS x')
       conn.commit()
       inserted[i] += 2000
+    time.sleep(30)
     conn.close()
 
   threads = [threading.Thread(target=insert, args=(i, ))
@@ -154,8 +155,6 @@ def test_concurrent_inserts(pipeline, clean_db):
 
   stop = True
   map(lambda t: t.join(), threads)
-
-  time.sleep(30)
 
   total = (pipeline.execute('SELECT sum(count) FROM concurrent_inserts0')
            .first()['sum'])
@@ -168,9 +167,9 @@ def test_concurrent_inserts(pipeline, clean_db):
 
 @async_insert
 def test_concurrent_copy(pipeline, clean_db):
-  pipeline.create_cv('concurrent_inserts0',
+  pipeline.create_cv('concurrent_copy0',
                      'SELECT x::int, count(*) FROM stream GROUP BY x')
-  pipeline.create_cv('concurrent_inserts1', 'SELECT count(*) FROM stream')
+  pipeline.create_cv('concurrent_copy1', 'SELECT count(*) FROM stream')
 
   tmp_file = os.path.join(tempfile.gettempdir(), 'tmp.copy')
   query = 'SELECT generate_series(1, 2000) AS x'
@@ -188,6 +187,7 @@ def test_concurrent_copy(pipeline, clean_db):
       cur.execute("COPY stream (x) FROM '%s'" % tmp_file)
       conn.commit()
       inserted[i] += 2000
+    time.sleep(30)
     conn.close()
 
   threads = [threading.Thread(target=insert, args=(i, ))
@@ -199,12 +199,10 @@ def test_concurrent_copy(pipeline, clean_db):
   stop = True
   map(lambda t: t.join(), threads)
 
-  time.sleep(30)
-
-  total = (pipeline.execute('SELECT sum(count) FROM concurrent_inserts0')
+  total = (pipeline.execute('SELECT sum(count) FROM concurrent_copy0')
            .first()['sum'])
   assert total == sum(inserted)
 
-  total = (pipeline.execute('SELECT count FROM concurrent_inserts1')
+  total = (pipeline.execute('SELECT count FROM concurrent_copy1')
            .first()['count'])
   assert total == sum(inserted)
