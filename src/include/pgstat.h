@@ -1129,8 +1129,8 @@ typedef struct PgStat_MsgCQpurge
 	int64 m_key;
 } PgStat_MsgCQpurge;
 
-extern PgStat_StatCQEntry *MyProcStatCQEntry;
-extern PgStat_StatCQEntry *MyStatCQEntry;
+extern volatile PgStat_StatCQEntry *MyProcStatCQEntry;
+extern volatile PgStat_StatCQEntry *MyStatCQEntry;
 
 #define SetStatCQEntryViewId(key, view) ((key) |= (uint64) (view))
 #define SetStatCQEntryProcPid(key, pid) ((key) |= ((uint64 ) (pid) << 30L))

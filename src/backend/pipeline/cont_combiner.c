@@ -1743,6 +1743,7 @@ ContinuousQueryCombinerMain(void)
 		{
 			int count = 0;
 			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->current_query;
+			volatile bool error = false;
 
 			PG_TRY();
 			{
@@ -1780,16 +1781,23 @@ ContinuousQueryCombinerMain(void)
 				if (ActiveSnapshotSet())
 					PopActiveSnapshot();
 
-				ContExecutorPurgeQuery(cont_exec);
-				pgstat_increment_cq_error(1);
-
 				if (!continuous_query_crash_recovery)
 					proc_exit(1);
 
-				MemoryContextSwitchTo(cont_exec->exec_cxt);
+				/*
+				 * Modifying anything within a PG_CATCH block can have unpredictable behavior
+				 * when optimization is enabled, so we do the remaining error handling later.
+				 */
+				error = true;
 			}
 			PG_END_TRY();
 
+			if (error)
+			{
+				ContExecutorPurgeQuery(cont_exec);
+				pgstat_increment_cq_error(1);
+				MemoryContextSwitchTo(cont_exec->exec_cxt);
+			}
 next:
 			ContExecutorEndQuery(cont_exec);
 		}

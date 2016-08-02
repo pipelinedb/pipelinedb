@@ -240,6 +240,7 @@ ContinuousQueryWorkerMain(void)
 		{
 			EState *estate = NULL;
 			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->current_query;
+			volatile bool error = false;
 
 			PG_TRY();
 			{
@@ -279,18 +280,26 @@ ContinuousQueryWorkerMain(void)
 				if (estate && ActiveSnapshotSet())
 					UnsetEStateSnapshot(estate);
 
-				ContExecutorPurgeQuery(cont_exec);
-				pgstat_increment_cq_error(1);
-
 				if (!continuous_query_crash_recovery)
 					proc_exit(1);
 
 				AbortCurrentTransaction();
 				StartTransactionCommand();
 
-				MemoryContextSwitchTo(cont_exec->exec_cxt);
+				/*
+				 * Modifying anything within a PG_CATCH block can have unpredictable behavior
+				 * when optimization is enabled, so we do the remaining error handling later.
+				 */
+				error = true;
 			}
 			PG_END_TRY();
+
+			if (error)
+			{
+				ContExecutorPurgeQuery(cont_exec);
+				pgstat_increment_cq_error(1);
+				MemoryContextSwitchTo(cont_exec->exec_cxt);
+			}
 
 next:
 			ContExecutorEndQuery(cont_exec);
