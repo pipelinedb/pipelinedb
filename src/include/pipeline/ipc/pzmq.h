@@ -22,6 +22,6 @@ extern char *pzmq_recv(int *len, int timeout);
 
 extern bool pzmq_send(uint64 id, char *buf, int len, bool wait);
 
-extern void pzmq_cleanup(void);
+extern void pzmq_purge_sock_files(void);
 
 #endif

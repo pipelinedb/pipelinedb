@@ -291,7 +291,7 @@ pzmq_send(uint64 id, char *msg, int len, bool wait)
 }
 
 void
-pzmq_cleanup(void)
+pzmq_purge_sock_files(void)
 {
 	char dpath[MAXPGPATH];
 	char fpath[MAXPGPATH];
