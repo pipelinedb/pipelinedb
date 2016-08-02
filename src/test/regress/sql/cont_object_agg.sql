@@ -162,10 +162,6 @@ SELECT array_sort(array_agg) FROM test_array_agg;
 
 DROP CONTINUOUS VIEW test_array_agg;
 
-DROP FUNCTION array_sort(anyarray);
-DROP FUNCTION json_to_array(json);
-DROP FUNCTION json_keys_array(json);
-
 CREATE CONTINUOUS VIEW jois AS SELECT x::integer, json_object_int_sum(payload::text), COUNT(*) FROM cqobjectagg_stream GROUP BY x;
 
 INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
@@ -188,3 +184,48 @@ INSERT INTO cqobjectagg_stream (x, y) VALUES (3, 13);
 SELECT * FROM test_array_agg_array;
 
 DROP CONTINUOUS VIEW test_array_agg_array;
+
+-- jsonb_agg
+CREATE CONTINUOUS VIEW test_jsonb_agg AS SELECT key::text, jsonb_agg(tval::text) AS j0, jsonb_agg(fval::float8) AS j1, jsonb_agg(ival::integer) AS j2 FROM cqobjectagg_stream GROUP BY key;
+
+INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('x', 'text', 0.01, 42), ('x', 'more text', 0.01, 42), ('x', 'blaahhhh', 0.01, 42);
+INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('y', '4.2', 1.01, 42), ('z', '\"quoted\"', 2.01, 42), ('x', '', 0.01, 42), ('z', '2', '3', '4');
+
+SELECT key, array_sort(json_to_array(j0::json)) FROM test_jsonb_agg ORDER BY key;
+SELECT key, array_sort(json_to_array(j1::json)) FROM test_jsonb_agg ORDER BY key;
+SELECT key, array_sort(json_to_array(j2::json)) FROM test_jsonb_agg ORDER BY key;
+
+INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('x', 'text', 0.01, 42), ('y', 'more text', 0.01, 42), ('z', 'blaahhhh', 0.01, 42);
+
+SELECT key, array_sort(json_to_array(j0::json)) FROM test_jsonb_agg ORDER BY key;
+SELECT key, array_sort(json_to_array(j1::json)) FROM test_jsonb_agg ORDER BY key;
+SELECT key, array_sort(json_to_array(j2::json)) FROM test_jsonb_agg ORDER BY key;
+
+DROP CONTINUOUS VIEW test_jsonb_agg;
+
+-- jsonb_object_agg
+CREATE CONTINUOUS VIEW test_jsonb_object_agg0 AS SELECT n, jsonb_object_agg(n::text, v::integer) FROM cqobjectagg_stream GROUP BY n;
+CREATE CONTINUOUS VIEW test_jsonb_object_agg1 AS SELECT n, jsonb_object_agg(n::text, t::text) FROM cqobjectagg_stream GROUP BY n;
+
+INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 1, '1');
+INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 2, '2');
+INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k1', 3, '3');
+INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k2', 4, '4');
+INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k3', 5, '5'), ('k3', 6, '6');
+
+SELECT n, array_sort(json_keys_array(jsonb_object_agg::json)) FROM test_jsonb_object_agg0 ORDER BY n;
+SELECT n, array_sort(json_keys_array(jsonb_object_agg::json)) FROM test_jsonb_object_agg1 ORDER BY n;
+
+INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 1, '1');
+INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 2, '2');
+INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k1', 3, '3');
+
+SELECT n, array_sort(json_keys_array(jsonb_object_agg::json)) FROM test_jsonb_object_agg0 ORDER BY n;
+SELECT n, array_sort(json_keys_array(jsonb_object_agg::json)) FROM test_jsonb_object_agg1 ORDER BY n;
+
+DROP CONTINUOUS VIEW test_jsonb_object_agg0;
+DROP CONTINUOUS VIEW test_jsonb_object_agg1;
+
+DROP FUNCTION array_sort(anyarray);
+DROP FUNCTION json_to_array(json);
+DROP FUNCTION json_keys_array(json);
