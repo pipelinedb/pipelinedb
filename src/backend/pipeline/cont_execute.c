@@ -33,7 +33,8 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-#define MAX_IN_XACT_TIMEOUT 5
+#define MAX_IN_XACT_TIMEOUT 5 /* 5ms */
+#define MAX_NOT_IN_XACT_TIMEOUT 3000 /* 3s */
 
 ContExecutor *
 ContExecutorNew(ContQueryStateInit initfn)
@@ -83,8 +84,18 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 
 	exec->batch = NULL;
 
-	if (IsTransactionState())
+	/*
+	 * We should never sleep forever, since there is a race in setting got_SIGTERM and
+	 * zmq_poll(). If we set got_SIGTERM right before calling zmq_poll(), we will
+	 * sleep forever since the postmaster doens't resend SIGTERM signals to unresponsive
+	 * child processes.
+	 */
+	if (ShouldTerminateContQueryProcess())
+		timeout = 0;
+	else if (IsTransactionState())
 		timeout = timeout ? Min(MAX_IN_XACT_TIMEOUT, timeout) : MAX_IN_XACT_TIMEOUT;
+	else
+		timeout = timeout ? Min(MAX_NOT_IN_XACT_TIMEOUT, timeout) : MAX_NOT_IN_XACT_TIMEOUT;
 
 	/* TODO(usmanm): report activity */
 	success = ipc_tuple_reader_poll(timeout);
