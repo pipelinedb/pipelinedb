@@ -531,7 +531,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 
 	result_info->ri_FdwState = sis;
 
-	if (!(eflags & REENTRANT_STREAM_INSERT))
+	if (!IsContQueryProcess())
 		pzmq_init();
 }
 
@@ -615,4 +615,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 	}
 
 	microbatch_destroy(sis->batch);
+
+	if (!IsContQueryProcess())
+		pzmq_destroy();
 }

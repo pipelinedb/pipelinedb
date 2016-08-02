@@ -47,10 +47,7 @@ pzmq_init(void)
 	HASHCTL ctl;
 
 	if (zmq_state)
-	{
 		return;
-		//elog(ERROR, "pzmq is already initialized");
-	}
 
 	cxt = AllocSetContextCreate(TopMemoryContext, "pzmq MemoryContext",
 				ALLOCSET_DEFAULT_MINSIZE,
@@ -84,7 +81,7 @@ pzmq_destroy(void)
 	pzmq_socket_t *zsock;
 
 	if (!zmq_state)
-		elog(ERROR, "pzmq is not initialized");
+		return;
 
 	hash_seq_init(&iter, zmq_state->dests);
 	while ((zsock = (pzmq_socket_t *) hash_seq_search(&iter)) != NULL)
@@ -169,6 +166,10 @@ pzmq_connect(uint64 id)
 			optval = 1;
 			if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &optval, sizeof(int)) != 0)
 				elog(WARNING, "pzmq_connect failed to set hwm: %s", zmq_strerror(errno));
+
+			optval = 1;
+			if (zmq_setsockopt(zsock->sock, ZMQ_IMMEDIATE, &optval, sizeof(int)) != 0)
+				elog(WARNING, "pzmq_connect failed to set immediate: %s", zmq_strerror(errno));
 
 			optval = 5000;
 			if (zmq_setsockopt(zsock->sock, ZMQ_LINGER, &optval, sizeof(int)) != 0)
