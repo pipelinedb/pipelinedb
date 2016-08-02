@@ -185,13 +185,13 @@ ipc_tuple_reader_next(Oid query_id)
 	/* Have we started reading this microbatch? */
 	if (my_rscan.tup_idx == -1)
 	{
-		MemoryContext old;
 		my_rscan.tup_idx = 0;
 		my_rscan_tup.desc = mb->desc;
 
 		if (mb->acks)
 		{
 			ListCell *lc;
+			MemoryContext old;
 
 			/*
 			 * Instead of using the ContQueryTransactionContext we use the TopTransactionContext
@@ -204,7 +204,7 @@ ipc_tuple_reader_next(Oid query_id)
 				tagged_ref_t *ref = palloc(sizeof(tagged_ref_t));
 				*ref = *(tagged_ref_t *) lfirst(lc);
 
-				my_rbatch.acks = lappend(my_rbatch.acks, lfirst(lc));
+				my_rbatch.acks = lappend(my_rbatch.acks, ref);
 			}
 
 			MemoryContextSwitchTo(old);

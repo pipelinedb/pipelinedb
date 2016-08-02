@@ -1375,6 +1375,7 @@ sync_all(ContExecutor *cont_exec)
 		if (!state)
 			continue;
 
+		debug_query_string = state->base.query->name->relname;
 		MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
 
 		PG_TRY();
@@ -1396,11 +1397,15 @@ sync_all(ContExecutor *cont_exec)
 
 		state->pending_tuples = 0;
 		state->existing = NULL;
+		debug_query_string = NULL;
+		MyStatCQEntry = NULL;
+
 		/*
 		 * Set acks to NIL here so we don't try to access them for future ticks
 		 * that happen in a different transaction.
 		 */
 		state->acks = NIL;
+
 		MemSet(state->group_hashes, 0, state->group_hashes_len);
 		MemoryContextResetAndDeleteChildren(state->combine_cxt);
 	}
@@ -1822,7 +1827,7 @@ next:
 	{
 		ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->states[query_id];
 
-		if (state == NULL)
+		if (!state)
 			continue;
 
 		MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;

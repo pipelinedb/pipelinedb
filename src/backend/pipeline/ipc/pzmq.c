@@ -16,6 +16,7 @@
 #include "utils/memutils.h"
 
 #define ERRNO_IS_SAFE() (errno == EINTR || errno == EAGAIN || !errno)
+#define SOCKNAME_STR "ipc:///tmp/pdb_%ld"
 
 typedef struct pzmq_socket_t
 {
@@ -120,7 +121,7 @@ pzmq_bind(uint64 id)
 	zsock = palloc0(sizeof(pzmq_socket_t));
 	zsock->id = id;
 	zsock->type = ZMQ_PULL;
-	sprintf(zsock->addr, "ipc:///tmp/%ld", id);
+	sprintf(zsock->addr, SOCKNAME_STR, id);
 	zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PULL);
 	if (zmq_setsockopt(zsock->sock, ZMQ_RCVTIMEO, &optval, sizeof(int)) != 0)
 		elog(WARNING, "pzmq_connect failed to set recvtimeo: %s", zmq_strerror(errno));
@@ -155,7 +156,7 @@ pzmq_connect(uint64 id)
 
 		zsock->id = id;
 		zsock->type = ZMQ_PUSH;
-		sprintf(zsock->addr, "ipc:///tmp/%ld", id);
+		sprintf(zsock->addr, SOCKNAME_STR, id);
 		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
 
 		if (!IsContQueryProcess())
