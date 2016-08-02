@@ -137,8 +137,8 @@ PgStat_MsgBgWriter BgWriterStats;
  * If we're a CQ process, this tracks our various runtime stats
  */
 static PgStat_StatCQEntryLocal MyProcStatCQEntryLocal;
-volatile PgStat_StatCQEntry *MyProcStatCQEntry = (PgStat_StatCQEntry *) &MyProcStatCQEntryLocal;
-volatile PgStat_StatCQEntry *MyStatCQEntry = NULL;
+PgStat_StatCQEntry *MyProcStatCQEntry = (PgStat_StatCQEntry *) &MyProcStatCQEntryLocal;
+PgStat_StatCQEntry *MyStatCQEntry = NULL;
 
 /* ----------
  * Local data

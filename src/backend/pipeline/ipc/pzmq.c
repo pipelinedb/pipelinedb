@@ -110,7 +110,6 @@ pzmq_bind(uint64 id)
 {
 	MemoryContext old;
 	pzmq_socket_t *zsock;
-	int optval = -1;
 
 	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
@@ -125,8 +124,6 @@ pzmq_bind(uint64 id)
 	zsock->type = ZMQ_PULL;
 	sprintf(zsock->addr, SOCKNAME_STR, DataDir, id);
 	zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PULL);
-	if (zmq_setsockopt(zsock->sock, ZMQ_RCVTIMEO, &optval, sizeof(int)) != 0)
-		elog(WARNING, "pzmq_connect failed to set recvtimeo: %s", zmq_strerror(errno));
 
 	if (zmq_bind(zsock->sock, zsock->addr) != 0)
 	{

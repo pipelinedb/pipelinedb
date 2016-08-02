@@ -615,7 +615,4 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 	}
 
 	microbatch_destroy(sis->batch);
-
-	if (!IsContQueryProcess())
-		pzmq_destroy();
 }
