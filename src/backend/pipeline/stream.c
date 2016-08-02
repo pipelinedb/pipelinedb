@@ -91,6 +91,8 @@ CopyIntoStream(Relation rel, TupleDesc desc, HeapTuple *tuples, int ntuples)
 		}
 
 		ExecDropSingleTupleTableSlot(slot);
+
+		Assert(sis->ntups == ntuples);
 		pgstat_increment_cq_write(ntuples, sis->nbytes);
 	}
 
