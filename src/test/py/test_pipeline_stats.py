@@ -23,7 +23,8 @@ def test_cq_stats(pipeline, clean_db):
     pipeline.insert('stream', ('x',), values)
     pipeline.insert('stream', ('x',), values)
     # Sleep a little so that the next time we insert, we force the stats collector.
-    time.sleep(0.5)
+    # Must be >= 1s since that's the force interval.
+    time.sleep(1)
     pipeline.insert('stream', ('x',), values)
     pipeline.insert('stream', ('x',), values)
 
