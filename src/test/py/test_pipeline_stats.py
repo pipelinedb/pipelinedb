@@ -40,16 +40,18 @@ def test_cq_stats(pipeline, clean_db):
     assert proc_rows == num_combiners + num_workers
     assert cq_rows == 4
 
+    # We get 2000 in case the first two microbatches go to the same worker
+    # and the second two go to a different one. In this case, both will flush
+    # the first microbatch they see, so 1000 + 1000.
+
     result = pipeline.execute("SELECT * FROM pipeline_query_stats WHERE name = 'test_10_groups' AND type = 'worker'").first()
-    assert result['input_rows'] >= 3000
-    assert result['input_rows'] <= 4000
+    assert result['input_rows'] in [2000, 3000, 4000]
 
     result = pipeline.execute("SELECT * FROM pipeline_query_stats WHERE name = 'test_10_groups' AND type = 'combiner'").first()
     assert result['output_rows'] == 10
 
     result = pipeline.execute("SELECT * FROM pipeline_query_stats WHERE name = 'test_1_group' AND type = 'worker'").first()
-    assert result['input_rows'] >= 3000
-    assert result['input_rows'] <= 4000
+    assert result['input_rows'] in [2000, 3000, 4000]
 
     result = pipeline.execute("SELECT * FROM pipeline_query_stats WHERE name = 'test_1_group' AND type = 'combiner'").first()
     assert result['output_rows'] == 1
