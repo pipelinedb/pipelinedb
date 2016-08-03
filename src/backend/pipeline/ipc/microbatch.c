@@ -19,8 +19,8 @@
 #include "utils/memutils.h"
 #include "utils/typcache.h"
 
-int continuous_query_num_batch;
 int continuous_query_batch_size;
+int continuous_query_batch_length;
 
 #define MAX_PACKED_SIZE (MAX_MICROBATCH_SIZE - 2048) /* subtract 2kb for buffer for acks */
 #define MAX_TUPDESC_SIZE(desc) ((desc)->natts * (sizeof(NameData) + (3 * sizeof(int))))
@@ -146,7 +146,10 @@ microbatch_add_tuple(microbatch_t *mb, HeapTuple tup, uint64 hash)
 		elog(ERROR, "tuple is too large to fit in a microbatch");
 
 	if (mb->allow_iter)
-		elog(ERROR, "microbatch is read only, can't add more tuples");
+		elog(ERROR, "microbatch is read only, can't add tuples");
+
+	if (mb->ntups >= continuous_query_batch_size)
+		return false;
 
 	if (tup_size + mb->packed_size + mb->buf->len >= MAX_PACKED_SIZE)
 		return false;

@@ -2763,22 +2763,22 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"continuous_query_num_batch", PGC_SIGHUP, QUERY_TUNING,
+		{"continuous_query_batch_size", PGC_SIGHUP, QUERY_TUNING,
 		 gettext_noop("Sets the maximum number of events to accumulate before executing a continuous query plan on them."),
 		 gettext_noop("A higher value usually yields less frequent continuous view updates.")
 		},
-		&continuous_query_num_batch,
+		&continuous_query_batch_size,
 		10000, 10, INT_MAX,
 		NULL, NULL, NULL
 	},
 
 	{
-		{"continuous_query_batch_size", PGC_BACKEND, RESOURCES_MEM,
+		{"continuous_query_batch_length", PGC_BACKEND, RESOURCES_MEM,
 		 gettext_noop("Sets the maximum size of the batch of events to accumulate before executing a continuous query plan on them."),
 		 gettext_noop("A higher value usually yields less frequent continuous view updates."),
 		 GUC_UNIT_KB
 		},
-		&continuous_query_batch_size,
+		&continuous_query_batch_length,
 		262144, 8192, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},

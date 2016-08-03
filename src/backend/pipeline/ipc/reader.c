@@ -91,8 +91,7 @@ ipc_tuple_reader_pull(void)
 		microbatch_t *mb;
 		int timeout;
 
-		if (ntups >= continuous_query_num_batch ||
-				nbytes >= (continuous_query_batch_size * 1024))
+		if (ntups >= continuous_query_batch_size || nbytes >= MAX_MICROBATCH_SIZE)
 			break;
 
 		TimestampDifference(start, GetCurrentTimestamp(), &secs, &usecs);
