@@ -463,7 +463,6 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	sis->flags = eflags;
 	sis->queries = queries;
 	sis->nbatches = 1;
-	sis->sync = false;
 	sis->start_generation = 0;
 	sis->db_meta = NULL;
 
@@ -487,10 +486,9 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	}
 	else
 	{
-		sis->ack = microbatch_ack_new();
 		sis->db_meta = GetMyContQueryDatabaseMetadata();
 		sis->start_generation = pg_atomic_read_u64(&sis->db_meta->generation);
-		sis->sync = synchronous_stream_insert;
+		sis->ack = microbatch_ack_new(synchronous_stream_insert ? SYNC : ASYNC);
 
 		if (is_inferred_stream_relation(rel))
 		{
@@ -520,7 +518,6 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 		else if (acks)
 		{
 			Assert(!sis->ack);
-			Assert(!sis->sync);
 			microbatch_add_acks(sis->batch, acks);
 		}
 	}
@@ -578,17 +575,18 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 	{
 		bool success = false;
 		int64 generation = -1;
+		microbatch_ack_type_t type = microbatch_ack_get_type(sis->ack);
 
 		Assert(sis->db_meta);
 
 		for (;;)
 		{
-			if (!sis->sync && microbatch_ack_is_read(sis->ack))
+			if (type == ASYNC && microbatch_ack_is_read(sis->ack))
 			{
 				success = true;
 				break;
 			}
-			else if (sis->sync && microbatch_ack_is_acked(sis->ack))
+			else if (type == SYNC && microbatch_ack_is_acked(sis->ack))
 			{
 				success = true;
 				break;
@@ -611,7 +609,7 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 					(errmsg("a background worker crashed while processing this batch"),
 					errhint("Some of the tuples inserted in this batch might have been lost.")));
 
-		microbatch_ack_destroy(sis->ack);
+		microbatch_ack_free(sis->ack);
 	}
 
 	microbatch_destroy(sis->batch);

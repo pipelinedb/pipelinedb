@@ -1,8 +1,8 @@
 #
 # Makefile for storage/ipc
-# 
+#
 # Portions Copyright (c) 2013-2016, PipelineDB
-# 
+#
 # src/backend/storage/ipc/Makefile
 #
 
@@ -18,7 +18,6 @@ endif
 endif
 
 OBJS = dsm_impl.o dsm.o ipc.o ipci.o pmsignal.o procarray.o procsignal.o \
-	shmem.o shmqueue.o shm_mq.o shm_toc.o sinval.o sinvaladt.o standby.o \
-	shm_alloc.o
+	shmem.o shmqueue.o shm_mq.o shm_toc.o sinval.o sinvaladt.o standby.o
 
 include $(top_srcdir)/src/backend/common.mk

@@ -23,7 +23,6 @@
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "miscadmin.h"
-#include "storage/shm_alloc.h"
 #include "utils/hashfuncs.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"

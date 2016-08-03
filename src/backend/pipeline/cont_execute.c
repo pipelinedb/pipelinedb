@@ -26,7 +26,6 @@
 #include "pipeline/ipc/reader.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
-#include "storage/shm_alloc.h"
 #include "tcop/tcopprot.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
