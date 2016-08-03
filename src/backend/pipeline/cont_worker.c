@@ -219,7 +219,7 @@ end_plan(QueryDesc *query_desc)
 void
 ContinuousQueryWorkerMain(void)
 {
-	ContExecutor *cont_exec = ContExecutorNew(Worker, &init_query_state);
+	ContExecutor *cont_exec = ContExecutorNew(&init_query_state);
 	Oid query_id;
 
 	WorkerResOwner = ResourceOwnerCreate(NULL, "WorkerResOwner");
@@ -239,7 +239,7 @@ ContinuousQueryWorkerMain(void)
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, 0)) != InvalidOid)
 		{
 			EState *estate = NULL;
-			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->current_query;
+			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->curr_query;
 			volatile bool error = false;
 
 			PG_TRY();
@@ -266,11 +266,11 @@ ContinuousQueryWorkerMain(void)
 				/* flush tuples to combiners or transform out functions */
 				flush_tuples(state);
 
-				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
-				MemoryContextSwitchTo(state->base.state_cxt);
-
 				UnsetEStateSnapshot(estate);
 				state->query_desc->estate = estate = NULL;
+
+				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
+				MemoryContextSwitchTo(state->base.state_cxt);
 			}
 			PG_CATCH();
 			{
@@ -279,9 +279,6 @@ ContinuousQueryWorkerMain(void)
 
 				if (estate && ActiveSnapshotSet())
 					UnsetEStateSnapshot(estate);
-
-				if (!continuous_query_crash_recovery)
-					proc_exit(1);
 
 				AbortCurrentTransaction();
 				StartTransactionCommand();
@@ -298,7 +295,6 @@ ContinuousQueryWorkerMain(void)
 			{
 				ContExecutorPurgeQuery(cont_exec);
 				pgstat_increment_cq_error(1);
-				MemoryContextSwitchTo(cont_exec->exec_cxt);
 			}
 
 next:

@@ -17167,3 +17167,48 @@ else
   as_fn_error $? "ncurses library not found (https://www.gnu.org/software/ncurses/)" "$LINENO" 5
 fi
 ac_cv_lib_ncurses=ac_cv_lib_ncurses_main
+
+
+# ZMQ
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lzmq" >&5
+$as_echo_n "checking for main in -lzmq... " >&6; }
+if ${ac_cv_lib_zmq_main+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lzmq  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+int
+main ()
+{
+return main ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_zmq_main=yes
+else
+  ac_cv_lib_zmq_main=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_zmq_main" >&5
+$as_echo "$ac_cv_lib_zmq_main" >&6; }
+if test "x$ac_cv_lib_zmq_main" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBZMQ 1
+_ACEOF
+
+  LIBS="-lzmq $LIBS"
+
+else
+  as_fn_error $? "zmq library not found (http://zeromq.org/intro:get-the-software)" "$LINENO" 5
+fi
+ac_cv_lib_zmq=ac_cv_lib_zmq_main
+

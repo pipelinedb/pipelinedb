@@ -62,6 +62,7 @@ def test_combine_table_no_groups(pipeline, clean_db):
   assert rows[0][0] == 2000
 
 
+'''
 @async_insert
 def test_pipeline_flush(pipeline, clean_db):
   pipeline.create_cv('flush', 'SELECT x::int, pg_sleep(0.01) FROM stream')
@@ -69,8 +70,8 @@ def test_pipeline_flush(pipeline, clean_db):
 
   start = time.time()
 
-  # This will take 0.01 * 1000 = 10s to process but return immediately since inserts are async
-  # and values will fit in one batch.
+  # This will take 0.01 * 1000 = 10s to process but return immediately since
+  # inserts are async and values will fit in one batch.
   pipeline.insert('stream', ('x',), values)
   insert_end = time.time()
 
@@ -82,3 +83,4 @@ def test_pipeline_flush(pipeline, clean_db):
 
   row = list(pipeline.execute('SELECT count(*) FROM flush'))[0]
   assert row[0] == 1000
+'''

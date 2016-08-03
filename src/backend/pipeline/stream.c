@@ -32,6 +32,7 @@
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
+#include "pipeline/stream_fdw.h"
 #include "storage/shm_alloc.h"
 #include "storage/ipc.h"
 #include "tcop/pquery.h"
@@ -53,144 +54,49 @@ char *stream_targets;
 int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;
 void *copy_iter_arg = NULL;
 
-uint64
-SendTuplesToContWorkers(Relation stream, TupleDesc desc, HeapTuple *tuples,
-		int ntuples, InsertBatchAck *acks, int nacks)
-{
-	ipc_queue *ipcq;
-	Bitmapset *targets = GetLocalStreamReaders(RelationGetRelid(stream));
-	bytea *packed_desc;
-	int i;
-	int free;
-	uint64 tail;
-	uint64 head;
-	int nbatches = 1;
-	uint64 size = 0;
-	int ninserted;
-	TimestampTz now = GetCurrentTimestamp();
-
-	/* No reader? Noop. */
-	if (bms_is_empty(targets))
-		return 0;
-
-	packed_desc = PackTupleDesc(desc);
-
-	ipcq = get_any_worker_queue_with_lock();
-	head = pg_atomic_read_u64(&ipcq->head);
-	tail = pg_atomic_read_u64(&ipcq->tail);
-	free = ipc_queue_free_size(ipcq, head, tail);
-	ninserted = 0;
-
-	Assert(free >= 0);
-
-	for (i = 0; i < ntuples; i++)
-	{
-		HeapTuple tup = tuples[i];
-		int len;
-		StreamTupleState *sts = StreamTupleStateCreate(tup, desc, packed_desc, targets, acks, nacks, &len);
-		ipc_queue_slot *slot = ipc_queue_slot_get(ipcq, head);
-		int len_needed = sizeof(ipc_queue_slot) + len;
-		bool needs_wrap = ipc_queue_needs_wrap(ipcq, head, len_needed);
-		char *dest_bytes;
-
-		Assert(IsContQueryWorkerProcess() ? ipcq->consumed_by_broker : true);
-		Assert(tail <= head);
-
-		if (needs_wrap)
-			len_needed = len + ipcq->size - ipc_queue_offset(ipcq, head);
-
-		if (free < len_needed)
-		{
-			tail = pg_atomic_read_u64(&ipcq->tail);
-			free = ipc_queue_free_size(ipcq, head, tail);
-		}
-
-		if (free < len_needed || ninserted >= continuous_query_batch_size)
-		{
-			ipc_queue_update_head(ipcq, head);
-			ipc_queue_unlock(ipcq);
-
-			ipcq = get_any_worker_queue_with_lock();
-
-			head = pg_atomic_read_u64(&ipcq->head);
-			tail = pg_atomic_read_u64(&ipcq->tail);
-			free = ipc_queue_free_size(ipcq, head, tail);
-
-			if (ninserted)
-				nbatches++;
-
-			now = GetCurrentTimestamp();
-			ninserted = 0;
-
-			/* retry this tuple */
-			i--;
-
-			continue;
-		}
-
-		size += len;
-		ninserted++;
-
-		free -= len_needed;
-		head += len_needed;
-
-		slot->time = now;
-		slot->len = len;
-		slot->peeked = false;
-		slot->wraps = needs_wrap;
-		slot->next = head;
-
-		dest_bytes = needs_wrap ? ipcq->bytes : slot->bytes;
-		ipc_queue_check_overflow(ipcq, dest_bytes, len);
-
-		StreamTupleStateCopyFn(dest_bytes, sts, len);
-
-		if (sts->record_descs)
-			pfree(sts->record_descs);
-		pfree(sts);
-	}
-
-	ipc_queue_update_head(ipcq, head);
-	ipc_queue_unlock(ipcq);
-
-	pgstat_increment_stream_insert(RelationGetRelid(stream), ntuples, nbatches, size);
-
-	bms_free(targets);
-	pfree(packed_desc);
-
-	return size;
-}
-
 /*
  * CopyIntoStream
  *
  * COPY events to a stream from an input source
  */
 void
-CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
+CopyIntoStream(Relation rel, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	InsertBatchAck *ack = NULL;
-	InsertBatch *batch = NULL;
 	bool snap = ActiveSnapshotSet();
+	ResultRelInfo rinfo;
+	StreamInsertState *sis;
+
+	MemSet(&rinfo, 0, sizeof(ResultRelInfo));
+	rinfo.ri_RangeTableIndex = 1; /* dummy */
+	rinfo.ri_TrigDesc = NULL;
+	rinfo.ri_RelationDesc = rel;
 
 	if (snap)
 		PopActiveSnapshot();
 
-	if (synchronous_stream_insert)
+	BeginStreamModify(NULL, &rinfo, list_make1(desc), 0, 0);
+	sis = (StreamInsertState *) rinfo.ri_FdwState;
+	Assert(sis);
+
+	if (sis->queries)
 	{
-		batch = InsertBatchCreate();
-		ack = palloc0(sizeof(InsertBatchAck));
-		ack->batch_id = batch->id;
-		ack->batch = batch;
+		TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
+		int i;
+
+		for (i = 0; i < ntuples; i++)
+		{
+			ExecStoreTuple(tuples[i], slot, InvalidBuffer, false);
+			ExecStreamInsert(NULL, &rinfo, slot, NULL);
+			ExecClearTuple(slot);
+		}
+
+		ExecDropSingleTupleTableSlot(slot);
+
+		Assert(sis->ntups == ntuples);
+		pgstat_increment_cq_write(ntuples, sis->nbytes);
 	}
 
-	SendTuplesToContWorkers(stream, desc, tuples, ntuples, ack, ack ? 1 : 0);
-
-	if (batch)
-	{
-		pfree(ack);
-		InsertBatchWaitAndRemove(batch, ntuples);
-	}
+	EndStreamModify(NULL, &rinfo);
 
 	if (snap)
 		PushActiveSnapshot(GetTransactionSnapshot());
@@ -202,8 +108,9 @@ pipeline_stream_insert(PG_FUNCTION_ARGS)
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
 	Trigger *trig = trigdata->tg_trigger;
 	HeapTuple tup;
-	TupleDesc desc;
+	List *fdw_private;
 	int i;
+	ResultRelInfo rinfo;
 
 	if (trig->tgnargs < 1)
 		elog(ERROR, "pipeline_stream_insert: must be provided a stream name");
@@ -237,20 +144,40 @@ pipeline_stream_insert(PG_FUNCTION_ARGS)
 	else
 		tup = trigdata->tg_trigtuple;
 
-	desc = RelationGetDescr(trigdata->tg_relation);
+	fdw_private = list_make1(RelationGetDescr(trigdata->tg_relation));
+
+	MemSet(&rinfo, 0, sizeof(ResultRelInfo));
+	rinfo.ri_RangeTableIndex = 1; /* dummy */
+	rinfo.ri_TrigDesc = NULL;
 
 	for (i = 0; i < trig->tgnargs; i++)
 	{
 		RangeVar *stream;
 		Relation rel;
-		HeapTuple tups[1];
+		StreamInsertState *sis;
 
 		stream = makeRangeVarFromNameList(textToQualifiedNameList(cstring_to_text(trig->tgargs[i])));
 		rel = heap_openrv(stream, AccessShareLock);
 
-		tups[0] = tup;
-		SendTuplesToContWorkers(rel, desc, tups, 1, NULL, 0);
+		rinfo.ri_RelationDesc = rel;
 
+		BeginStreamModify(NULL, &rinfo, fdw_private, 0, 0);
+		sis = (StreamInsertState *) rinfo.ri_FdwState;
+		Assert(sis);
+
+		if (sis->queries)
+		{
+			TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
+
+			ExecStoreTuple(tup, slot, InvalidBuffer, false);
+			ExecStreamInsert(NULL, &rinfo, slot, NULL);
+			ExecClearTuple(slot);
+
+			ExecDropSingleTupleTableSlot(slot);
+			pgstat_report_streamstat(true);
+		}
+
+		EndStreamModify(NULL, &rinfo);
 		heap_close(rel, AccessShareLock);
 	}
 

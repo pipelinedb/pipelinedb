@@ -26,7 +26,6 @@
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/ipc/broker.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/bgwriter.h"
@@ -153,7 +152,6 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 
 		size = add_size(size, ShmemDynAllocSize());
 		size = add_size(size, ContQuerySchedulerShmemSize());
-		size = add_size(size, IPCMessageBrokerShmemSize());
 
 		/* might as well round it off to a multiple of a typical page size */
 		size = add_size(size, 8192 - (size % 8192));
