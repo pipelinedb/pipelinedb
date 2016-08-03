@@ -316,7 +316,6 @@ ContExecutorStartNextQuery(ContExecutor *exec, int timeout)
 		}
 	}
 
-	Assert(!OidIsValid(exec->curr_query_id) || exec->curr_query);
 	return exec->curr_query_id;
 }
 
