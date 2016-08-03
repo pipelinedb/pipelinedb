@@ -15,7 +15,7 @@
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/ipc/pzmq.h"
 #include "pipeline/miscutils.h"
-#include "storage/shm_alloc.h"
+#include "storage/shmem.h"
 #include "utils/memutils.h"
 #include "utils/typcache.h"
 
@@ -24,24 +24,97 @@ int continuous_query_batch_length;
 
 #define MAX_PACKED_SIZE (MAX_MICROBATCH_SIZE - 2048) /* subtract 2kb for buffer for acks */
 #define MAX_TUPDESC_SIZE(desc) ((desc)->natts * (sizeof(NameData) + (3 * sizeof(int))))
+#define MAX_MICROBATCHES MaxBackends
+
+typedef struct MicrobatchAckShmemStruct
+{
+	pg_atomic_uint64 counter;
+	microbatch_ack_t acks[1];
+} MicrobatchAckShmemStruct;
+
+static MicrobatchAckShmemStruct *MicrobatchAckShmem = NULL;
+
+Size
+MicrobatchAckShmemSize(void)
+{
+	Size size;
+
+	size = sizeof(MicrobatchAckShmemStruct);
+	size = mul_size(sizeof(microbatch_ack_t), MAX_MICROBATCHES);
+
+	return size;
+}
+
+void
+MicrobatchAckShmemInit(void)
+{
+	bool found;
+
+	MicrobatchAckShmem = (MicrobatchAckShmemStruct *)
+			ShmemInitStruct("MicrobatchAckShmem", MicrobatchAckShmemSize(), &found);
+
+	if (!found)
+	{
+		int i;
+
+		MemSet(MicrobatchAckShmem, 0, MicrobatchAckShmemSize());
+		pg_atomic_init_u64(&MicrobatchAckShmem->counter, 0);
+
+		for (i = 0; i < MAX_MICROBATCHES; i++)
+		{
+			microbatch_ack_t *ack = &MicrobatchAckShmem->acks[i];
+			pg_atomic_init_u64(&ack->id, 0);
+			pg_atomic_init_flag(&ack->is_wread);
+			pg_atomic_init_u32(&ack->num_cacks, 0);
+			pg_atomic_init_u32(&ack->num_cacks, 0);
+			pg_atomic_init_u32(&ack->num_ctups, 0);
+			pg_atomic_init_u32(&ack->num_wacks, 0);
+			pg_atomic_init_u32(&ack->num_wtups, 0);
+		}
+	}
+}
 
 microbatch_ack_t *
-microbatch_ack_new(void)
+microbatch_ack_new(microbatch_ack_type_t type)
 {
-	microbatch_ack_t *ack = (microbatch_ack_t *) ShmemDynAlloc0(sizeof(microbatch_ack_t));
-	ack->id = rand() ^ (int) MyProcPid;
-	pg_atomic_init_flag(&ack->read);
-	pg_atomic_init_u32(&ack->num_cacks, 0);
-	pg_atomic_init_u32(&ack->num_ctups, 0);
-	pg_atomic_init_u32(&ack->num_wacks, 0);
-	pg_atomic_init_u32(&ack->num_wtups, 0);
+	microbatch_ack_t *ack;
+	uint64 id;
+
+	id = type;
+	id <<= 63L;
+	id |= (rand() ^ (int) MyProcPid) & 0x7fffffffffffffff;
+
+	for (;;)
+	{
+		int i = pg_atomic_fetch_add_u64(&MicrobatchAckShmem->counter, 1) % MAX_MICROBATCHES;
+		uint64 zero = 0;
+
+		ack = &MicrobatchAckShmem->acks[i];
+		if (!pg_atomic_compare_exchange_u64(&ack->id, &zero, id))
+			continue;
+
+		pg_atomic_clear_flag(&ack->is_wread);
+		pg_atomic_write_u32(&ack->num_cacks, 0);
+		pg_atomic_write_u32(&ack->num_cacks, 0);
+		pg_atomic_write_u32(&ack->num_ctups, 0);
+		pg_atomic_write_u32(&ack->num_wacks, 0);
+		pg_atomic_write_u32(&ack->num_wtups, 0);
+
+		/*
+		 * TODO(usmanm): If MAX_MICROBATCHES insert procs crash before freeing their ack,
+		 * we could run out out acks and keep on spinning here. Seems unlikely, but a workaround
+		 * is eventually needed.
+		 */
+		break;
+	}
+
 	return ack;
 }
 
 void
-microbatch_ack_destroy(microbatch_ack_t *ack)
+microbatch_ack_free(microbatch_ack_t *ack)
 {
-	ShmemDynFree(ack);
+	pg_atomic_write_u64(&ack->id, 0);
 }
 
 microbatch_t *
@@ -130,7 +203,7 @@ void
 microbatch_add_ack(microbatch_t *mb, microbatch_ack_t *ack)
 {
 	tagged_ref_t *ref = palloc(sizeof(tagged_ref_t));
-	ref->tag = ack->id;
+	ref->tag = pg_atomic_read_u64(&ack->id);
 	ref->ptr = ack;
 
 	mb->acks = lappend(mb->acks, ref);
@@ -436,7 +509,7 @@ microbatch_add_acks(microbatch_t *mb, List *acks)
 	{
 		tagged_ref_t *ref = lfirst(lc);
 		microbatch_ack_t *ack = (microbatch_ack_t *) ref->ptr;
-		if (ref->tag == ack->id)
+		if (ref->tag == pg_atomic_read_u64(&ack->id))
 			microbatch_add_ack(mb, ack);
 	}
 

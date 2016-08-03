@@ -43,7 +43,6 @@ typedef struct StreamInsertState
 	TupleDesc desc;
 
 	microbatch_ack_t *ack;
-	bool sync;
 	uint64 start_generation;
 
 	ContQueryDatabaseMetadata *db_meta;
