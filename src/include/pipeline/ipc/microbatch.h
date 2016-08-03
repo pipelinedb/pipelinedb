@@ -35,10 +35,13 @@ typedef enum microbatch_type_t
 typedef struct microbatch_ack_t
 {
 	volatile uint64 id;
+	pg_atomic_flag read;
+
 	/* Number of acks from workers */
 	pg_atomic_uint32 num_wacks;
 	/* Number of acks from combiners */
 	pg_atomic_uint32 num_cacks;
+	/* Total number of tuples read by workers */
 	/* Total number of tuples sent to workers */
 	pg_atomic_uint32 num_wtups;
 	/* Total number of tuples sent to combiners */
@@ -59,6 +62,15 @@ extern void microbatch_ack_destroy(microbatch_ack_t *ack);
 			pg_atomic_fetch_add_u32(&(ack)->num_cacks, (n)); \
 	} \
 	while (0);
+#define microbatch_ack_set_read(ack, dummy) \
+	do \
+	{ \
+		if (dummy) \
+			pg_atomic_test_set_flag(&(ack)->read); \
+		else \
+			pg_atomic_clear_flag(&(ack)->read); \
+	} \
+	while(0);
 #define microbatch_acks_check_and_exec(acks, fn, arg) \
 	do \
 	{ \
@@ -72,10 +84,10 @@ extern void microbatch_ack_destroy(microbatch_ack_t *ack);
 		}\
 	} \
 	while (0);
-
 #define microbatch_ack_is_acked(ack) \
 	(pg_atomic_read_u32(&(ack)->num_wacks) >= pg_atomic_read_u32(&(ack)->num_wtups) && \
 			pg_atomic_read_u32(&(ack)->num_cacks) >= pg_atomic_read_u32(&(ack)->num_ctups))
+#define microbatch_ack_is_read(ack) (!pg_atomic_unlocked_test_flag(&(ack)->read))
 
 typedef struct microbatch_t
 {

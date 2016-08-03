@@ -928,7 +928,7 @@ SignalContQuerySchedulerDropDB(Oid db_oid)
 	wait_for_db_procs_to_stop(db_oid);
 }
 
-extern ContQueryDatabaseMetadata *
+ContQueryDatabaseMetadata *
 GetContQueryDatabaseMetadata(Oid db_oid)
 {
 	bool found;
@@ -939,6 +939,17 @@ GetContQueryDatabaseMetadata(Oid db_oid)
 
 	if (!found)
 		return NULL;
+
+	return db_meta;
+}
+
+ContQueryDatabaseMetadata *
+GetMyContQueryDatabaseMetadata(void)
+{
+	static ContQueryDatabaseMetadata *db_meta = NULL;
+
+	if (!db_meta)
+		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
 
 	return db_meta;
 }

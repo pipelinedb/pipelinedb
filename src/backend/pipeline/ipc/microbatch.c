@@ -30,6 +30,7 @@ microbatch_ack_new(void)
 {
 	microbatch_ack_t *ack = (microbatch_ack_t *) ShmemDynAlloc0(sizeof(microbatch_ack_t));
 	ack->id = rand() ^ (int) MyProcPid;
+	pg_atomic_init_flag(&ack->read);
 	pg_atomic_init_u32(&ack->num_cacks, 0);
 	pg_atomic_init_u32(&ack->num_ctups, 0);
 	pg_atomic_init_u32(&ack->num_wacks, 0);
@@ -442,12 +443,9 @@ microbatch_add_acks(microbatch_t *mb, List *acks)
 void
 microbatch_send_to_worker(microbatch_t *mb)
 {
-	static int worker_id = 0;
-	static ContQueryDatabaseMetadata *db_meta = NULL;
+	ContQueryDatabaseMetadata *db_meta = GetMyContQueryDatabaseMetadata();
 	int recv_id;
-
-	if (!db_meta)
-		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
+	int worker_id;
 
 	if (IsContQueryCombinerProcess())
 	{
@@ -460,7 +458,7 @@ microbatch_send_to_worker(microbatch_t *mb)
 	else
 	{
 		/* TODO(usmanm): Poll all workers and send to first non-blocking one? */
-		worker_id = (worker_id + 1) % continuous_query_num_workers;
+		worker_id = rand() % continuous_query_num_workers;
 	}
 
 	recv_id = db_meta->db_procs[worker_id].pzmq_id;

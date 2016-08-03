@@ -487,6 +487,11 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	}
 	else
 	{
+		sis->ack = microbatch_ack_new();
+		sis->db_meta = GetMyContQueryDatabaseMetadata();
+		sis->start_generation = pg_atomic_read_u64(&sis->db_meta->generation);
+		sis->sync = synchronous_stream_insert;
+
 		if (is_inferred_stream_relation(rel))
 		{
 			void *incoming;
@@ -501,15 +506,6 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 		}
 		else
 			sis->desc = RelationGetDescr(rel);
-
-		if (synchronous_stream_insert)
-		{
-			sis->db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
-			sis->start_generation = pg_atomic_read_u64(&sis->db_meta->generation);
-
-			sis->ack = microbatch_ack_new();
-			sis->sync = true;
-		}
 	}
 
 	if (!bms_is_empty(queries))
@@ -578,17 +574,21 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 	pgstat_increment_stream_insert(RelationGetRelid(rel), sis->ntups, sis->nbatches, sis->nbytes);
 	microbatch_acks_check_and_exec(sis->batch->acks, microbatch_ack_increment_wtups, sis->ntups);
 
-	if (sis->sync)
+	if (sis->ack)
 	{
 		bool success = false;
 		int64 generation = -1;
 
-		Assert(sis->ack);
 		Assert(sis->db_meta);
 
-		while (true)
+		for (;;)
 		{
-			if (microbatch_ack_is_acked(sis->ack))
+			if (!sis->sync && microbatch_ack_is_read(sis->ack))
+			{
+				success = true;
+				break;
+			}
+			else if (sis->sync && microbatch_ack_is_acked(sis->ack))
 			{
 				success = true;
 				break;
@@ -615,8 +615,4 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 	}
 
 	microbatch_destroy(sis->batch);
-
-	/* This ensures that we wait till any data in our local ZMQ queues has been flushed! */
-	if (!IsContQueryProcess())
-		pzmq_pollout();
 }

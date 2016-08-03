@@ -32,7 +32,7 @@ typedef struct ipc_tuple_reader_batch
 extern void ipc_tuple_reader_init(void);
 extern void ipc_tuple_reader_destroy(void);
 
-#define ipc_tuple_reader_poll(timeout) (pzmq_pollin(timeout))
+#define ipc_tuple_reader_poll(timeout) (pzmq_poll(timeout))
 extern ipc_tuple_reader_batch *ipc_tuple_reader_pull(void);
 extern void ipc_tuple_reader_reset(void);
 extern void ipc_tuple_reader_ack(void);

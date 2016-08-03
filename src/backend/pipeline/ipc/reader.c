@@ -111,6 +111,9 @@ ipc_tuple_reader_pull(void)
 		my_reader->batches = lappend(my_reader->batches, mb);
 
 		queries = bms_union(queries, mb->queries);
+
+		if (IsContQueryWorkerProcess())
+			microbatch_acks_check_and_exec(mb->acks, microbatch_ack_set_read, 1);
 	}
 
 	MemoryContextSwitchTo(old);
