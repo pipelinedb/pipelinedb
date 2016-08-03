@@ -112,7 +112,11 @@ ipc_tuple_reader_pull(void)
 
 		queries = bms_union(queries, mb->queries);
 
-		/* Async insert ack hot path */
+		/*
+		 * Hot path for asynchronous inserts. For any microbatch coming from an insert process
+		 * (will always have only one ack), and we're the worker reading that microbatch, check
+		 * to see if its type is ASYNC and if so mark is as read.
+		 */
 		if (list_length(mb->acks) == 1 && IsContQueryWorkerProcess())
 		{
 			tagged_ref_t *ref = linitial(mb->acks);
@@ -120,6 +124,11 @@ ipc_tuple_reader_pull(void)
 			if (ref->tag == pg_atomic_read_u64(&ack->id) && microbatch_ack_get_type(ack) == ASYNC)
 			{
 				microbatch_ack_set_read(ack, 1);
+
+				/*
+				 * Set the acks for this microbatch to be NIL so that we don't pass them around to
+				 * downstream processes.
+				 */
 				mb->acks = NIL;
 			}
 		}
