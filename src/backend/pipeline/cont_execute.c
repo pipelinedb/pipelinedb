@@ -59,7 +59,7 @@ ContExecutorNew(ContQueryStateInit initfn)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	ContQueryTransactionContext = AllocSetContextCreate(cxt, "ContQueryCombineContext",
+	ContQueryTransactionContext = AllocSetContextCreate(cxt, "ContQueryTransactionContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -188,11 +188,12 @@ init_query_state(ContExecutor *exec, ContQueryState *state)
 static ContQueryState *
 get_query_state(ContExecutor *exec)
 {
-	ContQueryState *state = exec->states[exec->curr_query_id];
+	ContQueryState *state;
 	HeapTuple tup;
 	bool commit = false;
 
 	MyStatCQEntry = NULL;
+	state = exec->states[exec->curr_query_id];
 
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
@@ -216,7 +217,10 @@ get_query_state(ContExecutor *exec)
 
 	if (state != NULL)
 	{
-		/* Was the continuous view modified? In our case this means remove the old view and add a new one. */
+		/*
+		 * Was the continuous view modified? In our case this means remove the old view and add a new one.
+		 * Don't purge the query since the ID is still valid. We just have a stale state.
+		 */
 		if (HeapTupleGetOid(tup) != state->query->oid)
 		{
 			MemoryContextDelete(state->state_cxt);
@@ -260,6 +264,8 @@ get_query_state(ContExecutor *exec)
 	}
 
 	Assert(exec->states[exec->curr_query_id] == state);
+	Assert(state->query);
+
 	return state;
 }
 
@@ -298,7 +304,7 @@ ContExecutorStartNextQuery(ContExecutor *exec, int timeout)
 			break;
 	}
 
-	if (exec->curr_query_id == InvalidOid)
+	if (!OidIsValid(exec->curr_query_id))
 		exec->curr_query = NULL;
 	else
 	{
@@ -311,6 +317,7 @@ ContExecutorStartNextQuery(ContExecutor *exec, int timeout)
 		}
 	}
 
+	Assert(!OidIsValid(exec->curr_query_id) || exec->curr_query);
 	return exec->curr_query_id;
 }
 
