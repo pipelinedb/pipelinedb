@@ -1839,6 +1839,7 @@ reset_record_type_cache(void)
 		}
 		hash_destroy(RecordCacheHash);
 	}
+
 	if (RecordCacheArray)
 	{
 		int i;

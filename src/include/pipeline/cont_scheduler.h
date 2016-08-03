@@ -14,7 +14,8 @@
 #define CONT_SCHEDULER_H
 
 #include "storage/latch.h"
-#include "pipeline/ipc/broker.h"
+#include "pipeline/ipc/microbatch.h"
+#include "port/atomics.h"
 #include "postmaster/bgworker.h"
 #include "storage/dsm.h"
 #include "storage/spin.h"
@@ -35,21 +36,21 @@ typedef struct ContQueryDatabaseMetadata ContQueryDatabaseMetadata;
 typedef struct ContQueryProc
 {
 	ContQueryProcType type;
-
 	Latch *latch;
 
-	int id; /* unique across all cont query processes */
+	volatile int pzmq_id;
 	volatile int group_id; /* unqiue [0, n) for each db_oid, type pair */
 
 	BackgroundWorkerHandle *bgw_handle;
-
 	ContQueryDatabaseMetadata *db_meta;
 } ContQueryProc;
 
 struct ContQueryDatabaseMetadata
 {
-	Oid      db_oid;
+	Oid      db_id;
 	NameData db_name;
+
+	pg_atomic_uint64 generation;
 
 	slock_t mutex;
 
@@ -57,11 +58,8 @@ struct ContQueryDatabaseMetadata
 	sig_atomic_t dropdb;
 	sig_atomic_t terminate;
 
-	int lock_idx; /* ContQuerySchedulerShmem->locks index where the locks for this DB's workers start */
-
 	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
 	ContQueryProc *db_procs;
-
 	ContQueryProc adhoc_vacuumer;
 };
 
@@ -78,10 +76,8 @@ extern char *GetContQueryProcName(ContQueryProc *proc);
 
 /* guc parameters */
 extern bool continuous_queries_enabled;
-extern bool continuous_query_crash_recovery;
 extern int  continuous_query_num_combiners;
 extern int  continuous_query_num_workers;
-extern int  continuous_query_batch_size;
 extern int  continuous_query_max_wait;
 extern int  continuous_query_combiner_work_mem;
 extern int  continuous_query_combiner_synchronous_commit;
@@ -94,8 +90,6 @@ extern double continuous_query_proc_priority;
 /* shared memory stuff */
 extern Size ContQuerySchedulerShmemSize(void);
 extern void ContQuerySchedulerShmemInit(void);
-extern ContQueryRunParams *GetContQueryRunParams(void);
-extern int GetContSchedulerTrancheId(void);
 
 extern bool am_cont_combiner;
 
@@ -113,11 +107,12 @@ extern pid_t StartContQueryScheduler(void);
 
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
-extern bool ShouldTerminateContQueryProcess(void);
 
 extern void SignalContQuerySchedulerDropDB(Oid db_oid);
 extern void SignalContQuerySchedulerRefreshDBList(void);
+extern bool ShouldTerminateContQueryProcess(void);
 
 extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
+extern ContQueryDatabaseMetadata *GetMyContQueryDatabaseMetadata(void);
 
 #endif   /* CONT_SCHEDULER_H */

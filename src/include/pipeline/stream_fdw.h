@@ -15,9 +15,10 @@
 #include "nodes/execnodes.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
+#include "pipeline/ipc/microbatch.h"
 #include "utils/rel.h"
 
-#define REENTRANT_STREAM_INSERT 0x1
+#define REENTRANT_STREAM_INSERT 0x10000
 
 typedef struct StreamProjectionInfo StreamProjectionInfo;
 
@@ -31,21 +32,21 @@ typedef struct StreamScanState
 
 typedef struct StreamInsertState
 {
-	Bitmapset *targets;
-
-	long count;
-	long bytes;
-	int num_batches;
-
-	InsertBatch *batch;
-	InsertBatchAck *ack;
-
-	TupleDesc desc;
-	bytea *packed_desc;
-
-	ipc_queue *worker_queue;
-
 	int flags;
+	Bitmapset *queries;
+
+	int ntups;
+	long nbytes;
+	int nbatches;
+
+	microbatch_t *batch;
+	TupleDesc desc;
+
+	microbatch_ack_t *ack;
+	bool sync;
+	uint64 start_generation;
+
+	ContQueryDatabaseMetadata *db_meta;
 } StreamInsertState;
 
 extern Datum stream_fdw_handler(PG_FUNCTION_ARGS);
