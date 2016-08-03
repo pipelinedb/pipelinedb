@@ -615,4 +615,8 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 	}
 
 	microbatch_destroy(sis->batch);
+
+	/* This ensures that we wait till any data in our local ZMQ queues has been flushed! */
+	if (!IsContQueryProcess())
+		pzmq_pollout();
 }

@@ -26,6 +26,7 @@ typedef struct pzmq_socket_t
 	char type;
 	void *sock;
 	char addr[MAXPGPATH];
+	uint64 nops;
 } pzmq_socket_t;
 
 typedef struct pzmq_state_t
@@ -157,6 +158,7 @@ pzmq_connect(uint64 id)
 		zsock->type = ZMQ_PUSH;
 		sprintf(zsock->addr, SOCKNAME_STR, DataDir, id);
 		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
+		zsock->nops = 0;
 
 		if (!IsContQueryProcess())
 		{
@@ -189,7 +191,7 @@ pzmq_connect(uint64 id)
 }
 
 bool
-pzmq_poll(int timeout)
+pzmq_pollin(int timeout)
 {
 	zmq_pollitem_t item;
 	int rc;
@@ -210,10 +212,43 @@ pzmq_poll(int timeout)
 	rc = zmq_poll(&item, 1, timeout);
 
 	if (rc == -1 && !ERRNO_IS_SAFE())
-		elog(ERROR, "pzmq failed to poll: %s", zmq_strerror(errno));
+		elog(ERROR, "pzmq failed to pollin: %s", zmq_strerror(errno));
 
 	return item.revents & ZMQ_POLLIN;
 }
+
+bool
+pzmq_pollout(void)
+{
+	HASH_SEQ_STATUS iter;
+	pzmq_socket_t *zsock;
+	bool success = true;
+
+	if (!zmq_state)
+		elog(ERROR, "pzmq is not initialized");
+
+	hash_seq_init(&iter, zmq_state->dests);
+	while ((zsock = (pzmq_socket_t *) hash_seq_search(&iter)) != NULL)
+	{
+		zmq_pollitem_t item;
+		int rc;
+
+		if (!zsock->nops)
+			continue;
+
+		item.events = ZMQ_POLLOUT;
+		item.revents = 0;
+		item.socket = zsock->sock;
+
+		rc = zmq_poll(&item, 1, -1);
+
+		success &= (rc == 0) && (item.revents & ZMQ_POLLOUT);
+		zsock->nops = 0;
+	}
+
+	return success;
+}
+
 
 char *
 pzmq_recv(int *len, int timeout)
@@ -230,7 +265,7 @@ pzmq_recv(int *len, int timeout)
 
 	zmq_msg_init(&msg);
 
-	if (timeout && !pzmq_poll(timeout))
+	if (timeout && !pzmq_pollin(timeout))
 	{
 		*len = 0;
 		return NULL;
@@ -283,6 +318,8 @@ pzmq_send(uint64 id, char *msg, int len, bool wait)
 
 		return false;
 	}
+
+	zsock->nops++;
 
 	Assert(ret == len);
 	return true;
