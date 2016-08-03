@@ -56,6 +56,7 @@
 #include "pgstat.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cqmatrel.h"
+#include "pipeline/ipc/microbatch.h"
 #include "pipeline/stream.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
@@ -1646,16 +1647,6 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"continuous_query_crash_recovery", PGC_POSTMASTER, DEVELOPER_OPTIONS,
-		 gettext_noop("Recover from errors and crashes in continuous query processes."),
-		 NULL,
-		},
-		&continuous_query_crash_recovery,
-		true,
-		NULL, NULL, NULL
-	},
-
-	{
 		{"anonymous_update_checks", PGC_POSTMASTER, DEVELOPER_OPTIONS,
 		 gettext_noop("Anonymously check for available updates."),
 		 NULL,
@@ -2748,22 +2739,10 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"continuous_query_ipc_shared_mem", PGC_BACKEND, RESOURCES_MEM,
-		 gettext_noop("Sets the shared memory per DB to be used for IPC between continuous query processes."),
-		 NULL,
-		 GUC_UNIT_KB
-		},
-		&continuous_query_ipc_shared_mem,
-		262144, 32768, MAX_KILOBYTES,
-		NULL, NULL, NULL
-	},
-
-	{
 		{"continuous_query_combiner_work_mem", PGC_BACKEND, RESOURCES_MEM,
 		 gettext_noop("Sets the maximum memory to be used for combining partial results for continuous queries."),
 		 gettext_noop("This much memory can be used by each combiner processes's internal "
-					  "sort operation and hash table before switching to "
-					  "temporary disk files."),
+					  "sort operation and hash table before switching to temporary disk files."),
 		 GUC_UNIT_KB
 		},
 		&continuous_query_combiner_work_mem,
@@ -2784,12 +2763,23 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"continuous_query_batch_size", PGC_SIGHUP, QUERY_TUNING,
+		{"continuous_query_num_batch", PGC_SIGHUP, QUERY_TUNING,
 		 gettext_noop("Sets the maximum number of events to accumulate before executing a continuous query plan on them."),
 		 gettext_noop("A higher value usually yields less frequent continuous view updates.")
 		},
-		&continuous_query_batch_size,
+		&continuous_query_num_batch,
 		10000, 10, INT_MAX,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_batch_size", PGC_BACKEND, RESOURCES_MEM,
+		 gettext_noop("Sets the maximum size of the batch of events to accumulate before executing a continuous query plan on them."),
+		 gettext_noop("A higher value usually yields less frequent continuous view updates."),
+		 GUC_UNIT_KB
+		},
+		&continuous_query_batch_size,
+		262144, 8192, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 

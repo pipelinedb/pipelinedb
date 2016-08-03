@@ -134,6 +134,7 @@ typedef struct
 	/* Sliding-window state */
 	SWOutputState *sw;
 
+	List *acks;
 } ContQueryCombinerState;
 
 /*
@@ -913,6 +914,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 	ResultRelInfo *osri;
 	StreamInsertState *sis;
 	List *to_delete = NIL;
+	List *fdw_private;
 
 	/* Ensure matrel rows are synced into memory */
 	sync_sw_matrel_groups(state, matrel);
@@ -930,12 +932,18 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 
 	osri = CQOSRelOpen(osrel);
 
-	BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
+	/*
+	 * No acks for non-forced ticks since they don't get triggered by
+	 * any tuple insertion.
+	 */
+	fdw_private = list_make1(force ? state->acks : NIL);
+
+	BeginStreamModify(NULL, osri, fdw_private, 0, REENTRANT_STREAM_INSERT);
 	sis = (StreamInsertState *) osri->ri_FdwState;
 	Assert(sis);
 
 	/* If nothing is reading from this output stream, there is nothing to do */
-	if (sis->targets == NULL)
+	if (sis->queries == NULL)
 	{
 		EndStreamModify(NULL, osri);
 		CQOSRelClose(osri);
@@ -1218,11 +1226,11 @@ sync_combine(ContQueryCombinerState *state)
 
 		osri = CQOSRelOpen(osrel);
 
-		BeginStreamModify(NULL, osri, NIL, 0, REENTRANT_STREAM_INSERT);
+		BeginStreamModify(NULL, osri, list_make1(state->acks), 0, REENTRANT_STREAM_INSERT);
 		sis = (StreamInsertState *) osri->ri_FdwState;
 		Assert(sis);
 
-		os_targets = sis->targets;
+		os_targets = sis->queries;
 
 		/* If nothing is reading from the output stream, close it immediately */
 		if (os_targets == NULL)
@@ -1363,16 +1371,18 @@ sync_combine(ContQueryCombinerState *state)
 static void
 sync_all(ContExecutor *cont_exec)
 {
-	Bitmapset *tmp = bms_copy(cont_exec->queries);
+	Bitmapset *tmp = bms_copy(cont_exec->all_queries);
 	ContQueryCombinerState **states = (ContQueryCombinerState **) cont_exec->states;
 	int id;
 
 	while ((id = bms_first_member(tmp)) >= 0)
 	{
 		ContQueryCombinerState *state = states[id];
+
 		if (!state)
 			continue;
 
+		debug_query_string = state->base.query->name->relname;
 		MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
 
 		PG_TRY();
@@ -1394,6 +1404,15 @@ sync_all(ContExecutor *cont_exec)
 
 		state->pending_tuples = 0;
 		state->existing = NULL;
+		debug_query_string = NULL;
+		MyStatCQEntry = NULL;
+
+		/*
+		 * Set acks to NIL here so we don't try to access them for future ticks
+		 * that happen in a different transaction.
+		 */
+		state->acks = NIL;
+
 		MemSet(state->group_hashes, 0, state->group_hashes_len);
 		MemoryContextResetAndDeleteChildren(state->combine_cxt);
 	}
@@ -1641,68 +1660,57 @@ set_group_hash(ContQueryCombinerState *state, int index, int64 hash)
 }
 
 static int
-read_batch(ContQueryCombinerState *state, ContExecutor *cont_exec)
+read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 {
-	PartialTupleState *pts;
-	int len;
+	ipc_tuple *itup;
 	Size nbytes = 0;
-	int count = 0;
+	int ntups = 0;
 
-	while ((pts = (PartialTupleState *) ContExecutorYieldNextMessage(cont_exec, &len)) != NULL)
+	if (!exec->batch)
+		return 0;
+
+	while ((itup = ipc_tuple_reader_next(query_id)) != NULL)
 	{
 		if (!TupIsNull(state->slot))
 			ExecClearTuple(state->slot);
 
-		ExecStoreTuple(heap_copytuple(pts->tup), state->slot, InvalidBuffer, false);
+		ExecStoreTuple(heap_copytuple(itup->tup), state->slot, InvalidBuffer, false);
 		tuplestore_puttupleslot(state->batch, state->slot);
 
-		set_group_hash(state, count, pts->hash);
+		set_group_hash(state, ntups, itup->hash);
 
-		nbytes += len;
-		count++;
+		nbytes += itup->tup->t_len + HEAPTUPLESIZE;
+		ntups++;
 	}
+
+	state->acks = exec->batch->acks;
+	ipc_tuple_reader_rewind();
 
 	if (!TupIsNull(state->slot))
 		ExecClearTuple(state->slot);
 
-	pgstat_increment_cq_read(count, nbytes);
+	pgstat_increment_cq_read(ntups, nbytes);
 
-	return count;
+	return ntups;
 }
 
 /*
  * need_sync
  */
 static bool
-need_sync(ContExecutor *cont_exec, TimestampTz last_sync)
+need_sync(TimestampTz last_sync)
 {
-	Bitmapset *tmp = bms_copy(cont_exec->queries);
-	ContQueryCombinerState **states = (ContQueryCombinerState **) cont_exec->states;
-	int id;
-
-	while ((id = bms_first_member(tmp)) >= 0)
-	{
-		ContQueryCombinerState *state = states[id];
-		if (state == NULL)
-			continue;
-	}
-
-	if (synchronous_stream_insert || continuous_query_commit_interval == 0)
+	if (synchronous_stream_insert || !continuous_query_commit_interval)
 		return true;
 
 	return TimestampDifferenceExceeds(last_sync, GetCurrentTimestamp(), continuous_query_commit_interval);
 }
 
-void
-ContinuousQueryCombinerMain(void)
+static int
+get_min_tick_ms(void)
 {
-	ContExecutor *cont_exec = ContExecutorNew(Combiner, &init_query_state);
-	Oid query_id;
-	TimestampTz first_seen = GetCurrentTimestamp();
-	bool do_commit = false;
-	long total_pending = 0;
-	int min_tick_ms = 0;
 	Bitmapset *queries;
+	int min_tick_ms = 0;
 	int id;
 
 	/*
@@ -1727,6 +1735,21 @@ ContinuousQueryCombinerMain(void)
 
 	CommitTransactionCommand();
 
+	return min_tick_ms;
+}
+
+void
+ContinuousQueryCombinerMain(void)
+{
+	ContExecutor *cont_exec = ContExecutorNew(&init_query_state);
+	Oid query_id;
+	TimestampTz first_seen = 0;
+	bool do_commit = false;
+	long total_pending = 0;
+	int min_tick_ms;
+
+	min_tick_ms = get_min_tick_ms();
+
 	/* Set the commit level */
 	synchronous_commit = continuous_query_combiner_synchronous_commit;
 
@@ -1742,7 +1765,7 @@ ContinuousQueryCombinerMain(void)
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, min_tick_ms)) != InvalidOid)
 		{
 			int count = 0;
-			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->current_query;
+			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->curr_query;
 			volatile bool error = false;
 
 			PG_TRY();
@@ -1752,7 +1775,7 @@ ContinuousQueryCombinerMain(void)
 
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 
-				count = read_batch(state, cont_exec);
+				count = read_batch(cont_exec, state, query_id);
 
 				if (count)
 				{
@@ -1761,14 +1784,15 @@ ContinuousQueryCombinerMain(void)
 
 					combine(state);
 
-					if (first_seen == 0)
+					if (!first_seen)
 						first_seen = GetCurrentTimestamp();
 				}
 
 				if (state->sw)
 				{
 					tick_sw_groups(state, NULL, false);
-					min_tick_ms = min_tick_ms ? Min(min_tick_ms, state->base.query->sw_step_ms) : state->base.query->sw_step_ms;
+					min_tick_ms = min_tick_ms ? Min(min_tick_ms, state->base.query->sw_step_ms) :
+							state->base.query->sw_step_ms;
 				}
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
@@ -1780,9 +1804,6 @@ ContinuousQueryCombinerMain(void)
 
 				if (ActiveSnapshotSet())
 					PopActiveSnapshot();
-
-				if (!continuous_query_crash_recovery)
-					proc_exit(1);
 
 				/*
 				 * Modifying anything within a PG_CATCH block can have unpredictable behavior
@@ -1796,7 +1817,6 @@ ContinuousQueryCombinerMain(void)
 			{
 				ContExecutorPurgeQuery(cont_exec);
 				pgstat_increment_cq_error(1);
-				MemoryContextSwitchTo(cont_exec->exec_cxt);
 			}
 next:
 			ContExecutorEndQuery(cont_exec);
@@ -1804,7 +1824,7 @@ next:
 
 		if (total_pending == 0)
 			do_commit = true;
-		else if (need_sync(cont_exec, first_seen))
+		else if (need_sync(first_seen))
 		{
 			sync_all(cont_exec);
 			do_commit = true;
@@ -1821,7 +1841,7 @@ next:
 	{
 		ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->states[query_id];
 
-		if (state == NULL)
+		if (!state)
 			continue;
 
 		MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
@@ -1846,7 +1866,7 @@ GetCombinerLookupPlan(ContQuery *view)
 	bool save = am_cont_combiner;
 
 	exec.cxt = CurrentMemoryContext;
-	exec.current_query_id = view->id;
+	exec.curr_query_id = view->id;
 
 	base = palloc0(sizeof(ContQueryState));
 
@@ -1973,8 +1993,8 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 				text_to_cstring(relname), quote_qualified_identifier(cv->matrel->schemaname, cv->matrel->relname));
 
 	exec.cxt = CurrentMemoryContext;
-	exec.current_query_id = cv->id;
-	exec.queries = bms_make_singleton(cv->id);
+	exec.curr_query_id = cv->id;
+	exec.all_queries = bms_make_singleton(cv->id);
 
 	base = palloc0(sizeof(ContQueryState));
 

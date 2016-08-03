@@ -28,7 +28,6 @@ def test_output_tree(pipeline, clean_db):
   pipeline.create_cv('level3_7', 'SELECT (new).x, (new).count FROM level2_3_osrel')
 
   pipeline.insert('root', ('x',), [(x % 100,) for x in range(10000)])
-  time.sleep(5)
 
   names = [r[0] for r in pipeline.execute('SELECT name FROM pipeline_views() ORDER BY name DESC')]
   assert len(names) == 15
@@ -41,7 +40,6 @@ def test_output_tree(pipeline, clean_db):
       assert count == 100
 
   pipeline.insert('root', ('x',), [(x % 100,) for x in range(10000)])
-  time.sleep(5)
 
   # Verify all values propagated to each node in the tree again
   for name in names:
@@ -77,7 +75,7 @@ def test_concurrent_sw_ticking(pipeline, clean_db):
   assert len(names) == 2 * 10
 
   pipeline.insert('stream', ('x',), [(x % 100,) for x in range(10000)])
-  time.sleep(30)
+  time.sleep(25)
 
   for name in output_names:
     rows = list(pipeline.execute('SELECT COUNT(DISTINCT x) FROM %s' % name))
@@ -111,8 +109,7 @@ def test_transforms(pipeline, clean_db):
   pipeline.create_cv('ct_recv', 'SELECT x FROM oow_stream')
 
   pipeline.insert('stream', ('x',), [(x % 100,) for x in range(10000)])
-  time.sleep(20)
+  time.sleep(15)
 
   rows = list(pipeline.execute('SELECT * FROM ct_recv'))
   assert len(rows) == 100
-

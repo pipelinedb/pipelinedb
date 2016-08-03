@@ -23,7 +23,6 @@
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "miscadmin.h"
-#include "storage/shm_alloc.h"
 #include "utils/hashfuncs.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
@@ -31,20 +30,16 @@
 
 #define MURMUR_SEED 0x155517D2
 
-CombinerReceiveFunc CombinerReceiveHook = NULL;
-
 typedef struct
 {
 	DestReceiver pub;
 	ContQuery *cont_query;
 	ContExecutor *cont_exec;
 	FunctionCallInfo hash_fcinfo;
-	FuncExpr *hash;
-	int64 cv_name_hash;
-	List **partials;
-	int ntups;
-	int nacks;
-	InsertBatchAck *acks;
+	FuncExpr *hashfn;
+
+	uint64 name_hash;
+	List **tups_per_combiner;
 } CombinerState;
 
 static void
@@ -65,39 +60,25 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
 	MemoryContext old = MemoryContextSwitchTo(ContQueryBatchContext);
-	PartialTupleState *pts = palloc0(sizeof(PartialTupleState));
-	InsertBatchAck *acks = NULL;
-	int nacks = 0;
-	int idx;
+	int i;
+	tagged_ref_t *ref;
 
-	if (c->cont_query == NULL)
-		c->cont_query = c->cont_exec->current_query->query;
+	if (!c->cont_query)
+		c->cont_query = c->cont_exec->curr_query->query;
 
 	Assert(c->cont_query->type == CONT_VIEW);
 
-	if (synchronous_stream_insert)
-	{
-		if (c->acks == NULL)
-			c->acks = InsertBatchAckCreate(c->cont_exec->yielded_msgs, &c->nacks);
+	ref = palloc(sizeof(tagged_ref_t));
+	ref->ptr = ExecCopySlotTuple(slot);
 
-		c->ntups++;
-		acks = c->acks;
-		nacks = c->nacks;
-	}
-
-	pts->tup = ExecCopySlotTuple(slot);
-	pts->query_id = c->cont_query->id;
-	pts->nacks = nacks;
-	pts->acks = acks;
-
-	/* Shard by groups or id if no grouping. */
+	/* Shard by groups or name if no grouping. */
 	if (c->hash_fcinfo)
-		pts->hash = hash_group_for_combiner(slot, c->hash, c->hash_fcinfo);
+		ref->tag = hash_group_for_combiner(slot, c->hashfn, c->hash_fcinfo);
 	else
-		pts->hash = c->cv_name_hash;
+		ref->tag = c->name_hash;
 
-	idx = get_combiner_for_group_hash(pts->hash);
-	c->partials[idx] = lappend(c->partials[idx], pts);
+	i = get_combiner_for_group_hash(ref->tag);
+	c->tups_per_combiner[i] = lappend(c->tups_per_combiner[i], ref);
 
 	MemoryContextSwitchTo(old);
 }
@@ -108,7 +89,7 @@ combiner_destroy(DestReceiver *self)
 	CombinerState *c = (CombinerState *) self;
 	if (c->hash_fcinfo)
 		pfree(c->hash_fcinfo);
-	pfree(c->partials);
+	pfree(c->tups_per_combiner);
 	pfree(c);
 }
 
@@ -123,7 +104,7 @@ CreateCombinerDestReceiver(void)
 	self->pub.rDestroy = combiner_destroy;
 	self->pub.mydest = DestCombiner;
 
-	self->partials = palloc0(sizeof(List *) * continuous_query_num_combiners);
+	self->tups_per_combiner = palloc0(sizeof(List *) * continuous_query_num_combiners);
 
 	return (DestReceiver *) self;
 }
@@ -141,7 +122,7 @@ SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery 
 
 	c->cont_exec = exec;
 	c->cont_query = query;
-	c->cv_name_hash = MurmurHash3_64(relname, strlen(relname), MURMUR_SEED);
+	c->name_hash = MurmurHash3_64(relname, strlen(relname), MURMUR_SEED);
 
 	pfree(relname);
 }
@@ -158,7 +139,7 @@ SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash)
 	FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
 
 	fcinfo->flinfo = palloc0(sizeof(FmgrInfo));
-	fcinfo->flinfo->fn_mcxt = c->cont_exec->exec_cxt;
+	fcinfo->flinfo->fn_mcxt = ContQueryBatchContext;
 
 	fmgr_info(hash->funcid, fcinfo->flinfo);
 	fmgr_info_set_expr((Node *) hash, fcinfo->flinfo);
@@ -167,7 +148,22 @@ SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash)
 	fcinfo->nargs = list_length(hash->args);
 
 	c->hash_fcinfo = fcinfo;
-	c->hash = hash;
+	c->hashfn = hash;
+}
+
+static void
+microbatch_send_to_combiner(microbatch_t *mb, int combiner_id)
+{
+	static ContQueryDatabaseMetadata *db_meta = NULL;
+	int recv_id;
+
+	if (!db_meta)
+		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
+
+	recv_id = db_meta->db_procs[continuous_query_num_workers + combiner_id].pzmq_id;
+
+	microbatch_send(mb, recv_id);
+	microbatch_reset(mb);
 }
 
 void
@@ -175,85 +171,50 @@ CombinerDestReceiverFlush(DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
 	int i;
+	int ntups = 0;
+	Size size = 0;
+	microbatch_t *mb;
 
-	if (CombinerReceiveHook)
+	mb = microbatch_new(CombinerTuple, bms_make_singleton(c->cont_query->id), NULL);
+	microbatch_add_acks(mb, c->cont_exec->batch->acks);
+
+	for (i = 0; i < continuous_query_num_combiners; i++)
 	{
-		for (i = 0; i < continuous_query_num_combiners; i++)
+		List *tups = c->tups_per_combiner[i];
+		ListCell *lc;
+
+		if (tups == NIL)
+			continue;
+
+		ntups += list_length(tups);
+
+		foreach(lc, tups)
 		{
-			List *partials = c->partials[i];
-			ListCell *lc;
+			tagged_ref_t *ref = lfirst(lc);
+			HeapTuple tup = (HeapTuple) ref->ptr;
+			uint64 hash = ref->tag;
 
-			if (partials == NIL)
-				continue;
-
-			foreach(lc, partials)
+			if (!microbatch_add_tuple(mb, tup, hash))
 			{
-				PartialTupleState *pts = (PartialTupleState *) lfirst(lc);
-				int len = (sizeof(PartialTupleState) +
-						HEAPTUPLESIZE + pts->tup->t_len +
-						(pts->nacks * sizeof(InsertBatchAck)));
-
-				CombinerReceiveHook(pts, len);
+				microbatch_send_to_combiner(mb, i);
+				microbatch_add_tuple(mb, tup, hash);
 			}
 
-			list_free_deep(partials);
-			c->partials[i] = NIL;
+			size += HEAPTUPLESIZE + tup->t_len;
 		}
-	}
-	else
-	{
-		int ninserted = 0;
-		Size size = 0;
 
-		for (i = 0; i < continuous_query_num_combiners; i++)
+		if (!microbatch_is_empty(mb))
 		{
-			List *partials = c->partials[i];
-			ListCell *lc;
-			ipc_queue *ipcq = NULL;
-
-			if (partials == NIL)
-				continue;
-
-			foreach(lc, partials)
-			{
-				PartialTupleState *pts = (PartialTupleState *) lfirst(lc);
-				int len = (sizeof(PartialTupleState) +
-						HEAPTUPLESIZE + pts->tup->t_len +
-						(pts->nacks * sizeof(InsertBatchAck)));
-
-				if (ipcq == NULL)
-					ipcq = get_combiner_queue_with_lock(get_combiner_for_group_hash(pts->hash));
-
-				Assert(ipcq);
-				ipc_queue_push_nolock(ipcq, pts, len, true);
-
-				size += len;
-				ninserted++;
-			}
-
-			Assert(ipcq);
-			ipc_queue_unlock(ipcq);
-
-			list_free_deep(partials);
-			c->partials[i] = NIL;
+			microbatch_send_to_combiner(mb, i);
+			microbatch_reset(mb);
 		}
 
-		pgstat_increment_cq_write(ninserted, size);
+		list_free_deep(tups);
+		c->tups_per_combiner[i] = NIL;
 	}
 
-	if (c->acks)
-	{
-		int i;
+	microbatch_acks_check_and_exec(mb->acks, microbatch_ack_increment_ctups, ntups);
 
-		for (i = 0; i < c->nacks; i++)
-		{
-			InsertBatchAck *ack = &c->acks[i];
-			InsertBatchIncrementNumCTuples(ack->batch, c->ntups);
-		}
-
-		pfree(c->acks);
-		c->acks = NULL;
-		c->nacks = 0;
-		c->ntups = 0;
-	}
+	microbatch_destroy(mb);
+	pgstat_increment_cq_write(ntups, size);
 }

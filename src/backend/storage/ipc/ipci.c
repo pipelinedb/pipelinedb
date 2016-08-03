@@ -26,7 +26,7 @@
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/ipc/broker.h"
+#include "pipeline/ipc/microbatch.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/bgwriter.h"
@@ -44,7 +44,6 @@
 #include "storage/proc.h"
 #include "storage/procarray.h"
 #include "storage/procsignal.h"
-#include "storage/shm_alloc.h"
 #include "storage/sinvaladt.h"
 #include "storage/spin.h"
 
@@ -151,9 +150,9 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 		addin_request_allowed = false;
 		size = add_size(size, total_addin_request);
 
-		size = add_size(size, ShmemDynAllocSize());
+		/* PipelineDB */
 		size = add_size(size, ContQuerySchedulerShmemSize());
-		size = add_size(size, IPCMessageBrokerShmemSize());
+		size = add_size(size, MicrobatchAckShmemSize());
 
 		/* might as well round it off to a multiple of a typical page size */
 		size = add_size(size, 8192 - (size % 8192));
