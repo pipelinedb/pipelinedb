@@ -170,7 +170,7 @@ pzmq_connect(uint64 id)
 			if (zmq_setsockopt(zsock->sock, ZMQ_IMMEDIATE, &optval, sizeof(int)) != 0)
 				elog(WARNING, "pzmq_connect failed to set immediate: %s", zmq_strerror(errno));
 
-			optval = 5000;
+			optval = -1;
 			if (zmq_setsockopt(zsock->sock, ZMQ_LINGER, &optval, sizeof(int)) != 0)
 				elog(WARNING, "pzmq_connect failed to set linger: %s", zmq_strerror(errno));
 		}
