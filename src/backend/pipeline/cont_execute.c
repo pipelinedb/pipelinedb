@@ -235,14 +235,18 @@ get_query_state(ContExecutor *exec)
 	if (state == NULL)
 	{
 		MemoryContext old_cxt = MemoryContextSwitchTo(exec->cxt);
+
 		state = palloc0(sizeof(ContQueryState));
 		state = init_query_state(exec, state);
-		exec->states[exec->curr_query_id] = state;
+
 		MemoryContextSwitchTo(old_cxt);
+
+		exec->states[exec->curr_query_id] = state;
 
 		if (state->query == NULL)
 		{
 			PopActiveSnapshot();
+			ContExecutorPurgeQuery(exec);
 			return NULL;
 		}
 	}
@@ -255,6 +259,7 @@ get_query_state(ContExecutor *exec)
 		StartTransactionCommand();
 	}
 
+	Assert(exec->states[exec->curr_query_id] == state);
 	return state;
 }
 

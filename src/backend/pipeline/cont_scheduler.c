@@ -439,6 +439,7 @@ cont_bgworker_main(Datum arg)
 
 	run();
 
+	pg_atomic_fetch_add_u64(&MyContQueryProc->db_meta->generation, 1);
 	pzmq_destroy();
 	pgstat_send_cqpurge(0, MyProcPid, proc->type);
 
