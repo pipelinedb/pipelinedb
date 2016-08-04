@@ -133,6 +133,11 @@ def test_restart_recovery(pipeline, clean_db):
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
   assert result['count'] == 2
 
+  # XXX: Wait for all continuous processes to start up. If we insert before all
+  # of them have started, a synchronous insert will fail because the generation
+  # id changes and we'll think a background process might have crashed.
+  time.sleep(1)
+
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
