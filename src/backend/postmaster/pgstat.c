@@ -5600,7 +5600,7 @@ pgstat_db_requested(Oid databaseid)
  * cq_stat_init
  */
 void
-pgstat_init_cqstat(PgStat_StatCQEntry *entry, Oid viewid, pid_t pid)
+pgstat_init_cqstat(volatile PgStat_StatCQEntry *entry, Oid viewid, pid_t pid)
 {
 	MemSet(entry, 0, sizeof(PgStat_StatCQEntryLocal));
 
@@ -6120,7 +6120,7 @@ pgstat_end_cq_batch(uint64 nrows, Size nbytes)
 }
 
 void
-pgstat_start_cq(PgStat_StatCQEntry *entry)
+pgstat_start_cq(volatile PgStat_StatCQEntry *entry)
 {
 	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
 	int i = lentry->avgstat.i;
@@ -6132,7 +6132,7 @@ pgstat_start_cq(PgStat_StatCQEntry *entry)
 }
 
 void
-pgstat_end_cq(PgStat_StatCQEntry *entry)
+pgstat_end_cq(volatile PgStat_StatCQEntry *entry)
 {
 	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
 	int i = lentry->avgstat.i;
