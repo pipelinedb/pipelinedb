@@ -37,13 +37,15 @@ def test_cq_stats(pipeline, clean_db):
     proc_rows = len(proc_result)
     cq_rows = len(cq_result)
 
-    assert proc_rows == num_combiners + num_workers
+    # We are guaranteed to send data to all combiners but only at least 1 worker
+    # since we randomly select which worker to send the data to.
+    assert proc_rows >= num_combiners + 1
+    assert proc_rows <= num_combiners + num_workers
     assert cq_rows == 4
 
     # We get 2000 in case the first two microbatches go to the same worker
     # and the second two go to a different one. In this case, both will flush
     # the first microbatch they see, so 1000 + 1000.
-
     result = pipeline.execute("SELECT * FROM pipeline_query_stats WHERE name = 'test_10_groups' AND type = 'worker'").first()
     assert result['input_rows'] in [2000, 3000, 4000]
 
