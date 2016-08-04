@@ -81,6 +81,7 @@ extern Query *GetContViewQuery(RangeVar *rv);
 extern Query *GetContWorkerQuery(RangeVar *rv);
 extern Query *GetContCombinerQuery(RangeVar *rv);
 
+extern AttrNumber FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrel);
 extern Node *GetSWExpr(RangeVar *rv);
 extern ColumnRef *GetSWTimeColumn(RangeVar *rv);
 extern Interval *GetSWInterval(RangeVar *rv);

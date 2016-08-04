@@ -361,7 +361,7 @@ create_index_on_matrel(IndexStmt *stmt)
 	SelectStmt	*viewstmt;
 	List *tlist;
 	ListCell *lc;
-	bool is_sw = GetGCFlag(cv_name);
+	bool is_sw = IsSWContView(cv_name);
 
 	stmt->relation = GetMatRelName(cv_name);
 	cv = GetContQueryForView(cv_name);

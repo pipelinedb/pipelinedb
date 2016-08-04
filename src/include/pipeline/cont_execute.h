@@ -89,7 +89,7 @@ typedef struct PartialTupleState
 	int nacks;
 	InsertBatchAck *acks;
 
-	uint64 hash;
+	uint64 group_hash;
 	Oid query_id;
 
 	/* For pipelinedb_enterprise */

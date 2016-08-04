@@ -566,7 +566,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	bool saveAllowSystemTableMods;
 	Relation pipeline_query;
 	Relation overlayrel;
-	ContAnalyzeContext *context;
 	ContQuery *cv;
 	Oid cvid;
 	Constraint *pkey;
@@ -577,6 +576,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ColumnDef *new;
 	CreateStreamStmt *create_osrel;
 	Oid osrelid = InvalidOid;
+	AttrNumber sw_attno = InvalidAttrNumber;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -611,7 +611,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	cont_select_sql = deparse_query_def(cont_query);
 	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
 	cont_select->swStepFactor = ((SelectStmt *) stmt->query)->swStepFactor;
-	context = MakeContAnalyzeContext(NULL, cont_select, Worker);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
@@ -715,6 +714,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	else
 		seqrelid = InvalidOid;
 
+	sw_attno = FindSWTimeColumnAttrNo(viewselect, matrelid);
+
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog relation. We don't have relid for
 	 * the continuous view yet, since we need this entry for the DefineView call below to succeed.
@@ -723,8 +724,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, context->is_sw,
-								 false, &cvid);
+	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, sw_attno, false, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
@@ -779,7 +779,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/* Create group look up index and record dependencies */
 	if (IsBinaryUpgrade)
 		set_next_oids_for_lookup_index();
-	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, query, context->is_sw);
+	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, query, AttributeNumberIsValid(sw_attno));
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_pk_index();

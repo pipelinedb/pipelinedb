@@ -90,13 +90,25 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	pts->nacks = nacks;
 	pts->acks = acks;
 
-	/* Shard by groups or id if no grouping. */
 	if (c->hash_fcinfo)
-		pts->hash = hash_group_for_combiner(slot, c->hash, c->hash_fcinfo);
-	else
-		pts->hash = c->cv_name_hash;
+	{
+		uint64 hash;
 
-	idx = get_combiner_for_group_hash(pts->hash);
+		pts->group_hash = slot_hash_group(slot, c->hash, c->hash_fcinfo);
+
+		/*
+		 * We use a different hash function here, which ignores the SW time column, so that all logical groups
+		 * for a SW view go to the same combiner. Otherwise output streams can get messed up.
+		 */
+		hash = slot_hash_group_skip_attr(slot, c->cont_query->sw_attno, c->hash, c->hash_fcinfo);
+		idx = get_combiner_for_group_hash(hash);
+	}
+	else
+	{
+		pts->group_hash = c->cv_name_hash;
+		idx = get_combiner_for_group_hash(pts->group_hash);
+	}
+
 	c->partials[idx] = lappend(c->partials[idx], pts);
 
 	MemoryContextSwitchTo(old);
@@ -222,7 +234,7 @@ CombinerDestReceiverFlush(DestReceiver *self)
 						(pts->nacks * sizeof(InsertBatchAck)));
 
 				if (ipcq == NULL)
-					ipcq = get_combiner_queue_with_lock(get_combiner_for_group_hash(pts->hash));
+					ipcq = get_combiner_queue_with_lock(i);
 
 				Assert(ipcq);
 				ipc_queue_push_nolock(ipcq, pts, len, true);
