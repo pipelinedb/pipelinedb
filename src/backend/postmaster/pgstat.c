@@ -5871,9 +5871,7 @@ pgstat_recv_cqstat(PgStat_MsgCQstat *msg, int len)
 	{
 		cq_stat_recv_global(db->cont_queries, &stats, ptype);
 
-		/*
-		 * Aggregate the process-level stats
-		 */
+		/* Aggregate the process-level stats */
 		existing = pgstat_fetch_stat_cqentry(db->cont_queries, 0, pid, ptype);
 		if (!existing->start_ts)
 			existing->start_ts = stats.start_ts;

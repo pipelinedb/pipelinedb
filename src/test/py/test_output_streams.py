@@ -97,19 +97,17 @@ def test_transforms(pipeline, clean_db):
   Verify that continuous transforms work properly on output streams
   """
   pipeline.create_cv('sw', 'SELECT x::integer, COUNT(*) FROM stream GROUP BY x',
-                     max_age='10 seconds')
+                     max_age='5 seconds')
 
   # Write a row to a stream each time a row goes out of window
-  q = """
-  SELECT CASE WHEN (old).x IS NULL THEN (new).x ELSE (old).x END AS x
-  FROM sw_osrel WHERE old IS NOT NULL AND new IS NULL
-  """
+  q = 'SELECT (old).x AS x FROM sw_osrel WHERE old IS NOT NULL AND new IS NULL'
+
   pipeline.create_stream('oow_stream', x='integer')
   pipeline.create_ct('ct', q, "pipeline_stream_insert('oow_stream')")
   pipeline.create_cv('ct_recv', 'SELECT x FROM oow_stream')
 
   pipeline.insert('stream', ('x',), [(x % 100,) for x in range(10000)])
-  time.sleep(15)
+  time.sleep(7)
 
   rows = list(pipeline.execute('SELECT * FROM ct_recv'))
   assert len(rows) == 100
