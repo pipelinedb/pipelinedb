@@ -307,13 +307,16 @@ ContExecutorStartNextQuery(ContExecutor *exec, int timeout)
 		exec->curr_query = NULL;
 	else
 	{
-		exec->curr_query = get_query_state(exec);
-		if (exec->curr_query)
+		ContQueryState *state = get_query_state(exec);
+		if (state && state->query->active)
 		{
-			debug_query_string = exec->curr_query->query->name->relname;
+			exec->curr_query = state;
+			debug_query_string = state->query->name->relname;
 			MyStatCQEntry = (PgStat_StatCQEntry *) &exec->curr_query->stats;
 			pgstat_start_cq(MyStatCQEntry);
 		}
+		else
+			exec->curr_query = NULL;
 	}
 
 	return exec->curr_query_id;
