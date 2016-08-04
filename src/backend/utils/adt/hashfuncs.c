@@ -16,6 +16,7 @@
 #include "nodes/primnodes.h"
 #include "parser/parse_coerce.h"
 #include "pipeline/miscutils.h"
+#include "pipeline/cont_scheduler.h"
 #include "utils/datum.h"
 #include "utils/hashfuncs.h"
 #include "utils/memutils.h"
@@ -123,8 +124,6 @@ ls_hash_group(PG_FUNCTION_ARGS)
 		hashed = hash_combine(hashed, hash);
 	}
 
-	Assert(tsval > 0);
-
 	/*
 	 * [00:31] - 32 lowest-order bits from hash value
 	 * [31:63] - 32 lowest-order bits of time-based value
@@ -171,12 +170,10 @@ hash_group(PG_FUNCTION_ARGS)
 
 
 /*
- * hash_group_for_combiner
- *
- * Hashes a tuple's group in order to determine which combiner it belongs to
+ * slot_hash_group_skip_attr
  */
 uint64
-hash_group_for_combiner(TupleTableSlot *slot, FuncExpr *hash, FunctionCallInfo fcinfo)
+slot_hash_group_skip_attr(TupleTableSlot *slot, AttrNumber skip_attno, FuncExpr *hash, FunctionCallInfo fcinfo)
 {
 	ListCell *lc;
 	Datum result;
@@ -187,6 +184,13 @@ hash_group_for_combiner(TupleTableSlot *slot, FuncExpr *hash, FunctionCallInfo f
 		AttrNumber attno = ((Var *) lfirst(lc))->varattno;
 		bool isnull;
 		Datum d;
+
+		if (attno == skip_attno)
+		{
+			fcinfo->argnull[i] = true;
+			i++;
+			continue;
+		}
 
 		d = slot_getattr(slot, attno, &isnull);
 		fcinfo->arg[i] = d;

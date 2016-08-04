@@ -89,7 +89,7 @@ DeleteSWExpiredTuples(Oid relid)
 	if (!cvname)
 		goto end;
 
-	if (!GetGCFlag(cvname))
+	if (!IsSWContView(cvname))
 		goto end;
 
 	/* Now we're certain relid is for a SW continuous view's matrel */
@@ -181,7 +181,7 @@ NumSWExpiredTuples(Oid relid)
 	if (!cvname)
 		return 0;
 
-	if (!GetGCFlag(cvname))
+	if (!IsSWContView(cvname))
 		return 0;
 
 	runctx = AllocSetContextCreate(CurrentMemoryContext,

@@ -20,7 +20,7 @@
 
 extern Datum hash_group(PG_FUNCTION_ARGS);
 extern Datum ls_hash_group(PG_FUNCTION_ARGS);
-extern uint64 hash_group_for_combiner(TupleTableSlot *slot, FuncExpr *hash, FunctionCallInfo fcinfo);
-
+extern uint64 slot_hash_group_skip_attr(TupleTableSlot *slot, AttrNumber sw_attno, FuncExpr *hash, FunctionCallInfo fcinfo);
+#define slot_hash_group(slot, hash, fcinfo) slot_hash_group_skip_attr((slot), InvalidAttrNumber, (hash), (fcinfo))
 
 #endif

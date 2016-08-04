@@ -211,7 +211,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, Oid sw_attno, bool adhoc, Oid *pq_id)
+DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int sw_attno, bool adhoc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -247,7 +247,7 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, Oid sw
 	values[Anum_pipeline_query_sw_attno - 1] = ObjectIdGetDatum(sw_attno);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 
-	if (OidIsValid(sw_attno))
+	if (AttributeNumberIsValid(sw_attno))
 		values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(query->swStepFactor);
 	else
 		values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);
@@ -464,7 +464,7 @@ GetSWContinuousViewRangeVar(List *nodes)
 		{
 			RangeVar *rv = lfirst(lc);
 
-			if (IsAContinuousView(rv) && GetGCFlag(rv))
+			if (IsAContinuousView(rv) && IsSWContView(rv))
 				return rv;
 		}
 	}
@@ -543,22 +543,22 @@ RelIdIsForMatRel(Oid relid, Oid *id)
 
 
 /*
- * GetGCFlag
+ * IsSWContView
  */
 bool
-GetGCFlag(RangeVar *name)
+IsSWContView(RangeVar *name)
 {
-	bool gc = false;
+	bool sw = false;
 	HeapTuple tuple = GetPipelineQueryTuple(name);
 
 	if (HeapTupleIsValid(tuple))
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
-		gc = row->sw_attno;
+		sw = AttributeNumberIsValid(row->sw_attno);
 		ReleaseSysCache(tuple);
 	}
 
-	return gc;
+	return sw;
 }
 
 ContQuery *
@@ -605,7 +605,7 @@ GetContQueryForId(Oid id)
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 	cq->sql = deparse_query_def(query);
 
-	if (OidIsValid(row->sw_attno))
+	if (AttributeNumberIsValid(row->sw_attno))
 	{
 		Interval *i;
 
