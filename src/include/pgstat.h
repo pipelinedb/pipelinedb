@@ -1178,7 +1178,7 @@ extern void pgstat_increment_cq_read(uint64 nrows, Size nbytes);
 			MyStatCQEntry->errors += (n); \
 	} while(0)
 
-extern void pgstat_init_cqstat(PgStat_StatCQEntry *entry, Oid viewid, pid_t pid);
+extern void pgstat_init_cqstat(volatile PgStat_StatCQEntry *entry, Oid viewid, pid_t pid);
 extern void pgstat_report_cqstat(bool force);
 extern void pgstat_report_create_drop_cv(bool create);
 extern void pgstat_send_cqpurge(Oid viewid, pid_t pid, ContQueryProcType ptype);
@@ -1187,9 +1187,9 @@ extern HTAB *pgstat_fetch_cqstat_all(void);
 #define pgstat_fetch_stat_global_cqentry(cont_queries, ptype) \
 	pgstat_fetch_stat_cqentry(cont_queries, 0, 0, ptype)
 
-extern void pgstat_start_cq(PgStat_StatCQEntry *entry);
-extern void pgstat_end_cq(PgStat_StatCQEntry *entry);
-extern void pgstat_end_cq_batch(PgStat_StatCQEntry *entry, uint64 nrows, Size nbytes);
+extern void pgstat_start_cq(volatile PgStat_StatCQEntry *entry);
+extern void pgstat_end_cq(volatile PgStat_StatCQEntry *entry);
+extern void pgstat_end_cq_batch(volatile PgStat_StatCQEntry *entry, uint64 nrows, Size nbytes);
 
 typedef struct PgStat_StatStreamEntry
 {
