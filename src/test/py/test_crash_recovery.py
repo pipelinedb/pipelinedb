@@ -2,23 +2,36 @@ from base import pipeline, clean_db
 import os
 import random
 import signal
+from subprocess import check_output, CalledProcessError
 import threading
 import time
 
-from subprocess import check_output, CalledProcessError
 
-def _get_pid(grep_str):
+def _get_pids(grep_str):
   try:
     out = check_output('ps aux | grep "pipeline" | grep "%s"' % grep_str,
                        shell=True).split('\n')
   except CalledProcessError:
-    return -1
+    return []
   out = filter(lambda s: len(s), out)
   if not out:
-    return -1
+    return []
 
-  out = filter(lambda s: len(s), out[0].split(' '))
-  return int(out[1])
+  pids = []
+  for line in out:
+    line = line.split()
+    pid = int(line[1].strip())
+    pids.append(pid)
+
+  return pids
+
+
+def _get_pid(grep_str):
+  pids = _get_pids(grep_str)
+  if not pids:
+    return -1
+  return random.choice(pids)
+
 
 def _kill(pid):
   if pid <= 0:
@@ -26,11 +39,20 @@ def _kill(pid):
   os.kill(pid, signal.SIGTERM)
   return True
 
+
+def get_worker_pids():
+  return _get_pids('worker[0-9] \[pipeline\]')
+
+def get_combiner_pids():
+  return _get_pids('combiner[0-9] \[pipeline\]')
+
 def kill_worker():
   return _kill(_get_pid('worker[0-9] \[pipeline\]'))
 
+
 def kill_combiner():
   return _kill(_get_pid('combiner[0-9] \[pipeline\]'))
+
 
 def test_simple_crash(pipeline, clean_db):
   """
@@ -66,6 +88,7 @@ def test_simple_crash(pipeline, clean_db):
 
   # To ensure that all remaining events in ZMQ queues have been consumed
   time.sleep(2)
+
 
 def test_concurrent_crash(pipeline, clean_db):
   """
@@ -113,6 +136,7 @@ def test_concurrent_crash(pipeline, clean_db):
   # To ensure that all remaining events in ZMQ queues have been consumed
   time.sleep(2)
 
+
 def test_restart_recovery(pipeline, clean_db):
   q = 'SELECT COUNT(*) FROM stream'
   pipeline.create_cv('test_restart_recovery', q)
@@ -143,20 +167,17 @@ def test_restart_recovery(pipeline, clean_db):
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
   assert result['count'] == 4
 
+
 def test_postmaster_worker_recovery(pipeline, clean_db):
   """
-  Verify that the Postmaster only restarts crashed worker processes, and does not
+  Verify that the postmaster only restarts crashed worker processes, and does not
   attempt to start them when the continuous query scheduler should.
   """
-  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'worker\'').first()
-  expected_workers = result['count']
+  expected_workers = len(get_worker_pids())
+  assert expected_workers > 0
 
-  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
-  expected_combiners = result['count']
-
-  q = 'SELECT COUNT(*) FROM stream'
-  pipeline.create_cv('test_pm_recovery', q)
-  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+  expected_combiners = len(get_combiner_pids())
+  assert expected_combiners > 0
 
   def backend():
     try:
@@ -198,8 +219,5 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
   assert pipeline.conn
 
   # Now verify that we have the correct number of CQ worker procs
-  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'worker\'').first()
-  assert result['count'] == expected_workers
-
-  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
-  assert result['count'] == expected_combiners
+  assert expected_workers == len(get_worker_pids())
+  assert expected_combiners == len(get_combiner_pids())
