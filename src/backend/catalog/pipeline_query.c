@@ -211,7 +211,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, bool gc, bool adhoc, Oid *pq_id)
+DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, Oid sw_attno, bool adhoc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -244,10 +244,10 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, bool g
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(matrelid);
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(seqrelid);
-	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
+	values[Anum_pipeline_query_sw_attno - 1] = ObjectIdGetDatum(sw_attno);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 
-	if (gc)
+	if (OidIsValid(sw_attno))
 		values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(query->swStepFactor);
 	else
 		values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);
@@ -294,10 +294,10 @@ UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid)
 
 	MemSet(replace, 0 , sizeof(replace));
 	MemSet(nulls, 0 , sizeof(nulls));
-	replace[Anum_pipeline_query_pkindid - 1] = true;
-	replace[Anum_pipeline_query_lookupindid - 1] = true;
-	values[Anum_pipeline_query_pkindid - 1] = ObjectIdGetDatum(pkindid);
-	values[Anum_pipeline_query_lookupindid - 1] = ObjectIdGetDatum(lookupindid);
+	replace[Anum_pipeline_query_pkidxid - 1] = true;
+	replace[Anum_pipeline_query_lookupidxid - 1] = true;
+	values[Anum_pipeline_query_pkidxid - 1] = ObjectIdGetDatum(pkindid);
+	values[Anum_pipeline_query_lookupidxid - 1] = ObjectIdGetDatum(lookupindid);
 
 	new = heap_modify_tuple(tup, RelationGetDescr(pipeline_query), values, nulls, replace);
 
@@ -328,8 +328,8 @@ UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
 	MemSet(nulls, 0 , sizeof(nulls));
 	replace[Anum_pipeline_query_relid - 1] = true;
 	replace[Anum_pipeline_query_osrelid - 1] = true;
-	replace[Anum_pipeline_query_pkindid - 1] = true;
-	replace[Anum_pipeline_query_lookupindid - 1] = true;
+	replace[Anum_pipeline_query_pkidxid - 1] = true;
+	replace[Anum_pipeline_query_lookupidxid - 1] = true;
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(cvrelid);
 	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 
@@ -554,7 +554,7 @@ GetGCFlag(RangeVar *name)
 	if (HeapTupleIsValid(tuple))
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
-		gc = row->gc;
+		gc = row->sw_attno;
 		ReleaseSysCache(tuple);
 	}
 
@@ -589,6 +589,8 @@ GetContQueryForId(Oid id)
 	cq->matrelid = row->matrelid;
 	cq->active = row->active;
 	cq->osrelid = row->osrelid;
+	cq->pkidxid = row->pkidxid;
+	cq->lookupidxid = row->lookupidxid;
 
 	if (cq->type == CONT_VIEW)
 	{
@@ -603,11 +605,12 @@ GetContQueryForId(Oid id)
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 	cq->sql = deparse_query_def(query);
 
-	if (row->gc)
+	if (OidIsValid(row->sw_attno))
 	{
 		Interval *i;
 
-		cq->is_sw = row->gc;
+		cq->is_sw = true;
+		cq->sw_attno = row->sw_attno;
 		cq->sw_step_factor = query->swStepFactor;
 		i = GetSWInterval(cq->name);
 		cq->sw_interval_ms = 1000 * (int) DatumGetFloat8(
@@ -860,8 +863,8 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, bool a
 	values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(fnoid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(typoid); /* HACK(usmanm): So matrel index works */
 	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(InvalidOid);
-	values[Anum_pipeline_query_pkindid - 1] = ObjectIdGetDatum(InvalidOid);
-	values[Anum_pipeline_query_lookupindid - 1] = ObjectIdGetDatum(InvalidOid);
+	values[Anum_pipeline_query_pkidxid - 1] = ObjectIdGetDatum(InvalidOid);
+	values[Anum_pipeline_query_lookupidxid - 1] = ObjectIdGetDatum(InvalidOid);
 
 	/* This code is copied from trigger.c:CreateTrigger */
 	if (list_length(args))
@@ -911,7 +914,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, bool a
 
 	/* unused */
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(InvalidOid);
-	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(false);
+	values[Anum_pipeline_query_sw_attno - 1] = ObjectIdGetDatum(InvalidOid);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);
 
