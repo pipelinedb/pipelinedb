@@ -40,7 +40,7 @@ def test_disk_spill(pipeline, clean_db):
                               random.randint(0, 1000000)),
                    xrange(1000))
       pipeline.insert('test_vacuum_stream', ('x', 'y'), values)
-      time.sleep(0.01)
+      time.sleep(0.001)
 
   t = threading.Thread(target=insert)
   t.start()
@@ -104,13 +104,15 @@ def test_disk_spill(pipeline, clean_db):
   assert sorted(matrel_rows) != matrel_rows
 
   # TODO(usmanm): This check fails of CircleCI, so skip for now.
-  if os.environ.get('iamcircle') is None:
+  if os.environ.get('CIRCLE_PROJECT_USERNAME') is None:
     # The number of disk pages should also go up and down
     disk_pages = map(lambda s: s.disk_pages, stats)
     assert sorted(disk_pages) != disk_pages
 
   db.execute('ANALYZE')
   before = get_stat()
+
+  time.sleep(5)
 
   # Now vacuum while we're not inserting at all and see if it does a major
   # clean up
