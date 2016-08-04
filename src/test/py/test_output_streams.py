@@ -100,8 +100,7 @@ def test_transforms(pipeline, clean_db):
                      max_age='5 seconds')
 
   # Write a row to a stream each time a row goes out of window
-  q = 'SELECT (old).x AS x FROM sw_osrel WHERE old IS NOT NULL AND new IS NULL'
-
+  q = 'SELECT (old).x FROM sw_osrel WHERE old IS NOT NULL AND new IS NULL'
   pipeline.create_stream('oow_stream', x='integer')
   pipeline.create_ct('ct', q, "pipeline_stream_insert('oow_stream')")
   pipeline.create_cv('ct_recv', 'SELECT x FROM oow_stream')

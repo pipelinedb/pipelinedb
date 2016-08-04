@@ -3714,20 +3714,25 @@ GetSWInterval(RangeVar *rv)
 ColumnRef *
 GetSWTimeColumn(RangeVar *rv)
 {
-	Node *expr = GetSWExpr(rv);
-	ContAnalyzeContext context;
+	ContQuery *view;
+	Relation rel;
+	ColumnRef *col;
+	TupleDesc desc;
+	Form_pg_attribute attr;
 
-	if (expr == NULL)
-		return NULL;
+	view = GetContQueryForView(rv);
+	rel = heap_open(view->matrelid, AccessShareLock);
+	desc = RelationGetDescr(rel);
 
-	context.cols = NIL;
-	context.types = NIL;
+	Assert(AttributeNumberIsValid(view->sw_attno));
+	attr = desc->attrs[view->sw_attno - 1];
 
-	collect_types_and_cols(expr, &context);
+	col = makeNode(ColumnRef);
+	col->fields = list_make1(makeString(pstrdup(NameStr(attr->attname))));
 
-	Assert(list_length(context.cols) == 1);
+	heap_close(rel, AccessShareLock);
 
-	return linitial(context.cols);
+	return col;
 }
 
 ColumnRef *
@@ -3841,7 +3846,7 @@ CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var)
 	rv = makeRangeVar(
 			get_namespace_name(get_rel_namespace(rte->relid)), get_rel_name(rte->relid), -1);
 
-	if (!GetGCFlag(rv))
+	if (!IsSWContView(rv))
 		return NULL;
 
 	sw_cref = GetSWTimeColumn(rv);
@@ -4009,4 +4014,42 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 	}
 	else
 		select->swStepFactor = sliding_window_step_factor;
+}
+
+AttrNumber
+FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid)
+{
+	ContAnalyzeContext context;
+	char *colname;
+	Relation rel;
+	TupleDesc desc;
+	int i;
+	AttrNumber attno = InvalidAttrNumber;
+
+	if (!has_clock_timestamp(viewselect->whereClause, NULL))
+		return attno;
+
+	context.cols = context.types = NIL;
+	collect_types_and_cols(viewselect->whereClause, &context);
+
+	Assert(list_length(context.cols) == 1);
+	colname = FigureColname(linitial(context.cols));
+
+	rel = heap_open(matrelid, AccessShareLock);
+	desc = RelationGetDescr(rel);
+
+	for (i = 0; i < desc->natts; i++)
+	{
+		Form_pg_attribute attr = desc->attrs[i];
+		if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
+		{
+			attno = i + 1;
+			break;
+		}
+	}
+
+	heap_close(rel, AccessShareLock);
+
+	Assert(AttributeNumberIsValid(attno));
+	return attno;
 }

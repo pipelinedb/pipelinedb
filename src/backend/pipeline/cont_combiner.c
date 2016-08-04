@@ -611,7 +611,7 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 	TimestampTz oldest;
 	FunctionCallInfoData hashfcinfo;
 	FmgrInfo flinfo;
-	int64 cv_name_hash;
+	uint64 cv_name_hash;
 	bool close_matrel = matrel == NULL;
 
 	/*
@@ -657,12 +657,12 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 		bool isnew;
 		HeapTupleEntry entry;
 		MemoryContext old;
-		int64 hash;
+		uint64 hash;
 
 		ExecStoreTuple(tup, state->slot, InvalidBuffer, false);
 
 		if (state->hashfunc)
-			hash = hash_group_for_combiner(state->slot, state->hashfunc, &hashfcinfo);
+			hash = slot_hash_group_skip_attr(state->slot, state->base.query->sw_attno, state->hashfunc, &hashfcinfo);
 		else
 			hash = cv_name_hash;
 
@@ -2035,7 +2035,7 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 
 		if (state->hashfunc)
 		{
-			int64 hash =  hash_group_for_combiner(state->slot, state->hashfunc, hashfcinfo);
+			uint64 hash =  slot_hash_group(state->slot, state->hashfunc, hashfcinfo);
 			set_group_hash(state, state->pending_tuples, hash);
 		}
 

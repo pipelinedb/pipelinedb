@@ -63,6 +63,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	int i;
 	tagged_ref_t *ref;
 
+
 	if (!c->cont_query)
 		c->cont_query = c->cont_exec->curr_query->query;
 
@@ -73,11 +74,20 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 
 	/* Shard by groups or name if no grouping. */
 	if (c->hash_fcinfo)
-		ref->tag = hash_group_for_combiner(slot, c->hashfn, c->hash_fcinfo);
-	else
-		ref->tag = c->name_hash;
+	{
+		uint64 hash;
 
-	i = get_combiner_for_group_hash(ref->tag);
+		ref->tag = slot_hash_group(slot, c->hashfn, c->hash_fcinfo);
+
+		hash = slot_hash_group_skip_attr(slot, c->cont_query->sw_attno, c->hashfn, c->hash_fcinfo);
+		i = get_combiner_for_group_hash(hash);
+	}
+	else
+	{
+		ref->tag = c->name_hash;
+		i = get_combiner_for_group_hash(c->name_hash);
+	}
+
 	c->tups_per_combiner[i] = lappend(c->tups_per_combiner[i], ref);
 
 	MemoryContextSwitchTo(old);
