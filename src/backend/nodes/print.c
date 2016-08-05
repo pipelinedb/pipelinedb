@@ -29,6 +29,7 @@
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
 #include "utils/lsyscache.h"
+
 #define SLEEP_ON_ASSERT
 /*
  * debug_segfault
