@@ -124,7 +124,7 @@ test: sw_vacuum
 # ----------
 # Another group of parallel tests
 # ----------
-test: create_cont_view cont_view_sanity cont_window
+test: create_cont_view cont_view_sanity
 
 # ----------
 # Another group of parallel tests

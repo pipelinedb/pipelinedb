@@ -74,7 +74,11 @@ double sliding_window_step_factor;
 #define MIN_USEC (60 * SECOND_USEC)
 #define HOUR_USEC (60 * MIN_USEC)
 #define INTERNAL_COLNAME_PREFIX "_"
-#define IS_DISTINCT_ONLY_AGG(name) (pg_strcasecmp((name), "count") == 0 || pg_strcasecmp((name), "array_agg") == 0)
+#define IS_DISTINCT_ONLY_AGG(name) (pg_strcasecmp((name), "count") == 0 || \
+		pg_strcasecmp((name), "array_agg") == 0)
+#define IS_UNSUPPORTED_AGG(name) (pg_strcasecmp(name, "mode") == 0 || \
+		pg_strcasecmp(name, "xmlagg") == 0 || \
+		pg_strcasecmp(name, "percentile_disc") == 0)
 
 #define MIN_VIEW_MAX_AGE_FACTOR 0.5
 
@@ -111,18 +115,16 @@ replace_node(Node *tree, ReplaceNodeContext *context)
 	 * For now to be conservative we only allow replacing FuncCall and ColumnRefs.
 	 */
 	Assert(IsA(context->old, FuncCall) || IsA(context->old, TypeCast) || IsA(context->old, ColumnRef) ||
-			IsA(context->old, Aggref) || IsA(context->old, WindowFunc) || IsA(context->old, A_Expr));
-	Assert(IsA(context->new, FuncCall) || IsA(context->new, ColumnRef) || IsA(context->new, WindowFunc) ||
-			IsA(context->new, FuncExpr));
+			IsA(context->old, Aggref) || IsA(context->old, A_Expr));
+	Assert(IsA(context->new, FuncCall) || IsA(context->new, ColumnRef) || IsA(context->new, FuncExpr));
 	Assert(IsA(context->old, TypeCast) || IsA(context->old, ColumnRef) ? IsA(context->new, ColumnRef) : true);
 	Assert(IsA(context->old, Aggref) ? IsA(context->new, WindowFunc) || IsA(context->new, FuncExpr) : true);
 	Assert(IsA(context->old, WindowFunc) ? IsA(context->new, FuncExpr) : true);
 	Assert(sizeof(ColumnRef) <= sizeof(A_Expr));
 	Assert(sizeof(ColumnRef) <= sizeof(FuncCall));
 	Assert(sizeof(ColumnRef) <= sizeof(TypeCast));
-	Assert(sizeof(WindowFunc) <= sizeof(WindowFunc));
 	Assert(sizeof(FuncExpr) <= sizeof(Aggref));
-	Assert(sizeof(FuncExpr) <= sizeof(WindowFunc));
+	Assert(sizeof(WindowFunc) <= sizeof(Aggref));
 
 	if (tree == NULL)
 		return false;
@@ -947,6 +949,12 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 				errmsg("continuous queries don't support HAVING clauses"),
 				errhint("Try using a WHERE clause on the continuous view instead.")));
 
+	collect_windows(select, context);
+	if (context->windows)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("continuous queries don't support WINDOW functions")));
+
 	/* recurse for any sub-SELECTs */
 	if (list_length(select->fromClause) == 1 && IsA(linitial(select->fromClause), RangeSubselect))
 	{
@@ -1144,11 +1152,7 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 		FuncCall *func = (FuncCall *) lfirst(lc);
 		char *name = NameListToString(func->funcname);
 
-
-		/* mode and xmlagg are not supported */
-		if (pg_strcasecmp(name, "mode") == 0 ||
-				pg_strcasecmp(name, "xmlagg") == 0 ||
-				pg_strcasecmp(name, "percentile_disc") == 0)
+		if (IS_UNSUPPORTED_AGG(name))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					errmsg("continuous queries don't support \"%s\" aggregate", name),
@@ -1161,66 +1165,16 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 					parser_errposition(context->pstate, func->location)));
 	}
 
-	/* Ensure that any WINDOWs are legal */
-	collect_windows(select, context);
-	if (list_length(context->windows))
-	{
-		WindowDef *window = (WindowDef *) linitial(context->windows);
-
-		/*
-		 * All WINDOW definitions must be *equivalent*. We allow different framing, but ordering and
-		 * partitioning must be identical.
-		 */
-		if (list_length(context->windows) > 1)
-		{
-			int i;
-
-			for (i = 1; i < list_length(context->windows); i++)
-			{
-				WindowDef *window2 = (WindowDef *) list_nth(context->windows, i);
-				if (!equal(window->partitionClause, window2->partitionClause))
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							errmsg("all WINDOWs in a continuous query must have identical PARTITION BY clauses"),
-							parser_errposition(context->pstate, window2->location)));
-				if (!equal(window->orderClause, window2->orderClause))
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							errmsg("all WINDOWs in a continuous query must have identical ORDER BY clauses"),
-							parser_errposition(context->pstate, window2->location)));
-			}
-		}
-
-		if (list_length(window->orderClause) > 1)
-		{
-			/* Can't ORDER BY multiple columns. */
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					errmsg("continuous queries allow only a single ORDER BY expression in WINDOWs"),
-					parser_errposition(context->pstate, window->location)));
-		}
-		else if (list_length(window->orderClause) == 1)
-		{
-			SortBy *sort = (SortBy *) linitial(window->orderClause);
-
-			if (!validate_window_timestamp_expr(sort->node, context))
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						errmsg("ORDER BY expression for WINDOWs must evaluate to datetime type category values"),
-						parser_errposition(context->pstate, sort->location)));
-		}
-	}
-
-	/* Ensure that the sliding window is legal */
+	/* Ensure that the sliding window is legal, if present */
 	context->expr = NULL;
 	if (find_clock_timestamp_expr(select->whereClause, context))
 		validate_clock_timestamp_expr(select, context->expr, context);
 
-	/* DISTINCT now allowed for windows */
-	if ((context->is_sw || context->windows) && select->distinctClause)
+	/* DISTINCT now allowed for sliding windows */
+	if (context->is_sw && select->distinctClause)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				errmsg("continuous queries don't allow a DISTINCT clause with windows")));
+				errmsg("sliding window continuous queries don't allow a DISTINCT clause")));
 
 	/* Pass it to the analyzer to make sure all function definitions, etc. are correct */
 	parse_analyze(copyObject(node), sql, NULL, 0);
@@ -1379,7 +1333,7 @@ apply_transout(Expr *expr, Oid aggoid)
 	Expr *arg;
 	ReplaceNodeContext context;
 
-	Assert(IsA(expr, Aggref) || IsA(expr, WindowFunc));
+	Assert(IsA(expr, Aggref));
 
 	GetCombineInfo(aggoid, &combinefn, &transoutfn, &combineinfn, &statetype);
 
@@ -1434,12 +1388,9 @@ validate_agg(Node *node)
 	HeapTuple combtup;
 	Form_pg_aggregate aggform;
 
-	Assert(IsA(node, Aggref) || IsA(node, WindowFunc));
+	Assert(IsA(node, Aggref));
 
-	if (IsA(node, Aggref))
-		aggfnoid = ((Aggref *) node)->aggfnoid;
-	else
-		aggfnoid = ((WindowFunc *) node)->winfnoid;
+	aggfnoid = ((Aggref *) node)->aggfnoid;
 
 	aggtup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(aggfnoid));
 	Assert(HeapTupleIsValid(aggtup));
@@ -2298,99 +2249,26 @@ hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContex
 }
 
 static void
-proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContext *context)
+proj_and_group_for_sliding_window(SelectStmt *proc, SelectStmt *view, ContAnalyzeContext *context)
 {
 	Node *time;
 	A_Expr *sw_expr = NULL;
-	ListCell *lc;
 	ColumnRef *cref;
+	ReplaceNodeContext cxt;
 
-	if (!context->is_sw)
-	{
-		WindowDef *window = (WindowDef *) linitial(context->windows);
-		ListCell *lc;
-		List *partitionClause = NIL;
+	context->expr = NULL;
+	find_clock_timestamp_expr(proc->whereClause, context);
 
-		/*
-		 * All WINDOWs share the same PARTITION BY clause, so we only need to do hoisting
-		 * for the first one.
-		 */
-		foreach(lc, window->partitionClause)
-		{
-			Node *node = (Node *) lfirst(lc);
-			ColumnRef *cref = hoist_node(&proc->targetList, node, context);
-			ListCell *lc2;
-			bool found = false;
+	Assert(context->expr && IsA(context->expr, A_Expr));
 
-			foreach(lc2, proc->groupClause)
-			{
-				if (equal(node, lfirst(lc2)))
-				{
-					found = true;
-					break;
-				}
-			}
+	sw_expr = (A_Expr *) context->expr;
 
-			if (!found)
-			{
-				if (context->proc_type == Combiner)
-					proc->groupClause = lappend(proc->groupClause, cref);
-				else
-					proc->groupClause = lappend(proc->groupClause, node);
-			}
-
-			partitionClause = lappend(partitionClause, cref);
-		}
-
-		/*
-		 * Since WINDOWs are applied to the view overlay, we replace their paritionClause
-		 * with one that references the appropriate columns in the matrel.
-		 */
-		foreach(lc, context->windows)
-		{
-			window = (WindowDef *) lfirst(lc);
-			window->partitionClause = partitionClause;
-		}
-
-		/* No ORDER BY? Add an explicit ORDER BY over arrival_timestamp. */
-		if (list_length(window->orderClause) == 0)
-		{
-			ColumnRef *cref = makeNode(ColumnRef);
-			SortBy *sort = makeNode(SortBy);
-			RangeVar *stream = (RangeVar *) linitial(context->streams);
-
-			if (stream->alias)
-				cref->fields = list_make2(makeString(stream->alias->aliasname), makeString(ARRIVAL_TIMESTAMP));
-			else if (stream->schemaname)
-				cref->fields = list_make3(makeString(stream->schemaname), makeString(stream->relname), makeString(ARRIVAL_TIMESTAMP));
-			else
-				cref->fields = list_make2(makeString(stream->relname), makeString(ARRIVAL_TIMESTAMP));
-
-			sort->node = (Node *) cref;
-
-			window->orderClause = list_make1(sort);
-		}
-
-		Assert(list_length(window->orderClause) == 1);
-
-		time = ((SortBy *) linitial(window->orderClause))->node;
-	}
+	if (has_clock_timestamp(sw_expr->lexpr, NULL))
+		time = sw_expr->rexpr;
 	else
-	{
-		context->expr = NULL;
-		find_clock_timestamp_expr(proc->whereClause, context);
+		time = sw_expr->lexpr;
 
-		Assert(context->expr && IsA(context->expr, A_Expr));
-
-		sw_expr = (A_Expr *) context->expr;
-
-		if (has_clock_timestamp(sw_expr->lexpr, NULL))
-			time = sw_expr->rexpr;
-		else
-			time = sw_expr->lexpr;
-
-		time = copyObject(time);
-	}
+	time = copyObject(time);
 
 	context->cols = NIL;
 	collect_types_and_cols(time, context);
@@ -2406,27 +2284,13 @@ proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContex
 
 	context->hoisted_name = NULL;
 
-	if (context->is_sw)
-	{
-		ReplaceNodeContext cxt;
+	view->whereClause = copyObject(sw_expr);
 
-		view->whereClause = copyObject(sw_expr);
+	cxt.old = time;
+	cxt.new = (Node *) cref;
+	cxt.size = sizeof(ColumnRef);
 
-		cxt.old = time;
-		cxt.new = (Node *) cref;
-		cxt.size = sizeof(ColumnRef);
-
-		replace_node(view->whereClause, &cxt);
-	}
-
-	/* Change all ORDER BY for WINDOWs to point to the matrel truncated timestamp column */
-	foreach(lc, context->windows)
-	{
-		WindowDef *w = lfirst(lc);
-		SortBy *sort = makeNode(SortBy);
-		sort->node = (Node *) cref;
-		w->orderClause = list_make1(sort);
-	}
+	replace_node(view->whereClause, &cxt);
 }
 
 /*
@@ -2455,7 +2319,6 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	collect_rels_and_streams((Node *) proc->fromClause, context);
 	collect_types_and_cols((Node *) proc, context);
 	collect_agg_funcs((Node *) proc->targetList, context);
-	collect_windows(proc, context);
 	name_res_targets(proc->targetList);
 
 	tl_len = list_length(proc->targetList);
@@ -2472,11 +2335,11 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	/*
 	 * The view combines for WINDOWs or if there is a grouping/aggregation on a sliding window.
 	 */
-	context->view_combines = (list_length(context->windows) ||
-			(context->is_sw && (list_length(context->funcs) || list_length(stmt->groupClause))));
+	context->view_combines = (context->is_sw &&
+			(list_length(context->funcs) || list_length(stmt->groupClause)));
 
-	if (context->is_sw || context->view_combines)
-		proj_and_group_for_windows(proc, view, context);
+	if (context->is_sw)
+		proj_and_group_for_sliding_window(proc, view, context);
 
 	/*
 	 * We can't use the standard hypothetical/ordered set aggregate functions because
@@ -2604,9 +2467,6 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 			tmp_list = lappend(tmp_list, res);
 			view->targetList = lappend(view->targetList, matrel_res);
 
-			/* WINDOWs are applied to the overlay view. */
-			agg->over = NULL;
-
 			continue;
 		}
 
@@ -2677,9 +2537,6 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 				cxt.size = sizeof(ColumnRef);
 
 			replace_node(res_val, &cxt);
-
-			/* WINDOWs are applied to the overlay view only. */
-			fcall->over = NULL;
 		}
 
 		/*
@@ -2698,18 +2555,6 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	}
 
 	proc->targetList = tmp_list;
-
-	/*
-	 * Copy over the WINDOW clause from the worker statement to the
-	 * view statement. These WINDOW clauses must be already modified so that
-	 * they reference appropriate columns in the matrel rather than expressions
-	 * from the continuous view target list.
-	 */
-	if (list_length(context->windows))
-	{
-		view->windowClause = proc->windowClause;
-		proc->windowClause = NIL;
-	}
 
 	/* Copy over worker limit/offsets to the view */
 	view->limitCount = proc->limitCount;
@@ -2731,7 +2576,10 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 		context->funcs = NIL;
 		collect_agg_funcs((Node *) proc->targetList, context);
 		foreach(lc, context->funcs)
-			((FuncCall *) lfirst(lc))->agg_filter = NULL;
+		{
+			FuncCall *fn = lfirst(lc);
+			fn->agg_filter = NULL;
+		}
 	}
 
 	if (viewptr)
@@ -2841,7 +2689,7 @@ attr_to_aggs(AttrNumber attr, List *tlist)
 
 	n = linitial(l);
 
-	Assert(IsA(n, Aggref) || IsA(n, WindowFunc));
+	Assert(IsA(n, Aggref));
 
 	return n;
 }
@@ -2882,20 +2730,10 @@ make_combine_args(ParseState *pstate, Oid combineinfn, Node *arg)
 static void
 extract_agg_final_info(Node *n, Oid *aggfn, Oid *type, Oid *finaltype)
 {
-	if (IsA(n, Aggref))
-	{
-		Aggref *agg = (Aggref *) n;
-		*aggfn = agg->aggfnoid;
-		*type = agg->aggtype;
-		*finaltype = agg->aggfinaltype;
-	}
-	else if (IsA(n, WindowFunc))
-	{
-		WindowFunc *wfunc = (WindowFunc *) n;
-		*aggfn = wfunc->winfnoid;
-		*type = wfunc->wintype;
-		*finaltype = wfunc->winfinaltype;
-	}
+	Aggref *agg = (Aggref *) n;
+	*aggfn = agg->aggfnoid;
+	*type = agg->aggtype;
+	*finaltype = agg->aggfinaltype;
 }
 
 static Query *
@@ -3007,8 +2845,9 @@ make_combine_agg_for_viewdef(ParseState *pstate, Oid cvid, Var *var,
 	}
 	else
 	{
-		((WindowFunc *) result)->args = args;
-		transformWindowFuncCall(pstate, (WindowFunc *) result, over);
+		WindowFunc *win = (WindowFunc *) result;
+		win->args = args;
+		transformWindowFuncCall(pstate, win, over);
 	}
 
 	return (Node *) result;
@@ -3295,7 +3134,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	 */
 	target = (TargetEntry *) list_nth(cont_qry->targetList, cvatt - 1);
 
-	if (IsA(target->expr, Aggref) || IsA(target->expr, WindowFunc))
+	if (IsA(target->expr, Aggref))
 	{
 		Oid fnoid = InvalidOid;
 		Oid type = InvalidOid;
