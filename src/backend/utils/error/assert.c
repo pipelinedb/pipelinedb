@@ -22,7 +22,7 @@
 #include "execinfo.h"
 #include "miscadmin.h"
 #include "tcop/tcopprot.h"
-
+#define SLEEP_ON_ASSERT
 /*
  * ExceptionalCondition - Handles the failure of an Assert()
  */

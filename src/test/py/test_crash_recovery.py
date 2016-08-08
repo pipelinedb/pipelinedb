@@ -1,27 +1,37 @@
 from base import pipeline, clean_db
-import getpass
 import os
-import psycopg2
 import random
 import signal
+from subprocess import check_output, CalledProcessError
 import threading
 import time
 
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from subprocess import check_output, CalledProcessError
 
-def _get_pid(grep_str):
+def _get_pids(grep_str):
   try:
     out = check_output('ps aux | grep "pipeline" | grep "%s"' % grep_str,
                        shell=True).split('\n')
   except CalledProcessError:
-    return -1
+    return []
   out = filter(lambda s: len(s), out)
   if not out:
-    return -1
+    return []
 
-  out = filter(lambda s: len(s), out[0].split(' '))
-  return int(out[1])
+  pids = []
+  for line in out:
+    line = line.split()
+    pid = int(line[1].strip())
+    pids.append(pid)
+
+  return pids
+
+
+def _get_pid(grep_str):
+  pids = _get_pids(grep_str)
+  if not pids:
+    return -1
+  return random.choice(pids)
+
 
 def _kill(pid):
   if pid <= 0:
@@ -29,11 +39,20 @@ def _kill(pid):
   os.kill(pid, signal.SIGTERM)
   return True
 
+
+def get_worker_pids():
+  return _get_pids('worker[0-9] \[pipeline\]')
+
+def get_combiner_pids():
+  return _get_pids('combiner[0-9] \[pipeline\]')
+
 def kill_worker():
   return _kill(_get_pid('worker[0-9] \[pipeline\]'))
 
+
 def kill_combiner():
   return _kill(_get_pid('combiner[0-9] \[pipeline\]'))
+
 
 def test_simple_crash(pipeline, clean_db):
   """
@@ -47,9 +66,7 @@ def test_simple_crash(pipeline, clean_db):
   result = pipeline.execute('SELECT * FROM test_simple_crash').first()
   assert result['count'] == 2
 
-  # We can potentially lose one batch for a worker or combiner crash.
-  # In our case each batch adds a count 2 and since we're adding 3 batches
-  # we should either see an increment from the previous count of 4 or 6.
+  # This batch can potentially get lost.
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
   assert kill_worker()
@@ -57,8 +74,9 @@ def test_simple_crash(pipeline, clean_db):
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
   result = pipeline.execute('SELECT * FROM test_simple_crash').first()
-  assert result['count'] == 6
+  assert result['count'] in [4, 6]
 
+  # This batch can potentially get lost.
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
   assert kill_combiner()
@@ -66,7 +84,11 @@ def test_simple_crash(pipeline, clean_db):
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
   result = pipeline.execute('SELECT * FROM test_simple_crash').first()
-  assert result['count'] == 10
+  assert result['count'] in [6, 8, 10]
+
+  # To ensure that all remaining events in ZMQ queues have been consumed
+  time.sleep(2)
+
 
 def test_concurrent_crash(pipeline, clean_db):
   """
@@ -74,14 +96,15 @@ def test_concurrent_crash(pipeline, clean_db):
   """
   q = 'SELECT COUNT(*) FROM stream'
   pipeline.create_cv('test_concurrent_crash', q)
+  batch_size = 25000
 
   desc = [0, 0, False]
-  vals = [(1, )] * 25000
+  vals = [(1, )] * batch_size
 
   def insert():
     while True:
         pipeline.insert('stream', ['x'], vals)
-        desc[1] += 25000
+        desc[1] += batch_size
         if desc[2]:
           break
 
@@ -107,7 +130,12 @@ def test_concurrent_crash(pipeline, clean_db):
   result = pipeline.execute('SELECT count FROM test_concurrent_crash').first()
 
   assert num_killed > 0
-  assert result['count'] >= num_inserted
+  assert result['count'] <= num_inserted
+  assert result['count'] >= num_inserted - (num_killed * batch_size)
+
+  # To ensure that all remaining events in ZMQ queues have been consumed
+  time.sleep(2)
+
 
 def test_restart_recovery(pipeline, clean_db):
   q = 'SELECT COUNT(*) FROM stream'
@@ -129,25 +157,27 @@ def test_restart_recovery(pipeline, clean_db):
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
   assert result['count'] == 2
 
+  # XXX: Wait for all continuous processes to start up. If we insert before all
+  # of them have started, a synchronous insert will fail because the generation
+  # id changes and we'll think a background process might have crashed.
+  time.sleep(1)
+
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
   assert result['count'] == 4
 
+
 def test_postmaster_worker_recovery(pipeline, clean_db):
   """
-  Verify that the Postmaster only restarts crashed worker processes, and does not
+  Verify that the postmaster only restarts crashed worker processes, and does not
   attempt to start them when the continuous query scheduler should.
   """
-  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'worker\'').first()
-  expected_workers = result['count']
+  expected_workers = len(get_worker_pids())
+  assert expected_workers > 0
 
-  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
-  expected_combiners = result['count']
-
-  q = 'SELECT COUNT(*) FROM stream'
-  pipeline.create_cv('test_pm_recovery', q)
-  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+  expected_combiners = len(get_combiner_pids())
+  assert expected_combiners > 0
 
   def backend():
     try:
@@ -177,7 +207,7 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
   attempts = 0
   pipeline.conn = None
 
-  while attempts < 15:
+  while attempts < 20:
     try:
       pipeline.conn = pipeline.engine.connect()
       break
@@ -189,8 +219,5 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
   assert pipeline.conn
 
   # Now verify that we have the correct number of CQ worker procs
-  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'worker\'').first()
-  assert result['count'] == expected_workers
-
-  result = pipeline.execute('SELECT COUNT(*) FROM pipeline_proc_stats WHERE type = \'combiner\'').first()
-  assert result['count'] == expected_combiners
+  assert expected_workers == len(get_worker_pids())
+  assert expected_combiners == len(get_combiner_pids())

@@ -106,7 +106,6 @@
 #include "pg_getopt.h"
 #include "pgstat.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/ipc/broker.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"
@@ -252,8 +251,7 @@ static pid_t StartupPID = 0,
 			PgArchPID = 0,
 			PgStatPID = 0,
 			SysLoggerPID = 0,
-			ContQuerySchedulerPID = 0,
-			IPCMessageBrokerPID = 0;
+			ContQuerySchedulerPID = 0;
 
 /* Startup process's status */
 typedef enum
@@ -1758,9 +1756,6 @@ ServerLoop(void)
 		if (ContQuerySchedulerPID == 0 && pmState == PM_RUN)
 			ContQuerySchedulerPID = StartContQueryScheduler();
 
-		if (IPCMessageBrokerPID == 0 && pmState == PM_RUN)
-			IPCMessageBrokerPID = StartIPCMessageBroker();
-
 		/* If we have lost the stats collector, try to start a new one */
 		if (PgStatPID == 0 && pmState == PM_RUN)
 			PgStatPID = pgstat_start();
@@ -2583,8 +2578,6 @@ pmdie(SIGNAL_ARGS)
 					signal_child(WalWriterPID, SIGTERM);
 				if (ContQuerySchedulerPID != 0)
 					signal_child(ContQuerySchedulerPID, SIGTERM);
-				if (IPCMessageBrokerPID != 0)
-					signal_child(IPCMessageBrokerPID, SIGTERM);
 
 				/*
 				 * If we're in recovery, we can't kill the startup process
@@ -2658,8 +2651,6 @@ pmdie(SIGNAL_ARGS)
 					signal_child(WalWriterPID, SIGTERM);
 				if (ContQuerySchedulerPID != 0)
 					signal_child(ContQuerySchedulerPID, SIGTERM);
-				if (IPCMessageBrokerPID != 0)
-					signal_child(IPCMessageBrokerPID, SIGTERM);
 				pmState = PM_WAIT_BACKENDS;
 			}
 
@@ -2948,15 +2939,6 @@ reaper(SIGNAL_ARGS)
 			if (!EXIT_STATUS_0(exitstatus))
 				HandleChildCrash(pid, exitstatus,
 								 _("continuous query scheduler process"));
-			continue;
-		}
-
-		if (pid == IPCMessageBrokerPID)
-		{
-			IPCMessageBrokerPID = 0;
-			if (!EXIT_STATUS_0(exitstatus))
-				HandleChildCrash(pid, exitstatus,
-								 _("ipc message broker process"));
 			continue;
 		}
 
@@ -3448,15 +3430,6 @@ HandleChildCrash(int pid, int exitstatus, const char *procname)
 		signal_child(ContQuerySchedulerPID, (SendStop ? SIGSTOP : SIGQUIT));
 	}
 
-	if (pid == IPCMessageBrokerPID)
-		IPCMessageBrokerPID = 0;
-	else if (IPCMessageBrokerPID != 0 && take_action)
-	{
-		ereport(DEBUG2,
-				(errmsg_internal("sending %s to process %d", (SendStop ? "SIGSTOP" : "SIGQUIT"), (int) IPCMessageBrokerPID)));
-		signal_child(IPCMessageBrokerPID, (SendStop ? SIGSTOP : SIGQUIT));
-	}
-
 	/*
 	 * Force a power-cycle of the pgarch process too.  (This isn't absolutely
 	 * necessary, but it seems like a good idea for robustness, and it
@@ -3932,8 +3905,6 @@ TerminateChildren(int signal)
 		signal_child(PgStatPID, signal);
 	if (ContQuerySchedulerPID != 0)
 		signal_child(ContQuerySchedulerPID, signal);
-	if (IPCMessageBrokerPID != 0)
-		signal_child(IPCMessageBrokerPID, signal);
 }
 
 /*

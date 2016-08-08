@@ -9,6 +9,8 @@ dependencies:
     - sudo apt-get update
     - sudo apt-get install check
     - sudo apt-get install libncurses-dev
+    - wget https://gist.githubusercontent.com/usmanm/32a54a6b0f1f29d7737f86e29f837afa/raw/2edeaccc5af03fbb4e4564ded84cfe20a4060499/install_zmq.sh
+    - sudo sh install_zmq.sh
 
   post:
     - ./configure CFLAGS="-O0" --prefix=/home/ubuntu/pdb --enable-cassert

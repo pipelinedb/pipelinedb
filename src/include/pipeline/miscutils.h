@@ -18,6 +18,12 @@
 #include "storage/dsm.h"
 #include "utils/typcache.h"
 
+typedef struct tagged_ref_t
+{
+	void *ptr;
+	uint64 tag;
+} tagged_ref_t;
+
 #define ptr_difference(begin, end) ((void *) (((char *) end) - ((char *) begin)))
 #define ptr_offset(begin, offset) ((void *) (((char *) begin) + ((uintptr_t) offset)))
 
@@ -32,7 +38,6 @@ extern void SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *at
 extern void DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf);
 
 /* for backends / bg workers to yield cpu */
-extern int SetNicePriority(void);
-extern int SetDefaultPriority(void);
+extern int set_nice_priority(void);
 
 #endif   /* MISCUTILS_H */

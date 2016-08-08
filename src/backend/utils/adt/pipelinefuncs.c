@@ -1012,58 +1012,11 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 	SRF_RETURN_DONE(funcctx);
 }
 
-static void
-ipc_queue_wait_till_empty(ipc_queue *ipcq)
-{
-	while (true)
-	{
-		if (ipc_queue_is_empty(ipcq))
-			break;
-		pg_usleep(5000);
-	}
-}
-
 /*
  * pipeline_flush
  */
 Datum
 pipeline_flush(PG_FUNCTION_ARGS)
 {
-	int i;
-	ipc_queue *wqueues[continuous_query_num_workers * 2];
-	ipc_queue *cqueues[continuous_query_num_combiners];
-	ipc_queue *ipcq;
-
-	for (i = 0; i < continuous_query_num_workers; i++)
-	{
-		ipcq = get_worker_queue_with_lock(i, false);
-		ipc_queue_wait_till_empty(ipcq);
-		wqueues[i + continuous_query_num_workers] = ipcq;
-
-		ipcq = get_worker_queue_with_lock(i, true);
-		ipc_queue_wait_till_empty(ipcq);
-		wqueues[i] = ipcq;
-	}
-
-	for (i = 0; i < continuous_query_num_combiners; i++)
-	{
-		ipcq = get_combiner_queue_with_lock(i);
-		ipc_queue_wait_till_empty(ipcq);
-		cqueues[i] = ipcq;
-	}
-
-	/*
-	 * At this point there is no more data in continuous process queues, however, we must still wait
-	 * for commit_interval for everything to get flushed to disk. After that we can unlock all the
-	 * queues.
-	 */
-	pg_usleep(continuous_query_commit_interval * 1000 * 2);
-
-	for (i = 0; i < continuous_query_num_combiners; i++)
-		ipc_queue_unlock(cqueues[i]);
-
-	for (i = 0; i < continuous_query_num_workers * 2; i++)
-		ipc_queue_unlock(wqueues[i]);
-
 	PG_RETURN_BOOL(true);
 }

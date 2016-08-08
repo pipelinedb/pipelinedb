@@ -92,6 +92,8 @@
 										 * failed statistics collector; in
 										 * seconds. */
 
+#define PIPELINE_STAT_INTERVAL  1000    /* Minimum time between stats file updates for continuous procs */
+
 #define PGSTAT_POLL_LOOP_COUNT	(PGSTAT_MAX_WAIT_TIME / PGSTAT_RETRY_DELAY)
 #define PGSTAT_INQ_LOOP_COUNT	(PGSTAT_INQ_INTERVAL / PGSTAT_RETRY_DELAY)
 
@@ -135,8 +137,8 @@ PgStat_MsgBgWriter BgWriterStats;
  * If we're a CQ process, this tracks our various runtime stats
  */
 static PgStat_StatCQEntryLocal MyProcStatCQEntryLocal;
-volatile PgStat_StatCQEntry *MyProcStatCQEntry = (PgStat_StatCQEntry *) &MyProcStatCQEntryLocal;
-volatile PgStat_StatCQEntry *MyStatCQEntry = NULL;
+PgStat_StatCQEntry *MyProcStatCQEntry = (PgStat_StatCQEntry *) &MyProcStatCQEntryLocal;
+PgStat_StatCQEntry *MyStatCQEntry = NULL;
 
 /* ----------
  * Local data
@@ -5603,7 +5605,7 @@ pgstat_init_cqstat(volatile PgStat_StatCQEntry *entry, Oid viewid, pid_t pid)
 	MemSet(entry, 0, sizeof(PgStat_StatCQEntryLocal));
 
 	entry->start_ts = GetCurrentTimestamp();
-	entry->last_report = GetCurrentTimestamp();
+	entry->last_report = 0;
 
 	SetStatCQEntryViewId(entry->key, viewid);
 	SetStatCQEntryProcPid(entry->key, pid);
@@ -5710,7 +5712,7 @@ cq_stat_report_entry(volatile PgStat_StatCQEntry *entry)
 	 * If we consumed no tuples, saw no errors, and didn't create/drop any CVs,
 	 * there's no need to send a msg to the stats collector.
 	 */
-	if (entry->input_rows == 0 && entry->errors == 0 &&
+	if (entry->input_rows == 0 && entry->output_rows == 0 && entry->errors == 0 &&
 			entry->cv_create == 0 && entry->cv_drop == 0)
 		return;
 
@@ -5774,7 +5776,8 @@ pgstat_report_cqstat(bool force)
 	 * msec since we last sent one, or the caller wants to force stats out.
 	 */
 	if (!force && MyStatCQEntry &&
-			!TimestampDifferenceExceeds(MyStatCQEntry->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
+			!TimestampDifferenceExceeds(MyStatCQEntry->last_report, GetCurrentTimestamp(),
+					PIPELINE_STAT_INTERVAL))
 		return;
 
 	cq_stat_report_entry(MyProcStatCQEntry);
@@ -5868,9 +5871,7 @@ pgstat_recv_cqstat(PgStat_MsgCQstat *msg, int len)
 	{
 		cq_stat_recv_global(db->cont_queries, &stats, ptype);
 
-		/*
-		 * Aggregate the process-level stats
-		 */
+		/* Aggregate the process-level stats */
 		existing = pgstat_fetch_stat_cqentry(db->cont_queries, 0, pid, ptype);
 		if (!existing->start_ts)
 			existing->start_ts = stats.start_ts;
@@ -6096,11 +6097,11 @@ pgstat_increment_cq_read(uint64 nrows, Size nbytes)
 }
 
 void
-pgstat_end_cq_batch(volatile PgStat_StatCQEntry *entry, uint64 nrows, Size nbytes)
+pgstat_end_cq_batch(uint64 nrows, Size nbytes)
 {
 	FILE *fp = fopen("/proc/self/statm", "r");
 	uint64 mem = 0;
-	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) entry;
+	PgStat_StatCQEntryLocal *lentry = (PgStat_StatCQEntryLocal *) MyProcStatCQEntry;
 
 	if (fp)
 	{
@@ -6115,7 +6116,7 @@ pgstat_end_cq_batch(volatile PgStat_StatCQEntry *entry, uint64 nrows, Size nbyte
 	lentry->avgstat.tuples[lentry->avgstat.i] += nrows;
 	lentry->avgstat.bytes[lentry->avgstat.i] += nbytes;
 
-	pgstat_end_cq(entry);
+	pgstat_end_cq(MyProcStatCQEntry);
 }
 
 void
