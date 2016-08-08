@@ -1,3 +1,8 @@
+CREATE STREAM stream_cqminmax (
+  key text, i8 int8, i4 int4, i2 int2, o oid, f8 float8, f4 float4,
+  d date, t time, tz timetz, m money, ts timestamp, tstz timestamptz,
+  ts0 timestamp, ts1 timestamp, txt text, n numeric, a int[]);
+
 CREATE CONTINUOUS VIEW test_min_max AS SELECT
 key::text,
 min(i8::int8) AS i8min, max(i8) AS i8max,
@@ -41,4 +46,4 @@ SELECT key, dmin, dmax, tmin, tmax, tzmin, tzmax, mmin FROM test_min_max ORDER B
 SELECT key, mmax, tsmin, tsmax, tstzmin, tstzmax, intervalmin FROM test_min_max ORDER BY key;
 SELECT key, intervalmax, txtmin, txtmax, nmin, nmax, amin, amax FROM test_min_max ORDER BY key;
 
-DROP CONTINUOUS VIEW test_min_max;
+DROP CONTINUOUS VIEW stream_cqminmax CASCADE;

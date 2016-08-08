@@ -55,10 +55,10 @@ typedef struct ContAnalyzeContext
 #define IsMatRelFinalize(proname) (pg_strcasecmp(NameStr(proname), MATREL_FINALIZE) == 0)
 
 extern bool collect_rels_and_streams(Node *node, ContAnalyzeContext *context);
-extern bool collect_types_and_cols(Node *node, ContAnalyzeContext *context);
+extern bool collect_cols(Node *node, ContAnalyzeContext *context);
 
 extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType type);
-extern void CreateInferredStreams(SelectStmt *stmt);
+extern void RewriteFromClause(SelectStmt *stmt);
 extern void MakeSelectsContinuous(SelectStmt *stmt);
 extern void ValidateSubselect(Node *subquery, char *objdesc);
 extern void ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql);

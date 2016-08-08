@@ -6,6 +6,7 @@ def test_hll_count_distinct(pipeline, clean_db):
     """
     Verify that streaming COUNT(DISTINCT) works
     """
+    pipeline.create_stream('stream', x='int')
     q = 'SELECT COUNT(DISTINCT x::integer) FROM stream'
     pipeline.create_cv('test_count_distinct', q)
 

@@ -465,6 +465,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	sis->nbatches = 1;
 	sis->start_generation = 0;
 	sis->db_meta = NULL;
+	sis->desc = RelationGetDescr(rel);
 
 	if (eflags & REENTRANT_STREAM_INSERT)
 	{
@@ -472,38 +473,12 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 
 		sis->ack = NULL;
 		acks = linitial(fdw_private);
-
-		if (list_length(fdw_private) == 2)
-		{
-			Assert(IsContQueryWorkerProcess());
-			sis->desc = lsecond(fdw_private);
-		}
-		else
-		{
-			Assert(!is_inferred_stream_relation(rel));
-			sis->desc = RelationGetDescr(rel);
-		}
 	}
 	else
 	{
 		sis->db_meta = GetMyContQueryDatabaseMetadata();
 		sis->start_generation = pg_atomic_read_u64(&sis->db_meta->generation);
 		sis->ack = microbatch_ack_new(synchronous_stream_insert ? SYNC : ASYNC);
-
-		if (is_inferred_stream_relation(rel))
-		{
-			void *incoming;
-
-			Assert(fdw_private);
-			incoming = linitial(fdw_private);
-
-			if (IsA(incoming, List))
-				sis->desc = ExecTypeFromTL(incoming, false);
-			else
-				sis->desc = (TupleDesc) incoming;
-		}
-		else
-			sis->desc = RelationGetDescr(rel);
 	}
 
 	if (!bms_is_empty(queries))

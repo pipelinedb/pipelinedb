@@ -10,6 +10,8 @@ def test_prepared_inserts(pipeline, clean_db):
   """
   Verify that we can PREPARE and EXECUTE an INSERT statement
   """
+  pipeline.create_stream('stream', x='int', y='float8')
+
   conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
   db = conn.cursor()
   db.execute('CREATE CONTINUOUS VIEW test_prepared0 AS SELECT x::integer, COUNT(*), sum(y::integer) FROM stream GROUP BY x')
@@ -48,6 +50,7 @@ def test_prepared_extended(pipeline, clean_db):
   Verify that we can write to streams using the extended protocol. This test
   shells out to a binary because psycopg2 doesn't use the extended protocol.
   """
+  pipeline.create_stream('extended_stream', x='int', y='int', z='int')
   q = """
   SELECT COUNT(x::integer) AS x, COUNT(y::integer) AS y, COUNT(z::integer) AS z FROM extended_stream
   """

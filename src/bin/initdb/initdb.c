@@ -2263,7 +2263,7 @@ load_pipelinedb(void)
 {
 	PG_CMD_DECL;
 
-	fputs(_("loading PipelineDB... "), stdout);
+	fputs(_("loading PipelineDB ... "), stdout);
 	fflush(stdout);
 
 	snprintf(cmd, sizeof(cmd),

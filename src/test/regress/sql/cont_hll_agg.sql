@@ -1,3 +1,5 @@
+CREATE STREAM test_hll_agg_stream (x int, y text, k text);
+
 CREATE CONTINUOUS VIEW test_hll_agg0 AS SELECT k::text, hll_agg(x::integer) FROM test_hll_agg_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_hll_agg1 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(y::text)) FROM test_hll_agg_stream GROUP BY k;
 
@@ -121,9 +123,4 @@ SELECT * FROM test_sw_hll_agg2 ORDER BY k;
 SELECT hll_print(combine(hll_agg)) FROM test_hll_agg0;
 SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg0;
 
-DROP CONTINUOUS VIEW test_hll_agg0;
-DROP CONTINUOUS VIEW test_hll_agg1;
-DROP CONTINUOUS VIEW test_hll_agg2;
-DROP CONTINUOUS VIEW test_sw_hll_agg0;
-DROP CONTINUOUS VIEW test_sw_hll_agg1;
-DROP CONTINUOUS VIEW test_sw_hll_agg2;
+DROP STREAM test_hll_agg_stream CASCADE;

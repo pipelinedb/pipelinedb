@@ -1,3 +1,5 @@
+CREATE STREAM test_uc_stream (k text, x int, s text, y int);
+
 -- Verify some validation
 CREATE CONTINUOUS VIEW test_uc_validation AS SELECT k::text, avg(x::integer) FROM test_uc_stream GROUP BY k;
 CREATE TABLE test_uc_table (v numeric);
@@ -36,6 +38,7 @@ dense_rank('20') WITHIN GROUP (ORDER BY s) AS expr0,
 regr_r2(x::integer, y::integer) AS expr1
 FROM test_uc_stream GROUP BY s;
 
+CREATE STREAM test_uc_systat_stream (t timestamptz, queue_length int);
 CREATE CONTINUOUS VIEW test_uc2 AS
 SELECT date_trunc('minute', t::timestamptz) AS minute,
          avg(queue_length::integer) AS load_avg
@@ -237,6 +240,7 @@ DROP TABLE test_uc_table1;
 DROP VIEW test_uc2_view;
 DROP CONTINUOUS VIEW test_uc2;
 
+CREATE STREAM sysstat (t timestamptz, queue_length float);
 CREATE CONTINUOUS VIEW over_1m AS
 SELECT date_trunc('minute', t::timestamptz) AS minute, avg(queue_length::float) AS load_avg
 FROM sysstat
@@ -252,3 +256,6 @@ WINDOW w AS (ORDER BY minute DESC ROWS 4 PRECEDING);
 
 DROP VIEW over_5m;
 DROP CONTINUOUS VIEW over_1m;
+DROP STREAM test_uc_stream CASCADE;
+DROP STREAM test_uc_systat_stream CASCADE;
+DROP STREAM sysstat CASCADE;

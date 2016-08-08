@@ -67,6 +67,8 @@ CREATE AGGREGATE combinable_avg(integer)
 SELECT count(*) FROM pipeline_combine WHERE combinefn IN
   (SELECT oid FROM pg_proc WHERE proname='combinable_avg_combine');
 
+CREATE STREAM cca_stream (x int, y int);
+
 -- Verify that the matrel looks ok
 CREATE CONTINUOUS VIEW test_combinable_aggs_v0 AS
 	SELECT x::integer, combinable_avg(y::integer) FROM cca_stream GROUP BY x;
@@ -98,6 +100,7 @@ DROP FUNCTION combinable_avg_transout(integer[]);
 DROP FUNCTION combinable_avg_combinein(json);
 
 DROP CONTINUOUS VIEW test_combinable_aggs_v0;
+DROP STREAM cca_stream CASCADE;
 
 DROP AGGREGATE combinable_avg (integer);
 
@@ -178,6 +181,7 @@ SELECT test_set_agg(x) FROM cont_plpgsql_t;
 
 SELECT set_merge(test_set_agg(x), set_add(NULL::text[], 'z')) FROM cont_plpgsql_t;
 
+CREATE STREAM cont_plpgsql_s (x text);
 CREATE CONTINUOUS VIEW cont_plpgsql_cv AS SELECT test_set_agg(x::text) FROM cont_plpgsql_s;
 
 INSERT INTO cont_plpgsql_s (x) VALUES ('a'), ('b'), ('c');
@@ -190,6 +194,7 @@ SELECT unnest(test_set_agg) FROM cont_plpgsql_cv ORDER BY unnest;
 
 DROP TABLE cont_plpgsql_t;
 DROP CONTINUOUS VIEW cont_plpgsql_cv;
+DROP STREAM cont_plpgsql_s CASCADE;
 
 DROP AGGREGATE test_set_agg (anyelement);
 DROP FUNCTION set_add (anyarray, anyelement);

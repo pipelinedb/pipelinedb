@@ -1,6 +1,7 @@
 CREATE DATABASE pipeline_stats_db;
 \c pipeline_stats_db
 
+CREATE STREAM test_pipeline_stats_stream (x int);
 CREATE CONTINUOUS VIEW test_pipeline_stats0 AS SELECT COUNT(*) FROM test_pipeline_stats_stream;
 
 SELECT pg_sleep(2);

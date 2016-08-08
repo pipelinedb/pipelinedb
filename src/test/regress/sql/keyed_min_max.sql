@@ -23,6 +23,7 @@ SELECT keyed_max(NULL::text, x) FROM generate_series(1, 1000) AS x;
 SELECT keyed_max(NULL::float8, NULL::float8) FROM generate_series(1, 1000) AS x;
 SELECT keyed_max('192.168.0.1'::inet, -x) FROM generate_series(1, 1000) AS x;
 
+CREATE STREAM keyed_min_max_stream (x int, y numeric, z text, t text);
 CREATE CONTINUOUS VIEW keyed_min_max0 AS
 	SELECT x::integer % 10 AS g, keyed_min(x, y::numeric), keyed_max(x, y),
 		 keyed_min(z::text, substring(t::text, 1, 2)) AS keyed_min_text
@@ -35,7 +36,9 @@ INSERT INTO keyed_min_max_stream (x, y, z, t) SELECT x, -x AS y, x AS z, x + 1 A
 SELECT * FROM keyed_min_max0 ORDER BY g;
 
 DROP CONTINUOUS VIEW keyed_min_max0;
+DROP STREAM keyed_min_max_stream CASCADE;
 
+CREATE STREAM keyed_min_max_stream (ts timestamptz, x text);
 CREATE CONTINUOUS VIEW keyed_min_max1 AS
 	SELECT keyed_min(ts::timestamptz, x::text) AS first_value, keyed_max(ts, x) AS last_value
 FROM keyed_min_max_stream;
@@ -50,4 +53,4 @@ INSERT INTO keyed_min_max_stream (ts, x) VALUES ('2015-10-31 00:05:00', '6000000
 SELECT * FROM keyed_min_max1;
 
 DROP CONTINUOUS VIEW keyed_min_max1;
-
+DROP STREAM keyed_min_max_stream CASCADE;

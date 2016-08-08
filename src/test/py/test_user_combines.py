@@ -11,6 +11,7 @@ def test_simple_aggs(pipeline, clean_db):
     avg(x), sum(y::float8), count(*) FROM stream GROUP BY k;
     """
     desc = ('x', 'y')
+    pipeline.create_stream('stream', x='int', y='float8')
     pipeline.create_cv('test_simple_aggs', q)
     pipeline.create_table('test_simple_aggs_t', x='integer', y='float8')
 
@@ -41,6 +42,7 @@ def test_object_aggs(pipeline, clean_db):
     json_agg(x), json_object_agg(x, y::float8), string_agg(s::text, \' :: \')FROM stream GROUP BY k;
     """
     desc = ('x', 'y', 's')
+    pipeline.create_stream('stream', x='int', y='float8', s='text')
     pipeline.create_cv('test_object_aggs', q)
     pipeline.create_table('test_object_aggs_t', x='integer', y='float8', s='text')
 
@@ -78,6 +80,7 @@ def test_stats_aggs(pipeline, clean_db):
     regr_sxx(x, y::float8), stddev(x) FROM stream GROUP BY k;
     """
     desc = ('x', 'y')
+    pipeline.create_stream('stream', x='int', y='float8')
     pipeline.create_cv('test_stats_aggs', q)
     pipeline.create_table('test_stats_aggs_t', x='integer', y='float8')
 
@@ -116,6 +119,7 @@ def test_hypothetical_set_aggs(pipeline, clean_db):
     FROM stream GROUP BY k
     """
     desc = ('x', 'y')
+    pipeline.create_stream('stream', x='int', y='float8')
     pipeline.create_cv('test_hs_aggs', q)
     pipeline.create_table('test_hs_aggs_t', x='integer', y='float8')
 
@@ -153,6 +157,7 @@ def test_hll_distinct(pipeline, clean_db):
     SELECT x::integer %% 10 AS k, COUNT(DISTINCT x) AS count FROM stream GROUP BY k
     """
     desc = ('x', 'y')
+    pipeline.create_stream('stream', x='int', y='float8')
     pipeline.create_cv('test_hll_distinct', q)
     pipeline.create_table('test_hll_distinct_t', x='integer', y='float8')
 
@@ -189,6 +194,7 @@ def test_windowed_combine(pipeline, clean_db):
     SELECT x::integer, avg(y::integer) FROM stream GROUP BY x
     """
     desc = ('x', 'y')
+    pipeline.create_stream('stream', x='int', y='float8')
     pipeline.create_cv('test_windowed_combine', q)
     pipeline.create_table('test_windowed_combine_t', x='integer', y='integer')
 
@@ -226,6 +232,7 @@ def test_combine_in_view(pipeline, clean_db):
     SELECT x::integer, avg(y::integer) FROM stream GROUP BY x
     """
     desc = ('x', 'y')
+    pipeline.create_stream('stream', x='int', y='float8')
     pipeline.create_cv('test_combine_view', q)
     pipeline.execute('CREATE VIEW v AS SELECT combine(avg) FROM test_combine_view')
 

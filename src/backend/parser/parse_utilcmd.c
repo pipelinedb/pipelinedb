@@ -776,12 +776,6 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 				 errmsg("\"%s\" is not a table, view, materialized view, composite type, or foreign table",
 						RelationGetRelationName(relation))));
 
-	if (is_inferred_stream_relation(relation))
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is an inferred stream and cannot be specified in the LIKE clause",
-						 RelationGetRelationName(relation))));
-
 	cancel_parser_errposition_callback(&pcbstate);
 
 	/*

@@ -1,4 +1,5 @@
 CREATE TABLESPACE testspace LOCATION '@testtablespace@';
+CREATE STREAM test_tablespace_stream (x int);
 CREATE CONTINUOUS VIEW test_tablespace TABLESPACE testspace AS SELECT COUNT(*) FROM test_tablespace_stream;
 SELECT tablespace FROM pg_tables WHERE tablename='test_tablespace_mrel';
  tablespace 
@@ -8,5 +9,6 @@ SELECT tablespace FROM pg_tables WHERE tablename='test_tablespace_mrel';
 
 DROP TABLESPACE testspace;
 ERROR:  tablespace "testspace" is not empty
-DROP CONTINUOUS VIEW test_tablespace;
+DROP STREAM test_tablespace_stream CASCADE;
+NOTICE:  drop cascades to continuous view test_tablespace
 DROP TABLESPACE testspace;

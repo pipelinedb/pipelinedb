@@ -7,6 +7,9 @@ def test_stream_buffer(pipeline, clean_db):
   Run CQs which take different times to process an event in the stream buffer
   and each stream is read by a disjoint set of CQs.
   """
+  pipeline.create_stream('stream1', x='int', string='text')
+  pipeline.create_stream('stream2', x='int', string='text')
+
   pipeline.create_cv('test_sbuf_1',
                      'SELECT x::int FROM stream1')
   pipeline.create_cv('test_sbuf_2',

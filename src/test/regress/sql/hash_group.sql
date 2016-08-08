@@ -12,6 +12,7 @@ SELECT date_trunc('second', '2015-01-01'::timestamp) + i * interval '1 second' A
 FROM generate_series(1, 100) AS i ORDER BY key;
 
 -- Ensure that hash index is created and cannot be dropped
+CREATE STREAM hash_group_stream (x int, y timestamptz);
 CREATE CONTINUOUS VIEW hash_group AS SELECT x::int, COUNT(*) FROM hash_group_stream GROUP BY x;
 CREATE CONTINUOUS VIEW ls_hash_group1 AS SELECT x::int, minute(y::timestamptz), COUNT(*) FROM hash_group_stream WHERE ( arrival_timestamp > clock_timestamp() - interval '5 hour' ) GROUP BY x, minute;
 CREATE CONTINUOUS VIEW ls_hash_group2 AS SELECT x::int, y::timestamptz, COUNT(*) FROM hash_group_stream GROUP BY x, y;
@@ -24,6 +25,4 @@ DROP INDEX hash_group_mrel_expr_idx;
 DROP INDEX ls_hash_group1_mrel_expr_idx;
 DROP INDEX ls_hash_group2_mrel_expr_idx;
 
-DROP CONTINUOUS VIEW hash_group;
-DROP CONTINUOUS VIEW ls_hash_group1;
-DROP CONTINUOUS VIEW ls_hash_group2;
+DROP STREAM hash_group_stream CASCADE;

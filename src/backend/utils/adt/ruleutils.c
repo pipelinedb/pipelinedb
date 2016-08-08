@@ -6178,15 +6178,7 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 		appendStringInfoChar(buf, '.');
 	}
 	if (attname)
-	{
 		appendStringInfoString(buf, quote_identifier(attname));
-		/* Always print explicit type cast for inferred stream columns */
-		if (is_inferred_stream_rte(rte))
-			appendStringInfo(buf, "::%s",
-					format_type_with_typemod(var->vartype,
-							var->vartypmod == InvalidOid ? -1 : var->vartypmod));
-
-	}
 	else
 	{
 		appendStringInfoChar(buf, '*');

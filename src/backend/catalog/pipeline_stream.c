@@ -55,84 +55,7 @@ typedef struct StreamTargetsEntry
 {
 	Oid relid; /* hash key --- MUST BE FIRST */
 	Bitmapset *queries;
-	bool inferred;
-	HTAB *colstotypes;
-	TupleDesc desc;
 } StreamTargetsEntry;
-
-/*
- * infer_tupledesc
- *
- * Given a stream, infer a TupleDesc based on the supertype of all
- * the casted types for each of the stream's columns
- */
-static void
-infer_tupledesc(StreamTargetsEntry *stream)
-{
-	HASH_SEQ_STATUS status;
-	StreamColumnsEntry *entry;
-	List *names = NIL;
-	List *types = NIL;
-	List *mods = NIL;
-	List *collations = NIL;
-	Const *preferred = makeConst(NUMERIC_OID, -1, 0, -1, 0, true, false);
-
-	hash_seq_init(&status, stream->colstotypes);
-	while ((entry = (StreamColumnsEntry *) hash_seq_search(&status)) != NULL)
-	{
-		char err[128];
-		Oid supertype;
-		char category;
-		bool typispreferred;
-		Oid t = exprType(linitial(entry->types));
-
-		/*
-		 * If there are any numeric types in our target types, we prepend a float8
-		 * to the list of types to select from, as that is our preferred type when
-		 * there is any ambiguity about how to interpret numeric types.
-		 */
-		get_type_category_preferred(t, &category, &typispreferred);
-		if (category == TYPCATEGORY_NUMERIC)
-			entry->types = lcons(preferred, entry->types);
-
-		sprintf(err, "type conflict with stream \"%s\":", get_rel_name(stream->relid));
-		supertype = select_common_type(NULL, entry->types, err, NULL);
-
-		names = lappend(names, makeString(entry->name));
-		types = lappend_int(types, supertype);
-		mods = lappend_int(mods, -1);
-		collations = lappend_int(collations, 0);
-	}
-
-	stream->desc = BuildDescFromLists(names, types, mods, collations);
-}
-
-/*
- * add_coltypes
- *
- * Given a target list, add the types the entries to a list of types seen
- * for the same column across all streams
- */
-static void
-add_coltypes(StreamTargetsEntry *stream, List *targetlist)
-{
-	ListCell *lc;
-
-	foreach(lc, targetlist)
-	{
-		bool found;
-		TypeCast *tc = (TypeCast *) lfirst(lc);
-		StreamColumnsEntry *entry;
-		char *name = FigureColname((Node *) tc);
-
-		entry = (StreamColumnsEntry *)  hash_search(stream->colstotypes, name, HASH_ENTER, &found);
-
-		if (!found)
-			entry->types = NIL;
-
-		entry->types = lappend(entry->types, tc);
-	}
-}
 
 /*
  * streams_to_meta
@@ -152,7 +75,6 @@ streams_to_meta(Relation pipeline_query)
 	HTAB *targets;
 	StreamTargetsEntry *entry;
 	HeapTuple tup;
-	HASH_SEQ_STATUS status;
 
 	MemSet(&ctl, 0, sizeof(ctl));
 
@@ -184,14 +106,12 @@ streams_to_meta(Relation pipeline_query)
 
 		context = MakeContAnalyzeContext(make_parsestate(NULL), sel, Worker);
 		collect_rels_and_streams((Node *) sel->fromClause, context);
-		collect_types_and_cols((Node *) sel, context);
 
 		foreach(lc, context->streams)
 		{
 			RangeVar *rv = (RangeVar *) lfirst(lc);
 			bool found;
 			Oid key;
-			bool is_inferred = false;
 
 			key = RangeVarGetRelid(rv, NoLock, false);
 			entry = (StreamTargetsEntry *) hash_search(targets, &key, HASH_ENTER, &found);
@@ -204,19 +124,7 @@ streams_to_meta(Relation pipeline_query)
 				colsctl.keysize = NAMEDATALEN;
 				colsctl.entrysize = sizeof(StreamColumnsEntry);
 
-				entry->colstotypes = hash_create(rv->relname, 8, &colsctl, HASH_ELEM);
 				entry->queries = NULL;
-				entry->desc = NULL;
-				entry->inferred = false;
-			}
-
-			RangeVarIsForStream(rv, &is_inferred);
-
-			/* if it's a typed stream, we can just set the descriptor right away */
-			if (is_inferred)
-			{
-				entry->inferred = true;
-				add_coltypes(entry, context->types);
 			}
 
 			if (row->active)
@@ -225,16 +133,6 @@ streams_to_meta(Relation pipeline_query)
 	}
 
 	heap_endscan(scandesc);
-
-	/*
-	 * Now we have enough information to infer a TupleDesc for each stream
-	 */
-	hash_seq_init(&status, targets);
-	while ((entry = (StreamTargetsEntry *) hash_seq_search(&status)) != NULL)
-	{
-		if (entry->inferred)
-			infer_tupledesc(entry);
-	}
 
 	return targets;
 }
@@ -250,28 +148,6 @@ is_stream_relid(Oid relid)
 	return result;
 }
 
-bool
-is_inferred_stream_relation(Relation rel)
-{
-	return rel->rd_rel->relkind == RELKIND_STREAM && IsInferredStream((rel)->rd_id);
-}
-
-bool
-is_inferred_stream_rte(RangeTblEntry *rte)
-{
-	Relation rel;
-	bool result;
-
-	if (rte->relkind != RELKIND_STREAM)
-		return false;
-
-	rel = heap_open(rte->relid, NoLock);
-	result = is_inferred_stream_relation(rel);
-
-	heap_close(rel, NoLock);
-
-	return result;
-}
 
 /*
  * Deserialize a TupleDesc from a bytea *
@@ -397,13 +273,6 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(entry->relid));
 		Assert(HeapTupleIsValid(tup));
 
-		/* Only update desc for inferred streams */
-		if (entry->inferred)
-		{
-			values[Anum_pipeline_stream_desc - 1] = PointerGetDatum(PackTupleDesc(entry->desc));
-			replaces[Anum_pipeline_stream_desc - 1] = true;
-		}
-
 		newtup = heap_modify_tuple(tup, pipeline_stream->rd_att,
 				values, nulls, replaces);
 
@@ -467,8 +336,6 @@ mark_nonexistent_streams(Relation pipeline_stream, List *keys)
 
 			replaces[Anum_pipeline_stream_queries - 1] = true;
 			nulls[Anum_pipeline_stream_queries - 1] = true;
-			replaces[Anum_pipeline_stream_desc - 1] = true;
-			nulls[Anum_pipeline_stream_desc - 1] = true;
 
 			newtup = heap_modify_tuple(tup, pipeline_stream->rd_att,
 					values, nulls, replaces);
@@ -614,140 +481,19 @@ GetLocalStreamReaders(Oid relid)
 	return readers;
 }
 
-TupleDesc
-GetInferredStreamTupleDesc(Oid relid, List *colnames)
-{
-	HeapTuple tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(relid));
-	bool isnull;
-	Datum raw;
-	bytea *bytes;
-	TupleDesc desc;
-	ListCell *lc;
-	List *attlist = NIL;
-	Form_pg_attribute *attrs;
-	AttrNumber attno = InvalidAttrNumber;
-	int i;
-	MemoryContext old;
-	TupleDesc result;
-
-	Assert(HeapTupleIsValid(tup));
-	Assert(((Form_pipeline_stream) GETSTRUCT(tup))->inferred);
-
-	raw = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_desc, &isnull);
-
-	if (isnull)
-	{
-		ReleaseSysCache(tup);
-		return NULL;
-	}
-
-	/* Relcache entries are expected to live in CacheMemoryContext */
-	old = MemoryContextSwitchTo(CacheMemoryContext);
-
-	bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(raw));
-	desc = UnpackTupleDesc(bytes);
-
-	ReleaseSysCache(tup);
-
-	/*
-	 * Now we need to build a new TupleDesc based on the subset and
-	 * ordering of the columns we're interested in
-	 */
-	attno = 1;
-	foreach(lc, colnames)
-	{
-		char *colname;
-		int i;
-
-		if (IsA(lfirst(lc), ResTarget))
-			colname = ((ResTarget *) lfirst(lc))->name;
-		else if (IsA(lfirst(lc), String))
-			colname = strVal((Value *) lfirst(lc));
-		else
-			elog(ERROR, "unexpected node found in insert columns list: %d", nodeTag(lfirst(lc)));
-
-		for (i=0; i<desc->natts; i++)
-		{
-			/*
-			 * It's ok if no matching column was found in the all-streams TupleDesc,
-			 * it just means nothing is reading that column and we can ignore it
-			 */
-			if (pg_strcasecmp(colname, NameStr(desc->attrs[i]->attname)) == 0)
-			{
-				Form_pg_attribute att = (Form_pg_attribute) desc->attrs[i];
-				att->attnum = attno++;
-				attlist = lappend(attlist, att);
-				break;
-			}
-		}
-	}
-
-	attrs = palloc0(list_length(attlist) * sizeof(Form_pg_attribute));
-	i = 0;
-	foreach(lc, attlist)
-		attrs[i++] = (Form_pg_attribute) lfirst(lc);
-
-	result = CreateTupleDesc(list_length(attlist), false, attrs);
-	result->tdrefcount = 1;
-
-	MemoryContextSwitchTo(old);
-
-	return result;
-}
-
 /*
  * RangeVarIsForStream
  */
 bool
-RangeVarIsForStream(RangeVar *rv, bool *is_inferred)
+RangeVarIsForStream(RangeVar *rv)
 {
-	Relation rel = heap_openrv_extended(rv, NoLock, true);
-	Oid relid;
-	HeapTuple tup;
-	Form_pipeline_stream row;
-	bool is_stream = false;
-
-	if (rel == NULL)
-		return false;
-
-	relid = rel->rd_id;
+	Relation rel = heap_openrv(rv, NoLock);
+	bool is_stream;
 
 	is_stream = rel->rd_rel->relkind == RELKIND_STREAM;
 	heap_close(rel, NoLock);
 
-	if (!is_stream)
-		return false;
-
-	if (is_inferred)
-	{
-		tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(relid));
-		Assert(HeapTupleIsValid(tup));
-		row = (Form_pipeline_stream) GETSTRUCT(tup);
-		*is_inferred = row->inferred;
-		ReleaseSysCache(tup);
-	}
-
-	return true;
-}
-
-/*
- * IsInferredStream
- */
-bool
-IsInferredStream(Oid relid)
-{
-	HeapTuple tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(relid));
-	Form_pipeline_stream row;
-	bool is_inferred;
-
-	if (!HeapTupleIsValid(tup))
-		return false;
-
-	row = (Form_pipeline_stream) GETSTRUCT(tup);
-	is_inferred = row->inferred;
-	ReleaseSysCache(tup);
-
-	return is_inferred;
+	return is_stream;
 }
 
 /*
@@ -768,32 +514,6 @@ bool IsStream(Oid relid)
 }
 
 /*
- * CreateInferredStream
- */
-void
-CreateInferredStream(RangeVar *rv)
-{
-	ObjectAddress address;
-	CreateStreamStmt *stmt;
-
-	stmt = makeNode(CreateStreamStmt);
-	stmt->ft.base.relation = rv;
-	stmt->ft.base.tableElts = NIL;
-	stmt->ft.base.if_not_exists = false;
-	stmt->is_inferred = true;
-	stmt->ft.servername = PIPELINE_STREAM_SERVER;
-
-	transformCreateStreamStmt(stmt);
-
-	address = DefineRelation((CreateStmt *) stmt,
-							RELKIND_STREAM,
-							InvalidOid, NULL);
-
-	CreateForeignTable((CreateForeignTableStmt *) stmt, address.objectId);
-	CreatePipelineStreamEntry(stmt, address.objectId);
-}
-
-/*
  * CreatePipelineStreamCatalogEntry
  */
 void
@@ -810,9 +530,7 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	MemSet(nulls, 0, sizeof(nulls));
 
 	values[Anum_pipeline_stream_relid - 1] = ObjectIdGetDatum(relid);
-	values[Anum_pipeline_stream_inferred - 1] = BoolGetDatum(stmt->is_inferred);
 	nulls[Anum_pipeline_stream_queries - 1] = true;
-	nulls[Anum_pipeline_stream_desc - 1] = true;
 
 	tup = heap_form_tuple(pipeline_stream->rd_att, values, nulls);
 	simple_heap_insert(pipeline_stream, tup);
@@ -859,107 +577,4 @@ RemovePipelineStreamById(Oid oid)
 	CommandCounterIncrement();
 
 	heap_close(pipeline_stream, RowExclusiveLock);
-}
-
-/*
- * prepare_inferred_stream_for_insert
- */
-void
-prepare_inferred_stream_for_insert(Relation rel, Query *query)
-{
-	List *colnames = NIL;
-	ListCell *lc;
-	AttrNumber att = 1;
-	TupleDesc desc;
-
-	foreach(lc, query->targetList)
-	{
-		TargetEntry *te;
-
-		if (!IsA(lfirst(lc), TargetEntry))
-			elog(ERROR, "unexpected node type found in insert target list: %d", nodeTag(lfirst(lc)));
-
-		te = (TargetEntry *) lfirst(lc);
-
-		if (!te->resname)
-			elog(ERROR, "no column name given for attribute %d", att);
-
-		colnames = lappend(colnames, makeString(te->resname));
-		att++;
-	}
-
-	if (!colnames || list_length(colnames) != list_length(query->targetList))
-		elog(ERROR, "unable to infer schema from the insert target list");
-
-	desc = GetInferredStreamTupleDesc(rel->rd_id, colnames);
-	rel->rd_att = desc;
-	rel->rd_rel->relnatts = desc->natts;
-
-	/* We need to mark any columns that nothing is read as junk */
-	foreach(lc, query->targetList)
-	{
-		TargetEntry *te = (TargetEntry *) lfirst(lc);
-		int i;
-		bool found = false;
-
-		for (i = 0; i < desc->natts; i++)
-		{
-			if (pg_strcasecmp(te->resname, NameStr(desc->attrs[i]->attname)) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-
-		if (!found)
-			te->resjunk = true;
-	}
-}
-
-/*
- * inferred_stream_open
- */
-Relation
-inferred_stream_open(ParseState *pstate, Relation rel)
-{
-	TupleDesc desc = NULL;
-	Relation stream_rel;
-
-	Assert(is_inferred_stream_relation(rel));
-
-	if (pstate->p_cont_view_context)
-		desc = parserGetStreamDescr(rel->rd_id, pstate->p_cont_view_context);
-	else if (pstate->p_ins_cols)
-		desc = GetInferredStreamTupleDesc(rel->rd_id, pstate->p_ins_cols);
-	else
-		desc = CreateTupleDesc(0, false, NULL);
-
-	/* Create a dummy Relation for the inferred stream */
-	stream_rel = (Relation) palloc0(sizeof(RelationData));
-	stream_rel->rd_att = desc;
-	stream_rel->rd_rel = palloc0(sizeof(FormData_pg_class));
-	stream_rel->rd_rel->relnatts = desc->natts;
-	namestrcpy(&stream_rel->rd_rel->relname, NameStr(rel->rd_rel->relname));
-	stream_rel->rd_rel->relkind = RELKIND_STREAM;
-	stream_rel->rd_id = rel->rd_id;
-	stream_rel->rd_rel->relnamespace = rel->rd_rel->relnamespace;
-	stream_rel->rd_refcnt = 1; /* needs for copy */
-
-	heap_close(rel, NoLock);
-
-	return stream_rel;
-}
-
-/*
- * inferred_stream_close
- */
-void
-inferred_stream_close(Relation rel)
-{
-	Assert(is_inferred_stream_relation(rel));
-
-	rel->rd_att->tdrefcount = 0;
-	FreeTupleDesc(RelationGetDescr(rel));
-	pfree(rel->rd_rel);
-	pfree(rel);
 }

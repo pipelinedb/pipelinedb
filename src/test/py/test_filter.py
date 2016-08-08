@@ -5,6 +5,7 @@ def test_filter_clause(pipeline, clean_db):
     """
     Verify that FILTER clauses work on aggregates and sliding window aggregates
     """
+    pipeline.create_stream('test_filter_stream', x='int')
     q = """
     SELECT SUM(x::int) FILTER (WHERE mod(x, 2) = 0) AS sum2, SUM(x::int) FILTER (WHERE mod(x, 3) = 0) AS sum3 FROM test_filter_stream
     """

@@ -3087,11 +3087,7 @@ typedef struct ExplainContQueryStmt
 	List 		*options;
 } ExplainContQueryStmt;
 
-typedef struct CreateStreamStmt
-{
-	CreateForeignTableStmt ft;
-	bool 		is_inferred;
-} CreateStreamStmt;
+typedef struct CreateForeignTableStmt CreateStreamStmt;
 
 typedef struct CreateContTransformStmt
 {

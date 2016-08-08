@@ -1,3 +1,5 @@
+CREATE STREAM regr_stream (x integer, y integer);
+
 -- regr_sxx
 CREATE CONTINUOUS VIEW test_regr_sxx AS SELECT regr_sxx(x::float8, y::float8) FROM regr_stream;
 
@@ -47,14 +49,4 @@ SELECT * FROM test_regr_intercept;
 SELECT * FROM test_covar_pop;
 SELECT * FROM test_corr;
 
-DROP CONTINUOUS VIEW test_regr_sxx;
-DROP CONTINUOUS VIEW test_regr_syy;
-DROP CONTINUOUS VIEW test_regr_sxy;
-DROP CONTINUOUS VIEW test_regr_avgx;
-DROP CONTINUOUS VIEW test_regr_avgy;
-DROP CONTINUOUS VIEW test_regr_r2;
-DROP CONTINUOUS VIEW test_regr_slope;
-DROP CONTINUOUS VIEW test_regr_intercept;
-DROP CONTINUOUS VIEW test_regr_count;
-DROP CONTINUOUS VIEW test_covar_pop;
-DROP CONTINUOUS VIEW test_corr;
+DROP STREAM regr_stream CASCADE;

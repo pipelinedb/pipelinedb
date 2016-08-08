@@ -1,3 +1,5 @@
+CREATE STREAM test_gs_stream (x int, y int, z int);
+
 CREATE CONTINUOUS VIEW test_gs0 AS SELECT x::integer, y::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY CUBE (x, y);
 
@@ -51,3 +53,5 @@ DROP CONTINUOUS VIEW test_gs0;
 DROP CONTINUOUS VIEW test_gs1;
 DROP CONTINUOUS VIEW test_gs2;
 DROP CONTINUOUS VIEW test_gs3;
+
+DROP STREAM test_gs_stream CASCADE;

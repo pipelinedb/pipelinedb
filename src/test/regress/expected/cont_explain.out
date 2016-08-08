@@ -1,14 +1,15 @@
+CREATE STREAM test_cont_explain_stream (x int, y text);
 CREATE CONTINUOUS VIEW test_cont_explain1 AS SELECT COUNT(*) FROM test_cont_explain_stream;
 CREATE CONTINUOUS VIEW test_cont_explain2 AS SELECT x::int, COUNT(*) FROM test_cont_explain_stream GROUP BY x;
 CREATE CONTINUOUS VIEW test_cont_explain3 AS SELECT x::int, y::text, SUM(x) FROM test_cont_explain_stream GROUP BY x, y;
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
-                      CONTINUOUS QUERY PLANS                       
--------------------------------------------------------------------
+                   CONTINUOUS QUERY PLANS                    
+-------------------------------------------------------------
  Worker Plan:
    ->  Aggregate
          Output: count(*)
          ->  Foreign Scan on public.test_cont_explain_stream
-               Output: arrival_timestamp::timestamp with time zone
+               Output: x, y, arrival_timestamp
  Combiner Plan:
    ->  Aggregate
          Output: combine(count)
@@ -20,14 +21,14 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
 (13 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
-                            CONTINUOUS QUERY PLANS                             
--------------------------------------------------------------------------------
+                   CONTINUOUS QUERY PLANS                    
+-------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
-         Output: x::integer, count(*)
-         Group Key: test_cont_explain_stream.x::integer
+         Output: x, count(*)
+         Group Key: test_cont_explain_stream.x
          ->  Foreign Scan on public.test_cont_explain_stream
-               Output: x::integer, arrival_timestamp::timestamp with time zone
+               Output: x, y, arrival_timestamp
  Combiner Plan:
    ->  HashAggregate
          Output: x, combine(count)
@@ -40,14 +41,14 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
 (15 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
-                                  CONTINUOUS QUERY PLANS                                  
-------------------------------------------------------------------------------------------
+                          CONTINUOUS QUERY PLANS                           
+---------------------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
-         Output: x::integer, y::text, sum(x::integer)
-         Group Key: test_cont_explain_stream.x::integer, test_cont_explain_stream.y::text
+         Output: x, y, sum(x)
+         Group Key: test_cont_explain_stream.x, test_cont_explain_stream.y
          ->  Foreign Scan on public.test_cont_explain_stream
-               Output: x::integer, y::text, arrival_timestamp::timestamp with time zone
+               Output: x, y, arrival_timestamp
  Combiner Plan:
    ->  HashAggregate
          Output: x, y, combine(sum)
@@ -61,13 +62,13 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
 
 INSERT INTO test_cont_explain_stream (x, y) VALUES (1, 'hello');
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
-                      CONTINUOUS QUERY PLANS                       
--------------------------------------------------------------------
+                   CONTINUOUS QUERY PLANS                    
+-------------------------------------------------------------
  Worker Plan:
    ->  Aggregate
          Output: count(*)
          ->  Foreign Scan on public.test_cont_explain_stream
-               Output: arrival_timestamp::timestamp with time zone
+               Output: x, y, arrival_timestamp
  Combiner Plan:
    ->  Aggregate
          Output: combine(count)
@@ -83,10 +84,10 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
 ---------------------------------------------------------------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
-         Output: x::integer, count(*)
-         Group Key: test_cont_explain_stream.x::integer
+         Output: x, count(*)
+         Group Key: test_cont_explain_stream.x
          ->  Foreign Scan on public.test_cont_explain_stream
-               Output: x::integer, arrival_timestamp::timestamp with time zone
+               Output: x, y, arrival_timestamp
  Combiner Plan:
    ->  HashAggregate
          Output: x, combine(count)
@@ -112,10 +113,10 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
 ----------------------------------------------------------------------------------------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
-         Output: x::integer, y::text, sum(x::integer)
-         Group Key: test_cont_explain_stream.x::integer, test_cont_explain_stream.y::text
+         Output: x, y, sum(x)
+         Group Key: test_cont_explain_stream.x, test_cont_explain_stream.y
          ->  Foreign Scan on public.test_cont_explain_stream
-               Output: x::integer, y::text, arrival_timestamp::timestamp with time zone
+               Output: x, y, arrival_timestamp
  Combiner Plan:
    ->  HashAggregate
          Output: x, y, combine(sum)
@@ -136,6 +137,8 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
                            Index Cond: (hash_group(test_cont_explain3_mrel.x, test_cont_explain3_mrel.y) = "*VALUES*".column1)
 (24 rows)
 
-DROP CONTINUOUS VIEW test_cont_explain1;
-DROP CONTINUOUS VIEW test_cont_explain2;
-DROP CONTINUOUS VIEW test_cont_explain3;
+DROP STREAM test_cont_explain_stream CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to continuous view test_cont_explain1
+drop cascades to continuous view test_cont_explain2
+drop cascades to continuous view test_cont_explain3

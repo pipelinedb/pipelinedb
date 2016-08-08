@@ -1,3 +1,4 @@
+CREATE STREAM test_sw_regr_stream (x integer, y integer);
 -- regr_sxx
 CREATE CONTINUOUS VIEW test_sw_regr_sxx AS SELECT regr_sxx(x::float8, y::float8) FROM test_sw_regr_stream WHERE arrival_timestamp > clock_timestamp() - interval '60 second';
 -- regr_syy
@@ -94,14 +95,16 @@ SELECT * FROM test_sw_corr;
  0.0434102139892421
 (1 row)
 
-DROP CONTINUOUS VIEW test_sw_regr_sxx;
-DROP CONTINUOUS VIEW test_sw_regr_syy;
-DROP CONTINUOUS VIEW test_sw_regr_sxy;
-DROP CONTINUOUS VIEW test_sw_regr_avgx;
-DROP CONTINUOUS VIEW test_sw_regr_avgy;
-DROP CONTINUOUS VIEW test_sw_regr_r2;
-DROP CONTINUOUS VIEW test_sw_regr_slope;
-DROP CONTINUOUS VIEW test_sw_regr_intercept;
-DROP CONTINUOUS VIEW test_sw_regr_count;
-DROP CONTINUOUS VIEW test_sw_covar_pop;
-DROP CONTINUOUS VIEW test_sw_corr;
+DROP STREAM test_sw_regr_stream CASCADE;
+NOTICE:  drop cascades to 11 other objects
+DETAIL:  drop cascades to continuous view test_sw_regr_sxx
+drop cascades to continuous view test_sw_regr_syy
+drop cascades to continuous view test_sw_regr_sxy
+drop cascades to continuous view test_sw_regr_avgx
+drop cascades to continuous view test_sw_regr_avgy
+drop cascades to continuous view test_sw_regr_r2
+drop cascades to continuous view test_sw_regr_slope
+drop cascades to continuous view test_sw_regr_intercept
+drop cascades to continuous view test_sw_regr_count
+drop cascades to continuous view test_sw_covar_pop
+drop cascades to continuous view test_sw_corr

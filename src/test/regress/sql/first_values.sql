@@ -1,4 +1,5 @@
 CREATE TABLE first_values_t (x int, y int, z int);
+CREATE STREAM first_values_s (x int, y int, z int);
 CREATE CONTINUOUS VIEW first_values_v AS SELECT x::int, first_values(2) WITHIN GROUP (ORDER BY y::int) FROM first_values_s GROUP BY x;
 \d first_values_v
 
@@ -33,7 +34,9 @@ INSERT INTO first_values_s (x, y) SELECT x, x FROM generate_series(1, 1000) AS x
 SELECT * FROM first_values_v_order0 ORDER BY g;
 
 DROP CONTINUOUS VIEW first_values_v_order0;
+DROP STREAM first_values_s CASCADE;
 
+CREATE STREAM first_values_s (t0 text, t1 text, t2 text);
 CREATE CONTINUOUS VIEW first_values_v_order1 AS
 	SELECT first_values(3) WITHIN GROUP (ORDER BY t0::text, t1::text, t2::text) FROM first_values_s;
 
@@ -45,3 +48,4 @@ SELECT * FROM first_values_v_order1;
 SELECT combine(first_values) FROM first_values_v_order1;
 
 DROP CONTINUOUS VIEW first_values_v_order1;
+DROP STREAM first_values_s CASCADE;

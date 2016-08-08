@@ -1,3 +1,4 @@
+CREATE STREAM test_pk_stream (x int);
 CREATE CONTINUOUS VIEW test_pk0 WITH (pk='x') AS SELECT x::integer, COUNT(*) FROM test_pk_stream GROUP BY x;
 \d+ test_pk0_mrel
                     Table "public.test_pk0_mrel"
@@ -75,3 +76,4 @@ CREATE CONTINUOUS VIEW wrong_arg_type WITH (pk=1) AS SELECT COUNT(*) FROM test_p
 ERROR:  continuous view primary keys must be specified with a valid column name
 CREATE CONTINUOUS VIEW no_column WITH (pk='not_here') AS SELECT COUNT(*) FROM test_pk_stream;
 ERROR:  primary key column "not_here" not found
+DROP STREAM test_pk_stream CASCADE;

@@ -1,45 +1,29 @@
-CREATE CONTINUOUS VIEW ps0 AS SELECT id::integer FROM stream0;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
-CREATE CONTINUOUS VIEW ps1 AS SELECT id::integer, val::text FROM stream0;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
-CREATE CONTINUOUS VIEW ps2 AS SELECT id::float FROM stream0;
-CREATE CONTINUOUS VIEW ps3 AS SELECT x::integer, y::timestamp FROM stream1;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
+CREATE STREAM stream0 (id integer);
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+CREATE CONTINUOUS VIEW ps0 AS SELECT id FROM stream0;
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+CREATE CONTINUOUS VIEW ps1 AS SELECT count(*) FROM stream0;
+CREATE CONTINUOUS VIEW ps2 AS SELECT id FROM stream0;
+CREATE STREAM stream1 (x integer, y timestamp);
+CREATE CONTINUOUS VIEW ps3 AS SELECT x, y FROM stream1;
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
 CREATE CONTINUOUS VIEW ps4 AS SELECT id::text FROM stream0;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
-CREATE STREAM stream2 (x INT);
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+CREATE STREAM stream2 (x integer);
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
 CREATE CONTINUOUS VIEW ps5 AS SELECT x FROM stream2;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
 DROP CONTINUOUS VIEW ps0;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
 DROP CONTINUOUS VIEW ps1;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
 DROP CONTINUOUS VIEW ps2;
 DROP CONTINUOUS VIEW ps3;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
 DROP CONTINUOUS VIEW ps5;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
-
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
 DROP STREAM stream2;
-
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+DROP STREAM stream1;
+DROP STREAM stream0 CASCADE;
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;

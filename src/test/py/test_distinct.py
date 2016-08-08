@@ -7,6 +7,7 @@ def test_distinct(pipeline, clean_db):
   """
   Verify that streaming SELECT DISTINCT ON (...) works
   """
+  pipeline.create_stream('stream', x='int', y='int', z='int')
   q = 'SELECT DISTINCT ON (x::int, y::int - z::int) x::int, y::int FROM stream'
   pipeline.create_cv('test_distinct', q)
 

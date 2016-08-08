@@ -6,6 +6,7 @@ import time
 
 
 def test_combine_table(pipeline, clean_db):
+  pipeline.create_stream('stream', x='int')
   pipeline.create_cv('combine_table',
                      'SELECT x::int, COUNT(*) FROM stream GROUP BY x')
 
@@ -49,6 +50,7 @@ def test_combine_table(pipeline, clean_db):
 
 
 def test_combine_table_no_groups(pipeline, clean_db):
+  pipeline.create_stream('stream', x='int')
   pipeline.create_cv('no_groups', 'SELECT COUNT(*) FROM stream')
   values = [(i,) for i in xrange(1000)]
   pipeline.insert('stream', ('x',), values)

@@ -1,3 +1,5 @@
+CREATE STREAM test_stream_targets_stream (x int);
+
 CREATE CONTINUOUS VIEW test_stream_targets0 AS SELECT COUNT(*) FROM test_stream_targets_stream;
 CREATE CONTINUOUS VIEW test_stream_targets1 AS SELECT COUNT(*) FROM test_stream_targets_stream;
 CREATE CONTINUOUS VIEW test_stream_targets2 AS SELECT COUNT(*) FROM test_stream_targets_stream;
@@ -20,6 +22,4 @@ SELECT * FROM test_stream_targets0;
 SELECT * FROM test_stream_targets1;
 SELECT * FROM test_stream_targets2;
 
-DROP CONTINUOUS VIEW test_stream_targets0;
-DROP CONTINUOUS VIEW test_stream_targets1;
-DROP CONTINUOUS VIEW test_stream_targets2;
+DROP STREAM test_stream_targets_stream CASCADE;

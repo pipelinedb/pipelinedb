@@ -280,7 +280,7 @@ collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 
 	if (IsA(node, RangeVar))
 	{
-		if (RangeVarIsForStream((RangeVar *) node, NULL))
+		if (RangeVarIsForStream((RangeVar *) node))
 			context->streams = lappend(context->streams, node);
 		else
 			context->rels = lappend(context->rels, node);
@@ -292,42 +292,18 @@ collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 }
 
 /*
- * collect_types_and_cols
+ * collect_cols
  */
 bool
-collect_types_and_cols(Node *node, ContAnalyzeContext *context)
+collect_cols(Node *node, ContAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
 
-	if (IsA(node, TypeCast))
-	{
-		TypeCast *tc = (TypeCast *) node;
-		if (IsA(tc->arg, ColumnRef))
-		{
-			ListCell* lc;
-
-			foreach(lc, context->types)
-			{
-				TypeCast *t = (TypeCast *) lfirst(lc);
-				if (equal(tc->arg, t->arg) && !equal(tc, t))
-				{
-					/* a column can only be assigned one type */
-					ColumnRef *cr = (ColumnRef *) tc->arg;
-					ereport(ERROR,
-							(errcode(ERRCODE_SYNTAX_ERROR),
-							errmsg("column has an ambiguous type because of a conflicting previous type cast"),
-							parser_errposition(context->pstate, cr->location)));
-				}
-			}
-
-			context->types = lappend(context->types, tc);
-		}
-	}
-	else if (IsA(node, ColumnRef))
+	if (IsA(node, ColumnRef))
 		context->cols = lappend(context->cols, node);
 
-	return raw_expression_tree_walker(node, collect_types_and_cols, (void *) context);
+	return raw_expression_tree_walker(node, collect_cols, (void *) context);
 }
 
 static bool
@@ -739,8 +715,8 @@ warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
 
 	MemSet(&local, 0, sizeof(ContAnalyzeContext));
 
-	collect_types_and_cols((Node *) stmt->fromClause, &local);
-	collect_types_and_cols((Node *) stmt->whereClause, &local);
+	collect_cols((Node *) stmt->fromClause, &local);
+	collect_cols((Node *) stmt->whereClause, &local);
 
 	/* we only want to log one notice per column, so de-dup */
 	foreach(lc, local.cols)
@@ -783,12 +759,6 @@ warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
 				elog(NOTICE, "consider creating an index on %s for improved stream-table join performance", NameListToString(col->fields));
 		}
 	}
-}
-
-static bool
-has_relname(RangeVar *rv, char *relname)
-{
-	return pg_strcasecmp(rv->relname, relname) == 0 || (rv->alias && pg_strcasecmp(rv->alias->aliasname, relname) == 0);
 }
 
 static bool
@@ -920,8 +890,6 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 	SelectStmt *select;
 	ContAnalyzeContext *context;
 	ListCell *lc;
-	RangeVar *stream;
-	bool is_inferred;
 
 	if (!IsA(node, SelectStmt))
 		ereport(ERROR,
@@ -966,7 +934,7 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 	}
 
 	collect_rels_and_streams((Node *) select->fromClause, context);
-	collect_types_and_cols((Node *) select, context);
+	collect_cols((Node *) select, context);
 	collect_agg_funcs((Node *) select, context);
 
 	if (list_length(select->sortClause) > 0)
@@ -1008,15 +976,6 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 				parser_errposition(context->pstate, rv->location)));
 	}
 
-	stream = (RangeVar *) linitial(context->streams);
-
-	if (equal(stream, name))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				errmsg("continuous queries cannot read from themselves"),
-				errhint("Remove \"%s\" from the FROM clause.", stream->relname),
-				parser_errposition(context->pstate, stream->location)));
-
 	/*
 	 * Ensure that we have no `*` in the target list.
 	 *
@@ -1040,105 +999,6 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 					 errmsg("can't select \"%s\" in continuous queries", qualname),
 					 errhint("Explicitly state the columns you want to SELECT."),
 					 parser_errposition(context->pstate, cref->location)));
-		}
-	}
-
-	RangeVarIsForStream(stream, &is_inferred);
-
-	/* Ensure that each column being read from an inferred stream is type-casted */
-	if (is_inferred)
-	{
-		foreach(lc, context->cols)
-		{
-			ListCell *lc2;
-			ColumnRef *cref = lfirst(lc);
-			bool needs_type = true;
-			bool has_type = false;
-			bool refs_target;
-			char *colname = FigureColname((Node *) cref);
-			char *qualname = NameListToString(cref->fields);
-
-			/*
-			 * ARRIVAL_TIMESTAMP doesn't require an explicit type cast. We don't care about the
-			 * qualified name because even if it's a column for a table, we don't need an explicit
-			 * type.
-			 */
-			if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
-				continue;
-
-			/*
-			 * If the column is for a relation, we don't need any explicit type case.
-			 */
-			if (list_length(cref->fields) == 2)
-			{
-				char *col_relname = strVal(linitial(cref->fields));
-
-				foreach(lc2, context->rels)
-				{
-					RangeVar *rv = (RangeVar *) lfirst(lc2);
-
-					if (has_relname(rv, col_relname))
-					{
-						needs_type = false;
-						break;
-					}
-				}
-
-				if (!needs_type)
-					continue;
-			}
-
-			/* Do we have a TypeCast for this ColumnRef? */
-			foreach(lc2, context->types)
-			{
-				TypeCast *tc = (TypeCast *) lfirst(lc2);
-				if (equal(tc->arg, cref))
-				{
-					has_type = true;
-					break;
-				}
-			}
-
-			if (has_type)
-				continue;
-
-			/*
-			 * If the column refers to a named target then it doesn't need an explicit type.
-			 *
-			 * This doesn't work in cases where target references the column being checked.
-			 * For example:
-			 *
-			 *   SELECT date_trunc('hour', x) AS x FROM stream
-			 *   SELECT substring(y::text, 1, 2) as x, substring(x, 1, 2) FROM stream
-			 *
-			 * In both these examples we need an explicit cast for `x`.
-			 */
-			needs_type = false;
-			refs_target = false;
-
-			foreach(lc2, select->targetList)
-			{
-				ResTarget *res = (ResTarget *) lfirst(lc2);
-				char *name = res->name ? res->name : FigureColname(res->val);
-
-				if (contains_node((Node *) res, (Node *) cref))
-				{
-					needs_type = true;
-					break;
-				}
-
-				if (pg_strcasecmp(qualname, name) == 0)
-					refs_target = true;
-			}
-
-			/* If it doesn't reference a target or is contained in a target, it needs a type */
-			if (needs_type || !refs_target)
-				ereport(ERROR,
-						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-						errmsg("column reference \"%s\" has an ambiguous type", qualname),
-						errhint("Explicitly cast to the desired type, e.g. %s::integer, or create the stream \"%s\" with CREATE STREAM.",
-								qualname, stream->relname),
-						parser_errposition(context->pstate, cref->location)));
 		}
 	}
 
@@ -1312,7 +1172,7 @@ transformContSelectStmt(ParseState *pstate, SelectStmt *select)
 	ContAnalyzeContext *context = MakeContAnalyzeContext(pstate, select, ptype);
 
 	collect_rels_and_streams((Node *) select->fromClause, context);
-	collect_types_and_cols((Node *) select, context);
+	collect_cols((Node *) select, context);
 
 	pstate->p_cont_view_context = context;
 }
@@ -1546,7 +1406,7 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 	ListCell *lc;
 	bool saw_atime = false;
 
-	foreach(lc, stmt->ft.base.tableElts)
+	foreach(lc, stmt->base.tableElts)
 	{
 		ColumnDef *coldef = (ColumnDef *) lfirst(lc);
 		if (pg_strcasecmp(coldef->colname, ARRIVAL_TIMESTAMP) == 0)
@@ -1575,78 +1435,8 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 		coldef->constraints = NIL;
 		coldef->typeName = typename;
 
-		stmt->ft.base.tableElts = lappend(stmt->ft.base.tableElts, coldef);
+		stmt->base.tableElts = lappend(stmt->base.tableElts, coldef);
 	}
-}
-
-static void
-save_next_oids(Oid *type, Oid *arraytype, Oid *class)
-{
-	*type = binary_upgrade_next_pg_type_oid;
-	*arraytype = binary_upgrade_next_array_pg_type_oid;
-	*class = binary_upgrade_next_heap_pg_class_oid;
-}
-
-static void
-set_next_oids_for_inferred_stream(void)
-{
-	binary_upgrade_next_pg_type_oid = 100000 * GetNewObjectId();
-	binary_upgrade_next_array_pg_type_oid = 100000 * GetNewObjectId();
-	binary_upgrade_next_heap_pg_class_oid = 100000 * GetNewObjectId();
-}
-
-static bool
-create_inferred_streams(Node *node, void *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, RangeVar))
-	{
-		RangeVar *rv = (RangeVar *) node;
-		Oid relid = RangeVarGetRelid(rv, NoLock, true);
-
-		if (!OidIsValid(relid))
-		{
-			Oid save_type;
-			Oid save_arraytype;
-			Oid save_class;
-
-			/*
-			 * XXX(derekjn) If this is a binary upgrade, all OIDs need to be explicitly
-			 * set so that they align with the old database files. However, since
-			 * inferred streams are created lazily, we don't have a good way to deterministically
-			 * assign them an OID during binary upgrades.
-			 *
-			 * But since they don't actually need any storage, all we need to do is assign them an
-			 * OID that isn't claimed by incoming binary upgrade objects. We can't do this
-			 * deterministically either, so we just claim the next available OID, multiply it
-			 * by a huge number and throw a hail mary.
-			 *
-			 * The *worst* possible thing that can happen here is that the binary upgrade will fail
-			 * once it gets to a certain relation, which can be worked around by manually dumping
-			 * and restoring that relation, but even that is very unlikely to be necessary.
-			 */
-			if (IsBinaryUpgrade)
-			{
-				save_next_oids(&save_type, &save_arraytype, &save_class);
-				set_next_oids_for_inferred_stream();
-			}
-
-			CreateInferredStream(rv);
-
-			if (IsBinaryUpgrade)
-			{
-				binary_upgrade_next_pg_type_oid = save_type;
-				binary_upgrade_next_array_pg_type_oid = save_arraytype;
-				binary_upgrade_next_heap_pg_class_oid = save_class;
-			}
-		}
-
-		return false;
-	}
-
-	return raw_expression_tree_walker(node, create_inferred_streams, context);
 }
 
 /*
@@ -1741,12 +1531,11 @@ rewrite_from_clause(Node *from)
 }
 
 /*
- * CreateInferredStreams
+ * RewriteFromClause
  */
 void
-CreateInferredStreams(SelectStmt *stmt)
+RewriteFromClause(SelectStmt *stmt)
 {
-	create_inferred_streams(copyObject(stmt->fromClause), NULL);
 	stmt->fromClause = (List *) rewrite_from_clause((Node *) stmt->fromClause);
 }
 
@@ -1837,13 +1626,13 @@ is_res_target_for_node(Node *rt, Node *node)
 	return false;
 }
 
-static bool
+static ColumnRef *
 node_for_cref(Node *node)
 {
 	while (node)
 	{
 		if (IsA(node, ColumnRef))
-			return true;
+			return (ColumnRef *) node;
 
 		if (IsA(node, TypeCast))
 		{
@@ -1852,10 +1641,10 @@ node_for_cref(Node *node)
 			continue;
 		}
 
-		return false;
+		return NULL;
 	}
 
-	return false;
+	return NULL;
 }
 
 static ResTarget *
@@ -1866,25 +1655,43 @@ find_node_in_target_list(List *tlist, Node *node)
 	foreach(lc, tlist)
 	{
 		ResTarget *res = lfirst(lc);
+		ColumnRef *res_cref;
+		ColumnRef *node_cref;
+		char *resname;
+		char *colname;
 
 		if (equal(res->val, node))
 			return res;
-	}
 
-	foreach(lc, tlist)
-	{
-		ResTarget *res = lfirst(lc);
+		node_cref = node_for_cref(node);
+		if (!node_cref)
+			continue;
 
-		if (res->name != NULL && node_for_cref(node) && pg_strcasecmp(res->name, FigureColname((Node *) node)) == 0)
+		/* At this point we're sure that node is for a column */
+
+		if (res->name)
+			resname = res->name;
+		else
+			resname = FigureColname((Node *) res);
+
+		colname = FigureColname(node);
+		if (pg_strcasecmp(resname, colname) != 0)
+			continue;
+
+		res_cref = node_for_cref(res->val);
+		if (res_cref)
 		{
-			/*
-			 * Is this ResTarget overriding a node it references?
-			 * Example: substring(key::text, 1, 2) AS key
-			 */
-			if (contains_node((Node *) res, node))
-				continue;
-			return res;
+			if (equal(res_cref, node_cref))
+				return res;
+			continue;
 		}
+
+		/*
+		 * Is this ResTarget overriding a node it references?
+		 * Example: substring(key::text, 1, 2) AS key
+		 */
+		if (!contains_node(res->val, node))
+			return res;
 	}
 
 	return NULL;
@@ -2260,7 +2067,6 @@ proj_and_group_for_sliding_window(SelectStmt *proc, SelectStmt *view, ContAnalyz
 	find_clock_timestamp_expr(proc->whereClause, context);
 
 	Assert(context->expr && IsA(context->expr, A_Expr));
-
 	sw_expr = (A_Expr *) context->expr;
 
 	if (has_clock_timestamp(sw_expr->lexpr, NULL))
@@ -2271,7 +2077,7 @@ proj_and_group_for_sliding_window(SelectStmt *proc, SelectStmt *view, ContAnalyz
 	time = copyObject(time);
 
 	context->cols = NIL;
-	collect_types_and_cols(time, context);
+	collect_cols(time, context);
 
 	Assert(list_length(context->cols) == 1);
 
@@ -2317,7 +2123,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 
 	make_selects_continuous((Node *) proc, NULL);
 	collect_rels_and_streams((Node *) proc->fromClause, context);
-	collect_types_and_cols((Node *) proc, context);
+	collect_cols((Node *) proc, context);
 	collect_agg_funcs((Node *) proc->targetList, context);
 	name_res_targets(proc->targetList);
 
@@ -3589,7 +3395,7 @@ GetWindowTimeColumn(RangeVar *cv)
 		context.cols = NIL;
 		context.types = NIL;
 
-		collect_types_and_cols(view->whereClause, &context);
+		collect_cols(view->whereClause, &context);
 
 		Assert(list_length(context.cols) == 1);
 
@@ -3869,7 +3675,7 @@ FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid)
 		return attno;
 
 	context.cols = context.types = NIL;
-	collect_types_and_cols(viewselect->whereClause, &context);
+	collect_cols(viewselect->whereClause, &context);
 
 	Assert(list_length(context.cols) == 1);
 	colname = FigureColname(linitial(context.cols));

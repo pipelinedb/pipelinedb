@@ -21,6 +21,7 @@ def _test_hs_agg(pipeline, agg):
     values = [random.randint(-100, 100) for n in range(1000)]
     h = random.choice(values) + random.randint(-10, 10)
 
+    pipeline.create_stream('stream', x='int')
     cq = 'SELECT %s(%d) WITHIN GROUP (ORDER BY x::integer) FROM stream' % (agg, h)
     pipeline.create_cv('test_%s' % agg, cq)
 

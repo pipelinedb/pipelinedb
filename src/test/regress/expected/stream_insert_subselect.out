@@ -1,5 +1,6 @@
 CREATE TABLE stream_subselect_t (x integer);
 INSERT INTO stream_subselect_t (SELECT generate_series(1, 100));
+CREATE STREAM stream_subselect_stream (x int, price int, t timestamptz);
 CREATE CONTINUOUS VIEW stream_subselect_v0 AS SELECT x::integer FROM stream_subselect_stream;
 INSERT INTO stream_subselect_stream (x) (SELECT * FROM stream_subselect_t);
 INSERT INTO stream_subselect_stream (x) (SELECT * FROM (SELECT x AS y FROM stream_subselect_t) s0);
@@ -65,9 +66,11 @@ SELECT * FROM stream_subselect_v4;
   1000
 (1 row)
 
-DROP CONTINUOUS VIEW stream_subselect_v0;
-DROP CONTINUOUS VIEW stream_subselect_v1;
-DROP CONTINUOUS VIEW stream_subselect_v2;
-DROP CONTINUOUS VIEW stream_subselect_v3;
-DROP CONTINUOUS VIEW stream_subselect_v4;
+DROP STREAM stream_subselect_stream CASCADE;
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to continuous view stream_subselect_v0
+drop cascades to continuous view stream_subselect_v1
+drop cascades to continuous view stream_subselect_v2
+drop cascades to continuous view stream_subselect_v3
+drop cascades to continuous view stream_subselect_v4
 DROP TABLE stream_subselect_t;

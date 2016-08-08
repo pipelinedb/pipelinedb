@@ -1,6 +1,7 @@
 CREATE TABLE stream_subselect_t (x integer);
 INSERT INTO stream_subselect_t (SELECT generate_series(1, 100));
 
+CREATE STREAM stream_subselect_stream (x int, price int, t timestamptz);
 CREATE CONTINUOUS VIEW stream_subselect_v0 AS SELECT x::integer FROM stream_subselect_stream;
 
 INSERT INTO stream_subselect_stream (x) (SELECT * FROM stream_subselect_t);
@@ -32,9 +33,5 @@ INSERT INTO stream_subselect_stream (price, t) SELECT 10 + random() AS price, cu
 
 SELECT * FROM stream_subselect_v4;
 
-DROP CONTINUOUS VIEW stream_subselect_v0;
-DROP CONTINUOUS VIEW stream_subselect_v1;
-DROP CONTINUOUS VIEW stream_subselect_v2;
-DROP CONTINUOUS VIEW stream_subselect_v3;
-DROP CONTINUOUS VIEW stream_subselect_v4;
+DROP STREAM stream_subselect_stream CASCADE;
 DROP TABLE stream_subselect_t;

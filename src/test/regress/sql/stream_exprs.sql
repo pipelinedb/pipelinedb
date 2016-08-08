@@ -1,3 +1,4 @@
+CREATE STREAM test_exprs_stream (b boolean, t text, n numeric);
 CREATE CONTINUOUS VIEW test_stream_exprs AS SELECT b::boolean, t::text, n::numeric FROM test_exprs_stream;
 
 INSERT INTO test_exprs_stream (b, t, n) VALUES (true and true, substring('string!', 1, 3), 1.2 + 100.0001);
@@ -19,4 +20,4 @@ INSERT INTO test_exprs_stream (n) VALUES (1 - 1);
 
 SELECT * FROM test_stream_exprs ORDER BY b, t, n;
 
-DROP CONTINUOUS VIEW test_stream_exprs;
+DROP STREAM test_exprs_stream CASCADE;

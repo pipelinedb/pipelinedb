@@ -204,8 +204,36 @@ make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 		bool found = false;
 		int i;
 
+		if (te->resjunk)
+		{
+			Var *v;
+			ListCell *lc2;
+			Assert(IsA(te->expr, Var));
+
+			v = (Var *) te->expr;
+			foreach(lc2, query->targetList)
+			{
+				TargetEntry *te2 = lfirst(lc2);
+				FuncExpr *fn;
+
+				if (!IsA(te2->expr, FuncExpr))
+					continue;
+
+				fn = (FuncExpr *) te2->expr;
+				if (list_length(fn->args) != 1)
+					continue;
+
+				if (equal(v, linitial(fn->args)))
+				{
+					te = te2;
+					break;
+				}
+			}
+		}
+
 		/* We must have a non-junk target entry */
 		Assert(!te->resjunk);
+		Assert(te->resname);
 
 		/*
 		 * Instead of using the expression itself as an argument, we use a variable that
@@ -434,30 +462,15 @@ record_cv_dependencies(Oid cvoid, Oid matreloid, Oid osreloid, Oid seqreloid, Oi
 		rv = (RangeVar *) lfirst(lc);
 		relid = RangeVarGetRelid(rv, NoLock, false);
 
-		if (IsInferredStream(relid))
-		{
-			referenced.classId = RelationRelationId;
-			referenced.objectId = viewoid;
-			referenced.objectSubId = 0;
+		referenced.classId = RelationRelationId;
+		referenced.objectId = relid;
+		referenced.objectSubId = 0;
 
-			dependent.classId = RelationRelationId;
-			dependent.objectId = relid;
-			dependent.objectSubId = 0;
+		dependent.classId = RelationRelationId;
+		dependent.objectId = viewoid;
+		dependent.objectSubId = 0;
 
-			recordDependencyOn(&dependent, &referenced, DEPENDENCY_STREAM);
-		}
-		else
-		{
-			referenced.classId = RelationRelationId;
-			referenced.objectId = relid;
-			referenced.objectSubId = 0;
-
-			dependent.classId = RelationRelationId;
-			dependent.objectId = viewoid;
-			dependent.objectSubId = 0;
-
-			recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
-		}
+		recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
 	}
 
 	referenced.classId = RelationRelationId;
@@ -598,7 +611,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
-	CreateInferredStreams((SelectStmt *) stmt->query);
+	RewriteFromClause((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
 	/* Apply any CQ storage options like max_age, step_factor */
@@ -758,10 +771,10 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	heap_close(overlayrel, NoLock);
 
 	create_osrel = makeNode(CreateStreamStmt);
-	create_osrel->ft.servername = PIPELINE_STREAM_SERVER;
-	create_osrel->ft.base.stream = true;
-	create_osrel->ft.base.tableElts = list_make2(old, new);
-	create_osrel->ft.base.relation = makeRangeVar(view->schemaname, CVNameToOSRelName(view->relname), -1);
+	create_osrel->servername = PIPELINE_STREAM_SERVER;
+	create_osrel->base.stream = true;
+	create_osrel->base.tableElts = list_make2(old, new);
+	create_osrel->base.relation = makeRangeVar(view->schemaname, CVNameToOSRelName(view->relname), -1);
 	transformCreateStreamStmt(create_osrel);
 
 	if (IsBinaryUpgrade)
@@ -1113,30 +1126,15 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query 
 		rv = (RangeVar *) lfirst(lc);
 		relid = RangeVarGetRelid(rv, NoLock, false);
 
-		if (IsInferredStream(relid))
-		{
-			referenced.classId = RelationRelationId;
-			referenced.objectId = relid;
-			referenced.objectSubId = 0;
+		referenced.classId = RelationRelationId;
+		referenced.objectId = relid;
+		referenced.objectSubId = 0;
 
-			dependent.classId = RelationRelationId;
-			dependent.objectId = relid;
-			dependent.objectSubId = 0;
+		dependent.classId = RelationRelationId;
+		dependent.objectId = relid;
+		dependent.objectSubId = 0;
 
-			recordDependencyOn(&dependent, &referenced, DEPENDENCY_STREAM);
-		}
-		else
-		{
-			referenced.classId = RelationRelationId;
-			referenced.objectId = relid;
-			referenced.objectSubId = 0;
-
-			dependent.classId = RelationRelationId;
-			dependent.objectId = relid;
-			dependent.objectSubId = 0;
-
-			recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
-		}
+		recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
 	}
 
 	referenced.classId = RelationRelationId;
@@ -1154,7 +1152,7 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query 
 			Value *v = (Value *) lfirst(lc);
 			RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(strVal(v)));
 
-			if (!RangeVarIsForStream(rv, NULL))
+			if (!RangeVarIsForStream(rv))
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						errmsg("\"%s\" is not a stream", strVal(v)),
@@ -1205,7 +1203,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 
 	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
-	CreateInferredStreams((SelectStmt *) stmt->query);
+	RewriteFromClause((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
 	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);

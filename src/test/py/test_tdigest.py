@@ -10,6 +10,7 @@ def test_tdigest_agg(pipeline, clean_db):
     GROUP BY k
     """
     desc = ('k', 'x')
+    pipeline.create_stream('test_tdigest_stream', k='int', x='int')
     pipeline.create_cv('test_tdigest_agg', q)
 
     rows = []

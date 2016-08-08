@@ -1,117 +1,138 @@
-CREATE CONTINUOUS VIEW ps0 AS SELECT id::integer FROM stream0;
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |   name    | inferred | queries |                               tup_desc                               
---------+-----------+----------+---------+----------------------------------------------------------------------
- public | ps0_osrel | f        |         | {old::ps0,new::ps0,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream0   | t        | {ps0}   | {id::numeric,"arrival_timestamp::timestamp(0) with time zone"}
+CREATE STREAM stream0 (id integer);
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |  name   | queries 
+--------+---------+---------
+ public | stream0 | 
+(1 row)
+
+CREATE CONTINUOUS VIEW ps0 AS SELECT id FROM stream0;
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    | queries 
+--------+-----------+---------
+ public | ps0_osrel | 
+ public | stream0   | {ps0}
 (2 rows)
 
-CREATE CONTINUOUS VIEW ps1 AS SELECT id::integer, val::text FROM stream0;
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |   name    | inferred |  queries  |                                 tup_desc                                 
---------+-----------+----------+-----------+--------------------------------------------------------------------------
- public | ps0_osrel | f        |           | {old::ps0,new::ps0,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps1_osrel | f        |           | {old::ps1,new::ps1,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream0   | t        | {ps0,ps1} | {id::numeric,val::text,"arrival_timestamp::timestamp(0) with time zone"}
-(3 rows)
-
-CREATE CONTINUOUS VIEW ps2 AS SELECT id::float FROM stream0;
-CREATE CONTINUOUS VIEW ps3 AS SELECT x::integer, y::timestamp FROM stream1;
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |   name    | inferred |    queries    |                                            tup_desc                                            
---------+-----------+----------+---------------+------------------------------------------------------------------------------------------------
- public | ps0_osrel | f        |               | {old::ps0,new::ps0,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps1_osrel | f        |               | {old::ps1,new::ps1,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps2_osrel | f        |               | {old::ps2,new::ps2,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps3_osrel | f        |               | {old::ps3,new::ps3,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream0   | t        | {ps0,ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream1   | t        | {ps3}         | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
+CREATE CONTINUOUS VIEW ps1 AS SELECT count(*) FROM stream0;
+CREATE CONTINUOUS VIEW ps2 AS SELECT id FROM stream0;
+CREATE STREAM stream1 (x integer, y timestamp);
+CREATE CONTINUOUS VIEW ps3 AS SELECT x, y FROM stream1;
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    |    queries    
+--------+-----------+---------------
+ public | ps0_osrel | 
+ public | ps1_osrel | 
+ public | ps2_osrel | 
+ public | ps3_osrel | 
+ public | stream0   | {ps0,ps1,ps2}
+ public | stream1   | {ps3}
 (6 rows)
 
 CREATE CONTINUOUS VIEW ps4 AS SELECT id::text FROM stream0;
-ERROR:  type conflict with stream "stream0": types double precision and text cannot be matched
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |   name    | inferred |    queries    |                                            tup_desc                                            
---------+-----------+----------+---------------+------------------------------------------------------------------------------------------------
- public | ps0_osrel | f        |               | {old::ps0,new::ps0,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps1_osrel | f        |               | {old::ps1,new::ps1,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps2_osrel | f        |               | {old::ps2,new::ps2,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps3_osrel | f        |               | {old::ps3,new::ps3,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream0   | t        | {ps0,ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream1   | t        | {ps3}         | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
-(6 rows)
-
-CREATE STREAM stream2 (x INT);
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |   name    | inferred |    queries    |                                            tup_desc                                            
---------+-----------+----------+---------------+------------------------------------------------------------------------------------------------
- public | ps0_osrel | f        |               | {old::ps0,new::ps0,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps1_osrel | f        |               | {old::ps1,new::ps1,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps2_osrel | f        |               | {old::ps2,new::ps2,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps3_osrel | f        |               | {old::ps3,new::ps3,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream0   | t        | {ps0,ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream1   | t        | {ps3}         | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream2   | f        |               | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    |      queries      
+--------+-----------+-------------------
+ public | ps0_osrel | 
+ public | ps1_osrel | 
+ public | ps2_osrel | 
+ public | ps3_osrel | 
+ public | ps4_osrel | 
+ public | stream0   | {ps0,ps1,ps2,ps4}
+ public | stream1   | {ps3}
 (7 rows)
 
-CREATE CONTINUOUS VIEW ps5 AS SELECT x FROM stream2;
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |   name    | inferred |    queries    |                                            tup_desc                                            
---------+-----------+----------+---------------+------------------------------------------------------------------------------------------------
- public | ps0_osrel | f        |               | {old::ps0,new::ps0,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps1_osrel | f        |               | {old::ps1,new::ps1,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps2_osrel | f        |               | {old::ps2,new::ps2,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps3_osrel | f        |               | {old::ps3,new::ps3,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps5_osrel | f        |               | {old::ps5,new::ps5,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream0   | t        | {ps0,ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream1   | t        | {ps3}         | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream2   | f        | {ps5}         | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
+CREATE STREAM stream2 (x integer);
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    |      queries      
+--------+-----------+-------------------
+ public | ps0_osrel | 
+ public | ps1_osrel | 
+ public | ps2_osrel | 
+ public | ps3_osrel | 
+ public | ps4_osrel | 
+ public | stream0   | {ps0,ps1,ps2,ps4}
+ public | stream1   | {ps3}
+ public | stream2   | 
 (8 rows)
 
+CREATE CONTINUOUS VIEW ps5 AS SELECT x FROM stream2;
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    |      queries      
+--------+-----------+-------------------
+ public | ps0_osrel | 
+ public | ps1_osrel | 
+ public | ps2_osrel | 
+ public | ps3_osrel | 
+ public | ps4_osrel | 
+ public | ps5_osrel | 
+ public | stream0   | {ps0,ps1,ps2,ps4}
+ public | stream1   | {ps3}
+ public | stream2   | {ps5}
+(9 rows)
+
 DROP CONTINUOUS VIEW ps0;
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |   name    | inferred |  queries  |                                            tup_desc                                            
---------+-----------+----------+-----------+------------------------------------------------------------------------------------------------
- public | ps1_osrel | f        |           | {old::ps1,new::ps1,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps2_osrel | f        |           | {old::ps2,new::ps2,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps3_osrel | f        |           | {old::ps3,new::ps3,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps5_osrel | f        |           | {old::ps5,new::ps5,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream0   | t        | {ps1,ps2} | {"id::double precision",val::text,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream1   | t        | {ps3}     | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream2   | f        | {ps5}     | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
-(7 rows)
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    |    queries    
+--------+-----------+---------------
+ public | ps1_osrel | 
+ public | ps2_osrel | 
+ public | ps3_osrel | 
+ public | ps4_osrel | 
+ public | ps5_osrel | 
+ public | stream0   | {ps1,ps2,ps4}
+ public | stream1   | {ps3}
+ public | stream2   | {ps5}
+(8 rows)
 
 DROP CONTINUOUS VIEW ps1;
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |   name    | inferred | queries |                                            tup_desc                                            
---------+-----------+----------+---------+------------------------------------------------------------------------------------------------
- public | ps2_osrel | f        |         | {old::ps2,new::ps2,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps3_osrel | f        |         | {old::ps3,new::ps3,"arrival_timestamp::timestamp(0) with time zone"}
- public | ps5_osrel | f        |         | {old::ps5,new::ps5,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream0   | t        | {ps2}   | {"id::double precision","arrival_timestamp::timestamp(0) with time zone"}
- public | stream1   | t        | {ps3}   | {"y::timestamp without time zone",x::numeric,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream2   | f        | {ps5}   | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
-(6 rows)
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    |  queries  
+--------+-----------+-----------
+ public | ps2_osrel | 
+ public | ps3_osrel | 
+ public | ps4_osrel | 
+ public | ps5_osrel | 
+ public | stream0   | {ps2,ps4}
+ public | stream1   | {ps3}
+ public | stream2   | {ps5}
+(7 rows)
 
 DROP CONTINUOUS VIEW ps2;
 DROP CONTINUOUS VIEW ps3;
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |   name    | inferred | queries |                               tup_desc                               
---------+-----------+----------+---------+----------------------------------------------------------------------
- public | ps5_osrel | f        |         | {old::ps5,new::ps5,"arrival_timestamp::timestamp(0) with time zone"}
- public | stream2   | f        | {ps5}   | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
-(2 rows)
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    | queries 
+--------+-----------+---------
+ public | ps4_osrel | 
+ public | ps5_osrel | 
+ public | stream0   | {ps4}
+ public | stream1   | 
+ public | stream2   | {ps5}
+(5 rows)
 
 DROP CONTINUOUS VIEW ps5;
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema |  name   | inferred | queries |                           tup_desc                            
---------+---------+----------+---------+---------------------------------------------------------------
- public | stream2 | f        |         | {x::integer,"arrival_timestamp::timestamp(0) with time zone"}
-(1 row)
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    | queries 
+--------+-----------+---------
+ public | ps4_osrel | 
+ public | stream0   | {ps4}
+ public | stream1   | 
+ public | stream2   | 
+(4 rows)
 
 DROP STREAM stream2;
-SELECT schema, name, inferred, queries, tup_desc FROM pipeline_streams() ORDER BY name;
- schema | name | inferred | queries | tup_desc 
---------+------+----------+---------+----------
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema |   name    | queries 
+--------+-----------+---------
+ public | ps4_osrel | 
+ public | stream0   | {ps4}
+ public | stream1   | 
+(3 rows)
+
+DROP STREAM stream1;
+DROP STREAM stream0 CASCADE;
+NOTICE:  drop cascades to continuous view ps4
+SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
+ schema | name | queries 
+--------+------+---------
 (0 rows)
 

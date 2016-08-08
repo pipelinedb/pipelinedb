@@ -1,3 +1,4 @@
+CREATE STREAM cqswcount_stream (k text);
 CREATE CONTINUOUS VIEW test_count AS SELECT k::text, COUNT(*) FROM cqswcount_stream WHERE arrival_timestamp > clock_timestamp() - interval '60 second' GROUP BY k;
 INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x'), ('x'), ('x'), ('x'), ('x');
 INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x'), ('x'), ('x'), ('x'), ('x'), ('y'), ('y'), ('y'), ('y'), ('y'), ('y');
@@ -57,5 +58,7 @@ SELECT * FROM sw_count1;
        0
 (1 row)
 
-DROP CONTINUOUS VIEW sw_count0 CASCADE;
-NOTICE:  drop cascades to view sw_count1
+DROP STREAM cqswcount_stream CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to continuous view sw_count0
+drop cascades to view sw_count1

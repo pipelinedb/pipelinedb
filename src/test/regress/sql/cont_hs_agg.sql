@@ -1,3 +1,5 @@
+CREATE STREAM test_hs_stream (x int, y int, z text, g int);
+
 -- rank
 CREATE CONTINUOUS VIEW test_rank0 AS SELECT rank(7, 47, '47') WITHIN GROUP (ORDER BY x::integer, y::integer, z::text) FROM test_hs_stream;
 CREATE CONTINUOUS VIEW test_rank1 AS SELECT g::integer, rank(5, 5) WITHIN GROUP (ORDER BY g, x::integer) FROM test_hs_stream GROUP BY g;
@@ -62,18 +64,4 @@ SELECT * FROM test_dense_rank0;
 SELECT * FROM test_dense_rank1;
 SELECT * FROM test_dense_rank2;
 
-DROP CONTINUOUS VIEW test_rank0;
-DROP CONTINUOUS VIEW test_rank1;
-DROP CONTINUOUS VIEW test_rank2;
-DROP CONTINUOUS VIEW test_rank3;
-DROP CONTINUOUS VIEW test_percent0;
-DROP CONTINUOUS VIEW test_percent1;
-DROP CONTINUOUS VIEW test_percent2;
-DROP CONTINUOUS VIEW test_percent3;
-DROP CONTINUOUS VIEW test_cume_dist0;
-DROP CONTINUOUS VIEW test_cume_dist1;
-DROP CONTINUOUS VIEW test_cume_dist2;
-DROP CONTINUOUS VIEW test_cume_dist3;
-DROP CONTINUOUS VIEW test_dense_rank0;
-DROP CONTINUOUS VIEW test_dense_rank1;
-DROP CONTINUOUS VIEW test_dense_rank2;
+DROP STREAM test_hs_stream CASCADE;

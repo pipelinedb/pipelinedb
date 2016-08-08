@@ -1,3 +1,4 @@
+CREATE STREAM test_distinct_count_stream (x int, y int, z int);
 -- COUNT(DISTINCT ...)
 CREATE CONTINUOUS VIEW test_distinct_count AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream;
 CREATE CONTINUOUS VIEW test_distinct_sw_count AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream WHERE (arrival_timestamp > clock_timestamp() - interval '10 seconds');
@@ -85,10 +86,13 @@ SELECT * FROM test_distinct_sw_count_small;
      0
 (1 row)
 
-DROP CONTINUOUS VIEW test_distinct_count;
-DROP CONTINUOUS VIEW test_distinct_sw_count;
-DROP CONTINUOUS VIEW test_distinct_sw_count_small;
+DROP STREAM test_distinct_count_stream CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to continuous view test_distinct_count
+drop cascades to continuous view test_distinct_sw_count
+drop cascades to continuous view test_distinct_sw_count_small
 -- DISTINCT / DISTINCT ON
+CREATE STREAM test_distinct_stream (x int, y int, z int);
 CREATE CONTINUOUS VIEW test_distinct AS SELECT DISTINCT x::int, y::int - z::int FROM test_distinct_stream;
 CREATE CONTINUOUS VIEW test_distinct_on AS SELECT DISTINCT ON (x::int, y::int - z::int) x::int, y::int, z::int FROM test_distinct_stream;
 INSERT INTO test_distinct_stream (x, y, z) VALUES (1, 1, '1'), (1, 1, '1'), (4, 4, '4'), (7, 7, '7'), (0, 0, '0'), (2, 2, '2'), (4, 4, '4'), (8, 8, '8'), (8, 8, '8'), (7, 7, '7'), (9, 9, '9'), (6, 6, '6'), (2, 2, '2'), (6, 6, '6'), (5, 5, '5'), (3, 3, '3'), (9, 9, '9'), (0, 0, '0'), (5, 5, '5'), (3, 3, '3');
@@ -160,8 +164,6 @@ SELECT * FROM test_distinct_on ORDER BY x;
    |   |  
 (11 rows)
 
-DROP CONTINUOUS VIEW test_distinct;
-DROP CONTINUOUS VIEW test_distinct_on;
 CREATE CONTINUOUS VIEW test_distinct_regress AS SELECT DISTINCT x::int, y::int FROM test_distinct_stream;
 INSERT INTO test_distinct_stream (x) VALUES (1);
 INSERT INTO test_distinct_stream (y) VALUES (1);
@@ -172,4 +174,8 @@ SELECT * FROM test_distinct_regress;
    | 1
 (2 rows)
 
-DROP CONTINUOUS VIEW test_distinct_regress;
+DROP STREAM test_distinct_stream CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to continuous view test_distinct
+drop cascades to continuous view test_distinct_on
+drop cascades to continuous view test_distinct_regress

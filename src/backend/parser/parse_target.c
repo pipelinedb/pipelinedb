@@ -424,22 +424,9 @@ transformAssignedExpr(ParseState *pstate,
 						colname),
 				 parser_errposition(pstate, location)));
 
-	/*
-	 * If it's an inferred stream and the attrno is outside our range, then just mask it as a TEXTOID. The attribute is
-	 * going to be ignore anyway.
-	 */
-	if (attrno > RelationGetNumberOfAttributes(rd) && IsInferredStream(RelationGetRelid(rd)))
-	{
-		attrtype = TEXTOID;
-		attrtypmod = InvalidOid;
-		attrcollation = InvalidOid;
-	}
-	else
-	{
-		attrtype = attnumTypeId(rd, attrno);
-		attrtypmod = rd->rd_att->attrs[attrno - 1]->atttypmod;
-		attrcollation = rd->rd_att->attrs[attrno - 1]->attcollation;
-	}
+	attrtype = attnumTypeId(rd, attrno);
+	attrtypmod = rd->rd_att->attrs[attrno - 1]->atttypmod;
+	attrcollation = rd->rd_att->attrs[attrno - 1]->attcollation;
 
 	/*
 	 * If the expression is a DEFAULT placeholder, insert the attribute's
@@ -941,7 +928,6 @@ checkInsertTargets(ParseState *pstate, List *cols, List **attrnos)
 		Bitmapset  *wholecols = NULL;
 		Bitmapset  *partialcols = NULL;
 		ListCell   *tl;
-		int natts = RelationGetNumberOfAttributes(pstate->p_target_relation);
 
 		foreach(tl, cols)
 		{
@@ -952,18 +938,12 @@ checkInsertTargets(ParseState *pstate, List *cols, List **attrnos)
 			/* Lookup column name, ereport on failure */
 			attrno = attnameAttNum(pstate->p_target_relation, name, false);
 			if (attrno == InvalidAttrNumber)
-			{
-				/* If the stream is inferred, just add dummy attrnos beyond the limit of its TupleDesc */
-				if (IsInferredStream(RelationGetRelid(pstate->p_target_relation)))
-					attrno = ++natts;
-				else
-					ereport(ERROR,
-							(errcode(ERRCODE_UNDEFINED_COLUMN),
-						errmsg("column \"%s\" of relation \"%s\" does not exist",
-							   name,
-							 RelationGetRelationName(pstate->p_target_relation)),
-							 parser_errposition(pstate, col->location)));
-			}
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+					errmsg("column \"%s\" of relation \"%s\" does not exist",
+						   name,
+						 RelationGetRelationName(pstate->p_target_relation)),
+						 parser_errposition(pstate, col->location)));
 
 			/*
 			 * Check for duplicates, but only of whole columns --- we allow

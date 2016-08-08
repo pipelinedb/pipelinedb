@@ -14,6 +14,7 @@ def test_percentile_cont_agg(pipeline, clean_db):
     max_seen = max(max_seen, max(b)[0])
     batches.append(b)
 
+  pipeline.create_stream('test_stream', x='int')
   query = '''SELECT
   percentile_cont(ARRAY[%s])
   WITHIN GROUP (ORDER BY x::integer) FROM %s

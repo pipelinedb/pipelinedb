@@ -1,4 +1,6 @@
-CREATE CONTINUOUS VIEW test_cont_index0 AS SELECT x::integer, COUNT(*), AVG(x) FROM stream GROUP BY x;
+CREATE STREAM cont_idx_stream (x int, y int);
+
+CREATE CONTINUOUS VIEW test_cont_index0 AS SELECT x::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x;
 
 CREATE INDEX test_ci_idx0 ON test_cont_index0 (x);
 \d+ test_cont_index0_mrel
@@ -11,7 +13,7 @@ CREATE INDEX test_ci_idx2 ON test_cont_index0 (x, avg);
 
 DROP CONTINUOUS VIEW test_cont_index0;
 
-CREATE CONTINUOUS VIEW test_cont_index1 WITH (max_age = '1 hour') AS SELECT x::integer, y::integer, COUNT(*), AVG(x) FROM stream GROUP BY x, y;
+CREATE CONTINUOUS VIEW test_cont_index1 WITH (max_age = '1 hour') AS SELECT x::integer, y::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x, y;
 
 CREATE INDEX test_ci_idx0 ON test_cont_index1 (x);
 \d+ test_cont_index1_mrel
@@ -26,3 +28,5 @@ CREATE INDEX test_ci_idx3 ON test_cont_index1 (x, y);
 \d+ test_cont_index1_mrel
 
 DROP CONTINUOUS VIEW test_cont_index1;
+
+DROP STREAM cont_idx_stream CASCADE;

@@ -1,3 +1,5 @@
+CREATE STREAM test_sw_hs_stream (x int, y int, z text, g int);
+
 -- First use big windows to verify that we get the same results as identical queries without sliding windows
 -- rank
 CREATE CONTINUOUS VIEW test_sw_rank0 AS SELECT rank(7, 47, '47') WITHIN GROUP (ORDER BY x::integer, y::integer, z::text) FROM test_sw_hs_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
@@ -118,19 +120,4 @@ INSERT INTO test_sw_hs_stream (g, x, y, z) VALUES (9, 19, -19, '19');
 
 SELECT * FROM test_sw_hs_change ORDER BY rank;
 
-DROP CONTINUOUS VIEW test_sw_rank0;
-DROP CONTINUOUS VIEW test_sw_rank1;
-DROP CONTINUOUS VIEW test_sw_rank2;
-DROP CONTINUOUS VIEW test_sw_rank3;
-DROP CONTINUOUS VIEW test_sw_percent0;
-DROP CONTINUOUS VIEW test_sw_percent1;
-DROP CONTINUOUS VIEW test_sw_percent2;
-DROP CONTINUOUS VIEW test_sw_percent3;
-DROP CONTINUOUS VIEW test_sw_cume_dist0;
-DROP CONTINUOUS VIEW test_sw_cume_dist1;
-DROP CONTINUOUS VIEW test_sw_cume_dist2;
-DROP CONTINUOUS VIEW test_sw_cume_dist3;
-DROP CONTINUOUS VIEW test_sw_dense_rank0;
-DROP CONTINUOUS VIEW test_sw_dense_rank1;
-DROP CONTINUOUS VIEW test_sw_dense_rank2;
-DROP CONTINUOUS VIEW test_sw_hs_change;
+DROP STREAM test_sw_hs_stream CASCADE;

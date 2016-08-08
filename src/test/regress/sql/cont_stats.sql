@@ -1,3 +1,5 @@
+CREATE STREAM stats_stream (x int);
+
 -- variance
 -- Note: variance and var_samp are the same thing.
 -- variance is the old form of var_samp, but we want to make
@@ -65,27 +67,4 @@ SELECT * FROM test_numeric_stddev_pop;
 SELECT * FROM test_float8_stddev_pop;
 SELECT * FROM test_float4_stddev_pop;
 
-DROP CONTINUOUS VIEW test_int8_var_samp;
-DROP CONTINUOUS VIEW test_int4_var_samp;
-DROP CONTINUOUS VIEW test_int2_var_samp;
-DROP CONTINUOUS VIEW test_numeric_var_samp;
-DROP CONTINUOUS VIEW test_float8_var_samp;
-DROP CONTINUOUS VIEW test_float4_var_samp;
-DROP CONTINUOUS VIEW test_int8_var_pop;
-DROP CONTINUOUS VIEW test_int4_var_pop;
-DROP CONTINUOUS VIEW test_int2_var_pop;
-DROP CONTINUOUS VIEW test_numeric_var_pop;
-DROP CONTINUOUS VIEW test_float8_var_pop;
-DROP CONTINUOUS VIEW test_float4_var_pop;
-DROP CONTINUOUS VIEW test_int8_stddev_samp;
-DROP CONTINUOUS VIEW test_int4_stddev_samp;
-DROP CONTINUOUS VIEW test_int2_stddev_samp;
-DROP CONTINUOUS VIEW test_numeric_stddev_samp;
-DROP CONTINUOUS VIEW test_float8_stddev_samp;
-DROP CONTINUOUS VIEW test_float4_stddev_samp;
-DROP CONTINUOUS VIEW test_int8_stddev_pop;
-DROP CONTINUOUS VIEW test_int4_stddev_pop;
-DROP CONTINUOUS VIEW test_int2_stddev_pop;
-DROP CONTINUOUS VIEW test_numeric_stddev_pop;
-DROP CONTINUOUS VIEW test_float8_stddev_pop;
-DROP CONTINUOUS VIEW test_float4_stddev_pop;
+DROP STREAM stats_stream CASCADE;

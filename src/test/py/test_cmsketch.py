@@ -5,6 +5,8 @@ def test_cmsketch_agg(pipeline, clean_db):
     """
     Test cmsketch_agg, cmsketch_merge_agg, cmsketch_cdf, cmsketch_quantile
     """
+    pipeline.create_stream('test_cmsketch_stream', k='int', x='int')
+
     q = """
     SELECT k::integer, cmsketch_agg(x::int) AS c FROM test_cmsketch_stream
     GROUP BY k

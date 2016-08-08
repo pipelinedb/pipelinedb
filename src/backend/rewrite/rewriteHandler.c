@@ -3218,9 +3218,6 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 				}
 			}
 
-			if (IsInferredStream(RelationGetRelid(rt_entry_relation)))
-				prepare_inferred_stream_for_insert(rt_entry_relation, parsetree);
-
 			if (values_rte)
 			{
 				List	   *attrnos;

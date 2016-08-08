@@ -1,5 +1,6 @@
 CREATE DATABASE pipeline_stats_db;
 \c pipeline_stats_db
+CREATE STREAM test_pipeline_stats_stream (x int);
 CREATE CONTINUOUS VIEW test_pipeline_stats0 AS SELECT COUNT(*) FROM test_pipeline_stats_stream;
 SELECT pg_sleep(2);
  pg_sleep 
@@ -54,7 +55,7 @@ SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 
 SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
  input_rows | input_bytes | errors 
 ------------+-------------+--------
-       2000 |       96000 |      0
+       2000 |      104000 |      0
 (1 row)
 
 DROP CONTINUOUS VIEW test_pipeline_stats0;
@@ -74,7 +75,7 @@ SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 
 SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
  input_rows | input_bytes | errors 
 ------------+-------------+--------
-       2000 |       96000 |      0
+       2000 |      104000 |      0
 (1 row)
 
 \c regression

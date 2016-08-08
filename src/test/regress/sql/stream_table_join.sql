@@ -1,3 +1,5 @@
+CREATE STREAM test_stj_stream (id int, data jsonb, val float8, col1 int, col2 int, col0 int);
+
 -- Simple joins
 CREATE TABLE test_stj_t0 (tid integer, data text, val float8);
 
@@ -153,7 +155,10 @@ SELECT pg_sleep(0.1);
 
 SELECT * FROM test_stj8;
 
+DROP STREAM test_stj_stream CASCADE;
+
 -- Regression test for join with empty table.
+CREATE STREAM test_stj_empty_stream (x int);
 CREATE TABLE test_stj_empty (x int);
 CREATE CONTINUOUS VIEW test_stj_empty_join AS SELECT test_stj_empty_stream.x::int FROM test_stj_empty_stream JOIN test_stj_empty ON test_stj_empty_stream.x = test_stj_empty.x;
 
@@ -182,7 +187,7 @@ SELECT pg_sleep(5);
 SELECT * FROM test_stj_sw0;
 
 DROP CONTINUOUS VIEW test_stj_sw0;
-DROP STREAM test_stj_sw0_s;
+DROP STREAM test_stj_sw0_s CASCADE;
 DROP TABLE test_stj_sw0_t;
 
 CREATE TABLE test_stj_t4 (x integer, y integer, z integer);
@@ -192,6 +197,7 @@ BEGIN
 END
 $$
 LANGUAGE plpgsql;
+CREATE STREAM stj_deps_stream (x int);
 CREATE CONTINUOUS VIEW stj_deps AS SELECT test_stj_foo(s.x::integer), t.x FROM stj_deps_stream s JOIN test_stj_t4 t ON s.x = t.x;
 
 -- Table columns being joined on can't be dropped
@@ -209,8 +215,10 @@ DROP CONTINUOUS VIEW stj_deps;
 ALTER TABLE test_stj_t4 DROP COLUMN x;
 DROP TABLE test_stj_t4;
 DROP FUNCTION test_stj_foo(integer);
+DROP STREAM stj_deps_stream CASCADE;
 
 -- Stream-view joins
+CREATE STREAM test_svj_stream (tid int);
 CREATE VIEW test_stj_v0 AS SELECT * from test_stj_t0;
 CREATE CONTINUOUS VIEW svj AS SELECT COUNT(*) FROM test_svj_stream s JOIN test_stj_v0 v ON s.tid::integer = v.tid;
 
@@ -223,25 +231,15 @@ SELECT * FROM svj;
 
 DROP CONTINUOUS VIEW svj;
 DROP VIEW test_stj_v0;
+DROP STREAM test_svj_stream CASCADE;
 
-DROP CONTINUOUS VIEW test_stj0;
-DROP CONTINUOUS VIEW test_stj1;
-DROP CONTINUOUS VIEW test_stj2;
-DROP CONTINUOUS VIEW test_stj3;
-DROP CONTINUOUS VIEW test_stj4;
-DROP CONTINUOUS VIEW test_stj5;
-DROP CONTINUOUS VIEW test_stj6;
-DROP CONTINUOUS VIEW test_stj7;
-DROP CONTINUOUS VIEW test_stj8;
-DROP CONTINUOUS VIEW stj_no_tl;
-DROP CONTINUOUS VIEW test_stj_empty_join;
 DROP TABLE test_stj_t0;
 DROP TABLE test_stj_t1;
 DROP TABLE test_stj_t2;
 DROP TABLE test_stj_t3;
 DROP TABLE test_stj_location;
 DROP TABLE test_stj_blocks;
-DROP TABLE test_stj_empty;
+DROP TABLE test_stj_empty CASCADE;
 
 -- Join types
 CREATE TABLE test_stj_t (x int);

@@ -27,6 +27,7 @@ def test_binary_upgrade(pipeline, clean_db):
   # Now create some CVs with data, some with indices
   for n in range(32):
     name = 'cv_%d' % n
+    pipeline.create_stream('stream_%d' % n, x='int', y='text', z='text')
     pipeline.create_cv(name, 'SELECT z::text, COUNT(DISTINCT z) AS distinct_count, COUNT(*) FROM stream_%d GROUP BY z' % n)
     rows = [(x, name, name) for x in range(1000)]
     pipeline.insert('stream_%d' % n, ('x', 'y', 'z'), rows)
@@ -37,6 +38,7 @@ def test_binary_upgrade(pipeline, clean_db):
   pipeline.execute('CREATE SCHEMA namespace')
   for n in range(8):
     name = 'namespace.cv_%d' % n
+    pipeline.create_stream('namespace.stream_%d' % n, x='int', y='text', z='text')
     pipeline.create_cv(name, 'SELECT z::text, COUNT(DISTINCT z) AS distinct_count, COUNT(*) FROM namespace.stream_%d GROUP BY z' % n)
     rows = [(x, name, name) for x in range(1000)]
     pipeline.insert('namespace.stream_%d' % n, ('x', 'y', 'z'), rows)
@@ -54,6 +56,8 @@ def test_binary_upgrade(pipeline, clean_db):
   LANGUAGE plpgsql;
   """
   pipeline.execute(create_fn)
+
+  pipeline.create_stream('stream', z='text')
 
   # Create some transforms
   for n in range(8):

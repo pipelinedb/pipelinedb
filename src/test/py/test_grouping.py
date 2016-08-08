@@ -6,6 +6,7 @@ def test_null_groups(pipeline, clean_db):
     """
     Verify that null group columns are considered equal
     """
+    pipeline.create_stream('stream', x='int', y='int', z='int')
     q = """
     SELECT x::integer, y::integer, z::integer, COUNT(*) FROM stream
     GROUP BY x, y, z;

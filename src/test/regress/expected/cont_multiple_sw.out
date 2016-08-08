@@ -1,4 +1,5 @@
 SET IntervalStyle to postgres;
+CREATE STREAM msw_stream (x int, y int, z text);
 -- We can't reference arrival_timestamp if the underlying CV isn't a SW
 CREATE CONTINUOUS VIEW msw0 AS SELECT x::integer, COUNT(*) FROM msw_stream
 WHERE x > 10 GROUP BY x;
@@ -473,7 +474,7 @@ NOTICE:  drop cascades to view msw4
 CREATE CONTINUOUS VIEW msw5 AS
 SELECT
   arrival_timestamp AS sw_time
-FROM stream
+FROM msw_stream
 WHERE arrival_timestamp > clock_timestamp() - INTERVAL '10 minute';
 \d+ msw5
                        Continuous view "public.msw5"
@@ -481,9 +482,9 @@ WHERE arrival_timestamp > clock_timestamp() - INTERVAL '10 minute';
 ---------+-----------------------------+-----------+---------+-------------
  sw_time | timestamp(0) with time zone |           | plain   | 
 View definition:
- SELECT arrival_timestamp::timestamp with time zone AS sw_time
-   FROM ONLY stream
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:10:00'::interval);
+ SELECT arrival_timestamp AS sw_time
+   FROM ONLY msw_stream
+  WHERE arrival_timestamp > (clock_timestamp() - '00:10:00'::interval);
 
 CREATE VIEW msw6 WITH (max_age = '1 minute') AS SELECT * FROM msw5;
 \d+ msw6
@@ -522,7 +523,7 @@ NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view msw6
 drop cascades to view msw7
 -- max_age of view vs step_size
-CREATE CONTINUOUS VIEW msw8 WITH (max_age='10 minute', step_factor='10') AS SELECT count(*) FROM stream;
+CREATE CONTINUOUS VIEW msw8 WITH (max_age='10 minute', step_factor='10') AS SELECT count(*) FROM msw_stream;
 CREATE VIEW msw9 WITH (max_age='5 minute') AS SELECT * FROM msw8;
 CREATE VIEW msw10 WITH (max_age='2 minute') AS SELECT * FROM msw8;
 CREATE VIEW msw11 WITH (max_age='1 minute') AS SELECT * FROM msw8;
@@ -532,3 +533,4 @@ DROP CONTINUOUS VIEW msw8 CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view msw9
 drop cascades to view msw10
+DROP STREAM msw_stream CASCADE;

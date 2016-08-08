@@ -58,6 +58,7 @@ def test_simple_crash(pipeline, clean_db):
   """
   Test simple worker and combiner crashes.
   """
+  pipeline.create_stream('stream', x='int')
   q = 'SELECT COUNT(*) FROM stream'
   pipeline.create_cv('test_simple_crash', q)
 
@@ -94,6 +95,7 @@ def test_concurrent_crash(pipeline, clean_db):
   """
   Test simple worker and combiner crashes.
   """
+  pipeline.create_stream('stream', x='int')
   q = 'SELECT COUNT(*) FROM stream'
   pipeline.create_cv('test_concurrent_crash', q)
   batch_size = 25000
@@ -138,6 +140,7 @@ def test_concurrent_crash(pipeline, clean_db):
 
 
 def test_restart_recovery(pipeline, clean_db):
+  pipeline.create_stream('stream', x='int')
   q = 'SELECT COUNT(*) FROM stream'
   pipeline.create_cv('test_restart_recovery', q)
 

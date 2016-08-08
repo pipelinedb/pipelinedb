@@ -6,6 +6,7 @@ def assert_result_changes(func, args):
     """
     Verifies that the result of the given function changes with time
     """
+    pipeline.create_stream('stream', x='int', y='text', z='int')
     name = 'assert_%s_decreases' % func
     pipeline.create_cv(name,
                        "SELECT %s(%s) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds'" % (func, args))

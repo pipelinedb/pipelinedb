@@ -808,13 +808,6 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 
 	assign_query_collations(pstate, qry);
 
-	/* If it's a dummy relation, discard it eagerly */
-	if (is_inferred_stream_relation(pstate->p_target_relation))
-	{
-		inferred_stream_close(pstate->p_target_relation);
-		pstate->p_target_relation = NULL;
-	}
-
 	return qry;
 }
 

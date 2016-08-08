@@ -3799,11 +3799,7 @@ _copyCreateForeignTableStmt(const CreateForeignTableStmt *from)
 static CreateStreamStmt *
 _copyCreateStreamStmt(const CreateStreamStmt *from)
 {
-	CreateStreamStmt *newnode = makeNode(CreateStreamStmt);
-	CreateForeignTableStmt *ft = _copyCreateForeignTableStmt(&from->ft);
-
-	memcpy(&newnode->ft, ft, sizeof(CreateForeignTableStmt));
-	COPY_SCALAR_FIELD(is_inferred);
+	CreateStreamStmt *newnode = _copyCreateForeignTableStmt(from);
 	((Node *) newnode)->type = T_CreateStreamStmt;
 
 	return newnode;

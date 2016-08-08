@@ -1,3 +1,4 @@
+CREATE STREAM os_stream (x int, y int, z int);
 
 CREATE CONTINUOUS VIEW os0 AS SELECT COUNT(*) FROM os_stream;
 CREATE CONTINUOUS VIEW os0_output AS SELECT (old).count AS old_count, (new).count AS new_count FROM output_of('os0');
@@ -149,3 +150,5 @@ INSERT INTO os_stream (x, y, z) VALUES (1, 16, 2);
 SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 
 DROP CONTINUOUS VIEW os3 CASCADE;
+
+DROP STREAM os_stream CASCADE;

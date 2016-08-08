@@ -12,6 +12,7 @@ def test_multiple_databases(pipeline, clean_db):
   cur.close()
 
   q = 'SELECT x::int FROM stream'
+  pipeline.create_stream('stream', x='int')
   pipeline.create_cv('test_multiple_databases', q)
 
   # Insert data in first database.
@@ -22,6 +23,7 @@ def test_multiple_databases(pipeline, clean_db):
   # Create same CV in the other database, make sure its created and write different data to it.
   tmp_conn = psycopg2.connect('dbname=tmp_pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
   cur = tmp_conn.cursor()
+  cur.execute('CREATE STREAM stream (x int)')
   cur.execute('CREATE CONTINUOUS VIEW test_multiple_databases AS %s' % q)
   tmp_conn.commit()
   cur.execute('INSERT INTO stream (x) VALUES %s' % ', '.join(map(lambda x: '(%d)' % x, range(1, 11, 2))))

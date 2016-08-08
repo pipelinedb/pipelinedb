@@ -1,3 +1,5 @@
+CREATE STREAM cont_activate_s (x int);
+
 CREATE CONTINUOUS VIEW cont_activate_v0 AS SELECT count(*) FROM cont_activate_s;
 CREATE CONTINUOUS VIEW cont_activate_v1 AS SELECT count(*) FROM cont_activate_s;
 
@@ -36,3 +38,5 @@ SELECT * FROM cont_activate_v1;
 
 DROP CONTINUOUS VIEW cont_activate_v0;
 DROP CONTINUOUS VIEW cont_activate_v1;
+
+DROP STREAM cont_activate_s CASCADE;

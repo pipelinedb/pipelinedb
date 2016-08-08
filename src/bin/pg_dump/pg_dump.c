@@ -341,36 +341,6 @@ is_seqrel(Archive *fout, Oid oid)
 }
 
 /*
- * is_inferred_stream
- *
- * Is the given relation an inferred stream?
- */
-static bool
-is_inferred_stream(Archive *fout, TableInfo *ti)
-{
-	PQExpBuffer ps = createPQExpBuffer();
-	PGresult *res;
-	bool result = false;
-
-	if (ti->relkind != RELKIND_STREAM)
-		return false;
-
-	appendPQExpBuffer(ps, "SELECT inferred FROM pipeline_stream WHERE relid = %d", ti->dobj.catId.oid);
-	res = ExecuteSqlQueryForSingleRow(fout, ps->data);
-
-	/*
-	 * We only want to dump static streams, as inferred streams will be created by
-	 * CREATE CONTINUOUS VIEW.
-	 */
-	destroyPQExpBuffer(ps);
-
-	if (strcmp(PQgetvalue(res, 0, PQfnumber(res, "inferred")), "t") == 0)
-		result = true;
-
-	return result;
-}
-
-/*
  * is_output_stream
  *
  * Is the given relation an output stream?
@@ -14348,7 +14318,7 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 		}
 
 		/* These relations are implicitly created by CREATE CONTINUOUS VIEW/TRANSFORM */
-		if (is_matrel(fout, tbinfo, 0) || is_inferred_stream(fout, tbinfo) || is_output_stream(fout, tbinfo))
+		if (is_matrel(fout, tbinfo, 0) || is_output_stream(fout, tbinfo))
 			return;
 
 		numParents = tbinfo->numParents;

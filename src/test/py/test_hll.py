@@ -6,6 +6,7 @@ def test_user_low_and_high_card(pipeline, clean_db):
     """
     Verify that HLL's with low and high cardinalities are correcly combined
     """
+    pipeline.create_stream('test_hll_stream', x='int', k='integer')
     q = """
     SELECT k::integer, hll_agg(x::integer) FROM test_hll_stream GROUP BY k
     """
@@ -42,6 +43,7 @@ def test_hll_agg_hashing(pipeline, clean_db):
     """
     Verify that hll_agg correctly hashes different input types
     """
+    pipeline.create_stream('test_hll_stream', x='int', y='text', z='float8')
     q = """
     SELECT hll_agg(x::integer) AS i,
     hll_agg(y::text) AS t,

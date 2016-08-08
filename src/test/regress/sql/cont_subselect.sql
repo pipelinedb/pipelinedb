@@ -1,3 +1,5 @@
+CREATE STREAM cont_subselect_stream (x int, y int, data json, a2 text, b2 text, c2 text, s text, key text);
+
 -- Disallowed subselects
 CREATE CONTINUOUS VIEW cont_subselect_v0 AS SELECT x FROM (SELECT COUNT(*) FROM cont_subselect_stream) _;
 
@@ -72,12 +74,7 @@ INSERT INTO cont_subselect_stream (x) (SELECT x % 10 FROM generate_series(1, 100
 
 SELECT * FROM cont_subselect_v5 ORDER BY x;
 
-DROP CONTINUOUS VIEW cont_subselect_v0;
-DROP CONTINUOUS VIEW cont_subselect_v1;
-DROP CONTINUOUS VIEW cont_subselect_v2;
-DROP CONTINUOUS VIEW cont_subselect_v3;
-DROP CONTINUOUS VIEW cont_subselect_v4;
-DROP CONTINUOUS VIEW cont_subselect_v5;
+DROP STREAM cont_subselect_stream CASCADE;
 
 -- Stream-table joins in subselects
 CREATE TABLE test_cont_sub_t0 (x integer, y integer);

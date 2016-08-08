@@ -3,80 +3,86 @@ import random
 
 
 def test_user_low_and_high_card(pipeline, clean_db):
-    """
-    Verify that Bloom filters's with low and high cardinalities are correcly
-    unioned
-    """
-    q = """
-    SELECT k::integer, bloom_agg(x::integer) FROM test_bloom_stream GROUP BY k
-    """
-    desc = ('k', 'x')
-    pipeline.create_cv('test_bloom_agg', q)
+  """
+  Verify that Bloom filters's with low and high cardinalities are correcly
+  unioned
+  """
+  pipeline.create_stream('test_bloom_stream', x='int', k='int')
 
-    # Low cardinalities
-    rows = []
-    for n in range(1000):
-        rows.append((0, random.choice((-1, -2))))
-        rows.append((1, random.choice((-3, -4))))
+  q = """
+  SELECT k::integer, bloom_agg(x::integer) FROM test_bloom_stream GROUP BY k
+  """
+  desc = ('k', 'x')
+  pipeline.create_cv('test_bloom_agg', q)
 
-    # High cardinalities
-    for n in range(10000):
-        rows.append((2, n))
-        rows.append((3, n))
+  # Low cardinalities
+  rows = []
+  for n in range(1000):
+    rows.append((0, random.choice((-1, -2))))
+    rows.append((1, random.choice((-3, -4))))
 
-    pipeline.insert('test_bloom_stream', desc, rows)
+  # High cardinalities
+  for n in range(10000):
+    rows.append((2, n))
+    rows.append((3, n))
 
-    result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) '
-                              'FROM test_bloom_agg WHERE k in (0, 1)').first()
-    assert result[0] == 4
+  pipeline.insert('test_bloom_stream', desc, rows)
 
-    result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) '
-                              'FROM test_bloom_agg WHERE k in (2, 3)').first()
-    assert result[0] == 8879
+  result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) '
+                            'FROM test_bloom_agg WHERE k in (0, 1)').first()
+  assert result[0] == 4
 
-    result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) '
-                              'FROM test_bloom_agg').first()
-    assert result[0] == 8881
+  result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) '
+                            'FROM test_bloom_agg WHERE k in (2, 3)').first()
+  assert result[0] == 8879
+
+  result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) '
+                            'FROM test_bloom_agg').first()
+  assert result[0] == 8881
 
 
 def test_bloom_agg_hashing(pipeline, clean_db):
-    """
-    Verify that bloom_agg correctly hashes different input types
-    """
-    q = """
-    SELECT bloom_agg(x::integer) AS i,
-    bloom_agg(y::text) AS t,
-    bloom_agg(z::float8) AS f FROM test_bloom_stream
-    """
-    desc = ('x', 'y', 'z')
-    pipeline.create_cv('test_bloom_hashing', q)
+  """
+  Verify that bloom_agg correctly hashes different input types
+  """
+  pipeline.create_stream('test_bloom_stream', x='int', y='text', z='float8')
 
-    rows = []
-    for n in range(10000):
-        rows.append((n, '%d' % n, float(n)))
-        rows.append((n, '%05d' % n, float(n)))
+  q = """
+  SELECT bloom_agg(x::integer) AS i,
+  bloom_agg(y::text) AS t,
+  bloom_agg(z::float8) AS f FROM test_bloom_stream
+  """
+  desc = ('x', 'y', 'z')
+  pipeline.create_cv('test_bloom_hashing', q)
 
-    pipeline.insert('test_bloom_stream', desc, rows)
+  rows = []
+  for n in range(10000):
+    rows.append((n, '%d' % n, float(n)))
+    rows.append((n, '%05d' % n, float(n)))
 
-    cvq = """
-    SELECT bloom_cardinality(i),
-    bloom_cardinality(t), bloom_cardinality(f) FROM test_bloom_hashing
-    """
-    result = list(pipeline.execute(cvq))
+  pipeline.insert('test_bloom_stream', desc, rows)
 
-    assert len(result) == 1
+  cvq = """
+  SELECT bloom_cardinality(i),
+  bloom_cardinality(t), bloom_cardinality(f) FROM test_bloom_hashing
+  """
+  result = list(pipeline.execute(cvq))
 
-    result = result[0]
+  assert len(result) == 1
 
-    assert result[0] == 8879
-    assert result[1] == 15614
-    assert result[2] == 8855
+  result = result[0]
+
+  assert result[0] == 8879
+  assert result[1] == 15614
+  assert result[2] == 8855
 
 
 def test_bloom_intersection(pipeline, clean_db):
   """
   Verify that bloom_intersection works
   """
+  pipeline.create_stream('test_bloom_stream', x='int', k='int')
+
   q = """
   SELECT k::int, bloom_agg(x::integer) FROM test_bloom_stream GROUP BY k
   """
@@ -104,10 +110,13 @@ def test_bloom_intersection(pipeline, clean_db):
 
   assert result[0] == 5530
 
+
 def test_bloom_contains(pipeline, clean_db):
   """
   Verify that bloom_contains works
   """
+  pipeline.create_stream('test_bloom_stream', x='int')
+
   q = """
   SELECT bloom_agg(x::integer) FROM test_bloom_stream
   """
@@ -135,6 +144,7 @@ def test_bloom_contains(pipeline, clean_db):
   assert result[1] == True
   assert result[2] == False
   assert result[3] == False
+
 
 def test_bloom_type(pipeline, clean_db):
   pipeline.create_table('test_bloom_type', x='int', y='bloom')

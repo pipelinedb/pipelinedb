@@ -10,6 +10,7 @@ def get_geometric_dist(items):
 
 
 def test_fss_agg(pipeline, clean_db):
+  pipeline.create_stream('test_fss_stream', x='int', k='text')
   q = """
   SELECT k::text, fss_agg(x::int, 5) FROM test_fss_stream
   GROUP BY k

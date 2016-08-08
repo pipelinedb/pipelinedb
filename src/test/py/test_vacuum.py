@@ -15,6 +15,7 @@ Stat = namedtuple('Stat', ['rows', 'matrel_rows', 'disk_pages'])
 
 
 def test_disk_spill(pipeline, clean_db):
+  pipeline.create_stream('test_vacuum_stream', x='int', y='text')
   pipeline.create_cv(
     'test_vacuum', '''
     SELECT x::int, COUNT(DISTINCT y::text)
@@ -132,6 +133,7 @@ def test_disk_spill(pipeline, clean_db):
 
 
 def test_concurrent_vacuum_full(pipeline, clean_db):
+  pipeline.create_stream('test_vacuum_stream', x='int')
   pipeline.create_cv(
     'test_vacuum_full',
     'SELECT x::int, COUNT(*) FROM test_vacuum_stream GROUP BY x')

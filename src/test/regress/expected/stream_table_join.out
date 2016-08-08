@@ -1,3 +1,4 @@
+CREATE STREAM test_stj_stream (id int, data jsonb, val float8, col1 int, col2 int, col0 int);
 -- Simple joins
 CREATE TABLE test_stj_t0 (tid integer, data text, val float8);
 INSERT INTO test_stj_t0 (tid, data, val) VALUES (0, '0', 0.1);
@@ -265,7 +266,20 @@ SELECT * FROM test_stj8;
  wot  | 101         | Mon Mar 30 03:56:17 2015 PDT | 20.0000000000000000 |    42
 (1 row)
 
+DROP STREAM test_stj_stream CASCADE;
+NOTICE:  drop cascades to 10 other objects
+DETAIL:  drop cascades to continuous view test_stj0
+drop cascades to continuous view test_stj1
+drop cascades to continuous view test_stj2
+drop cascades to continuous view test_stj3
+drop cascades to continuous view test_stj4
+drop cascades to continuous view test_stj5
+drop cascades to continuous view test_stj6
+drop cascades to continuous view stj_no_tl
+drop cascades to continuous view test_stj7
+drop cascades to continuous view test_stj8
 -- Regression test for join with empty table.
+CREATE STREAM test_stj_empty_stream (x int);
 CREATE TABLE test_stj_empty (x int);
 CREATE CONTINUOUS VIEW test_stj_empty_join AS SELECT test_stj_empty_stream.x::int FROM test_stj_empty_stream JOIN test_stj_empty ON test_stj_empty_stream.x = test_stj_empty.x;
 NOTICE:  consider creating an index on test_stj_empty.x for improved stream-table join performance
@@ -313,7 +327,7 @@ SELECT * FROM test_stj_sw0;
 (0 rows)
 
 DROP CONTINUOUS VIEW test_stj_sw0;
-DROP STREAM test_stj_sw0_s;
+DROP STREAM test_stj_sw0_s CASCADE;
 DROP TABLE test_stj_sw0_t;
 CREATE TABLE test_stj_t4 (x integer, y integer, z integer);
 CREATE FUNCTION test_stj_foo(integer) RETURNS integer AS $$
@@ -322,6 +336,7 @@ BEGIN
 END
 $$
 LANGUAGE plpgsql;
+CREATE STREAM stj_deps_stream (x int);
 CREATE CONTINUOUS VIEW stj_deps AS SELECT test_stj_foo(s.x::integer), t.x FROM stj_deps_stream s JOIN test_stj_t4 t ON s.x = t.x;
 NOTICE:  consider creating an index on t.x for improved stream-table join performance
 -- Table columns being joined on can't be dropped
@@ -341,7 +356,9 @@ DROP CONTINUOUS VIEW stj_deps;
 ALTER TABLE test_stj_t4 DROP COLUMN x;
 DROP TABLE test_stj_t4;
 DROP FUNCTION test_stj_foo(integer);
+DROP STREAM stj_deps_stream CASCADE;
 -- Stream-view joins
+CREATE STREAM test_svj_stream (tid int);
 CREATE VIEW test_stj_v0 AS SELECT * from test_stj_t0;
 CREATE CONTINUOUS VIEW svj AS SELECT COUNT(*) FROM test_svj_stream s JOIN test_stj_v0 v ON s.tid::integer = v.tid;
 NOTICE:  consider creating an index on v.tid for improved stream-table join performance
@@ -361,24 +378,15 @@ SELECT * FROM svj;
 
 DROP CONTINUOUS VIEW svj;
 DROP VIEW test_stj_v0;
-DROP CONTINUOUS VIEW test_stj0;
-DROP CONTINUOUS VIEW test_stj1;
-DROP CONTINUOUS VIEW test_stj2;
-DROP CONTINUOUS VIEW test_stj3;
-DROP CONTINUOUS VIEW test_stj4;
-DROP CONTINUOUS VIEW test_stj5;
-DROP CONTINUOUS VIEW test_stj6;
-DROP CONTINUOUS VIEW test_stj7;
-DROP CONTINUOUS VIEW test_stj8;
-DROP CONTINUOUS VIEW stj_no_tl;
-DROP CONTINUOUS VIEW test_stj_empty_join;
+DROP STREAM test_svj_stream CASCADE;
 DROP TABLE test_stj_t0;
 DROP TABLE test_stj_t1;
 DROP TABLE test_stj_t2;
 DROP TABLE test_stj_t3;
 DROP TABLE test_stj_location;
 DROP TABLE test_stj_blocks;
-DROP TABLE test_stj_empty;
+DROP TABLE test_stj_empty CASCADE;
+NOTICE:  drop cascades to continuous view test_stj_empty_join
 -- Join types
 CREATE TABLE test_stj_t (x int);
 INSERT INTO test_stj_t (x) SELECT generate_series(0, 1000) AS x;

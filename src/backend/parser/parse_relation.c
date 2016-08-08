@@ -1164,9 +1164,6 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 	}
 	cancel_parser_errposition_callback(&pcbstate);
 
-	if (is_inferred_stream_relation(rel))
-		rel = inferred_stream_open(pstate, rel);
-
 	return rel;
 }
 
@@ -1251,10 +1248,7 @@ addRangeTableEntry(ParseState *pstate,
 	 * so that the table can't be deleted or have its schema modified
 	 * underneath us.
 	 */
-	if (is_inferred_stream_relation(rel))
-		inferred_stream_close(rel);
-	else
-		heap_close(rel, NoLock);
+	heap_close(rel, NoLock);
 
 	/*
 	 * Set flags and access permissions.
@@ -2585,13 +2579,7 @@ get_rte_attribute_name(RangeTblEntry *rte, AttrNumber attnum)
 	 * built (which can easily happen for rules).
 	 */
 	if (rte->rtekind == RTE_RELATION)
-	{
-		/* Special handling for inferred streams */
-		if (rte->relkind == RELKIND_STREAM && IsInferredStream(rte->relid) &&
-				attnum > 0 && attnum <= list_length(rte->eref->colnames))
-			return strVal(list_nth(rte->eref->colnames, attnum - 1));
 		return get_relid_attribute_name(rte->relid, attnum);
-	}
 
 	/*
 	 * Otherwise use the column name from eref.  There should always be one.

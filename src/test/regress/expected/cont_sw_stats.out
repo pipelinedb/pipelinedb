@@ -1,3 +1,4 @@
+CREATE STREAM sw_stats_stream (x int);
 -- variance
 -- Note: variance and var_samp are the same thing.
 -- variance is the old form of var_samp, but we want to make
@@ -65,15 +66,15 @@ SELECT * FROM test_sw_stats_numeric_var_samp;
 (1 row)
 
 SELECT * FROM test_sw_stats_float8_var_samp;
-     var_samp     |     variance     
-------------------+------------------
- 89555.5274120603 | 89555.5274120603
+     var_samp     |      variance      
+------------------+--------------------
+ 89555.5274120603 | 89555.527412060302
 (1 row)
 
 SELECT * FROM test_sw_stats_float4_var_samp;
-     var_samp     |     variance     
-------------------+------------------
- 89555.5274120603 | 89555.5274120603
+     var_samp     |      variance      
+------------------+--------------------
+ 89555.5274120603 | 89555.527412060302
 (1 row)
 
 SELECT * FROM test_sw_stats_int8_var_pop;
@@ -184,27 +185,29 @@ SELECT * FROM test_sw_stats_float4_stddev_pop;
  298.509212211282
 (1 row)
 
-DROP CONTINUOUS VIEW test_sw_stats_int8_var_samp;
-DROP CONTINUOUS VIEW test_sw_stats_int4_var_samp;
-DROP CONTINUOUS VIEW test_sw_stats_int2_var_samp;
-DROP CONTINUOUS VIEW test_sw_stats_numeric_var_samp;
-DROP CONTINUOUS VIEW test_sw_stats_float8_var_samp;
-DROP CONTINUOUS VIEW test_sw_stats_float4_var_samp;
-DROP CONTINUOUS VIEW test_sw_stats_int8_var_pop;
-DROP CONTINUOUS VIEW test_sw_stats_int4_var_pop;
-DROP CONTINUOUS VIEW test_sw_stats_int2_var_pop;
-DROP CONTINUOUS VIEW test_sw_stats_numeric_var_pop;
-DROP CONTINUOUS VIEW test_sw_stats_float8_var_pop;
-DROP CONTINUOUS VIEW test_sw_stats_float4_var_pop;
-DROP CONTINUOUS VIEW test_sw_stats_int8_stddev_samp;
-DROP CONTINUOUS VIEW test_sw_stats_int4_stddev_samp;
-DROP CONTINUOUS VIEW test_sw_stats_int2_stddev_samp;
-DROP CONTINUOUS VIEW test_sw_stats_numeric_stddev_samp;
-DROP CONTINUOUS VIEW test_sw_stats_float8_stddev_samp;
-DROP CONTINUOUS VIEW test_sw_stats_float4_stddev_samp;
-DROP CONTINUOUS VIEW test_sw_stats_int8_stddev_pop;
-DROP CONTINUOUS VIEW test_sw_stats_int4_stddev_pop;
-DROP CONTINUOUS VIEW test_sw_stats_int2_stddev_pop;
-DROP CONTINUOUS VIEW test_sw_stats_numeric_stddev_pop;
-DROP CONTINUOUS VIEW test_sw_stats_float8_stddev_pop;
-DROP CONTINUOUS VIEW test_sw_stats_float4_stddev_pop;
+DROP STREAM sw_stats_stream CASCADE;
+NOTICE:  drop cascades to 24 other objects
+DETAIL:  drop cascades to continuous view test_sw_stats_int8_var_samp
+drop cascades to continuous view test_sw_stats_int4_var_samp
+drop cascades to continuous view test_sw_stats_int2_var_samp
+drop cascades to continuous view test_sw_stats_numeric_var_samp
+drop cascades to continuous view test_sw_stats_float8_var_samp
+drop cascades to continuous view test_sw_stats_float4_var_samp
+drop cascades to continuous view test_sw_stats_int8_var_pop
+drop cascades to continuous view test_sw_stats_int4_var_pop
+drop cascades to continuous view test_sw_stats_int2_var_pop
+drop cascades to continuous view test_sw_stats_numeric_var_pop
+drop cascades to continuous view test_sw_stats_float8_var_pop
+drop cascades to continuous view test_sw_stats_float4_var_pop
+drop cascades to continuous view test_sw_stats_int8_stddev_samp
+drop cascades to continuous view test_sw_stats_int4_stddev_samp
+drop cascades to continuous view test_sw_stats_int2_stddev_samp
+drop cascades to continuous view test_sw_stats_numeric_stddev_samp
+drop cascades to continuous view test_sw_stats_float8_stddev_samp
+drop cascades to continuous view test_sw_stats_float4_stddev_samp
+drop cascades to continuous view test_sw_stats_int8_stddev_pop
+drop cascades to continuous view test_sw_stats_int4_stddev_pop
+drop cascades to continuous view test_sw_stats_int2_stddev_pop
+drop cascades to continuous view test_sw_stats_numeric_stddev_pop
+drop cascades to continuous view test_sw_stats_float8_stddev_pop
+drop cascades to continuous view test_sw_stats_float4_stddev_pop

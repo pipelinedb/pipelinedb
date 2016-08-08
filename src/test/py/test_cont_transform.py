@@ -5,6 +5,10 @@ import time
 
 
 def test_multiple_insert(pipeline, clean_db):
+  pipeline.create_stream('stream', x='int')
+  pipeline.create_stream('stream1', x='int')
+  pipeline.create_stream('stream2', x='int')
+
   pipeline.create_cv('cv0', 'SELECT count(*) FROM stream1')
   pipeline.create_cv('cv1', 'SELECT count(*) FROM stream2')
   pipeline.create_ct('ct1', 'SELECT x::int FROM stream WHERE mod(x, 2) = 0', "pipeline_stream_insert('stream1', 'stream2')")
@@ -18,6 +22,10 @@ def test_multiple_insert(pipeline, clean_db):
 
 
 def test_nested_transforms(pipeline, clean_db):
+  pipeline.create_stream('stream', x='int')
+  pipeline.create_stream('stream2', x='int')
+  pipeline.create_stream('stream4', x='int')
+
   pipeline.create_cv('cv0', 'SELECT count(*) FROM stream4')
   pipeline.create_cv('cv1', 'SELECT count(*) FROM stream2')
   pipeline.create_ct('ct0', 'SELECT x::int FROM stream2 WHERE mod(x, 4) = 0', "pipeline_stream_insert('stream4')")

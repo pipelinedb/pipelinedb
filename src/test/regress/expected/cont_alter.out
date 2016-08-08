@@ -1,4 +1,5 @@
-CREATE CONTINUOUS VIEW test_cont_alter AS SELECT x::int FROM stream;
+CREATE STREAM cont_alter_stream (x int);
+CREATE CONTINUOUS VIEW test_cont_alter AS SELECT x::int FROM cont_alter_stream;
 ALTER VIEW test_cont_alter RENAME TO lolcat;
 ERROR:  "test_cont_alter" is not a view
 ALTER TABLE test_cont_alter_mrel RENAME TO lolcat;
@@ -9,4 +10,5 @@ ALTER TABLE test_cont_alter_mrel DROP COLUMN x;
 ERROR:  cannot drop table test_cont_alter_mrel column x because other objects depend on it
 DETAIL:  continuous view test_cont_alter depends on table test_cont_alter_mrel column x
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-DROP CONTINUOUS VIEW test_cont_alter;
+DROP STREAM cont_alter_stream CASCADE;
+NOTICE:  drop cascades to continuous view test_cont_alter

@@ -519,7 +519,6 @@ findDependentObjects(const ObjectAddress *object,
 	ObjectAddress otherObject;
 	ObjectAddressStack mystack;
 	ObjectAddressExtra extra;
-	Oid stream_dep_oid = InvalidOid;
 
 	/*
 	 * If the target object is already being visited in an outer recursion
@@ -598,13 +597,6 @@ findDependentObjects(const ObjectAddress *object,
 			case DEPENDENCY_AUTO:
 				/* no problem */
 				break;
-			case DEPENDENCY_STREAM:
-				/*
-				 * We're trying to drop an inferred stream. A dependency from an inferred stream
-				 * to a continuous view is semantically equivalent to an internal dependency because
-				 * the inferred stream is part of the "internal" implementation of all continuous views
-				 * reading from it.
-				 */
 			case DEPENDENCY_INTERNAL:
 			case DEPENDENCY_EXTENSION:
 				/*
@@ -821,10 +813,6 @@ findDependentObjects(const ObjectAddress *object,
 								getObjectDescription(object))));
 				subflags = 0;	/* keep compiler quiet */
 				break;
-			case DEPENDENCY_STREAM:
-				stream_dep_oid = otherObject.objectId;
-				subflags = 0; /* keep compiler quiet */
-				break;
 			default:
 				elog(ERROR, "unrecognized dependency type '%c' for %s",
 					 foundDep->deptype, getObjectDescription(object));
@@ -832,135 +820,15 @@ findDependentObjects(const ObjectAddress *object,
 				break;
 		}
 
-		/* DEPENDENCY_STREAM is handled separately below */
-		if (foundDep->deptype != DEPENDENCY_STREAM)
-			findDependentObjects(&otherObject,
-								 subflags,
-								 &mystack,
-								 targetObjects,
-								 pendingObjects,
-								 depRel);
+		findDependentObjects(&otherObject,
+							 subflags,
+							 &mystack,
+							 targetObjects,
+							 pendingObjects,
+							 depRel);
 	}
 
 	systable_endscan(scan);
-
-	/*
-	 * We're trying to drop a continuous view which has an inferred stream dependent on it.
-	 * Depending on whether there are other continuous views dependent on the stream or not,
-	 * we may or may not have to delete the inferred stream object as well.
-	 *
-	 * XXX(usmanm): this right now assumes that there is only a continuous view can only have a single
-	 * DEPENDENCY_STREAM entry in pg_depend. Once stream-stream joins come into play, this will need to be
-	 * fixed.
-	 */
-	if (OidIsValid(stream_dep_oid))
-	{
-		List *cv_deps = NIL;
-		int num_cvs = 0;
-		ListCell *lc;
-
-		ScanKeyInit(&key[0],
-					Anum_pg_depend_classid,
-					BTEqualStrategyNumber, F_OIDEQ,
-					ObjectIdGetDatum(RelationRelationId));
-		ScanKeyInit(&key[1],
-					Anum_pg_depend_objid,
-					BTEqualStrategyNumber, F_OIDEQ,
-					ObjectIdGetDatum(stream_dep_oid));
-		nkeys = 2;
-
-		scan = systable_beginscan(*depRel, DependDependerIndexId, true,
-								  NULL, nkeys, key);
-
-		while (HeapTupleIsValid(tup = systable_getnext(scan)))
-		{
-			Form_pg_depend foundDep = (Form_pg_depend) GETSTRUCT(tup);
-			if (foundDep->deptype == DEPENDENCY_STREAM)
-				cv_deps = lappend_oid(cv_deps, foundDep->refclassid);
-		}
-
-		systable_endscan(scan);
-
-		/*
-		 * We need to determine the number of continuous views that are dependent on this stream.
-		 * This isn't as easy as looking at the length of cv_deps because some of those views might be
-		 * pending deletion.
-		 */
-		foreach(lc, cv_deps)
-		{
-			ObjectAddress otherObject;
-
-			otherObject.classId = RelationRelationId;
-			otherObject.objectId = lfirst_oid(lc);
-			otherObject.objectSubId = 0;
-
-			if (pendingObjects && object_address_present(&otherObject, pendingObjects))
-				continue;
-
-			num_cvs++;
-		}
-
-		if (num_cvs == 1)
-		{
-			/*
-			 * If there's only one continuous view that the stream depends on, we treat it as a
-			 * DEPENDENCY_INTERNAL, so that it is garbage collected as well.
-			 */
-			ObjectAddress otherObject;
-
-			otherObject.classId = RelationRelationId;
-			otherObject.objectId = stream_dep_oid;
-			otherObject.objectSubId = 0;
-
-			findDependentObjects(&otherObject,
-								 DEPFLAG_INTERNAL,
-								 &mystack,
-								 targetObjects,
-								 pendingObjects,
-								 depRel);
-		}
-		else
-		{
-			/*
-			 * Just remove the DEPENDENCY_STREAM entry from pg_depend.
-			 */
-			ScanKeyInit(&key[0],
-						Anum_pg_depend_refclassid,
-						BTEqualStrategyNumber, F_OIDEQ,
-						ObjectIdGetDatum(object->classId));
-			ScanKeyInit(&key[1],
-						Anum_pg_depend_refobjid,
-						BTEqualStrategyNumber, F_OIDEQ,
-						ObjectIdGetDatum(object->objectId));
-			if (object->objectSubId != 0)
-			{
-				ScanKeyInit(&key[2],
-							Anum_pg_depend_refobjsubid,
-							BTEqualStrategyNumber, F_INT4EQ,
-							Int32GetDatum(object->objectSubId));
-				nkeys = 3;
-			}
-			else
-				nkeys = 2;
-
-			scan = systable_beginscan(*depRel, DependReferenceIndexId, true,
-									  NULL, nkeys, key);
-
-			while (HeapTupleIsValid(tup = systable_getnext(scan)))
-			{
-				Form_pg_depend foundDep = (Form_pg_depend) GETSTRUCT(tup);
-
-				if (foundDep->deptype == DEPENDENCY_STREAM)
-				{
-					Assert(foundDep->objid == stream_dep_oid);
-					simple_heap_delete(*depRel, &tup->t_self);
-					break;
-				}
-			}
-
-			systable_endscan(scan);
-		}
-	}
 
 	/*
 	 * Finally, we can add the target object to targetObjects.  Be careful to

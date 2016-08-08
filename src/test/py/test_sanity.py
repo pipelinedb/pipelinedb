@@ -12,6 +12,7 @@ def test_create_drop_continuous_view(pipeline, clean_db):
   """
   Basic sanity check
   """
+  pipeline.create_stream('stream', id='int')
   pipeline.create_cv('cv0', 'SELECT id::integer FROM stream')
   pipeline.create_cv('cv1', 'SELECT id::integer FROM stream')
   pipeline.create_cv('cv2', 'SELECT id::integer FROM stream')
@@ -35,6 +36,7 @@ def test_simple_insert(pipeline, clean_db):
   """
   Verify that we can insert some rows and count some stuff
   """
+  pipeline.create_stream('stream', key='int')
   pipeline.create_cv('cv',
                      'SELECT key::integer, COUNT(*) FROM stream GROUP BY key')
 
@@ -54,6 +56,7 @@ def test_multiple(pipeline, clean_db):
   """
   Verify that multiple continuous views work together properly
   """
+  pipeline.create_stream('stream', n='numeric', s='text', unused='int')
   pipeline.create_cv('cv0', 'SELECT n::numeric FROM stream WHERE n > 10.00001')
   pipeline.create_cv('cv1',
                      'SELECT s::text FROM stream WHERE s LIKE \'%%this%%\'')
@@ -75,6 +78,7 @@ def test_combine(pipeline, clean_db):
   """
   Verify that partial tuples are combined with on-disk tuples
   """
+  pipeline.create_stream('stream', key='text', unused='int')
   pipeline.create_cv('combine',
                      'SELECT key::text, COUNT(*) FROM stream GROUP BY key')
 
@@ -95,6 +99,7 @@ def test_combine(pipeline, clean_db):
 
 
 def test_multiple_stmts(pipeline, clean_db):
+  pipeline.create_stream('stream', unused='int')
   conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s'
                           % (getpass.getuser(), pipeline.port))
   db = conn.cursor()
@@ -111,6 +116,7 @@ def test_multiple_stmts(pipeline, clean_db):
 
 
 def test_uniqueness(pipeline, clean_db):
+  pipeline.create_stream('stream', x='int')
   pipeline.create_cv('uniqueness',
                      'SELECT x::int, count(*) FROM stream GROUP BY x')
 
@@ -124,9 +130,9 @@ def test_uniqueness(pipeline, clean_db):
 
   assert count == distinct_count
 
-
 @async_insert
 def test_concurrent_inserts(pipeline, clean_db):
+  pipeline.create_stream('stream', x='int')
   pipeline.create_cv('concurrent_inserts0',
                      'SELECT x::int, count(*) FROM stream GROUP BY x')
   pipeline.create_cv('concurrent_inserts1', 'SELECT count(*) FROM stream')
@@ -167,6 +173,7 @@ def test_concurrent_inserts(pipeline, clean_db):
 
 @async_insert
 def test_concurrent_copy(pipeline, clean_db):
+  pipeline.create_stream('stream', x='int')
   pipeline.create_cv('concurrent_copy0',
                      'SELECT x::int, count(*) FROM stream GROUP BY x')
   pipeline.create_cv('concurrent_copy1', 'SELECT count(*) FROM stream')

@@ -1,3 +1,5 @@
+CREATE STREAM test_pk_stream (x int);
+
 CREATE CONTINUOUS VIEW test_pk0 WITH (pk='x') AS SELECT x::integer, COUNT(*) FROM test_pk_stream GROUP BY x;
 \d+ test_pk0_mrel
 
@@ -21,3 +23,5 @@ DROP CONTINUOUS VIEW test_pk1;
 
 CREATE CONTINUOUS VIEW wrong_arg_type WITH (pk=1) AS SELECT COUNT(*) FROM test_pk_stream;
 CREATE CONTINUOUS VIEW no_column WITH (pk='not_here') AS SELECT COUNT(*) FROM test_pk_stream;
+
+DROP STREAM test_pk_stream CASCADE;

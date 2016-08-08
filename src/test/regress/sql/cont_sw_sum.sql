@@ -1,5 +1,7 @@
 -------------------------------------------------------------------------------
 -- Integer sums
+CREATE STREAM int_stream_cqswsum (k text, v int8);
+
 CREATE CONTINUOUS VIEW test_sw_int8_sum AS SELECT k::text, SUM(v::int8) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 CREATE CONTINUOUS VIEW test_sw_int4_sum AS SELECT k::text, SUM(v::int4) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 CREATE CONTINUOUS VIEW test_sw_int2_sum AS SELECT k::text, SUM(v::int2) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
@@ -20,8 +22,12 @@ SELECT * FROM test_sw_int8_sum ORDER BY k;
 SELECT * FROM test_sw_int4_sum ORDER BY k;
 SELECT * FROM test_sw_int2_sum ORDER BY k;
 
+DROP STREAM int_stream_cqswsum CASCADE;
+
 -------------------------------------------------------------------------------
 -- Float sums
+CREATE STREAM float_stream_cqswsum (k text, v float8);
+
 CREATE CONTINUOUS VIEW test_sw_float8_sum AS SELECT k::text, SUM(v::float8) FROM float_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 CREATE CONTINUOUS VIEW test_sw_float4_sum AS SELECT k::text, SUM(v::float4) FROM float_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 
@@ -39,8 +45,12 @@ INSERT INTO float_stream_cqswsum (k, v) VALUES ('y', -10.3), ('y', 1.2e6), ('y',
 SELECT * FROM test_sw_float8_sum ORDER BY k;
 SELECT * FROM test_sw_float4_sum ORDER BY k;
 
+DROP STREAM float_stream_cqswsum CASCADE;
+
 -------------------------------------------------------------------------------
 -- Cash sums
+CREATE STREAM cash_stream_cqswsum (k text, v money);
+
 CREATE CONTINUOUS VIEW test_sw_cash_sum AS SELECT k::text, SUM(v::money) FROM cash_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 
 INSERT INTO cash_stream_cqswsum (k, v) VALUES ('x', 10.2), ('x', 1.2), ('x', 0.10);
@@ -55,8 +65,12 @@ INSERT INTO cash_stream_cqswsum (k, v) VALUES ('y', '0.01');
 
 SELECT * FROM test_sw_cash_sum ORDER BY k;
 
+DROP STREAM cash_stream_cqswsum CASCADE;
+
 -------------------------------------------------------------------------------
 -- Numeric sums
+CREATE STREAM numeric_stream_cqswsum (k text, v numeric);
+
 CREATE CONTINUOUS VIEW test_sw_numeric_sum AS SELECT k::text, SUM(v::numeric) FROM numeric_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 
 INSERT INTO numeric_stream_cqswsum (k, v) VALUES ('x', 10.0002), ('x', 0.0001), ('x', -0.10);
@@ -71,8 +85,12 @@ INSERT INTO numeric_stream_cqswsum (k, v) VALUES ('y', '-00000000000000000000000
 
 SELECT * FROM test_sw_numeric_sum ORDER BY k;
 
+DROP STREAM numeric_stream_cqswsum CASCADE;
+
 -------------------------------------------------------------------------------
 -- Interval sum
+CREATE STREAM interval_stream_cqswsum (k text, ts0 timestamp, ts1 timestamp);
+
 CREATE CONTINUOUS VIEW test_sw_interval_sum AS SELECT k::text, SUM(ts1::timestamp - ts0::timestamp) FROM interval_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 
 INSERT INTO interval_stream_cqswsum (k, ts0, ts1) VALUES ('x', '2014-01-01', '2014-01-02'), ('x', '2014-01-01', '2014-02-01');
@@ -87,11 +105,4 @@ INSERT INTO interval_stream_cqswsum (k, ts0, ts1) VALUES ('y', '2014-01-01', '20
 
 SELECT * FROM test_sw_interval_sum ORDER BY k;
 
-DROP CONTINUOUS VIEW test_sw_int8_sum;
-DROP CONTINUOUS VIEW test_sw_int4_sum;
-DROP CONTINUOUS VIEW test_sw_int2_sum;
-DROP CONTINUOUS VIEW test_sw_cash_sum;
-DROP CONTINUOUS VIEW test_sw_float8_sum;
-DROP CONTINUOUS VIEW test_sw_float4_sum;
-DROP CONTINUOUS VIEW test_sw_numeric_sum;
-DROP CONTINUOUS VIEW test_sw_interval_sum;
+DROP STREAM interval_stream_cqswsum CASCADE;

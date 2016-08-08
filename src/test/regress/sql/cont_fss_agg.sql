@@ -1,3 +1,5 @@
+CREATE STREAM test_fss_agg_stream (x float8, y int, k text, t text);
+
 CREATE CONTINUOUS VIEW test_fss_agg0 AS SELECT k::text, fss_agg(x::int, 3) FROM test_fss_agg_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_fss_agg1 AS SELECT k::text, fss_agg(x::float8, 3) FROM test_fss_agg_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_fss_agg2 AS SELECT k::text, fss_agg(k::text, 3) FROM test_fss_agg_stream GROUP BY k;
@@ -80,3 +82,5 @@ INSERT INTO test_fss_agg_stream (x) VALUES (null);
 
 SELECT fss_topk(fss_agg) FROM test_fss_agg5;
 DROP CONTINUOUS VIEW test_fss_agg5;
+
+DROP STREAM test_fss_agg_stream CASCADE;

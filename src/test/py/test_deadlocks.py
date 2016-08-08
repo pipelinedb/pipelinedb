@@ -11,6 +11,7 @@ def test_concurrent_add_drop(pipeline, clean_db):
   Adds and drops continuous views while inserting into a stream so that we
   see add/drops in the middle of transactions in workers and combiners.
   """
+  pipeline.create_stream('stream', x='int')
   q = 'SELECT x::int,  COUNT(*) FROM stream GROUP BY x'
   pipeline.create_cv('cv', q)
 

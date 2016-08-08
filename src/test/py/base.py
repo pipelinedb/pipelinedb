@@ -166,14 +166,16 @@ class PipelineDB(object):
         self._tmp_dir = INSTALL_FORMAT % index
         return self._tmp_dir
 
-    def drop_all_queries(self):
+    def drop_all(self):
         """
-        Drop all continuous queries
+        Drop all continuous queries and streams
         """
         for transform in self.execute('SELECT schema, name FROM pipeline_transforms()'):
           self.execute('DROP CONTINUOUS TRANSFORM %s.%s CASCADE' % (transform['schema'], transform['name']))
         for view in self.execute('SELECT schema, name FROM pipeline_views()'):
           self.execute('DROP CONTINUOUS VIEW %s.%s CASCADE' % (view['schema'], view['name']))
+        for stream in self.execute('SELECT schema, name FROM pipeline_streams()'):
+          self.execute('DROP STREAM %s.%s CASCADE' % (stream['schema'], stream['name']))
 
     def create_cv(self, name, stmt, **kw):
         """
@@ -293,7 +295,7 @@ def clean_db(request):
     Called for every test so each test gets a clean db
     """
     pdb = request.module.pipeline
-    request.addfinalizer(pdb.drop_all_queries)
+    request.addfinalizer(pdb.drop_all)
 
 
 @pytest.fixture(scope='module')

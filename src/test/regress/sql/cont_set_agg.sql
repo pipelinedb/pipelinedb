@@ -1,3 +1,5 @@
+CREATE STREAM test_set_agg_stream (x int, y float8, z numeric, t text);
+
 CREATE CONTINUOUS VIEW test_set_agg0 AS SELECT array_length(set_agg(x::integer), 1), exact_count_distinct(x) FROM test_set_agg_stream;
 CREATE CONTINUOUS VIEW test_set_agg1 AS SELECT array_length(set_agg(y::float8), 1), exact_count_distinct(y) FROM test_set_agg_stream;
 CREATE CONTINUOUS VIEW test_set_agg2 AS SELECT array_length(set_agg(z::numeric), 1), exact_count_distinct(z) FROM test_set_agg_stream;
@@ -38,11 +40,12 @@ SELECT * FROM test_set_agg4;
 DROP CONTINUOUS VIEW test_set_agg4;
 
 -- Check for NULLs
-CREATE CONTINUOUS VIEW test_set_agg5 AS SELECT set_agg(x::text) FROM test_set_agg_stream;
+CREATE CONTINUOUS VIEW test_set_agg5 AS SELECT set_agg(t) FROM test_set_agg_stream;
 
-INSERT INTO test_set_agg_stream (x) VALUES ('a'), (1), (NULL);
-INSERT INTO test_set_agg_stream (x) VALUES ('a'), (1), (NULL);
+INSERT INTO test_set_agg_stream (t) VALUES ('a'), (1), (NULL);
+INSERT INTO test_set_agg_stream (t) VALUES ('a'), (1), (NULL);
 
 SELECT * FROM test_set_agg5;
 
 DROP CONTINUOUS VIEW test_set_agg5;
+DROP STREAM test_set_agg_stream CASCADE;

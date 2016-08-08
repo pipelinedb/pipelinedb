@@ -55,6 +55,7 @@ def test_join_with_aggs(pipeline, clean_db):
     _insert(pipeline, 'a0', a0, 0.1)
     _insert(pipeline, 'a1', a1, 0.1)
 
+    pipeline.create_stream('stream', **a0_cols)
     pipeline.create_cv('test_agg_join', q)
     _insert(pipeline, 'stream', s)
 
@@ -93,6 +94,7 @@ def test_join_with_where(pipeline, clean_db):
     _insert(pipeline, 'wt', wt, 0.1)
     _insert(pipeline, 'wt_s', s, 0.1)
 
+    pipeline.create_stream('stream', **wt_cols)
     pipeline.create_cv('test_join_where', q)
     _insert(pipeline, 'stream', s)
 
@@ -118,6 +120,8 @@ def test_join_ordering(pipeline, clean_db):
     ordering1 = _generate_rows(num_cols, 64)
     _insert(pipeline, 'ordering0', ordering0, 0.1)
     _insert(pipeline, 'ordering1', ordering1, 0.1)
+
+    pipeline.create_stream('stream', **ordering0_cols)
 
     # stream, table, table
     q0 = """
@@ -165,6 +169,7 @@ def test_join_across_batches(pipeline, clean_db):
     join_cols = [0]
     t_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
     pipeline.create_table('batch', **t_cols)
+    pipeline.create_stream('stream', **t_cols)
 
     q = """
     SELECT s.col0::integer FROM batch JOIN stream s ON batch.col0 = s.col0
@@ -191,6 +196,7 @@ def test_incremental_join(pipeline, clean_db):
     join_cols = [0, 1]
     t_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
     pipeline.create_table('inc', **t_cols)
+    pipeline.create_stream('stream', **t_cols)
 
     q = """
     SELECT s.col0::integer FROM inc JOIN stream s ON inc.col0 = s.col0
@@ -222,6 +228,7 @@ def test_join_multiple_tables(pipeline, clean_db):
 
     pipeline.create_table('t0', **t0_cols)
     pipeline.create_table('t1', **t1_cols)
+    pipeline.create_stream('stream', **t0_cols)
     q = """
     SELECT s.col0::integer FROM t0 JOIN t1 ON t0.col0 = t1.col0
     JOIN stream s ON t1.col0 = s.col0
@@ -246,6 +253,7 @@ def test_indexed(pipeline, clean_db):
     """
     Verify that stream-table joins involving indexed tables work
     """
+    pipeline.create_stream('stream', x='int', y='int')
     q = """
     SELECT stream.x::integer, count(*) FROM stream
     JOIN test_indexed_t t ON stream.x = t.x GROUP BY stream.x

@@ -210,7 +210,6 @@ typedef struct CopyStateData
 	 * State for copying to a stream
 	 */
 	bool to_stream;
-	bool to_inferred_stream;
 	List *attnamelist;
 	MemoryContext to_stream_ctxt;
 } CopyStateData;
@@ -847,22 +846,6 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		rel = heap_openrv(stmt->relation,
 							(is_from ? RowExclusiveLock : AccessShareLock));
 
-		if (is_inferred_stream_relation(rel))
-		{
-			ParseState *pstate;
-
-			if (!stmt->attlist)
-				ereport(ERROR,
-						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-						errmsg("column names must be explicitly given when copying into a stream"),
-						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
-
-			pstate = make_parsestate(NULL);
-			pstate->p_ins_cols = stmt->attlist;
-			rel = inferred_stream_open(pstate, rel);
-			free_parsestate(pstate);
-		}
-
 		relid = RelationGetRelid(rel);
 
 		rte = makeNode(RangeTblEntry);
@@ -997,12 +980,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	 * ensure that updates will be committed before lock is released.
 	 */
 	if (rel != NULL && rel->rd_refcnt > 0)
-	{
-		if (is_inferred_stream_relation(rel))
-			inferred_stream_close(rel);
-		else
-			heap_close(rel, (is_from ? NoLock : AccessShareLock));
-	}
+		heap_close(rel, (is_from ? NoLock : AccessShareLock));
 
 	return relid;
 }
@@ -1390,7 +1368,6 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
 	cstate->to_stream = rel && rel->rd_rel->relkind == RELKIND_STREAM;
-	cstate->to_inferred_stream = rel && is_inferred_stream_relation(rel);
 	cstate->attnamelist = attnamelist;
 
 	if (cstate->to_stream)
@@ -3049,7 +3026,7 @@ NextCopyFrom(CopyState cstate, ExprContext *econtext,
 			return false;
 
 		/* check for overflowing fields */
-		if (!cstate->to_inferred_stream && (nfields > 0 && fldct > nfields))
+		if (nfields > 0 && fldct > nfields)
 			ereport(ERROR,
 					(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
 					 errmsg("extra data after last expected column")));
@@ -4485,7 +4462,6 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 			char	   *name = strVal(lfirst(l));
 			int			attnum;
 			int			i;
-			bool is_inferred_stream = rel && is_inferred_stream_relation(rel);
 
 			/* Lookup column name */
 			attnum = InvalidAttrNumber;
@@ -4500,7 +4476,7 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 				}
 			}
 
-			if (attnum == InvalidAttrNumber && !is_inferred_stream)
+			if (attnum == InvalidAttrNumber)
 			{
 				if (rel != NULL)
 					ereport(ERROR,

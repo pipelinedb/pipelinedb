@@ -1,3 +1,5 @@
+CREATE STREAM test_os_stream (g int, x int, y int, z int);
+
 -- percentile_cont
 CREATE CONTINUOUS VIEW test_pc0 AS SELECT percentile_cont(0.23) WITHIN GROUP (ORDER BY x::integer) FROM test_os_stream;
 CREATE CONTINUOUS VIEW test_pc1 AS SELECT g::integer, percentile_cont(ARRAY[0, 0.2, 0.4, 0.6, 0.8, 1.0]) WITHIN GROUP (ORDER BY x::integer - y::integer) FROM test_os_stream GROUP BY g;
@@ -29,6 +31,4 @@ SELECT * FROM test_pc0;
 SELECT * FROM test_pc1 ORDER BY g;
 SELECT * FROM test_pc2;
 
-DROP CONTINUOUS VIEW test_pc0;
-DROP CONTINUOUS VIEW test_pc1;
-DROP CONTINUOUS VIEW test_pc2;
+DROP STREAM test_os_stream CASCADE;

@@ -1,6 +1,7 @@
 SET IntervalStyle to postgres;
+CREATE STREAM create_cont_stream (key integer, url text, value text);
 -- Simple ones
-CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key::integer FROM create_cont_stream1;
+CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key FROM create_cont_stream;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate0';
  count 
 -------
@@ -13,8 +14,8 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate0';
 --------+---------+-----------+---------+-------------
  key    | integer |           | plain   | 
 View definition:
- SELECT key::integer
-   FROM ONLY create_cont_stream1;
+ SELECT key
+   FROM ONLY create_cont_stream;
 
 \d+ cqcreate0_mrel;
                     Table "public.cqcreate0_mrel"
@@ -41,7 +42,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate0');
     FROM ONLY cqcreate0_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url::text, 1, 2) FROM create_cont_stream1;
+CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url, 1, 2) FROM create_cont_stream;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate1';
  count 
 -------
@@ -54,8 +55,8 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate1';
 -----------+------+-----------+----------+-------------
  substring | text |           | extended | 
 View definition:
- SELECT "substring"(url::text, 1, 2) AS "substring"
-   FROM ONLY create_cont_stream1;
+ SELECT "substring"(url, 1, 2) AS "substring"
+   FROM ONLY create_cont_stream;
 
 \d+ cqcreate1_mrel;
                      Table "public.cqcreate1_mrel"
@@ -82,7 +83,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate1');
     FROM ONLY cqcreate1_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqcreate2 AS SELECT key::integer, substring(value::text, 1, 2) AS s FROM create_cont_stream1;
+CREATE CONTINUOUS VIEW cqcreate2 AS SELECT key, substring(value, 1, 2) AS s FROM create_cont_stream;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate2';
  count 
 -------
@@ -96,9 +97,9 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate2';
  key    | integer |           | plain    | 
  s      | text    |           | extended | 
 View definition:
- SELECT key::integer,
-    "substring"(value::text, 1, 2) AS s
-   FROM ONLY create_cont_stream1;
+ SELECT key,
+    "substring"(value, 1, 2) AS s
+   FROM ONLY create_cont_stream;
 
 \d+ cqcreate2_mrel;
                     Table "public.cqcreate2_mrel"
@@ -127,8 +128,14 @@ SELECT pipeline_get_overlay_viewdef('cqcreate2');
     FROM ONLY cqcreate2_mrel;
 (1 row)
 
+DROP STREAM create_cont_stream CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to continuous view cqcreate0
+drop cascades to continuous view cqcreate1
+drop cascades to continuous view cqcreate2
+CREATE STREAM create_cont_stream (key text, value int8, x float8, y int8, z int2, ts0 timestamp, ts1 timestamp);
 -- Group by projections
-CREATE CONTINUOUS VIEW cqcreate3 AS SELECT key::text, COUNT(*), SUM(value::int8) FROM cont_create_stream2 GROUP BY key;
+CREATE CONTINUOUS VIEW cqcreate3 AS SELECT key, COUNT(*), SUM(value) FROM create_cont_stream GROUP BY key;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate3';
  count 
 -------
@@ -139,24 +146,24 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate3';
           Continuous view "public.cqcreate3"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
- key    | text(0) |           | extended | 
+ key    | text    |           | extended | 
  count  | bigint  |           | plain    | 
  sum    | numeric |           | main     | 
 View definition:
- SELECT key::text,
+ SELECT key,
     count(*) AS count,
-    sum(value::bigint) AS sum
-   FROM ONLY cont_create_stream2
-  GROUP BY key::text;
+    sum(value) AS sum
+   FROM ONLY create_cont_stream
+  GROUP BY key;
 
 \d+ cqcreate3_mrel;
                     Table "public.cqcreate3_mrel"
- Column |  Type   | Modifiers | Storage  | Stats target | Description 
---------+---------+-----------+----------+--------------+-------------
- key    | text(0) |           | extended |              | 
- count  | bigint  |           | plain    |              | 
- sum    | bytea   |           | extended |              | 
- $pk    | bigint  | not null  | plain    |              | 
+ Column |  Type  | Modifiers | Storage  | Stats target | Description 
+--------+--------+-----------+----------+--------------+-------------
+ key    | text   |           | extended |              | 
+ count  | bigint |           | plain    |              | 
+ sum    | bytea  |           | extended |              | 
+ $pk    | bigint | not null  | plain    |              | 
 Indexes:
     "cqcreate3_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqcreate3_mrel_expr_idx" btree (hash_group(key))
@@ -179,7 +186,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate3');
     FROM ONLY cqcreate3_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM cont_create_stream2 GROUP BY key::text;
+CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value) FROM create_cont_stream GROUP BY key;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate4';
  count 
 -------
@@ -194,18 +201,18 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate4';
  sum    | numeric |           | main    | 
 View definition:
  SELECT count(*) AS count,
-    sum(value::bigint) AS sum
-   FROM ONLY cont_create_stream2
-  GROUP BY key::text;
+    sum(value) AS sum
+   FROM ONLY create_cont_stream
+  GROUP BY key;
 
 \d+ cqcreate4_mrel;
                     Table "public.cqcreate4_mrel"
- Column |  Type   | Modifiers | Storage  | Stats target | Description 
---------+---------+-----------+----------+--------------+-------------
- _0     | text(0) |           | extended |              | 
- count  | bigint  |           | plain    |              | 
- sum    | bytea   |           | extended |              | 
- $pk    | bigint  | not null  | plain    |              | 
+ Column |  Type  | Modifiers | Storage  | Stats target | Description 
+--------+--------+-----------+----------+--------------+-------------
+ _0     | text   |           | extended |              | 
+ count  | bigint |           | plain    |              | 
+ sum    | bytea  |           | extended |              | 
+ $pk    | bigint | not null  | plain    |              | 
 Indexes:
     "cqcreate4_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cqcreate4_mrel_expr_idx" btree (hash_group(_0))
@@ -228,7 +235,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate4');
 (1 row)
 
 -- Sliding window queries
-CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds');
+CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds');
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate5';
  count 
 -------
@@ -236,21 +243,21 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate5';
 (1 row)
 
 \d+ cqcreate5;
-          Continuous view "public.cqcreate5"
- Column |  Type   | Modifiers | Storage  | Description 
---------+---------+-----------+----------+-------------
- key    | text(0) |           | extended | 
+         Continuous view "public.cqcreate5"
+ Column | Type | Modifiers | Storage  | Description 
+--------+------+-----------+----------+-------------
+ key    | text |           | extended | 
 View definition:
- SELECT key::text
-   FROM ONLY cont_create_stream2
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:05'::interval);
+ SELECT key
+   FROM ONLY create_cont_stream
+  WHERE arrival_timestamp > (clock_timestamp() - '00:00:05'::interval);
 
 \d+ cqcreate5_mrel;
                                     Table "public.cqcreate5_mrel"
       Column       |            Type             | Modifiers | Storage  | Stats target | Description 
 -------------------+-----------------------------+-----------+----------+--------------+-------------
  arrival_timestamp | timestamp(0) with time zone |           | plain    |              | 
- key               | text(0)                     |           | extended |              | 
+ key               | text                        |           | extended |              | 
  $pk               | bigint                      | not null  | plain    |              | 
 Indexes:
     "cqcreate5_mrel_pkey" PRIMARY KEY, btree ("$pk")
@@ -273,7 +280,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate5');
    WHERE (cqcreate5_mrel.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval));
 (1 row)
 
-CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key::text;
+CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate6';
  count 
 -------
@@ -287,16 +294,16 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate6';
  count  | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count
-   FROM ONLY cont_create_stream2
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:05'::interval)
-  GROUP BY key::text;
+   FROM ONLY create_cont_stream
+  WHERE arrival_timestamp > (clock_timestamp() - '00:00:05'::interval)
+  GROUP BY key;
 
 \d+ cqcreate6_mrel;
                                   Table "public.cqcreate6_mrel"
       Column       |           Type           | Modifiers | Storage  | Stats target | Description 
 -------------------+--------------------------+-----------+----------+--------------+-------------
  arrival_timestamp | timestamp with time zone |           | plain    |              | 
- _0                | text(0)                  |           | extended |              | 
+ _0                | text                     |           | extended |              | 
  count             | bigint                   |           | plain    |              | 
  $pk               | bigint                   | not null  | plain    |              | 
 Indexes:
@@ -322,30 +329,30 @@ SELECT pipeline_get_overlay_viewdef('cqcreate6');
 (1 row)
 
 -- These use a combine state column
-CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM cont_create_stream2 GROUP BY key;
+CREATE CONTINUOUS VIEW cvavg AS SELECT key, AVG(x) AS float_avg, AVG(y) AS int_avg, AVG(ts0 - ts1) AS internal_avg FROM create_cont_stream GROUP BY key;
 \d+ cvavg;
                     Continuous view "public.cvavg"
     Column    |       Type       | Modifiers | Storage  | Description 
 --------------+------------------+-----------+----------+-------------
- key          | text(0)          |           | extended | 
+ key          | text             |           | extended | 
  float_avg    | double precision |           | plain    | 
  int_avg      | numeric          |           | main     | 
  internal_avg | interval         |           | plain    | 
 View definition:
- SELECT key::text,
-    avg(x::double precision) AS float_avg,
-    avg(y::integer) AS int_avg,
-    avg(ts0::timestamp without time zone - ts1::timestamp without time zone) AS internal_avg
-   FROM ONLY cont_create_stream2
-  GROUP BY key::text;
+ SELECT key,
+    avg(x) AS float_avg,
+    avg(y) AS int_avg,
+    avg(ts0 - ts1) AS internal_avg
+   FROM ONLY create_cont_stream
+  GROUP BY key;
 
 \d+ cvavg_mrel;
                                Table "public.cvavg_mrel"
     Column    |        Type        | Modifiers | Storage  | Stats target | Description 
 --------------+--------------------+-----------+----------+--------------+-------------
- key          | text(0)            |           | extended |              | 
+ key          | text               |           | extended |              | 
  float_avg    | double precision[] |           | extended |              | 
- int_avg      | bigint[]           |           | extended |              | 
+ int_avg      | bytea              |           | extended |              | 
  internal_avg | interval[]         |           | extended |              | 
  $pk          | bigint             | not null  | plain    |              | 
 Indexes:
@@ -362,24 +369,24 @@ Options: fillfactor=50
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvavg');
-               pipeline_get_overlay_viewdef                
------------------------------------------------------------
-  SELECT cvavg_mrel.key,                                  +
-     float8_avg(cvavg_mrel.float_avg) AS float_avg,       +
-     int8_avg(cvavg_mrel.int_avg) AS int_avg,             +
-     interval_avg(cvavg_mrel.internal_avg) AS internal_avg+
+                       pipeline_get_overlay_viewdef                        
+---------------------------------------------------------------------------
+  SELECT cvavg_mrel.key,                                                  +
+     float8_avg(cvavg_mrel.float_avg) AS float_avg,                       +
+     numeric_poly_avg(numpolyaggstaterecv(cvavg_mrel.int_avg)) AS int_avg,+
+     interval_avg(cvavg_mrel.internal_avg) AS internal_avg                +
     FROM ONLY cvavg_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM create_cont_stream1;
+CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(key) AS count_col FROM create_cont_stream;
 \d+ cvjson;
             Continuous view "public.cvjson"
   Column   | Type | Modifiers | Storage  | Description 
 -----------+------+-----------+----------+-------------
  count_col | json |           | extended | 
 View definition:
- SELECT json_agg(x::text) AS count_col
-   FROM ONLY create_cont_stream1;
+ SELECT json_agg(key) AS count_col
+   FROM ONLY create_cont_stream;
 
 \d+ cvjson_mrel;
                        Table "public.cvjson_mrel"
@@ -406,15 +413,15 @@ SELECT pipeline_get_overlay_viewdef('cvjson');
     FROM ONLY cvjson_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM cont_create_stream2;
+CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key, value) FROM create_cont_stream;
 \d+ cvjsonobj;
              Continuous view "public.cvjsonobj"
      Column      | Type | Modifiers | Storage  | Description 
 -----------------+------+-----------+----------+-------------
  json_object_agg | json |           | extended | 
 View definition:
- SELECT json_object_agg(key::text, value::integer) AS json_object_agg
-   FROM ONLY cont_create_stream2;
+ SELECT json_object_agg(key, value) AS json_object_agg
+   FROM ONLY create_cont_stream;
 
 \d+ cvjsonobj_mrel;
                         Table "public.cvjsonobj_mrel"
@@ -442,22 +449,22 @@ SELECT pipeline_get_overlay_viewdef('cvjsonobj');
 (1 row)
 
 -- But these aggregates don't
-CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM cont_create_stream2;
+CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(z + y) AS sum_col FROM create_cont_stream;
 \d+ cvcount;
-                Continuous view "public.cvcount"
- Column  |       Type       | Modifiers | Storage | Description 
----------+------------------+-----------+---------+-------------
- sum_col | double precision |           | plain   | 
+           Continuous view "public.cvcount"
+ Column  |  Type   | Modifiers | Storage | Description 
+---------+---------+-----------+---------+-------------
+ sum_col | numeric |           | main    | 
 View definition:
- SELECT sum(x::integer::double precision + y::double precision) AS sum_col
-   FROM ONLY cont_create_stream2;
+ SELECT sum(z + y) AS sum_col
+   FROM ONLY create_cont_stream;
 
 \d+ cvcount_mrel;
-                          Table "public.cvcount_mrel"
- Column  |       Type       | Modifiers | Storage | Stats target | Description 
----------+------------------+-----------+---------+--------------+-------------
- sum_col | double precision |           | plain   |              | 
- $pk     | bigint           | not null  | plain   |              | 
+                     Table "public.cvcount_mrel"
+ Column  |  Type  | Modifiers | Storage  | Stats target | Description 
+---------+--------+-----------+----------+--------------+-------------
+ sum_col | bytea  |           | extended |              | 
+ $pk     | bigint | not null  | plain    |              | 
 Indexes:
     "cvcount_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
@@ -471,13 +478,13 @@ Options: fillfactor=50
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvcount');
- pipeline_get_overlay_viewdef 
-------------------------------
-  SELECT cvcount_mrel.sum_col+
+                          pipeline_get_overlay_viewdef                          
+--------------------------------------------------------------------------------
+  SELECT numeric_poly_sum(numpolyaggstaterecv(cvcount_mrel.sum_col)) AS sum_col+
     FROM ONLY cvcount_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream1;
+CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream;
 \d+ cvarray;
             Continuous view "public.cvarray"
   Column   |  Type  | Modifiers | Storage | Description 
@@ -485,7 +492,7 @@ CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_
  count_col | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count_col
-   FROM ONLY create_cont_stream1;
+   FROM ONLY create_cont_stream;
 
 \d+ cvarray_mrel;
                       Table "public.cvarray_mrel"
@@ -512,26 +519,26 @@ SELECT pipeline_get_overlay_viewdef('cvarray');
     FROM ONLY cvarray_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM cont_create_stream2 GROUP BY key;
+CREATE CONTINUOUS VIEW cvtext AS SELECT key, string_agg(substring(key, 1, 2), ',') FROM create_cont_stream GROUP BY key;
 \d+ cvtext;
-              Continuous view "public.cvtext"
-   Column   |  Type   | Modifiers | Storage  | Description 
-------------+---------+-----------+----------+-------------
- key        | text(0) |           | extended | 
- string_agg | text    |           | extended | 
+            Continuous view "public.cvtext"
+   Column   | Type | Modifiers | Storage  | Description 
+------------+------+-----------+----------+-------------
+ key        | text |           | extended | 
+ string_agg | text |           | extended | 
 View definition:
- SELECT key::text,
-    string_agg("substring"(s::text, 1, 2), ','::text) AS string_agg
-   FROM ONLY cont_create_stream2
-  GROUP BY key::text;
+ SELECT key,
+    string_agg("substring"(key, 1, 2), ','::text) AS string_agg
+   FROM ONLY create_cont_stream
+  GROUP BY key;
 
 \d+ cvtext_mrel;
-                        Table "public.cvtext_mrel"
-   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
-------------+---------+-----------+----------+--------------+-------------
- key        | text(0) |           | extended |              | 
- string_agg | bytea   |           | extended |              | 
- $pk        | bigint  | not null  | plain    |              | 
+                       Table "public.cvtext_mrel"
+   Column   |  Type  | Modifiers | Storage  | Stats target | Description 
+------------+--------+-----------+----------+--------------+-------------
+ key        | text   |           | extended |              | 
+ string_agg | bytea  |           | extended |              | 
+ $pk        | bigint | not null  | plain    |              | 
 Indexes:
     "cvtext_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "cvtext_mrel_expr_idx" btree (hash_group(key))
@@ -554,23 +561,23 @@ SELECT pipeline_get_overlay_viewdef('cvtext');
 (1 row)
 
 -- Check for expressions containing aggregates
-CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM cont_create_stream2;
+CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(y) FROM create_cont_stream;
 \d+ cqaggexpr1;
           Continuous view "public.cqaggexpr1"
-  Column  |  Type  | Modifiers | Storage | Description 
-----------+--------+-----------+---------+-------------
- ?column? | bigint |           | plain   | 
+  Column  |  Type   | Modifiers | Storage | Description 
+----------+---------+-----------+---------+-------------
+ ?column? | numeric |           | main    | 
 View definition:
- SELECT count(*) + sum(x::integer)
-   FROM ONLY cont_create_stream2;
+ SELECT count(*)::numeric OPERATOR(pg_catalog.+) sum(y)
+   FROM ONLY create_cont_stream;
 
 \d+ cqaggexpr1_mrel;
                    Table "public.cqaggexpr1_mrel"
- Column |  Type  | Modifiers | Storage | Stats target | Description 
---------+--------+-----------+---------+--------------+-------------
- _0     | bigint |           | plain   |              | 
- _1     | bigint |           | plain   |              | 
- $pk    | bigint | not null  | plain   |              | 
+ Column |  Type  | Modifiers | Storage  | Stats target | Description 
+--------+--------+-----------+----------+--------------+-------------
+ _0     | bigint |           | plain    |              | 
+ _1     | bytea  |           | extended |              | 
+ $pk    | bigint | not null  | plain    |              | 
 Indexes:
     "cqaggexpr1_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
@@ -584,32 +591,32 @@ Options: fillfactor=50
  arrival_timestamp | timestamp(0) with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
-           pipeline_get_overlay_viewdef            
----------------------------------------------------
-  SELECT (cqaggexpr1_mrel._0 + cqaggexpr1_mrel._1)+
+                                    pipeline_get_overlay_viewdef                                     
+-----------------------------------------------------------------------------------------------------
+  SELECT ((cqaggexpr1_mrel._0)::numeric + numeric_poly_sum(numpolyaggstaterecv(cqaggexpr1_mrel._1)))+
     FROM ONLY cqaggexpr1_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::integer) AS value FROM cont_create_stream2 GROUP BY key;
+CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key, AVG(x) + MAX(y) AS value FROM create_cont_stream GROUP BY key;
 \d+ cqaggexpr2;
               Continuous view "public.cqaggexpr2"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
- key    | text(0)          |           | extended | 
+ key    | text             |           | extended | 
  value  | double precision |           | plain    | 
 View definition:
- SELECT key::text,
-    avg(x::double precision) OPERATOR(pg_catalog.+) max(y::integer)::double precision AS value
-   FROM ONLY cont_create_stream2
-  GROUP BY key::text;
+ SELECT key,
+    avg(x) OPERATOR(pg_catalog.+) max(y)::double precision AS value
+   FROM ONLY create_cont_stream
+  GROUP BY key;
 
 \d+ cqaggexpr2_mrel;
                          Table "public.cqaggexpr2_mrel"
  Column |        Type        | Modifiers | Storage  | Stats target | Description 
 --------+--------------------+-----------+----------+--------------+-------------
- key    | text(0)            |           | extended |              | 
+ key    | text               |           | extended |              | 
  _0     | double precision[] |           | extended |              | 
- _1     | integer            |           | plain    |              | 
+ _1     | bigint             |           | plain    |              | 
  $pk    | bigint             | not null  | plain    |              | 
 Indexes:
     "cqaggexpr2_mrel_pkey" PRIMARY KEY, btree ("$pk")
@@ -632,26 +639,26 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
     FROM ONLY cqaggexpr2_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key;
+CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key, COUNT(*) AS value FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key;
 \d+ cqaggexpr3;
-          Continuous view "public.cqaggexpr3"
- Column |  Type   | Modifiers | Storage  | Description 
---------+---------+-----------+----------+-------------
- key    | text(0) |           | extended | 
- value  | bigint  |           | plain    | 
+         Continuous view "public.cqaggexpr3"
+ Column |  Type  | Modifiers | Storage  | Description 
+--------+--------+-----------+----------+-------------
+ key    | text   |           | extended | 
+ value  | bigint |           | plain    | 
 View definition:
- SELECT key::text,
+ SELECT key,
     count(*) AS value
-   FROM ONLY cont_create_stream2
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:05'::interval)
-  GROUP BY key::text;
+   FROM ONLY create_cont_stream
+  WHERE arrival_timestamp > (clock_timestamp() - '00:00:05'::interval)
+  GROUP BY key;
 
 \d+ cqaggexpr3_mrel;
                                   Table "public.cqaggexpr3_mrel"
       Column       |           Type           | Modifiers | Storage  | Stats target | Description 
 -------------------+--------------------------+-----------+----------+--------------+-------------
  arrival_timestamp | timestamp with time zone |           | plain    |              | 
- key               | text(0)                  |           | extended |              | 
+ key               | text                     |           | extended |              | 
  value             | bigint                   |           | plain    |              | 
  $pk               | bigint                   | not null  | plain    |              | 
 Indexes:
@@ -677,24 +684,24 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
    GROUP BY cqaggexpr3_mrel.key;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM cont_create_stream2 GROUP BY key;
+CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key, floor(AVG(x)) AS value FROM create_cont_stream GROUP BY key;
 \d+ cqaggexpr4;
               Continuous view "public.cqaggexpr4"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
- key    | text(0)          |           | extended | 
+ key    | text             |           | extended | 
  value  | double precision |           | plain    | 
 View definition:
- SELECT key::text,
-    pg_catalog.floor(avg(x::double precision)) AS value
-   FROM ONLY cont_create_stream2
-  GROUP BY key::text;
+ SELECT key,
+    pg_catalog.floor(avg(x)) AS value
+   FROM ONLY create_cont_stream
+  GROUP BY key;
 
 \d+ cqaggexpr4_mrel;
                          Table "public.cqaggexpr4_mrel"
  Column |        Type        | Modifiers | Storage  | Stats target | Description 
 --------+--------------------+-----------+----------+--------------+-------------
- key    | text(0)            |           | extended |              | 
+ key    | text               |           | extended |              | 
  _0     | double precision[] |           | extended |              | 
  $pk    | bigint             | not null  | plain    |              | 
 Indexes:
@@ -718,32 +725,32 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
     FROM ONLY cqaggexpr4_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM create_cont_stream1 GROUP BY k0, k1;
+CREATE CONTINUOUS VIEW cqgroupby AS SELECT key, x, COUNT(*) FROM create_cont_stream GROUP BY key, x;
 \d+ cqgroupby
-          Continuous view "public.cqgroupby"
- Column |  Type   | Modifiers | Storage  | Description 
---------+---------+-----------+----------+-------------
- k0     | text(0) |           | extended | 
- k1     | integer |           | plain    | 
- count  | bigint  |           | plain    | 
+               Continuous view "public.cqgroupby"
+ Column |       Type       | Modifiers | Storage  | Description 
+--------+------------------+-----------+----------+-------------
+ key    | text             |           | extended | 
+ x      | double precision |           | plain    | 
+ count  | bigint           |           | plain    | 
 View definition:
- SELECT k0::text,
-    k1::integer,
+ SELECT key,
+    x,
     count(*) AS count
-   FROM ONLY create_cont_stream1
-  GROUP BY k0::text, k1::integer;
+   FROM ONLY create_cont_stream
+  GROUP BY key, x;
 
 \d+ cqgroupby_mrel;
-                    Table "public.cqgroupby_mrel"
- Column |  Type   | Modifiers | Storage  | Stats target | Description 
---------+---------+-----------+----------+--------------+-------------
- k0     | text(0) |           | extended |              | 
- k1     | integer |           | plain    |              | 
- count  | bigint  |           | plain    |              | 
- $pk    | bigint  | not null  | plain    |              | 
+                         Table "public.cqgroupby_mrel"
+ Column |       Type       | Modifiers | Storage  | Stats target | Description 
+--------+------------------+-----------+----------+--------------+-------------
+ key    | text             |           | extended |              | 
+ x      | double precision |           | plain    |              | 
+ count  | bigint           |           | plain    |              | 
+ $pk    | bigint           | not null  | plain    |              | 
 Indexes:
     "cqgroupby_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cqgroupby_mrel_expr_idx" btree (hash_group(k0, k1))
+    "cqgroupby_mrel_expr_idx" btree (hash_group(key, x))
 Options: fillfactor=50
 
 \d+ cqgroupby_osrel;
@@ -757,48 +764,48 @@ Options: fillfactor=50
 SELECT pipeline_get_overlay_viewdef('cqgroupby');
  pipeline_get_overlay_viewdef 
 ------------------------------
-  SELECT cqgroupby_mrel.k0,  +
-     cqgroupby_mrel.k1,      +
+  SELECT cqgroupby_mrel.key, +
+     cqgroupby_mrel.x,       +
      cqgroupby_mrel.count    +
     FROM ONLY cqgroupby_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM create_cont_stream1
-GROUP BY a, b, c, d, e;
+CREATE CONTINUOUS VIEW multigroupindex AS SELECT key, x, y, z, value, COUNT(*) FROM create_cont_stream
+GROUP BY key, x, y, z, value;
 \d+ multigroupindex;
             Continuous view "public.multigroupindex"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
- a      | text(0)          |           | extended | 
- b      | bigint           |           | plain    | 
- c      | integer          |           | plain    | 
- d      | smallint         |           | plain    | 
- e      | double precision |           | plain    | 
+ key    | text             |           | extended | 
+ x      | double precision |           | plain    | 
+ y      | bigint           |           | plain    | 
+ z      | smallint         |           | plain    | 
+ value  | bigint           |           | plain    | 
  count  | bigint           |           | plain    | 
 View definition:
- SELECT a::text,
-    b::bigint,
-    c::integer,
-    d::smallint,
-    e::double precision,
+ SELECT key,
+    x,
+    y,
+    z,
+    value,
     count(*) AS count
-   FROM ONLY create_cont_stream1
-  GROUP BY a::text, b::bigint, c::integer, d::smallint, e::double precision;
+   FROM ONLY create_cont_stream
+  GROUP BY key, x, y, z, value;
 
 \d+ multigroupindex_mrel;
                       Table "public.multigroupindex_mrel"
  Column |       Type       | Modifiers | Storage  | Stats target | Description 
 --------+------------------+-----------+----------+--------------+-------------
- a      | text(0)          |           | extended |              | 
- b      | bigint           |           | plain    |              | 
- c      | integer          |           | plain    |              | 
- d      | smallint         |           | plain    |              | 
- e      | double precision |           | plain    |              | 
+ key    | text             |           | extended |              | 
+ x      | double precision |           | plain    |              | 
+ y      | bigint           |           | plain    |              | 
+ z      | smallint         |           | plain    |              | 
+ value  | bigint           |           | plain    |              | 
  count  | bigint           |           | plain    |              | 
  $pk    | bigint           | not null  | plain    |              | 
 Indexes:
     "multigroupindex_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "multigroupindex_mrel_expr_idx" btree (hash_group(a, b, c, d, e))
+    "multigroupindex_mrel_expr_idx" btree (hash_group(key, x, y, z, value))
 Options: fillfactor=50
 
 \d+ multigroupindex_osrel;
@@ -812,17 +819,36 @@ Options: fillfactor=50
 SELECT pipeline_get_overlay_viewdef('multigroupindex');
     pipeline_get_overlay_viewdef    
 ------------------------------------
-  SELECT multigroupindex_mrel.a,   +
-     multigroupindex_mrel.b,       +
-     multigroupindex_mrel.c,       +
-     multigroupindex_mrel.d,       +
-     multigroupindex_mrel.e,       +
+  SELECT multigroupindex_mrel.key, +
+     multigroupindex_mrel.x,       +
+     multigroupindex_mrel.y,       +
+     multigroupindex_mrel.z,       +
+     multigroupindex_mrel.value,   +
      multigroupindex_mrel.count    +
     FROM ONLY multigroupindex_mrel;
 (1 row)
 
+DROP STREAM create_cont_stream CASCADE;
+NOTICE:  drop cascades to 16 other objects
+DETAIL:  drop cascades to continuous view cqcreate3
+drop cascades to continuous view cqcreate4
+drop cascades to continuous view cqcreate5
+drop cascades to continuous view cqcreate6
+drop cascades to continuous view cvavg
+drop cascades to continuous view cvjson
+drop cascades to continuous view cvjsonobj
+drop cascades to continuous view cvcount
+drop cascades to continuous view cvarray
+drop cascades to continuous view cvtext
+drop cascades to continuous view cqaggexpr1
+drop cascades to continuous view cqaggexpr2
+drop cascades to continuous view cqaggexpr3
+drop cascades to continuous view cqaggexpr4
+drop cascades to continuous view cqgroupby
+drop cascades to continuous view multigroupindex
+CREATE STREAM create_cont_stream (x int, y int);
 -- A user-specified fillfactor should override the default
-CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;
+CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM create_cont_stream;
 \d+ withff_mrel;
                      Table "public.withff_mrel"
  Column |  Type  | Modifiers | Storage | Stats target | Description 
@@ -839,24 +865,24 @@ DROP CONTINUOUS VIEW ccvv;
 ERROR:  "ccvv" is not a continuous view 
 HINT:  Use DROP VIEW to remove a view.
 DROP VIEW ccvv;
-CREATE CONTINUOUS VIEW ccvv AS SELECT COUNT(*) FROM stream;
+CREATE CONTINUOUS VIEW ccvv AS SELECT COUNT(*) FROM create_cont_stream;
 DROP VIEW ccvv;
 ERROR:  "ccvv" is not a view
 HINT:  Use DROP CONTINUOUS VIEW to remove a continuous view.
 DROP CONTINUOUS VIEW ccvv;
 -- Subselects aren't allowed in a CV's target list
 CREATE TABLE ccvt (x integer);
-CREATE CONTINUOUS VIEW noss AS SELECT y::integer, (SELECT x FROM ccvt WHERE x = 1) FROM stream;
+CREATE CONTINUOUS VIEW noss AS SELECT y, (SELECT x FROM ccvt WHERE x = 1) FROM create_cont_stream;
 ERROR:  subqueries are not allowed in a continuous view's target list
 HINT:  Stream-table joins are the preferred method for combining other relations with continuous views.
 DROP TABLE ccvt;
 -- arrival_timestamp is reserved
-CREATE CONTINUOUS VIEW arrts AS SELECT x::integer AS arrival_timestamp FROM stream;
+CREATE CONTINUOUS VIEW arrts AS SELECT x AS arrival_timestamp FROM create_cont_stream;
 ERROR:  arrival_timestamp is a reserved column name
-CREATE CONTINUOUS VIEW arrts AS SELECT arrival_timestamp AS arrival_timestamp FROM stream;
+CREATE CONTINUOUS VIEW arrts AS SELECT arrival_timestamp AS arrival_timestamp FROM create_cont_stream;
 DROP CONTINUOUS VIEW arrts;
 -- WITH max_age
-CREATE CONTINUOUS VIEW ma0 WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream;
+CREATE CONTINUOUS VIEW ma0 WITH (max_age = '1 day') AS SELECT COUNT(*) FROM create_cont_stream;
 \d+ ma0;
             Continuous view "public.ma0"
  Column |  Type  | Modifiers | Storage | Description 
@@ -864,8 +890,8 @@ CREATE CONTINUOUS VIEW ma0 WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stre
  count  | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count
-   FROM ONLY stream
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '1 day'::interval);
+   FROM ONLY create_cont_stream
+  WHERE arrival_timestamp > (clock_timestamp() - '1 day'::interval);
 
 CREATE VIEW ma1 WITH (max_age = '10 hours') AS SELECT COUNT(*) FROM ma0;
 \d+ ma1;
@@ -879,17 +905,17 @@ View definition:
   WHERE arrival_timestamp > (clock_timestamp() - '10:00:00'::interval);
 
 -- max_age must be a valid interval string
-CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42) AS SELECT COUNT(*) FROM stream;
+CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42) AS SELECT COUNT(*) FROM create_cont_stream;
 ERROR:  "max_age" must be a valid interval string
 HINT:  For example, ... WITH (max_age = '1 hour') ...
-CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42.1) AS SELECT COUNT(*) FROM stream;
+CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42.1) AS SELECT COUNT(*) FROM create_cont_stream;
 ERROR:  "max_age" must be a valid interval string
 HINT:  For example, ... WITH (max_age = '1 hour') ...
-CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an interval') AS SELECT COUNT(*) FROM stream;
+CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an interval') AS SELECT COUNT(*) FROM create_cont_stream;
 ERROR:  invalid input syntax for type interval: "not an interval"
 LINE 1: CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an int...
         ^
-CREATE CONTINUOUS VIEW mawhere WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
+CREATE CONTINUOUS VIEW mawhere WITH (max_age = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
 WHERE x::integer = 1;
 \d+ mawhere;
           Continuous view "public.mawhere"
@@ -898,42 +924,28 @@ WHERE x::integer = 1;
  count  | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count
-   FROM ONLY stream
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '1 day'::interval) AND x::integer = 1;
+   FROM ONLY create_cont_stream
+  WHERE arrival_timestamp > (clock_timestamp() - '1 day'::interval) AND x = 1;
 
 DROP CONTINUOUS VIEW mawhere;
 -- max_age can't be used on non-sliding window continuous views
 CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM withff;
 ERROR:  "max_age" can only be specified when reading from a stream or continuous view
 -- or in conjunction with another sliding-window predicate
-CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
+CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
 WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
 ERROR:  cannot specify both "max_age" and a sliding window expression in the WHERE clause
+DROP STREAM create_cont_stream CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to continuous view withff
+drop cascades to continuous view ma0
+drop cascades to view ma1
+-- Custom type
 CREATE TYPE custom_type AS (integerone integer, integertwo integer);
-CREATE CONTINUOUS VIEW type_cv as SELECT val::custom_type, count(*) FROM my_stream GROUP BY val;
+CREATE STREAM create_cont_stream(val custom_type, x float8);
+CREATE CONTINUOUS VIEW type_cv as SELECT val, count(*) FROM create_cont_stream GROUP BY val;
 ERROR:  each grouping column type must be associated with an operator class
 HINT:  Define an operator class using CREATE OPERATOR CLASS.
-CREATE CONTINUOUS VIEW tts AS SELECT COUNT(*) FROM stream WHERE to_timestamp(x::float8) > clock_timestamp() - interval '3 months';
-DROP CONTINUOUS VIEW tts;
-DROP CONTINUOUS VIEW ma0 CASCADE;
-NOTICE:  drop cascades to view ma1
-DROP CONTINUOUS VIEW cqcreate0;
-DROP CONTINUOUS VIEW cqcreate1;
-DROP CONTINUOUS VIEW cqcreate2;
-DROP CONTINUOUS VIEW cqcreate3;
-DROP CONTINUOUS VIEW cqcreate4;
-DROP CONTINUOUS VIEW cqcreate5;
-DROP CONTINUOUS VIEW cqcreate6;
-DROP CONTINUOUS VIEW cvavg;
-DROP CONTINUOUS VIEW cvjson;
-DROP CONTINUOUS VIEW cvjsonobj;
-DROP CONTINUOUS VIEW cvcount;
-DROP CONTINUOUS VIEW cvarray;
-DROP CONTINUOUS VIEW cvtext;
-DROP CONTINUOUS VIEW cqaggexpr1;
-DROP CONTINUOUS VIEW cqaggexpr2;
-DROP CONTINUOUS VIEW cqaggexpr3;
-DROP CONTINUOUS VIEW cqaggexpr4;
-DROP CONTINUOUS VIEW cqgroupby;
-DROP CONTINUOUS VIEW multigroupindex;
-DROP CONTINUOUS VIEW withff;
+CREATE CONTINUOUS VIEW tts AS SELECT COUNT(*) FROM create_cont_stream WHERE to_timestamp(x) > clock_timestamp() - interval '3 months';
+DROP STREAM create_cont_stream CASCADE;
+NOTICE:  drop cascades to continuous view tts

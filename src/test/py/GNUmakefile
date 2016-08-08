@@ -4,7 +4,7 @@
 #    Makefile for src/test/py
 #
 # src/test/py/GNUmakefile
-# 
+#
 # This just creates a phony check target so that we can run this test
 # suite in a way that's consistent with the rest of the code base, and
 # so that these tests are recognized we run `make check` from the source
@@ -27,8 +27,9 @@ extended:
 
 check: all
 	py.test -v
-	
+
 clean:
 	rm -rf ./.pdb*
 	rm -rf ./__pycache__
 	rm -f extended
+	rm -rf test_binary_upgrade_data_dir

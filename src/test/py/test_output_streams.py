@@ -8,6 +8,7 @@ def test_output_tree(pipeline, clean_db):
   and transforms chained together by their output streams,
   and verify that all output correctly propagates to the leaves.
   """
+  pipeline.create_stream('root', x='int')
   pipeline.create_cv('level0_0', 'SELECT x::integer, count(*) FROM root GROUP BY x')
 
   pipeline.create_cv('level1_0', 'SELECT (new).x, (new).count FROM level0_0_osrel')
@@ -58,6 +59,7 @@ def test_concurrent_sw_ticking(pipeline, clean_db):
   Verify that several concurrent sliding-window queries each
   having different windows tick correctly at different intervals.
   """
+  pipeline.create_stream('stream', x='int')
   output_names = []
   for n in range(10):
     name = 'sw%d' % n
@@ -96,6 +98,7 @@ def test_transforms(pipeline, clean_db):
   """
   Verify that continuous transforms work properly on output streams
   """
+  pipeline.create_stream('stream', x='int')
   pipeline.create_cv('sw', 'SELECT x::integer, COUNT(*) FROM stream GROUP BY x',
                      max_age='5 seconds')
 

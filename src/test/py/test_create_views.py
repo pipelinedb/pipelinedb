@@ -7,6 +7,7 @@ MAX_CQS = 1024
 
 def test_create_views(pipeline, clean_db):
   cvs = []
+  pipeline.create_stream('stream', x='int')
   q = 'SELECT count(*) FROM stream'
 
   for i in xrange(1, MAX_CQS):

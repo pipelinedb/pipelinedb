@@ -2873,21 +2873,19 @@ explain_type:  CONTINUOUS TRANSFORM { $$ = OBJECT_CONTTRANSFORM; }
 CreateStreamStmt: CREATE STREAM qualified_name '(' OptTableElementList ')'
         {
           CreateStreamStmt *n = makeNode(CreateStreamStmt);
-          n->ft.base.relation = $3;
-          n->ft.base.tableElts = $5;
-          n->ft.base.if_not_exists = false;
-          n->ft.servername = PIPELINE_STREAM_SERVER;
-          n->is_inferred = false;
+          n->base.relation = $3;
+          n->base.tableElts = $5;
+          n->base.if_not_exists = false;
+          n->servername = PIPELINE_STREAM_SERVER;
           $$ = (Node *)n;
         }
     | CREATE STREAM IF_P NOT EXISTS qualified_name '(' OptTableElementList ')'
         {
           CreateStreamStmt *n = makeNode(CreateStreamStmt);
-          n->ft.base.relation = $6;
-          n->ft.base.tableElts = $8;
-          n->ft.base.if_not_exists = true;
-          n->ft.servername = PIPELINE_STREAM_SERVER;
-          n->is_inferred = false;
+          n->base.relation = $6;
+          n->base.tableElts = $8;
+          n->base.if_not_exists = true;
+          n->servername = PIPELINE_STREAM_SERVER;
           $$ = (Node *)n;
         }
     ;

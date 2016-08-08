@@ -10,6 +10,8 @@ def test_cq_stats(pipeline, clean_db):
     num_combiners = int(pipeline.execute('SHOW continuous_query_num_combiners').first()['continuous_query_num_combiners'])
     num_workers = int(pipeline.execute('SHOW continuous_query_num_workers').first()['continuous_query_num_workers'])
 
+    pipeline.create_stream('stream', x='int')
+
     # 10 rows
     q = 'SELECT x::integer %% 10 AS g, COUNT(*) FROM stream GROUP BY g'
     pipeline.create_cv('test_10_groups', q)

@@ -126,6 +126,7 @@ SELECT keyed_max('192.168.0.1'::inet, -x) FROM generate_series(1, 1000) AS x;
      -1000
 (1 row)
 
+CREATE STREAM keyed_min_max_stream (x int, y numeric, z text, t text);
 CREATE CONTINUOUS VIEW keyed_min_max0 AS
 	SELECT x::integer % 10 AS g, keyed_min(x, y::numeric), keyed_max(x, y),
 		 keyed_min(z::text, substring(t::text, 1, 2)) AS keyed_min_text
@@ -149,6 +150,8 @@ SELECT * FROM keyed_min_max0 ORDER BY g;
 (10 rows)
 
 DROP CONTINUOUS VIEW keyed_min_max0;
+DROP STREAM keyed_min_max_stream CASCADE;
+CREATE STREAM keyed_min_max_stream (ts timestamptz, x text);
 CREATE CONTINUOUS VIEW keyed_min_max1 AS
 	SELECT keyed_min(ts::timestamptz, x::text) AS first_value, keyed_max(ts, x) AS last_value
 FROM keyed_min_max_stream;
@@ -165,3 +168,4 @@ SELECT * FROM keyed_min_max1;
 (1 row)
 
 DROP CONTINUOUS VIEW keyed_min_max1;
+DROP STREAM keyed_min_max_stream CASCADE;

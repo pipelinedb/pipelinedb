@@ -100,7 +100,7 @@ ExecCheckPlanOutput(Relation resultRel, List *targetList)
 		if (!attr->attisdropped)
 		{
 			/* Normal case: demand type match */
-			if (exprType((Node *) tle->expr) != attr->atttypid && !is_inferred_stream_relation(resultRel))
+			if (exprType((Node *) tle->expr) != attr->atttypid)
 				ereport(ERROR,
 						(errcode(ERRCODE_DATATYPE_MISMATCH),
 						 errmsg("table row type and query-specified row type do not match"),
