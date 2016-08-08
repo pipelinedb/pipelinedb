@@ -1651,7 +1651,7 @@ set_group_hash(ContQueryCombinerState *state, int index, int64 hash)
 	if (start != state->group_hashes_len)
 	{
 		MemoryContext old = MemoryContextSwitchTo(state->base.state_cxt);
-		state->group_hashes = repalloc(state->group_hashes, state->group_hashes_len);
+		state->group_hashes = repalloc(state->group_hashes, state->group_hashes_len * sizeof(int64));
 		MemoryContextSwitchTo(old);
 	}
 
@@ -1673,7 +1673,6 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 	{
 		if (!TupIsNull(state->slot))
 			ExecClearTuple(state->slot);
-
 		ExecStoreTuple(heap_copytuple(itup->tup), state->slot, InvalidBuffer, false);
 		tuplestore_puttupleslot(state->batch, state->slot);
 
@@ -1776,7 +1775,6 @@ ContinuousQueryCombinerMain(void)
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 
 				count = read_batch(cont_exec, state, query_id);
-
 				if (count)
 				{
 					state->pending_tuples += count;
@@ -1846,6 +1844,7 @@ next:
 
 		MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
 		pgstat_report_cqstat(true);
+		MemoryContextDelete(state->base.state_cxt);
 	}
 
 	MemoryContextSwitchTo(TopMemoryContext);

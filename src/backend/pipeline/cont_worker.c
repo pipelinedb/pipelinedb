@@ -216,6 +216,64 @@ end_plan(QueryDesc *query_desc)
 	query_desc->planstate = NULL;
 }
 
+static void
+cleanup_worker_state(ContQueryWorkerState *state)
+{
+	QueryDesc *query_desc;
+	EState *estate;
+
+	/*
+	 * We wrap this in a separate try/catch block because ExecInitNode call can potentially throw
+	 * an error if the state was for a stream-table join and the table has been dropped.
+	 */
+	PG_TRY();
+	{
+		query_desc = state->query_desc;
+		estate = query_desc->estate;
+
+		(*state->dest->rShutdown) (state->dest);
+
+		if (estate == NULL)
+		{
+			query_desc->estate = estate = CreateEState(state->query_desc);
+			SetEStateSnapshot(estate);
+		}
+
+		/* The cleanup functions below expect these things to be registered. */
+		RegisterSnapshotOnOwner(estate->es_snapshot, WorkerResOwner);
+		RegisterSnapshotOnOwner(query_desc->snapshot, WorkerResOwner);
+
+		CurrentResourceOwner = WorkerResOwner;
+
+		if (query_desc->totaltime)
+			InstrStopNode(query_desc->totaltime, estate->es_processed);
+
+		if (query_desc->planstate == NULL)
+			init_plan(query_desc);
+
+		/* Clean up. */
+		ExecutorFinish(query_desc);
+		ExecutorEnd(query_desc);
+		UnsetEStateSnapshot(estate);
+
+		FreeQueryDesc(query_desc);
+	}
+	PG_CATCH();
+	{
+		/*
+		 * If this happens, it almost certainly means that a stream or table has been dropped
+		 * and no longer exists, even though the ended plan may have references to them. We're
+		 * not doing anything particularly critical in the above TRY block, so just consume these
+		 * harmless errors.
+		 */
+		FlushErrorState();
+
+		if (estate && ActiveSnapshotSet())
+			UnsetEStateSnapshot(estate);
+	}
+	PG_END_TRY();
+}
+
 void
 ContinuousQueryWorkerMain(void)
 {
@@ -309,65 +367,16 @@ next:
 	for (query_id = 0; query_id < MAX_CQS; query_id++)
 	{
 		ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->states[query_id];
-		QueryDesc *query_desc;
-		EState *estate;
 
 		if (state == NULL)
 			continue;
 
-		/*
-		 * We wrap this in a separate try/catch block because ExecInitNode call can potentially throw
-		 * an error if the state was for a stream-table join and the table has been dropped.
-		 */
-		PG_TRY();
-		{
-			query_desc = state->query_desc;
-			estate = query_desc->estate;
+		MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
 
-			(*state->dest->rShutdown) (state->dest);
+		cleanup_worker_state(state);
 
-			if (estate == NULL)
-			{
-				query_desc->estate = estate = CreateEState(state->query_desc);
-				SetEStateSnapshot(estate);
-			}
-
-			/* The cleanup functions below expect these things to be registered. */
-			RegisterSnapshotOnOwner(estate->es_snapshot, WorkerResOwner);
-			RegisterSnapshotOnOwner(query_desc->snapshot, WorkerResOwner);
-
-			CurrentResourceOwner = WorkerResOwner;
-
-			if (query_desc->totaltime)
-				InstrStopNode(query_desc->totaltime, estate->es_processed);
-
-			if (query_desc->planstate == NULL)
-				init_plan(query_desc);
-
-			/* Clean up. */
-			ExecutorFinish(query_desc);
-			ExecutorEnd(query_desc);
-			UnsetEStateSnapshot(estate);
-
-			FreeQueryDesc(query_desc);
-
-			MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
-			pgstat_report_cqstat(true);
-		}
-		PG_CATCH();
-		{
-			/*
-			 * If this happens, it almost certainly means that a stream or table has been dropped
-			 * and no longer exists, even though the ended plan may have references to them. We're
-			 * not doing anything particularly critical in the above TRY block, so just consume these
-			 * harmless errors.
-			 */
-			FlushErrorState();
-
-			if (estate && ActiveSnapshotSet())
-				UnsetEStateSnapshot(estate);
-		}
-		PG_END_TRY();
+		pgstat_report_cqstat(true);
+		MemoryContextDelete(state->base.state_cxt);
 	}
 
 	CommitTransactionCommand();
