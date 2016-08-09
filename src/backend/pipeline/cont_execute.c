@@ -374,6 +374,8 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	if (commit)
 	{
+		if (IsContQueryCombinerProcess())
+			elog(LOG, "Commit %d", commit);
 		CommitTransactionCommand();
 		MemoryContextReset(ContQueryTransactionContext);
 	}
