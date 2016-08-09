@@ -1697,9 +1697,9 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
  * need_sync
  */
 static bool
-need_sync(TimestampTz last_sync)
+need_sync(ContExecutor *exec, TimestampTz last_sync)
 {
-	if (synchronous_stream_insert || !continuous_query_commit_interval)
+	if (exec->saw_acks || !continuous_query_commit_interval)
 		return true;
 
 	return TimestampDifferenceExceeds(last_sync, GetCurrentTimestamp(), continuous_query_commit_interval);
@@ -1822,7 +1822,7 @@ next:
 
 		if (total_pending == 0)
 			do_commit = true;
-		else if (need_sync(first_seen))
+		else if (need_sync(cont_exec, first_seen))
 		{
 			sync_all(cont_exec);
 			do_commit = true;

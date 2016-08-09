@@ -1627,7 +1627,7 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"synchronous_stream_insert", PGC_POSTMASTER, QUERY_TUNING,
+		{"synchronous_stream_insert", PGC_USERSET, QUERY_TUNING,
 		 gettext_noop("Makes INSERTs into streams synchronous."),
 		 NULL,
 		},
