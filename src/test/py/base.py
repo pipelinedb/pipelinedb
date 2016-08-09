@@ -132,6 +132,24 @@ class PipelineDB(object):
         else:
           raise Exception('Failed to connect to PipelineDB')
 
+        # Wait for bgworkers to start
+        for i in xrange(10):
+          try:
+            out = subprocess.check_output('ps aux | grep "\[pipeline\]" | grep -e "worker[0-9]" -e "combiner[0-9]"',
+                                          shell=True).split('\n')
+          except subprocess.CalledProcessError:
+            out = []
+
+          out = filter(lambda s: s.strip(), out)
+          if len(out) == (default_params['continuous_query_num_workers'] +
+                          default_params['continuous_query_num_combiners']):
+            break
+          time.sleep(0.5)
+        else:
+          raise Exception('Background workers failed to start up')
+
+        time.sleep(0.2)
+
     def stop(self):
       """
       Stops the PipelineDB instance
