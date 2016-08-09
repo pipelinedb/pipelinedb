@@ -8,7 +8,7 @@ Homepage: http://pipelinedb.com
 
 Package: pipelinedb
 Architecture: i386 amd64
-Depends: ${shlibs:Depends}, ${misc:Depends} libxml2 (>= 2.7.4)
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: streaming SQL database
 	PipelineDB is a streaming SQL database that runs SQL queries continuously
 	on streams, incrementally storing the results in tables.
