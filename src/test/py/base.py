@@ -140,7 +140,12 @@ class PipelineDB(object):
           except subprocess.CalledProcessError:
             out = []
 
+          # Pick out PIDs that are greater than the PID of the postmaster we fired above.
+          # This way any running PipelineDB instances are ignored.
           out = filter(lambda s: s.strip(), out)
+          out = map(lambda s: int(s.split()[1]), out)
+          out = filter(lambda p: p > self.proc.pid, out)
+
           if len(out) == (default_params['continuous_query_num_workers'] +
                           default_params['continuous_query_num_combiners']):
             break
