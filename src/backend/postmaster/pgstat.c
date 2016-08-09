@@ -5659,13 +5659,7 @@ calculate_averages(volatile PgStat_StatCQEntry *entry)
 		if (!end_time)
 			continue;
 
-		/* This can happen if we try to flush the stats while in the middle of processing a batch */
-		if (end_time < start_time)
-		{
-			Assert(i == avg->i);
-			Assert(entry == MyProcStatCQEntry);
-			continue;
-		}
+		Assert(end_time >= start_time);
 
 		if (TimestampDifferenceExceeds(end_time, now, PGSTAT_AVERAGE_BUFFER_INTERVAL))
 		{
@@ -6126,6 +6120,7 @@ pgstat_start_cq(volatile PgStat_StatCQEntry *entry)
 	int i = lentry->avgstat.i;
 
 	lentry->avgstat.start_time[i] = GetCurrentTimestamp();
+	lentry->avgstat.end_time[i] = 0;
 	lentry->avgstat.memory[i] = 0;
 	lentry->avgstat.tuples[i] = 0;
 	lentry->avgstat.bytes[i] = 0;
