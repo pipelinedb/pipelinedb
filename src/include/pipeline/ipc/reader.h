@@ -24,6 +24,7 @@ typedef struct ipc_tuple
 typedef struct ipc_tuple_reader_batch
 {
 	Bitmapset *queries;
+	bool has_acks;
 	List *acks; /* only valid at when the iteration is complete */
 	int ntups;
 	Size nbytes;

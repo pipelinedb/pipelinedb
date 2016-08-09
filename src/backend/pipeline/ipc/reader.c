@@ -26,7 +26,7 @@ typedef struct ipc_tuple_reader_scan
 } ipc_tuple_reader_scan;
 
 static ipc_tuple_reader_scan my_rscan = { NULL, -1, false, false };
-static ipc_tuple_reader_batch my_rbatch = { NULL, NULL, 0, 0 };
+static ipc_tuple_reader_batch my_rbatch = { NULL, false, NULL, 0, 0 };
 static ipc_tuple my_rscan_tup;
 
 typedef struct ipc_tuple_reader
@@ -84,6 +84,8 @@ ipc_tuple_reader_pull(void)
 
 	old = MemoryContextSwitchTo(my_reader->cxt);
 
+	my_rbatch.has_acks = false;
+
 	while (true)
 	{
 		int len;
@@ -131,6 +133,8 @@ ipc_tuple_reader_pull(void)
 				mb->acks = NIL;
 			}
 		}
+
+		my_rbatch.has_acks |= list_length(mb->acks) > 0;
 	}
 
 	MemoryContextSwitchTo(old);

@@ -63,7 +63,6 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	int i;
 	tagged_ref_t *ref;
 
-
 	if (!c->cont_query)
 		c->cont_query = c->cont_exec->curr_query->query;
 
