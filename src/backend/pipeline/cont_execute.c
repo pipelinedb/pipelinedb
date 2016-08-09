@@ -91,7 +91,6 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 	bool success;
 
 	exec->batch = NULL;
-	exec->saw_acks = false;
 
 	/*
 	 * We should never sleep forever, since there is a race in setting got_SIGTERM and
@@ -360,8 +359,6 @@ ContExecutorEndQuery(ContExecutor *exec)
 	else
 		pgstat_send_cqpurge(exec->curr_query_id, 0, exec->ptype);
 
-	exec->saw_acks |= list_length(exec->batch->acks) > 0;
-
 	ipc_tuple_reader_rewind();
 	debug_query_string = NULL;
 	MyStatCQEntry = NULL;
@@ -374,8 +371,6 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	if (commit)
 	{
-		if (IsContQueryCombinerProcess())
-			elog(LOG, "Commit %d", commit);
 		CommitTransactionCommand();
 		MemoryContextReset(ContQueryTransactionContext);
 	}
@@ -392,7 +387,6 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 	exec->exec_queries = NULL;
 	exec->batch = NULL;
-	exec->saw_acks = false;
 
 	debug_query_string = NULL;
 	MyStatCQEntry = NULL;

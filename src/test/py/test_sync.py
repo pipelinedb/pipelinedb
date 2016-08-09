@@ -14,12 +14,14 @@ def test_userset_sync(pipeline, clean_db):
   pipeline.create_cv('delay',
                      'SELECT x::int, pg_sleep(0.1) FROM stream')
 
+  NUM_INSERTS = 100
+
   def insert(sync):
     conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s'
                             % (getpass.getuser(), pipeline.port))
     cur = conn.cursor()
     cur.execute('SET synchronous_stream_insert=%s' % ('on' if sync else 'off'))
-    for i in xrange(10):
+    for i in xrange(NUM_INSERTS):
       cur.execute('INSERT INTO stream (x) VALUES (%d)' % (0 if sync else 1))
       conn.commit()
     conn.close()
@@ -34,22 +36,22 @@ def test_userset_sync(pipeline, clean_db):
 
   async.join()
   async_time = time.time() - start
-  assert async_time < 1
+  assert async_time < NUM_INSERTS * 0.1
 
   num_sync = pipeline.execute('SELECT count FROM sync').first()['count']
   num_async = pipeline.execute('SELECT count FROM async').first()['count']
   total = pipeline.execute('SELECT count(*) FROM delay').first()['count']
-  assert num_async <= 10
-  assert num_sync < 10
-  assert total < 20
+  assert num_async < NUM_INSERTS
+  assert num_sync < NUM_INSERTS
+  assert total < NUM_INSERTS * 2
 
   sync.join()
-  assert time.time() - start > (0.8 + async_time)
+  assert time.time() - start > (NUM_INSERTS * 0.08 + async_time)
 
   pipeline.execute('COMMIT')
   num_sync = pipeline.execute('SELECT count FROM sync').first()['count']
   num_async = pipeline.execute('SELECT count FROM async').first()['count']
   total = pipeline.execute('SELECT count(*) FROM delay').first()['count']
-  assert num_sync == 10
-  assert num_async == 10
-  assert total == num_async + num_sync
+  assert num_sync == NUM_INSERTS
+  assert num_async == NUM_INSERTS
+  assert total == NUM_INSERTS * 2

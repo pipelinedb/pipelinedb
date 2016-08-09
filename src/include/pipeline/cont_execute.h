@@ -49,7 +49,6 @@ struct ContExecutor
 	Bitmapset *exec_queries;
 
 	ipc_tuple_reader_batch *batch;
-	bool saw_acks;
 
 	Oid curr_query_id;
 	ContQueryState *curr_query;

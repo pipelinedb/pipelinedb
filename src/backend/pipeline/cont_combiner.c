@@ -1699,7 +1699,7 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 static bool
 need_sync(ContExecutor *exec, TimestampTz last_sync)
 {
-	if (exec->saw_acks || !continuous_query_commit_interval)
+	if ((exec->batch && exec->batch->has_acks) || !continuous_query_commit_interval)
 		return true;
 
 	return TimestampDifferenceExceeds(last_sync, GetCurrentTimestamp(), continuous_query_commit_interval);
