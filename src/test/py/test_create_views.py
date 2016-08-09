@@ -18,7 +18,7 @@ def test_create_views(pipeline, clean_db):
     pipeline.create_cv('cv_fail', q)
     assert False
   except Exception, e:
-    assert 'maximum number of continuous views exceeded' in e.message
+    assert 'maximum number of continuous queries exceeded' in e.message
 
   ids = [r['id'] for r in
          pipeline.execute('SELECT id FROM pipeline_views()')]

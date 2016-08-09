@@ -112,8 +112,8 @@ get_next_id(Relation rel)
 		if (num_ids == MAX_CQS - 1) /* -1 because 0 is an invalid id */
 			ereport(ERROR,
 					(errcode(ERRCODE_TOO_MANY_CONTINUOUS_VIEWS),
-					errmsg("maximum number of continuous views exceeded"),
-					errhint("Please drop a existing continuous view before trying to create a new one.")));
+					errmsg("maximum number of continuous queries exceeded"),
+					errhint("Please drop an existing continuous query before trying to create a new one.")));
 
 		max = ids[num_ids - 1];
 		Assert(max >= num_ids);
