@@ -968,6 +968,7 @@ pipeline_flush(PG_FUNCTION_ARGS)
 	uint64 start_generation = pg_atomic_read_u64(&db_meta->generation);
 	microbatch_ack_t *ack = microbatch_ack_new(STREAM_INSERT_FLUSH);
 	microbatch_t *mb = microbatch_new(FlushTuple, NULL, NULL);
+	bool success;
 
 	pzmq_init();
 
@@ -979,8 +980,8 @@ pipeline_flush(PG_FUNCTION_ARGS)
 	microbatch_destroy(mb);
 
 	microbatch_ack_increment_wtups(ack, continuous_query_num_workers);
-	microbatch_ack_wait(ack, db_meta, start_generation);
+	success = microbatch_ack_wait(ack, db_meta, start_generation);
 	microbatch_ack_free(ack);
 
-	PG_RETURN_BOOL(true);
+	PG_RETURN_BOOL(success);
 }
