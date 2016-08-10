@@ -388,7 +388,7 @@ static const struct config_enum_entry huge_pages_options[] = {
 
 static const struct config_enum_entry stream_insert_options[] = {
 	{"async", STREAM_INSERT_ASYNCHRONOUS, false},
-	{"sync_read", STREAM_INSERT_SYNCHRONOUS_READ, false},
+	{"sync_receive", STREAM_INSERT_SYNCHRONOUS_RECEIVE, false},
 	{"sync_commit", STREAM_INSERT_SYNCHRONOUS_COMMIT, false},
 	{NULL, 0, false}
 };
@@ -3833,7 +3833,7 @@ static struct config_enum ConfigureNamesEnum[] =
 			NULL
 		},
 		&stream_insert_level,
-		STREAM_INSERT_SYNCHRONOUS_READ, stream_insert_options,
+		STREAM_INSERT_SYNCHRONOUS_RECEIVE, stream_insert_options,
 		NULL, NULL, NULL
 	},
 

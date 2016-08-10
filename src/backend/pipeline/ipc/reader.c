@@ -140,8 +140,8 @@ ipc_tuple_reader_pull(void)
 		queries = bms_union(queries, mb->queries);
 
 		/*
-		 * Hot path for STREAM_INSERT_SYNCHRONOUS_READ inserts. If we're receiving a microbatch from the insert process
-		 * (we are a worker and microbatch has a single ack of level STREAM_INSERT_SYNCHRONOUS_READ), mark it as read
+		 * Hot path for STREAM_INSERT_SYNCHRONOUS_RECEIVE inserts. If we're receiving a microbatch from the insert process
+		 * (we are a worker and microbatch has a single ack of level STREAM_INSERT_SYNCHRONOUS_RECEIVE), mark it as read
 		 * and don't pass the ack downstream.
 		 */
 		if (list_length(mb->acks) == 1 && IsContQueryWorkerProcess())
@@ -149,7 +149,7 @@ ipc_tuple_reader_pull(void)
 			tagged_ref_t *ref = linitial(mb->acks);
 			microbatch_ack_t *ack = (microbatch_ack_t *) ref->ptr;
 
-			if (microbatch_ack_ref_is_valid(ref) && microbatch_ack_get_level(ack) == STREAM_INSERT_SYNCHRONOUS_READ)
+			if (microbatch_ack_ref_is_valid(ref) && microbatch_ack_get_level(ack) == STREAM_INSERT_SYNCHRONOUS_RECEIVE)
 			{
 				microbatch_ack_set_read(ack, 1);
 

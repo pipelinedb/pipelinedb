@@ -128,7 +128,7 @@ microbatch_ack_wait(microbatch_ack_t *ack, ContQueryDatabaseMetadata *db_meta, u
 
 	for (;;)
 	{
-		if (level == STREAM_INSERT_SYNCHRONOUS_READ && microbatch_ack_is_read(ack))
+		if (level == STREAM_INSERT_SYNCHRONOUS_RECEIVE && microbatch_ack_is_read(ack))
 		{
 			success = true;
 			break;

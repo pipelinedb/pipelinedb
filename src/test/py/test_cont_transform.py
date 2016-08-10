@@ -54,7 +54,7 @@ def test_deadlock_regress(pipeline, clean_db):
 
   for copy in [True, False]:
     for nworkers in [1, 4]:
-      for sync in ['read', 'commit']:
+      for sync in ['receive', 'commit']:
         pipeline.stop()
         pipeline.run({
           'continuous_query_num_workers': nworkers,
