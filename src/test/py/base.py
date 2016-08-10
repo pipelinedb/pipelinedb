@@ -338,7 +338,7 @@ def async_insert(f):
   @wraps(f)
   def wrapper(pipeline, clean_db):
     pipeline.stop()
-    pipeline.run({'synchronous_stream_insert': 'off'})
+    pipeline.run({'stream_insert_level': 'sync_read'})
     try:
       f(pipeline, clean_db)
     finally:
