@@ -220,7 +220,7 @@ static void
 cleanup_worker_state(ContQueryWorkerState *state)
 {
 	QueryDesc *query_desc;
-	EState *estate;
+	EState *estate = NULL;
 
 	/*
 	 * We wrap this in a separate try/catch block because ExecInitNode call can potentially throw
