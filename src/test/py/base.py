@@ -64,7 +64,6 @@ class PipelineDB(object):
                 self.data_dir = os.path.join(root, 'data')
 
         self.bin_dir = install_bin_dir
-        self.recv_alerts = os.path.join(self.bin_dir, 'pipeline-recv-alerts')
         self.engine = None
 
     def run(self, params=None):
@@ -307,9 +306,6 @@ class PipelineDB(object):
 
     def get_bin_dir(self):
         return self.bin_dir
-
-    def get_recv_alerts(self):
-        return self.recv_alerts
 
 
 @pytest.fixture
