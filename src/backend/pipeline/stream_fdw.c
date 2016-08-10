@@ -478,7 +478,10 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	{
 		sis->db_meta = GetMyContQueryDatabaseMetadata();
 		sis->start_generation = pg_atomic_read_u64(&sis->db_meta->generation);
-		sis->ack = microbatch_ack_new(synchronous_stream_insert ? SYNC : ASYNC);
+		if (stream_insert_level == STREAM_INSERT_ASYNCHRONOUS)
+			sis->ack = NULL;
+		else
+			sis->ack = microbatch_ack_new(stream_insert_level);
 	}
 
 	if (!bms_is_empty(queries))
@@ -518,7 +521,7 @@ ExecStreamInsert(EState *estate, ResultRelInfo *result_info,
 
 	if (!microbatch_add_tuple(sis->batch, tup, 0))
 	{
-		microbatch_send_to_worker(sis->batch);
+		microbatch_send_to_worker(sis->batch, -1);
 		microbatch_add_tuple(sis->batch, tup, 0);
 		sis->nbatches++;
 	}
@@ -541,43 +544,14 @@ EndStreamModify(EState *estate, ResultRelInfo *result_info)
 		return;
 
 	if (!microbatch_is_empty(sis->batch))
-		microbatch_send_to_worker(sis->batch);
+		microbatch_send_to_worker(sis->batch, -1);
 
 	pgstat_increment_stream_insert(RelationGetRelid(rel), sis->ntups, sis->nbatches, sis->nbytes);
 	microbatch_acks_check_and_exec(sis->batch->acks, microbatch_ack_increment_wtups, sis->ntups);
 
 	if (sis->ack)
 	{
-		bool success = false;
-		int64 generation = -1;
-		microbatch_ack_type_t type = microbatch_ack_get_type(sis->ack);
-
-		Assert(sis->db_meta);
-
-		for (;;)
-		{
-			if (type == ASYNC && microbatch_ack_is_read(sis->ack))
-			{
-				success = true;
-				break;
-			}
-			else if (type == SYNC && microbatch_ack_is_acked(sis->ack))
-			{
-				success = true;
-				break;
-			}
-
-			generation = pg_atomic_read_u64(&sis->db_meta->generation);
-			if (generation != sis->start_generation)
-			{
-				Assert(generation > sis->start_generation);
-				break;
-			}
-
-			/* TODO(usmanm): exponential backoff? */
-			pg_usleep(1000);
-			CHECK_FOR_INTERRUPTS();
-		}
+		bool success = microbatch_ack_wait(sis->ack, sis->db_meta, sis->start_generation);
 
 		if (!success)
 			ereport(WARNING,

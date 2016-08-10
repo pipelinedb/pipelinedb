@@ -47,7 +47,7 @@
 #include "utils/typcache.h"
 
 /* guc parameters */
-bool synchronous_stream_insert;
+int stream_insert_level;
 char *stream_targets;
 
 int (*copy_iter_hook) (void *arg, void *buf, int minread, int maxread) = NULL;

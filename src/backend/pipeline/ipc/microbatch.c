@@ -75,14 +75,13 @@ MicrobatchAckShmemInit(void)
 }
 
 microbatch_ack_t *
-microbatch_ack_new(microbatch_ack_type_t type)
+microbatch_ack_new(StreamInsertLevel level)
 {
 	microbatch_ack_t *ack;
 	uint64 id;
-
-	id = type;
-	id <<= 63L;
-	id |= (rand() ^ (int) MyProcPid) & 0x7fffffffffffffff;
+	id = level;
+	id <<= 62L;
+	id |= (rand() ^ (int) MyProcPid) & 0x3fffffffffffffff;
 
 	for (;;)
 	{
@@ -117,6 +116,44 @@ microbatch_ack_free(microbatch_ack_t *ack)
 	pg_atomic_write_u64(&ack->id, 0);
 }
 
+bool
+microbatch_ack_wait(microbatch_ack_t *ack, ContQueryDatabaseMetadata *db_meta, uint64 start_generation)
+{
+	bool success = false;
+	uint64 generation;
+	StreamInsertLevel level = microbatch_ack_get_level(ack);
+
+	if (level == STREAM_INSERT_ASYNCHRONOUS)
+		return true;
+
+	for (;;)
+	{
+		if (level == STREAM_INSERT_SYNCHRONOUS_RECEIVE && microbatch_ack_is_read(ack))
+		{
+			success = true;
+			break;
+		}
+		else if ((level == STREAM_INSERT_SYNCHRONOUS_COMMIT || level == STREAM_INSERT_FLUSH) && microbatch_ack_is_acked(ack))
+		{
+			success = true;
+			break;
+		}
+
+		generation = pg_atomic_read_u64(&db_meta->generation);
+		if (generation != start_generation)
+		{
+			Assert(generation > start_generation);
+			break;
+		}
+
+		/* TODO(usmanm): exponential backoff? */
+		pg_usleep(1000);
+		CHECK_FOR_INTERRUPTS();
+	}
+
+	return success;
+}
+
 microbatch_t *
 microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc)
 {
@@ -135,7 +172,7 @@ microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc)
 	{
 		int i;
 
-		Assert(bms_num_members(queries) >= 1);
+		Assert(bms_num_members(queries));
 
 		mb->packed_size += BITMAPSET_SIZE(queries->nwords); /* queries */
 		mb->packed_size += sizeof(int); /* number of record descs */
@@ -163,13 +200,19 @@ microbatch_new(microbatch_type_t type, Bitmapset *queries, TupleDesc desc)
 			mb->packed_size += MAX_TUPDESC_SIZE(desc);
 		}
 	}
-	else
+	else if (type == CombinerTuple)
 	{
-		Assert(desc == NULL);
+		Assert(!desc);
 		Assert(type == CombinerTuple);
 		Assert(bms_num_members(queries) == 1);
 
 		mb->packed_size += sizeof(Oid); /* query id */
+	}
+	else
+	{
+		Assert(type == FlushTuple);
+		Assert(!queries);
+		Assert(!desc);
 	}
 
 	return mb;
@@ -376,7 +419,7 @@ microbatch_pack(microbatch_t *mb, int *len)
 		memcpy(pos, mb->queries, BITMAPSET_SIZE(mb->queries->nwords));
 		pos += BITMAPSET_SIZE(mb->queries->nwords);
 	}
-	else
+	else if (mb->type == CombinerTuple)
 	{
 		/* Pack query id */
 		Oid id = bms_next_member(mb->queries, -1);
@@ -468,7 +511,7 @@ microbatch_unpack(char *buf, int len)
 		mb->queries = (Bitmapset *) pos;
 		pos += BITMAPSET_SIZE(mb->queries->nwords);
 	}
-	else
+	else if (mb->type == CombinerTuple)
 	{
 		/* Unpack query id */
 		Oid query_id;
@@ -508,36 +551,52 @@ microbatch_add_acks(microbatch_t *mb, List *acks)
 	foreach(lc, acks)
 	{
 		tagged_ref_t *ref = lfirst(lc);
-		microbatch_ack_t *ack = (microbatch_ack_t *) ref->ptr;
-		if (ref->tag == pg_atomic_read_u64(&ack->id))
-			microbatch_add_ack(mb, ack);
+		if (microbatch_ack_ref_is_valid(ref))
+			microbatch_add_ack(mb, (microbatch_ack_t *) ref->ptr);
 	}
 
 	MemoryContextSwitchTo(old);
 }
 
 void
-microbatch_send_to_worker(microbatch_t *mb)
+microbatch_send_to_worker(microbatch_t *mb, int worker_id)
 {
 	ContQueryDatabaseMetadata *db_meta = GetMyContQueryDatabaseMetadata();
 	int recv_id;
-	int worker_id;
 
-	if (IsContQueryCombinerProcess())
+	if (worker_id == -1)
 	{
-		/*
-		 * Combiners need to shard over works so that updates to a specific group are always
-		 * written in order to the output stream.
-		 */
-		worker_id = MyContQueryProc->group_id % continuous_query_num_workers;
-	}
-	else
-	{
-		/* TODO(usmanm): Poll all workers and send to first non-blocking one? */
-		worker_id = rand() % continuous_query_num_workers;
+		if (IsContQueryCombinerProcess())
+		{
+			/*
+			 * Combiners need to shard over works so that updates to a specific group are always
+			 * written in order to the output stream.
+			 */
+			worker_id = MyContQueryProc->group_id % continuous_query_num_workers;
+		}
+		else
+		{
+			/* TODO(usmanm): Poll all workers and send to first non-blocking one? */
+			worker_id = rand() % continuous_query_num_workers;
+		}
 	}
 
 	recv_id = db_meta->db_procs[worker_id].pzmq_id;
+
+	microbatch_send(mb, recv_id);
+	microbatch_reset(mb);
+}
+
+void
+microbatch_send_to_combiner(microbatch_t *mb, int combiner_id)
+{
+	static ContQueryDatabaseMetadata *db_meta = NULL;
+	int recv_id;
+
+	if (!db_meta)
+		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
+
+	recv_id = db_meta->db_procs[continuous_query_num_workers + combiner_id].pzmq_id;
 
 	microbatch_send(mb, recv_id);
 	microbatch_reset(mb);

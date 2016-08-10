@@ -199,7 +199,7 @@ pipeline_stream_insert_batch(TransformState *t)
 
 		rinfo.ri_RelationDesc = rel;
 
-		BeginStreamModify(NULL, &rinfo, list_make2(t->cont_exec->batch->acks, RelationGetDescr(t->tg_rel)),
+		BeginStreamModify(NULL, &rinfo, list_make2(t->cont_exec->batch->sync_acks, RelationGetDescr(t->tg_rel)),
 				0, REENTRANT_STREAM_INSERT);
 		sis = (StreamInsertState *) rinfo.ri_FdwState;
 		Assert(sis);

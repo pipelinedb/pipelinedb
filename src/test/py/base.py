@@ -81,7 +81,7 @@ class PipelineDB(object):
         sock.close()
 
         default_params = {
-          'synchronous_stream_insert': 'on',
+          'stream_insert_level': 'sync_commit',
           'continuous_query_num_combiners': 2,
           'continuous_query_num_workers': 2,
           'anonymous_update_checks': 'off',
@@ -338,7 +338,7 @@ def async_insert(f):
   @wraps(f)
   def wrapper(pipeline, clean_db):
     pipeline.stop()
-    pipeline.run({'synchronous_stream_insert': 'off'})
+    pipeline.run({'stream_insert_level': 'sync_receive'})
     try:
       f(pipeline, clean_db)
     finally:

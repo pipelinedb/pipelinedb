@@ -23,6 +23,7 @@
 #include "pgstat.h"
 #include "pipeline/cont_execute.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/ipc/microbatch.h"
 #include "pipeline/ipc/reader.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
@@ -377,8 +378,34 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	if (exec->batch)
 	{
+		ListCell *lc;
+
 		pgstat_end_cq_batch(exec->batch->ntups, exec->batch->nbytes);
 		pgstat_report_stat(false);
+
+		if (IsContQueryWorkerProcess())
+		{
+			foreach(lc, exec->batch->flush_acks)
+			{
+				tagged_ref_t *ref = lfirst(lc);
+				microbatch_ack_t *ack = (microbatch_ack_t *) ref->ptr;
+				microbatch_t *mb;
+				int i;
+
+				if (!microbatch_ack_ref_is_valid(ref))
+					continue;
+
+				mb = microbatch_new(FlushTuple, NULL, NULL);
+				microbatch_add_ack(mb, ack);
+
+				for (i = 0; i < continuous_query_num_combiners; i++)
+					microbatch_send_to_combiner(mb, i);
+
+				microbatch_destroy(mb);
+			}
+
+			microbatch_acks_check_and_exec(exec->batch->flush_acks, microbatch_ack_increment_ctups, continuous_query_num_combiners);
+		}
 	}
 
 	ipc_tuple_reader_ack();

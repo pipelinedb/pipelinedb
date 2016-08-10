@@ -2322,7 +2322,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		snprintf(buf, sizeof(buf),
 				 "\"%s%spipelinedb\" -D \"%s/data\" -F%s "
 				 "-c \"listen_addresses=%s\" "
-				 "-c \"synchronous_stream_insert=on\" "
+				 "-c \"stream_insert_level=sync_commit\" "
 				 "-c \"continuous_query_num_combiners=2\" "
 				 "-c \"continuous_query_num_workers=4\" "
 				 "-c \"anonymous_update_checks=off\" "
