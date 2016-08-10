@@ -20,7 +20,8 @@ def test_userset_sync(pipeline, clean_db):
     conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s'
                             % (getpass.getuser(), pipeline.port))
     cur = conn.cursor()
-    cur.execute('SET synchronous_stream_insert=%s' % ('on' if sync else 'off'))
+    cur.execute('SET stream_insert_level=sync_%s' %
+                ('commit' if sync else 'read'))
     for i in xrange(NUM_INSERTS):
       cur.execute('INSERT INTO stream (x) VALUES (%d)' % (0 if sync else 1))
       conn.commit()

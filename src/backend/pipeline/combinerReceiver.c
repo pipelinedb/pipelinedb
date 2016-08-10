@@ -20,6 +20,7 @@
 #include "parser/parse_type.h"
 #include "pipeline/combinerReceiver.h"
 #include "pipeline/cont_execute.h"
+#include "pipeline/ipc/microbatch.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "miscadmin.h"
@@ -160,21 +161,6 @@ SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash)
 	c->hashfn = hash;
 }
 
-static void
-microbatch_send_to_combiner(microbatch_t *mb, int combiner_id)
-{
-	static ContQueryDatabaseMetadata *db_meta = NULL;
-	int recv_id;
-
-	if (!db_meta)
-		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
-
-	recv_id = db_meta->db_procs[continuous_query_num_workers + combiner_id].pzmq_id;
-
-	microbatch_send(mb, recv_id);
-	microbatch_reset(mb);
-}
-
 void
 CombinerDestReceiverFlush(DestReceiver *self)
 {
@@ -185,7 +171,7 @@ CombinerDestReceiverFlush(DestReceiver *self)
 	microbatch_t *mb;
 
 	mb = microbatch_new(CombinerTuple, bms_make_singleton(c->cont_query->id), NULL);
-	microbatch_add_acks(mb, c->cont_exec->batch->acks);
+	microbatch_add_acks(mb, c->cont_exec->batch->sync_acks);
 
 	for (i = 0; i < continuous_query_num_combiners; i++)
 	{

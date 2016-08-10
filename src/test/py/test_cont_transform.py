@@ -52,11 +52,11 @@ def test_deadlock_regress(pipeline, clean_db):
 
   for copy in [True, False]:
     for nworkers in [1, 4]:
-      for sync in ['off', 'on']:
+      for sync in ['read', 'commit']:
         pipeline.stop()
         pipeline.run({
           'continuous_query_num_workers': nworkers,
-          'synchronous_stream_insert': sync
+          'stream_insert_level': 'sync_%s' % sync
           })
 
         pipeline.execute('TRUNCATE CONTINUOUS VIEW cv')

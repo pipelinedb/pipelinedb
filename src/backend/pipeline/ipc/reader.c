@@ -33,6 +33,7 @@ typedef struct ipc_tuple_reader
 {
 	MemoryContext cxt;
 	List *batches;
+	List *flush_acks;
 } ipc_tuple_reader;
 
 static ipc_tuple_reader *my_reader = NULL;
@@ -79,6 +80,7 @@ ipc_tuple_reader_pull(void)
 	int ntups = 0;
 	int nbytes = 0;
 	Bitmapset *queries = NULL;
+	List *flush_acks = NIL;
 
 	Assert(my_reader->batches == NIL);
 
@@ -109,20 +111,45 @@ ipc_tuple_reader_pull(void)
 		ntups += mb->ntups;
 		nbytes += len;
 
+		/*
+		 * If this is a FlushTuple microbatch, don't add it to the list of microbatches to
+		 * process, just accumulate the ack so we can broadcast it later on.
+		 */
+		if (mb->type == FlushTuple)
+		{
+			tagged_ref_t *ref;
+			microbatch_ack_t *ack;
+
+			Assert(list_length(mb->acks) == 1);
+
+			ref = linitial(mb->acks);
+			if (!microbatch_ack_ref_is_valid(ref))
+				continue;
+
+			ack = (microbatch_ack_t *) ref->ptr;
+			Assert(microbatch_ack_get_level(ack) == STREAM_INSERT_FLUSH);
+
+			flush_acks = lappend(flush_acks, ref);
+			my_rbatch.has_acks = true;
+
+			continue;
+		}
+
 		my_reader->batches = lappend(my_reader->batches, mb);
 
 		queries = bms_union(queries, mb->queries);
 
 		/*
-		 * Hot path for asynchronous inserts. For any microbatch coming from an insert process
-		 * (will always have only one ack), and we're the worker reading that microbatch, check
-		 * to see if its type is ASYNC and if so mark is as read.
+		 * Hot path for STREAM_INSERT_SYNCHRONOUS_READ inserts. If we're receiving a microbatch from the insert process
+		 * (we are a worker and microbatch has a single ack of level STREAM_INSERT_SYNCHRONOUS_READ), mark it as read
+		 * and don't pass the ack downstream.
 		 */
 		if (list_length(mb->acks) == 1 && IsContQueryWorkerProcess())
 		{
 			tagged_ref_t *ref = linitial(mb->acks);
 			microbatch_ack_t *ack = (microbatch_ack_t *) ref->ptr;
-			if (ref->tag == pg_atomic_read_u64(&ack->id) && microbatch_ack_get_type(ack) == ASYNC)
+
+			if (microbatch_ack_ref_is_valid(ref) && microbatch_ack_get_level(ack) == STREAM_INSERT_SYNCHRONOUS_READ)
 			{
 				microbatch_ack_set_read(ack, 1);
 
@@ -142,7 +169,10 @@ ipc_tuple_reader_pull(void)
 	my_rbatch.ntups = ntups;
 	my_rbatch.nbytes = nbytes;
 	my_rbatch.queries = queries;
-	my_rbatch.acks = NIL;
+	my_rbatch.sync_acks = NIL;
+	my_rbatch.flush_acks = flush_acks;
+
+	my_reader->flush_acks = flush_acks;
 
 	return &my_rbatch;
 }
@@ -152,6 +182,7 @@ ipc_tuple_reader_reset(void)
 {
 	MemoryContextReset(my_reader->cxt);
 	my_reader->batches = NIL;
+	my_reader->flush_acks = NIL;
 	ipc_tuple_reader_rewind();
 }
 
@@ -165,6 +196,8 @@ ipc_tuple_reader_ack(void)
 		microbatch_t *mb = lfirst(lc);
 		microbatch_acks_check_and_exec(mb->acks, microbatch_ack_increment_acks, mb->ntups);
 	}
+
+	microbatch_acks_check_and_exec(my_reader->flush_acks, microbatch_ack_increment_acks, 1);
 }
 
 static inline ipc_tuple *
@@ -229,7 +262,7 @@ ipc_tuple_reader_next(Oid query_id)
 				tagged_ref_t *ref = palloc(sizeof(tagged_ref_t));
 				*ref = *(tagged_ref_t *) lfirst(lc);
 
-				my_rbatch.acks = lappend(my_rbatch.acks, ref);
+				my_rbatch.sync_acks = lappend(my_rbatch.sync_acks, ref);
 			}
 
 			MemoryContextSwitchTo(old);
@@ -256,5 +289,5 @@ ipc_tuple_reader_rewind(void)
 {
 	MemSet(&my_rscan, 0, sizeof(ipc_tuple_reader_scan));
 	my_rscan.tup_idx = -1;
-	my_rbatch.acks = NIL;
+	my_rbatch.sync_acks = NIL;
 }
