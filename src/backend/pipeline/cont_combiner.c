@@ -611,7 +611,7 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 	TimestampTz oldest;
 	FunctionCallInfoData hashfcinfo;
 	FmgrInfo flinfo;
-	uint64 cv_name_hash;
+	uint64 cv_name_hash = InvalidOid;
 	bool close_matrel = matrel == NULL;
 
 	/*
@@ -1067,8 +1067,8 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	MemoryContext tmp_cxt;
 	TuplestoreScan *scan;
 	MemoryContext old;
-	Oid *group_ops;
-	AttrNumber *group_idx;
+	Oid *group_ops = NULL;
+	AttrNumber *group_idx = NULL;
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
 	ColumnRef *cref;
