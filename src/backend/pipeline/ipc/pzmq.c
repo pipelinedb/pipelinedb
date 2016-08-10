@@ -110,6 +110,7 @@ pzmq_bind(uint64 id)
 {
 	MemoryContext old;
 	pzmq_socket_t *zsock;
+	int optval;
 
 	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
@@ -124,6 +125,11 @@ pzmq_bind(uint64 id)
 	zsock->type = ZMQ_PULL;
 	sprintf(zsock->addr, SOCKNAME_STR, DataDir, id);
 	zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PULL);
+
+	optval = 10;
+	if (zmq_setsockopt(zsock->sock, ZMQ_RCVHWM, &optval, sizeof(int)) != 0)
+		elog(WARNING, "pzmq_connect failed to set rcvhwm: %s", zmq_strerror(errno));
+
 
 	if (zmq_bind(zsock->sock, zsock->addr) != 0)
 	{
@@ -162,7 +168,7 @@ pzmq_connect(uint64 id)
 		{
 			optval = 1;
 			if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &optval, sizeof(int)) != 0)
-				elog(WARNING, "pzmq_connect failed to set hwm: %s", zmq_strerror(errno));
+				elog(WARNING, "pzmq_connect failed to set sndhwm: %s", zmq_strerror(errno));
 
 			optval = 1;
 			if (zmq_setsockopt(zsock->sock, ZMQ_IMMEDIATE, &optval, sizeof(int)) != 0)
@@ -174,6 +180,10 @@ pzmq_connect(uint64 id)
 		}
 		else
 		{
+			optval = 10;
+			if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &optval, sizeof(int)) != 0)
+				elog(WARNING, "pzmq_connect failed to set sndhwm: %s", zmq_strerror(errno));
+
 			optval = 0;
 			if (zmq_setsockopt(zsock->sock, ZMQ_LINGER, &optval, sizeof(int)) != 0)
 				elog(WARNING, "pzmq_connect failed to set linger: %s", zmq_strerror(errno));
