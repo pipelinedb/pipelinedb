@@ -28,8 +28,10 @@ def test_nested_transforms(pipeline, clean_db):
 
   pipeline.create_cv('cv0', 'SELECT count(*) FROM stream4')
   pipeline.create_cv('cv1', 'SELECT count(*) FROM stream2')
-  pipeline.create_ct('ct0', 'SELECT x::int FROM stream2 WHERE mod(x, 4) = 0', "pipeline_stream_insert('stream4')")
-  pipeline.create_ct('ct1', 'SELECT x::int FROM stream WHERE mod(x, 2) = 0', "pipeline_stream_insert('stream2')")
+  pipeline.create_ct('ct0', 'SELECT x::int FROM stream2 WHERE mod(x, 4) = 0',
+                     "pipeline_stream_insert('stream4')")
+  pipeline.create_ct('ct1', 'SELECT x::int FROM stream WHERE mod(x, 2) = 0',
+                     "pipeline_stream_insert('stream2')")
 
   pipeline.insert('stream', ('x', ), [(n, ) for n in range(1000)])
 
@@ -37,6 +39,7 @@ def test_nested_transforms(pipeline, clean_db):
   assert count == 250
   count = pipeline.execute('SELECT count FROM cv1').first()['count']
   assert count == 500
+
 
 def test_deadlock_regress(pipeline, clean_db):
   nitems = 2000000
@@ -52,11 +55,11 @@ def test_deadlock_regress(pipeline, clean_db):
 
   for copy in [True, False]:
     for nworkers in [1, 4]:
-      for sync in ['off', 'on']:
+      for sync in ['receive', 'commit']:
         pipeline.stop()
         pipeline.run({
           'continuous_query_num_workers': nworkers,
-          'synchronous_stream_insert': sync
+          'stream_insert_level': 'sync_%s' % sync
           })
 
         pipeline.execute('TRUNCATE CONTINUOUS VIEW cv')
@@ -70,7 +73,7 @@ def test_deadlock_regress(pipeline, clean_db):
         count = dict(pipeline.execute('SELECT count FROM cv').first() or {})
         ntries = 5
         while count.get('count') != nitems and ntries > 0:
-          assert sync == 'off'
+          assert sync == 'read'
           time.sleep(1)
           count = dict(pipeline.execute('SELECT count FROM cv').first() or {})
           ntries -= 1

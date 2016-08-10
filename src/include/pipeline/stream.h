@@ -22,6 +22,14 @@
 #include "utils/relcache.h"
 #include "utils/timestamp.h"
 
+typedef enum
+{
+	STREAM_INSERT_ASYNCHRONOUS,
+	STREAM_INSERT_SYNCHRONOUS_RECEIVE,
+	STREAM_INSERT_SYNCHRONOUS_COMMIT,
+	STREAM_INSERT_FLUSH /* internal */
+} StreamInsertLevel;
+
 /*
  * Hooks that can feed raw data to COPY when we need more flexibility than a simple file descriptor.
  */
@@ -34,7 +42,7 @@ extern void *copy_iter_arg;
 #define ARRIVAL_TIMESTAMP "arrival_timestamp"
 
 /* Whether or not to wait on the inserted event to be consumed by the CV */
-extern bool synchronous_stream_insert;
+extern int stream_insert_level;
 extern char *stream_targets;
 
 extern void CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);

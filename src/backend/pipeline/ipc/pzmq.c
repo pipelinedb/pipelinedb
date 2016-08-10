@@ -12,7 +12,9 @@
 #include <zmq.h>
 #include "postgres.h"
 
+#include "miscadmin.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/ipc/microbatch.h"
 #include "pipeline/ipc/pzmq.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
@@ -148,7 +150,6 @@ pzmq_connect(uint64 id)
 {
 	pzmq_socket_t *zsock;
 	bool found;
-	int optval;
 
 	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
@@ -157,6 +158,8 @@ pzmq_connect(uint64 id)
 
 	if (!found)
 	{
+		int optval;
+
 		MemSet(zsock, 0, sizeof(pzmq_socket_t));
 
 		zsock->id = id;
@@ -164,12 +167,13 @@ pzmq_connect(uint64 id)
 		sprintf(zsock->addr, SOCKNAME_STR, DataDir, id);
 		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
 
+		optval = 10;
+		if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &optval, sizeof(int)) != 0)
+			elog(WARNING, "pzmq_connect failed to set sndhwm: %s", zmq_strerror(errno));
+
+
 		if (!IsContQueryProcess())
 		{
-			optval = 1;
-			if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &optval, sizeof(int)) != 0)
-				elog(WARNING, "pzmq_connect failed to set sndhwm: %s", zmq_strerror(errno));
-
 			optval = 1;
 			if (zmq_setsockopt(zsock->sock, ZMQ_IMMEDIATE, &optval, sizeof(int)) != 0)
 				elog(WARNING, "pzmq_connect failed to set immediate: %s", zmq_strerror(errno));
@@ -180,10 +184,6 @@ pzmq_connect(uint64 id)
 		}
 		else
 		{
-			optval = 10;
-			if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &optval, sizeof(int)) != 0)
-				elog(WARNING, "pzmq_connect failed to set sndhwm: %s", zmq_strerror(errno));
-
 			optval = 0;
 			if (zmq_setsockopt(zsock->sock, ZMQ_LINGER, &optval, sizeof(int)) != 0)
 				elog(WARNING, "pzmq_connect failed to set linger: %s", zmq_strerror(errno));

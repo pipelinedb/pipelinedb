@@ -386,6 +386,13 @@ static const struct config_enum_entry huge_pages_options[] = {
 	{NULL, 0, false}
 };
 
+static const struct config_enum_entry stream_insert_options[] = {
+	{"async", STREAM_INSERT_ASYNCHRONOUS, false},
+	{"sync_receive", STREAM_INSERT_SYNCHRONOUS_RECEIVE, false},
+	{"sync_commit", STREAM_INSERT_SYNCHRONOUS_COMMIT, false},
+	{NULL, 0, false}
+};
+
 /*
  * Options for enum values stored in other modules
  */
@@ -1622,16 +1629,6 @@ static struct config_bool ConfigureNamesBool[] =
 			GUC_NOT_IN_SAMPLE | GUC_DISALLOW_IN_FILE
 		},
 		&data_checksums,
-		false,
-		NULL, NULL, NULL
-	},
-
-	{
-		{"synchronous_stream_insert", PGC_USERSET, QUERY_TUNING,
-		 gettext_noop("Makes INSERTs into streams synchronous."),
-		 NULL,
-		},
-		&synchronous_stream_insert,
 		false,
 		NULL, NULL, NULL
 	},
@@ -3827,7 +3824,17 @@ static struct config_enum ConfigureNamesEnum[] =
 		},
 		&continuous_query_combiner_synchronous_commit,
 		SYNCHRONOUS_COMMIT_OFF, synchronous_commit_options,
-		NULL, assign_synchronous_commit, NULL
+		NULL, NULL, NULL
+	},
+
+	{
+		{"stream_insert_level", PGC_USERSET, QUERY_TUNING,
+			gettext_noop("Sets the current transaction's synchronization level."),
+			NULL
+		},
+		&stream_insert_level,
+		STREAM_INSERT_SYNCHRONOUS_RECEIVE, stream_insert_options,
+		NULL, NULL, NULL
 	},
 
 	/* End-of-list marker */

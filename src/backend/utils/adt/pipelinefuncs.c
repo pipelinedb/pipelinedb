@@ -22,6 +22,7 @@
 #include "catalog/pipeline_stream_fn.h"
 #include "fmgr.h"
 #include "pipeline/cont_analyze.h"
+#include "pipeline/ipc/microbatch.h"
 #include "pipeline/stream.h"
 #include "miscadmin.h"
 #include "utils/array.h"
@@ -962,5 +963,25 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 Datum
 pipeline_flush(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_BOOL(true);
+	int i;
+	ContQueryDatabaseMetadata *db_meta = GetMyContQueryDatabaseMetadata();
+	uint64 start_generation = pg_atomic_read_u64(&db_meta->generation);
+	microbatch_ack_t *ack = microbatch_ack_new(STREAM_INSERT_FLUSH);
+	microbatch_t *mb = microbatch_new(FlushTuple, NULL, NULL);
+	bool success;
+
+	pzmq_init();
+
+	microbatch_add_ack(mb, ack);
+
+	for (i = 0; i < continuous_query_num_workers; i++)
+		microbatch_send_to_worker(mb, i);
+
+	microbatch_destroy(mb);
+
+	microbatch_ack_increment_wtups(ack, continuous_query_num_workers);
+	success = microbatch_ack_wait(ack, db_meta, start_generation);
+	microbatch_ack_free(ack);
+
+	PG_RETURN_BOOL(success);
 }

@@ -1682,7 +1682,7 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 		ntups++;
 	}
 
-	state->acks = exec->batch->acks;
+	state->acks = exec->batch->sync_acks;
 	ipc_tuple_reader_rewind();
 
 	if (!TupIsNull(state->slot))
