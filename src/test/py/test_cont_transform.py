@@ -40,6 +40,7 @@ def test_nested_transforms(pipeline, clean_db):
   count = pipeline.execute('SELECT count FROM cv1').first()['count']
   assert count == 500
 
+
 def test_deadlock_regress(pipeline, clean_db):
   nitems = 2000000
   tmp_file = os.path.join(tempfile.gettempdir(), 'tmp.json')
