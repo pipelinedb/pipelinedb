@@ -1209,37 +1209,39 @@ sync_combine(ContQueryCombinerState *state)
 	int ntups_updated = 0;
 	StreamInsertState *sis = NULL;
 	Bitmapset *os_targets = NULL;
+	Bitmapset *orig_targets = NULL;
 
 	matrel = heap_openrv_extended(state->base.query->matrel, RowExclusiveLock, true);
 	if (matrel == NULL)
 		return;
 
+
+	osrel = try_relation_open(state->base.query->osrelid, RowExclusiveLock);
+	if (osrel == NULL)
+		return;
+
+	osri = CQOSRelOpen(osrel);
+
+	BeginStreamModify(NULL, osri, list_make1(state->acks), 0, REENTRANT_STREAM_INSERT);
+	sis = (StreamInsertState *) osri->ri_FdwState;
+	Assert(sis);
+
+	os_targets = orig_targets = sis->queries;
+
+
 	/*
-	 * We'll handle output stream writes separately for SWs since
-	 * they require the execution of an overlay plan
+	 * If nothing is reading from the output stream, close it immediately.
+	 *
+	 * We'll also handle output stream writes separately for SWs since
+	 * they require the execution of an overlay plan.
 	 */
-	if (!state->base.query->is_sw)
+	if (state->base.query->is_sw || os_targets == NULL)
 	{
-		osrel = try_relation_open(state->base.query->osrelid, RowExclusiveLock);
-		if (osrel == NULL)
-			return;
-
-		osri = CQOSRelOpen(osrel);
-
-		BeginStreamModify(NULL, osri, list_make1(state->acks), 0, REENTRANT_STREAM_INSERT);
-		sis = (StreamInsertState *) osri->ri_FdwState;
-		Assert(sis);
-
-		os_targets = sis->queries;
-
-		/* If nothing is reading from the output stream, close it immediately */
-		if (os_targets == NULL)
-		{
-			EndStreamModify(NULL, osri);
-			CQOSRelClose(osri);
-			heap_close(osrel, NoLock);
-			sis = NULL;
-		}
+		EndStreamModify(NULL, osri);
+		CQOSRelClose(osri);
+		heap_close(osrel, NoLock);
+		sis = NULL;
+		os_targets = NULL;
 	}
 
 	ri = CQMatRelOpen(matrel);
@@ -1343,15 +1345,17 @@ sync_combine(ContQueryCombinerState *state)
 		EndStreamModify(NULL, osri);
 		CQOSRelClose(osri);
 		heap_close(osrel, NoLock);
-		sis = NULL;
 	}
 
 	/*
 	 * We handle SW output stream writes here so we can execute the
 	 * overlay plan on the whole batch all at once in order to to
 	 * compute output stream tuples.
+	 *
+	 * Note that this only happens if the output stream currently
+	 * has any readers.
 	 */
-	if (state->sw)
+	if (orig_targets && state->sw)
 		project_sw_overlay_into_ostream(state, matrel);
 
 	tuplestore_clear(state->combined);
