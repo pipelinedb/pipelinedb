@@ -21,7 +21,7 @@ def test_userset_sync(pipeline, clean_db):
                             % (getpass.getuser(), pipeline.port))
     cur = conn.cursor()
     cur.execute('SET stream_insert_level=sync_%s' %
-                ('commit' if sync else 'read'))
+                ('commit' if sync else 'receive'))
     for i in xrange(NUM_INSERTS):
       cur.execute('INSERT INTO stream (x) VALUES (%d)' % (0 if sync else 1))
       conn.commit()
