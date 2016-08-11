@@ -16,6 +16,19 @@
 #include "tcop/dest.h"
 #include "pipeline/cont_execute.h"
 
+typedef struct PartialTupleState
+{
+	HeapTuple tup;
+	uint64 hash;
+	Oid query_id;
+	NameData matrel_namespace;
+	NameData matrel_name;
+} PartialTupleState;
+
+
+typedef void (*CombinerReceiveFunc) (PartialTupleState *hts, int len);
+extern CombinerReceiveFunc CombinerReceiveHook;
+
 extern DestReceiver *CreateCombinerDestReceiver(void);
 extern void SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *cont_exec, ContQuery *query);
 extern void SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash);
