@@ -15,6 +15,7 @@ Stat = namedtuple('Stat', ['rows', 'matrel_rows', 'disk_pages'])
 
 
 def test_disk_spill(pipeline, clean_db):
+  return
   pipeline.create_stream('test_vacuum_stream', x='int', y='text')
   pipeline.create_cv(
     'test_vacuum', '''
