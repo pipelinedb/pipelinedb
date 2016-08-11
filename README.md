@@ -74,10 +74,12 @@ make run
 
 #### Send PipelineDB some data
 
-Now let's generate some test data and stream it into a simple continuous view. First, create the continuous view:
+Now let's generate some test data and stream it into a simple continuous view. First, create the stream and the continuous view that reads from it:
 
     pipeline
-    =# CREATE CONTINUOUS VIEW test_view AS SELECT key::text, COUNT(*) FROM test_stream GROUP BY key;
+    =# CREATE STREAM test_stream (key text, value integer);
+    CREATE STREAM
+    =# CREATE CONTINUOUS VIEW test_view AS SELECT key, COUNT(*) FROM test_stream GROUP BY key;
     CREATE CONTINUOUS VIEW
 
 Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Any `INSERT` target that isn't a table is considered a stream by PipelineDB, meaning streams don't need to have a schema created in advance. Let's emit a single event into the `test_stream` stream since our continuous view is reading from it:
@@ -86,7 +88,7 @@ Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Any `IN
     =# INSERT INTO test_stream (key, value) VALUES ('key', 42);
     INSERT 0 1
 
-The 1 in the "INSERT 0 1" response means that 1 event was emitted into a stream that is actually being read by a continuous query.
+The 1 in the `INSERT 0 1` response means that 1 event was emitted into a stream that is actually being read by a continuous query.
 
 The `generate-inserts` script is useful for generating and streaming larger amounts of test data. The following invocation of `generate-inserts` will build a SQL multi `INSERT` with 100,000 tuples having random strings assigned to the `key` field, and random `ints` assigned to the `value` field. All of these events will be emitted to `test_stream`, and subsequently read by the `test_view` continuous view. And since our script is just generating SQL, we can pipe its output directly into the `pipeline` client:
 
