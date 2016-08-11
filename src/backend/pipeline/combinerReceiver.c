@@ -24,12 +24,15 @@
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "miscadmin.h"
+#include "utils/builtins.h"
 #include "utils/hashfuncs.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
 
 #define MURMUR_SEED 0x155517D2
+
+CombinerReceiveFunc CombinerReceiveHook = NULL;
 
 typedef struct
 {
@@ -168,10 +171,13 @@ CombinerDestReceiverFlush(DestReceiver *self)
 	int i;
 	int ntups = 0;
 	Size size = 0;
-	microbatch_t *mb;
+	microbatch_t *mb = NULL;
 
-	mb = microbatch_new(CombinerTuple, bms_make_singleton(c->cont_query->id), NULL);
-	microbatch_add_acks(mb, c->cont_exec->batch->sync_acks);
+	if (CombinerReceiveHook == NULL)
+	{
+		mb = microbatch_new(CombinerTuple, bms_make_singleton(c->cont_query->id), NULL);
+		microbatch_add_acks(mb, c->cont_exec->batch->sync_acks);
+	}
 
 	for (i = 0; i < continuous_query_num_combiners; i++)
 	{
@@ -188,17 +194,33 @@ CombinerDestReceiverFlush(DestReceiver *self)
 			tagged_ref_t *ref = lfirst(lc);
 			HeapTuple tup = (HeapTuple) ref->ptr;
 			uint64 hash = ref->tag;
+			int len;
 
-			if (!microbatch_add_tuple(mb, tup, hash))
+			if (CombinerReceiveHook != NULL)
 			{
-				microbatch_send_to_combiner(mb, i);
-				microbatch_add_tuple(mb, tup, hash);
+				PartialTupleState *pts = palloc0(sizeof(PartialTupleState));
+				pts->tup = tup;
+				pts->hash = hash;
+				pts->query_id = c->cont_query->id;
+				namestrcpy(&pts->matrel_namespace, c->cont_query->matrel->schemaname);
+				namestrcpy(&pts->matrel_name, c->cont_query->matrel->relname);
+
+				len = sizeof(PartialTupleState) + HEAPTUPLESIZE + pts->tup->t_len;
+				CombinerReceiveHook(pts, len);
+			}
+			else
+			{
+				if (!microbatch_add_tuple(mb, tup, hash))
+				{
+					microbatch_send_to_combiner(mb, i);
+					microbatch_add_tuple(mb, tup, hash);
+				}
 			}
 
 			size += HEAPTUPLESIZE + tup->t_len;
 		}
 
-		if (!microbatch_is_empty(mb))
+		if (mb && !microbatch_is_empty(mb))
 		{
 			microbatch_send_to_combiner(mb, i);
 			microbatch_reset(mb);
@@ -208,8 +230,11 @@ CombinerDestReceiverFlush(DestReceiver *self)
 		c->tups_per_combiner[i] = NIL;
 	}
 
-	microbatch_acks_check_and_exec(mb->acks, microbatch_ack_increment_ctups, ntups);
+	if (mb)
+	{
+		microbatch_acks_check_and_exec(mb->acks, microbatch_ack_increment_ctups, ntups);
+		microbatch_destroy(mb);
+	}
 
-	microbatch_destroy(mb);
 	pgstat_increment_cq_write(ntups, size);
 }
