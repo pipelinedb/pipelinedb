@@ -151,7 +151,7 @@ ipc_tuple_reader_pull(void)
 
 			if (microbatch_ack_ref_is_valid(ref) && microbatch_ack_get_level(ack) == STREAM_INSERT_SYNCHRONOUS_RECEIVE)
 			{
-				microbatch_ack_set_read(ack, 1);
+				microbatch_ack_set_receive(ack, 1);
 
 				/*
 				 * Set the acks for this microbatch to be NIL so that we don't pass them around to

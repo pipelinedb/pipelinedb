@@ -378,13 +378,13 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	if (exec->batch)
 	{
-		ListCell *lc;
-
 		pgstat_end_cq_batch(exec->batch->ntups, exec->batch->nbytes);
 		pgstat_report_stat(false);
 
-		if (IsContQueryWorkerProcess())
+		if (exec->ptype == Worker)
 		{
+			ListCell *lc;
+
 			foreach(lc, exec->batch->flush_acks)
 			{
 				tagged_ref_t *ref = lfirst(lc);
@@ -404,7 +404,8 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 				microbatch_destroy(mb);
 			}
 
-			microbatch_acks_check_and_exec(exec->batch->flush_acks, microbatch_ack_increment_ctups, continuous_query_num_combiners);
+			microbatch_acks_check_and_exec(exec->batch->flush_acks, microbatch_ack_increment_ctups,
+					continuous_query_num_combiners);
 		}
 	}
 

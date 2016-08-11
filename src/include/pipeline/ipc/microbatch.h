@@ -36,7 +36,7 @@ typedef struct microbatch_ack_t
 	pg_atomic_uint64 id;
 
 	/* Has been read by some worker? */
-	pg_atomic_flag is_wread;
+	pg_atomic_flag is_wreceived;
 	/* Number of acks from workers */
 	pg_atomic_uint32 num_wacks;
 	/* Number of acks from combiners */
@@ -64,13 +64,13 @@ extern void microbatch_ack_free(microbatch_ack_t *ack);
 			pg_atomic_fetch_add_u32(&(ack)->num_cacks, (n)); \
 	} \
 	while (0);
-#define microbatch_ack_set_read(ack, dummy) \
+#define microbatch_ack_set_receive(ack, dummy) \
 	do \
 	{ \
 		if (dummy) \
-			pg_atomic_test_set_flag(&(ack)->is_wread); \
+			pg_atomic_test_set_flag(&(ack)->is_wreceived); \
 		else \
-			pg_atomic_clear_flag(&(ack)->is_wread); \
+			pg_atomic_clear_flag(&(ack)->is_wreceived); \
 	} \
 	while(0);
 #define microbatch_acks_check_and_exec(acks, fn, arg) \
@@ -89,7 +89,7 @@ extern void microbatch_ack_free(microbatch_ack_t *ack);
 #define microbatch_ack_is_acked(ack) \
 	(pg_atomic_read_u32(&(ack)->num_wacks) >= pg_atomic_read_u32(&(ack)->num_wtups) && \
 			pg_atomic_read_u32(&(ack)->num_cacks) >= pg_atomic_read_u32(&(ack)->num_ctups))
-#define microbatch_ack_is_read(ack) (!pg_atomic_unlocked_test_flag(&(ack)->is_wread))
+#define microbatch_ack_is_received(ack) (!pg_atomic_unlocked_test_flag(&(ack)->is_wreceived))
 extern bool microbatch_ack_wait(microbatch_ack_t *ack, ContQueryDatabaseMetadata *db_meta, uint64 start_generation);
 
 typedef enum microbatch_type_t
