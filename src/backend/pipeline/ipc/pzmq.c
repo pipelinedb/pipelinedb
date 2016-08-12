@@ -238,13 +238,13 @@ pzmq_recv(int *len, int timeout)
 	if (!zmq_state->me)
 		elog(ERROR, "pzmq is not binded");
 
-	zmq_msg_init(&msg);
-
 	if (timeout && !pzmq_poll(timeout))
 	{
 		*len = 0;
 		return NULL;
 	}
+
+	zmq_msg_init(&msg);
 
 	ret = zmq_msg_recv(&msg, zmq_state->me->sock, ZMQ_DONTWAIT);
 	if (ret == -1)
