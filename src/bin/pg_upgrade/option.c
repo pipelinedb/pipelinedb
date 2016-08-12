@@ -220,7 +220,7 @@ parseCommandLine(int argc, char *argv[])
 		/* Start with newline because we might be appending to a file. */
 		fprintf(fp, "\n"
 		"-----------------------------------------------------------------\n"
-				"  pg_upgrade run on %s"
+				"  pipeline-upgrade run on %s"
 				"-----------------------------------------------------------------\n\n",
 				ctime(&run_time));
 		fclose(fp);
@@ -275,9 +275,9 @@ parseCommandLine(int argc, char *argv[])
 static void
 usage(void)
 {
-	printf(_("pg_upgrade upgrades a PostgreSQL cluster to a different major version.\n\
+	printf(_("pipeline-upgrade upgrades a PipelineDB cluster to a different major version.\n\
 \nUsage:\n\
-  pg_upgrade [OPTION]...\n\
+  pipeline-upgrade [OPTION]...\n\
 \n\
 Options:\n\
   -b, --old-bindir=BINDIR       old cluster executable directory\n\
@@ -297,19 +297,19 @@ Options:\n\
   -V, --version                 display version information, then exit\n\
   -?, --help                    show this help, then exit\n\
 \n\
-Before running pg_upgrade you must:\n\
-  create a new database cluster (using the new version of initdb)\n\
+Before running pipeline-upgrade you must:\n\
+  create a new database cluster (using the new version of pipeline-init)\n\
   shutdown the postmaster servicing the old cluster\n\
   shutdown the postmaster servicing the new cluster\n\
 \n\
-When you run pg_upgrade, you must provide the following information:\n\
+When you run pipeline-upgrade, you must provide the following information:\n\
   the data directory for the old cluster  (-d DATADIR)\n\
   the data directory for the new cluster  (-D DATADIR)\n\
   the \"bin\" directory for the old version (-b BINDIR)\n\
   the \"bin\" directory for the new version (-B BINDIR)\n\
 \n\
 For example:\n\
-  pg_upgrade -d oldCluster/data -D newCluster/data -b oldCluster/bin -B newCluster/bin\n\
+  pipeline-upgrade -d oldCluster/data -D newCluster/data -b oldCluster/bin -B newCluster/bin\n\
 or\n"), old_cluster.port, new_cluster.port, os_info.user);
 #ifndef WIN32
 	printf(_("\
@@ -317,16 +317,16 @@ or\n"), old_cluster.port, new_cluster.port, os_info.user);
   $ export PGDATANEW=newCluster/data\n\
   $ export PGBINOLD=oldCluster/bin\n\
   $ export PGBINNEW=newCluster/bin\n\
-  $ pg_upgrade\n"));
+  $ pipeline-upgrade\n"));
 #else
 	printf(_("\
   C:\\> set PGDATAOLD=oldCluster/data\n\
   C:\\> set PGDATANEW=newCluster/data\n\
   C:\\> set PGBINOLD=oldCluster/bin\n\
   C:\\> set PGBINNEW=newCluster/bin\n\
-  C:\\> pg_upgrade\n"));
+  C:\\> pipeline-upgrade\n"));
 #endif
-	printf(_("\nReport bugs to <pgsql-bugs@postgresql.org>.\n"));
+	printf(_("\nReport bugs to <eng@pipelinedb.com>.\n"));
 }
 
 
