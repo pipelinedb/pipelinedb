@@ -12,12 +12,9 @@
 
 #include "replication/logical.h"
 
-extern int logical_read_local_xlog_page(XLogReaderState *state,
-							 XLogRecPtr targetPagePtr,
-							 int reqLen, XLogRecPtr targetRecPtr,
-							 char *cur_page, TimeLineID *pageTLI);
+extern void XLogReadPublic(char *buf, TimeLineID tli, XLogRecPtr startptr, Size count);
 
-extern int logical_read_local_xlog_page_non_block(XLogReaderState *state,
+extern int logical_read_local_xlog_page(XLogReaderState *state,
 							 XLogRecPtr targetPagePtr,
 							 int reqLen, XLogRecPtr targetRecPtr,
 							 char *cur_page, TimeLineID *pageTLI);
