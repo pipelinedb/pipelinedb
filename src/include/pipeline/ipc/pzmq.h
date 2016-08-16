@@ -11,6 +11,8 @@
 
 #include "postgres.h"
 
+#define PZMQ_SOCKNAME_STR "ipc://%s/pipeline/zmq/%ld.sock"
+
 extern void pzmq_init(void);
 extern void pzmq_destroy(void);
 

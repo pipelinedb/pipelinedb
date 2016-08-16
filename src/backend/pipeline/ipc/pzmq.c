@@ -20,7 +20,6 @@
 #include "utils/memutils.h"
 
 #define ERRNO_IS_SAFE() (errno == EINTR || errno == EAGAIN || !errno)
-#define SOCKNAME_STR "ipc://%s/pipeline/zmq/%ld.sock"
 
 typedef struct pzmq_socket_t
 {
@@ -96,7 +95,7 @@ pzmq_destroy(void)
 	if (zmq_state->me)
 	{
 		zmq_close(zmq_state->me->sock);
-		remove(zmq_state->me->addr);
+		remove(&zmq_state->me->addr[6]);
 	}
 
 	zmq_ctx_shutdown(zmq_state->zmq_cxt);
@@ -125,12 +124,12 @@ pzmq_bind(uint64 id)
 	zsock = palloc0(sizeof(pzmq_socket_t));
 	zsock->id = id;
 	zsock->type = ZMQ_PULL;
-	sprintf(zsock->addr, SOCKNAME_STR, DataDir, id);
+	sprintf(zsock->addr, PZMQ_SOCKNAME_STR, DataDir, id);
 	zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PULL);
 
 	optval = 10;
 	if (zmq_setsockopt(zsock->sock, ZMQ_RCVHWM, &optval, sizeof(int)) != 0)
-		elog(WARNING, "pzmq_connect failed to set rcvhwm: %s", zmq_strerror(errno));
+		elog(WARNING, "pzmq_bind failed to set rcvhwm: %s", zmq_strerror(errno));
 
 
 	if (zmq_bind(zsock->sock, zsock->addr) != 0)
@@ -164,7 +163,7 @@ pzmq_connect(uint64 id)
 
 		zsock->id = id;
 		zsock->type = ZMQ_PUSH;
-		sprintf(zsock->addr, SOCKNAME_STR, DataDir, id);
+		sprintf(zsock->addr, PZMQ_SOCKNAME_STR, DataDir, id);
 		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
 
 		optval = 10;
@@ -213,6 +212,7 @@ pzmq_poll(int timeout)
 	item.events = ZMQ_POLLIN;
 	item.revents = 0;
 	item.socket = zmq_state->me->sock;
+	item.fd = 0;
 
 	if (!timeout)
 		timeout = -1;

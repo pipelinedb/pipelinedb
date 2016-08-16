@@ -33,6 +33,7 @@
 #define MURMUR_SEED 0x155517D2
 
 CombinerReceiveFunc CombinerReceiveHook = NULL;
+CombinerFlushFunc CombinerFlushHook = NULL;
 
 typedef struct
 {
@@ -64,8 +65,9 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
 	MemoryContext old = MemoryContextSwitchTo(ContQueryBatchContext);
-	int i;
 	tagged_ref_t *ref;
+	uint64 shard_hash;
+	bool received = false;
 
 	if (!c->cont_query)
 		c->cont_query = c->cont_exec->curr_query->query;
@@ -78,20 +80,23 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	/* Shard by groups or name if no grouping. */
 	if (c->hash_fcinfo)
 	{
-		uint64 hash;
-
 		ref->tag = slot_hash_group(slot, c->hashfn, c->hash_fcinfo);
-
-		hash = slot_hash_group_skip_attr(slot, c->cont_query->sw_attno, c->hashfn, c->hash_fcinfo);
-		i = get_combiner_for_group_hash(hash);
+		shard_hash = slot_hash_group_skip_attr(slot, c->cont_query->sw_attno, c->hashfn, c->hash_fcinfo);
 	}
 	else
 	{
 		ref->tag = c->name_hash;
-		i = get_combiner_for_group_hash(c->name_hash);
+		shard_hash = c->name_hash;
 	}
 
-	c->tups_per_combiner[i] = lappend(c->tups_per_combiner[i], ref);
+	if (CombinerReceiveHook)
+		received = CombinerReceiveHook(c->cont_query, shard_hash, ref->tag, ref->ptr);
+
+	if (!received)
+	{
+		int i = get_combiner_for_shard_hash(shard_hash);
+		c->tups_per_combiner[i] = lappend(c->tups_per_combiner[i], ref);
+	}
 
 	MemoryContextSwitchTo(old);
 }
@@ -171,13 +176,13 @@ CombinerDestReceiverFlush(DestReceiver *self)
 	int i;
 	int ntups = 0;
 	Size size = 0;
-	microbatch_t *mb = NULL;
+	microbatch_t *mb;
 
-	if (CombinerReceiveHook == NULL)
-	{
-		mb = microbatch_new(CombinerTuple, bms_make_singleton(c->cont_query->id), NULL);
-		microbatch_add_acks(mb, c->cont_exec->batch->sync_acks);
-	}
+	if (CombinerFlushHook)
+		CombinerFlushHook();
+
+	mb = microbatch_new(CombinerTuple, bms_make_singleton(c->cont_query->id), NULL);
+	microbatch_add_acks(mb, c->cont_exec->batch->sync_acks);
 
 	for (i = 0; i < continuous_query_num_combiners; i++)
 	{
@@ -194,33 +199,17 @@ CombinerDestReceiverFlush(DestReceiver *self)
 			tagged_ref_t *ref = lfirst(lc);
 			HeapTuple tup = (HeapTuple) ref->ptr;
 			uint64 hash = ref->tag;
-			int len;
 
-			if (CombinerReceiveHook != NULL)
+			if (!microbatch_add_tuple(mb, tup, hash))
 			{
-				PartialTupleState *pts = palloc0(sizeof(PartialTupleState));
-				pts->tup = tup;
-				pts->hash = hash;
-				pts->query_id = c->cont_query->id;
-				namestrcpy(&pts->matrel_namespace, c->cont_query->matrel->schemaname);
-				namestrcpy(&pts->matrel_name, c->cont_query->matrel->relname);
-
-				len = sizeof(PartialTupleState) + HEAPTUPLESIZE + pts->tup->t_len;
-				CombinerReceiveHook(pts, len);
-			}
-			else
-			{
-				if (!microbatch_add_tuple(mb, tup, hash))
-				{
-					microbatch_send_to_combiner(mb, i);
-					microbatch_add_tuple(mb, tup, hash);
-				}
+				microbatch_send_to_combiner(mb, i);
+				microbatch_add_tuple(mb, tup, hash);
 			}
 
 			size += HEAPTUPLESIZE + tup->t_len;
 		}
 
-		if (mb && !microbatch_is_empty(mb))
+		if (!microbatch_is_empty(mb))
 		{
 			microbatch_send_to_combiner(mb, i);
 			microbatch_reset(mb);
@@ -230,11 +219,8 @@ CombinerDestReceiverFlush(DestReceiver *self)
 		c->tups_per_combiner[i] = NIL;
 	}
 
-	if (mb)
-	{
-		microbatch_acks_check_and_exec(mb->acks, microbatch_ack_increment_ctups, ntups);
-		microbatch_destroy(mb);
-	}
+	microbatch_acks_check_and_exec(mb->acks, microbatch_ack_increment_ctups, ntups);
+	microbatch_destroy(mb);
 
 	pgstat_increment_cq_write(ntups, size);
 }

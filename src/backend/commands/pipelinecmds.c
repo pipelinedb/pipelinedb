@@ -72,9 +72,6 @@
 /* guc params */
 int continuous_view_fillfactor;
 
-/* hooks */
-bool use_ls_hash_group_index = true;
-
 /* for binary upgrades */
 static Oid next_matrel_type = InvalidOid;
 static Oid next_matrel_array_type = InvalidOid;
@@ -252,7 +249,7 @@ make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 		if (!found)
 			elog(ERROR, "could not find index attribute in tuple descriptor");
 
-		if (use_ls_hash_group_index && TypeCategory(attr->atttypid) == TYPCATEGORY_DATETIME)
+		if (TypeCategory(attr->atttypid) == TYPCATEGORY_DATETIME)
 			hashoid = LS_HASH_GROUP_OID;
 
 		var = makeVar(1, attr->attnum, attr->atttypid, attr->atttypmod,

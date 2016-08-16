@@ -374,12 +374,12 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	{
 		CommitTransactionCommand();
 		MemoryContextReset(ContQueryTransactionContext);
+		pgstat_report_stat(false);
 	}
 
 	if (exec->batch)
 	{
 		pgstat_end_cq_batch(exec->batch->ntups, exec->batch->nbytes);
-		pgstat_report_stat(false);
 
 		if (exec->ptype == Worker)
 		{

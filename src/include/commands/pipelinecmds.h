@@ -23,9 +23,6 @@
 /* guc parameter */
 extern int continuous_view_fillfactor;
 
-/* hooks */
-extern bool use_ls_hash_group_index;
-
 extern void ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring);
 extern void ExecTruncateContViewStmt(TruncateStmt *stmt);
 
