@@ -114,7 +114,12 @@ ls_hash_group(PG_FUNCTION_ARGS)
 
 		/* all time-based types are based on 64-bit integers */
 		if (i == state->tsarg)
-			tsval = DatumGetInt64(d);
+		{
+			if (PG_ARGISNULL(i))
+				tsval = 0;
+			else
+				tsval = DatumGetInt64(d);
+		}
 
 		if (PG_ARGISNULL(i))
 			hash = 0;

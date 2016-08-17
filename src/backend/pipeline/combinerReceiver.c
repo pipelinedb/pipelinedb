@@ -66,7 +66,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	CombinerState *c = (CombinerState *) self;
 	MemoryContext old = MemoryContextSwitchTo(ContQueryBatchContext);
 	tagged_ref_t *ref;
-	uint64 shard_hash;
+	uint32 shard_hash;
 	bool received = false;
 
 	if (!c->cont_query)

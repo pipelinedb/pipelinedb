@@ -16,7 +16,7 @@
 #include "tcop/dest.h"
 #include "pipeline/cont_execute.h"
 
-typedef bool (*CombinerReceiveFunc) (ContQuery *query, uint64 shard_hash, uint64 group_hash, HeapTuple tup);
+typedef bool (*CombinerReceiveFunc) (ContQuery *query, uint32 shard_hash, uint64 group_hash, HeapTuple tup);
 extern CombinerReceiveFunc CombinerReceiveHook;
 typedef void (*CombinerFlushFunc) (void);
 extern CombinerFlushFunc CombinerFlushHook;
