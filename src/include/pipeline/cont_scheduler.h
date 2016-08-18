@@ -109,7 +109,6 @@ extern void ContinuousQueryWorkerMain(void);
 
 extern void SignalContQuerySchedulerDropDB(Oid db_oid);
 extern void SignalContQuerySchedulerRefreshDBList(void);
-extern bool ShouldTerminateContQueryProcess(void);
 
 extern ContQueryDatabaseMetadata *GetContQueryDatabaseMetadata(Oid db_oid);
 extern ContQueryDatabaseMetadata *GetMyContQueryDatabaseMetadata(void);

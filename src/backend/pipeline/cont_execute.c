@@ -99,7 +99,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 	 * sleep forever since the postmaster doens't resend SIGTERM signals to unresponsive
 	 * child processes.
 	 */
-	if (ShouldTerminateContQueryProcess())
+	if (get_sigterm_flag())
 		timeout = 0;
 	else if (IsTransactionState())
 		timeout = timeout ? Min(MAX_IN_XACT_TIMEOUT, timeout) : MAX_IN_XACT_TIMEOUT;

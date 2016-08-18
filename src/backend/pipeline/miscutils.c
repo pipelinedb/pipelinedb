@@ -16,7 +16,7 @@
 #include "utils/datum.h"
 #include "utils/typcache.h"
 
-extern double continuous_query_proc_priority;
+volatile sig_atomic_t pipeline_got_SIGTERM = false;
 
 void
 append_suffix(char *str, char *suffix, int max_len)
@@ -269,17 +269,4 @@ SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringI
 		appendStringInfoChar(buf, '1');
 		DatumToBytes(d, typ, buf);
 	}
-}
-
-#define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
-
-int
-set_nice_priority()
-{
-	int priority = 0;
-	int default_priority = getpriority(PRIO_PROCESS, MyProcPid);
-	priority = Max(default_priority, MAX_PRIORITY - 
-			ceil(continuous_query_proc_priority * (MAX_PRIORITY - default_priority)));
-
-	return nice(priority);
 }

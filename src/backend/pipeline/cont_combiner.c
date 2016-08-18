@@ -1760,7 +1760,7 @@ ContinuousQueryCombinerMain(void)
 	{
 		CHECK_FOR_INTERRUPTS();
 
-		if (ShouldTerminateContQueryProcess())
+		if (get_sigterm_flag())
 			break;
 
 		ContExecutorStartBatch(cont_exec, min_tick_ms);

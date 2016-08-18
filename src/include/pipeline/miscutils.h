@@ -15,14 +15,24 @@
 #include "executor/tuptable.h"
 #include "miscadmin.h"
 #include "lib/stringinfo.h"
+#include "signal.h"
 #include "storage/dsm.h"
 #include "utils/typcache.h"
+
+extern volatile sig_atomic_t pipeline_got_SIGTERM;
 
 typedef struct tagged_ref_t
 {
 	void *ptr;
 	uint64 tag;
 } tagged_ref_t;
+
+#define set_sigterm_flag() \
+	do \
+	{ \
+		pipeline_got_SIGTERM = true; \
+	} while (0)
+#define get_sigterm_flag() (pipeline_got_SIGTERM)
 
 #define ptr_difference(begin, end) ((void *) (((char *) end) - ((char *) begin)))
 #define ptr_offset(begin, offset) ((void *) (((char *) begin) + ((uintptr_t) offset)))
@@ -36,8 +46,5 @@ extern void MurmurHash3_128(const void *key, const Size len, const uint64_t seed
 extern uint64_t MurmurHash3_64(const void *key, const Size len, const uint64_t seed);
 extern void SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf);
 extern void DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf);
-
-/* for backends / bg workers to yield cpu */
-extern int set_nice_priority(void);
 
 #endif   /* MISCUTILS_H */

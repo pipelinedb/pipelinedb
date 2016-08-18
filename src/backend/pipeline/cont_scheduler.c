@@ -46,6 +46,8 @@
 #include "utils/syscache.h"
 #include "utils/timeout.h"
 
+#define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
+
 #define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners)
 #define NUM_LOCKS_PER_DB NUM_BG_WORKERS_PER_DB
 
@@ -82,7 +84,6 @@ double continuous_query_proc_priority;
 static MemoryContext ContQuerySchedulerContext;
 
 /* flags set by signal handlers */
-static volatile sig_atomic_t got_SIGTERM = false;
 static volatile sig_atomic_t got_SIGINT = false;
 
 /* the main continuous process scheduler shmem struct */
@@ -218,7 +219,7 @@ sigterm_handler(SIGNAL_ARGS)
 {
 	int save_errno = errno;
 
-	got_SIGTERM = true;
+	set_sigterm_flag();
 	if (MyProc)
 		SetLatch(MyLatch);
 
@@ -248,12 +249,6 @@ sigint_handler(SIGNAL_ARGS)
 		SetLatch(MyLatch);
 
 	errno = save_errno;
-}
-
-bool
-ShouldTerminateContQueryProcess(void)
-{
-	return (bool) got_SIGTERM;
 }
 
 static void
@@ -385,6 +380,17 @@ purge_adhoc_queries(void)
 	}
 
 	CommitTransactionCommand();
+}
+
+static int
+set_nice_priority()
+{
+	int priority = 0;
+	int default_priority = getpriority(PRIO_PROCESS, MyProcPid);
+	priority = Max(default_priority, MAX_PRIORITY -
+			ceil(continuous_query_proc_priority * (MAX_PRIORITY - default_priority)));
+
+	return nice(priority);
 }
 
 static void
@@ -836,7 +842,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 			proc_exit(1);
 
 		/* the normal shutdown case */
-		if (got_SIGTERM)
+		if (get_sigterm_flag())
 			break;
 
 		/* refresh database list? */
