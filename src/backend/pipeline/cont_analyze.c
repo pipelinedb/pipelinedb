@@ -76,9 +76,6 @@ double sliding_window_step_factor;
 #define INTERNAL_COLNAME_PREFIX "_"
 #define IS_DISTINCT_ONLY_AGG(name) (pg_strcasecmp((name), "count") == 0 || \
 		pg_strcasecmp((name), "array_agg") == 0)
-#define IS_UNSUPPORTED_AGG(name) (pg_strcasecmp(name, "mode") == 0 || \
-		pg_strcasecmp(name, "xmlagg") == 0 || \
-		pg_strcasecmp(name, "percentile_disc") == 0)
 
 #define MIN_VIEW_MAX_AGE_FACTOR 0.5
 
@@ -1011,12 +1008,6 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 	{
 		FuncCall *func = (FuncCall *) lfirst(lc);
 		char *name = NameListToString(func->funcname);
-
-		if (IS_UNSUPPORTED_AGG(name))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					errmsg("continuous queries don't support \"%s\" aggregate", name),
-					parser_errposition(context->pstate, func->location)));
 
 		if (func->agg_distinct && !IS_DISTINCT_ONLY_AGG(name))
 			ereport(ERROR,
