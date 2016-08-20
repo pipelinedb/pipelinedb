@@ -64,11 +64,11 @@ MicrobatchAckShmemInit(void)
 		{
 			microbatch_ack_t *ack = &MicrobatchAckShmem->acks[i];
 			pg_atomic_init_u64(&ack->id, 0);
-			pg_atomic_init_flag(&ack->is_wreceived);
 			pg_atomic_init_u32(&ack->num_cacks, 0);
 			pg_atomic_init_u32(&ack->num_cacks, 0);
 			pg_atomic_init_u32(&ack->num_ctups, 0);
 			pg_atomic_init_u32(&ack->num_wacks, 0);
+			pg_atomic_init_u32(&ack->num_wrecv, 0);
 			pg_atomic_init_u32(&ack->num_wtups, 0);
 		}
 	}
@@ -92,11 +92,11 @@ microbatch_ack_new(StreamInsertLevel level)
 		if (!pg_atomic_compare_exchange_u64(&ack->id, &zero, id))
 			continue;
 
-		pg_atomic_clear_flag(&ack->is_wreceived);
 		pg_atomic_write_u32(&ack->num_cacks, 0);
 		pg_atomic_write_u32(&ack->num_cacks, 0);
 		pg_atomic_write_u32(&ack->num_ctups, 0);
 		pg_atomic_write_u32(&ack->num_wacks, 0);
+		pg_atomic_write_u32(&ack->num_wrecv, 0);
 		pg_atomic_write_u32(&ack->num_wtups, 0);
 
 		/*
