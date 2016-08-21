@@ -459,7 +459,7 @@ select_existing_groups(ContQueryCombinerState *state)
 	dest = CreateDestReceiver(DestTupleTable);
 	SetTupleTableDestReceiverParams(dest, existing, existing->tablecxt, true);
 
-	PortalStart(portal, NULL, 0, NULL);
+	PortalStart(portal, NULL, EXEC_NO_MATREL_LOCKING, NULL);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,
@@ -469,7 +469,7 @@ select_existing_groups(ContQueryCombinerState *state)
 					 NULL);
 	PortalDrop(portal, false);
 
-	heap_close(matrel, NoLock);
+	heap_close(matrel, RowShareLock);
 
 finish:
 	batchgroups = hash_groups(state);
@@ -947,7 +947,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 	{
 		EndStreamModify(NULL, osri);
 		CQOSRelClose(osri);
-		heap_close(osrel, NoLock);
+		heap_close(osrel, RowExclusiveLock);
 		return;
 	}
 
@@ -1025,7 +1025,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 	/* Done, cleanup */
 	EndStreamModify(NULL, osri);
 	CQOSRelClose(osri);
-	heap_close(osrel, NoLock);
+	heap_close(osrel, RowExclusiveLock);
 
 	tuplestore_clear(state->sw->overlay_input);
 	tuplestore_clear(state->sw->overlay_output);
@@ -1211,14 +1211,16 @@ sync_combine(ContQueryCombinerState *state)
 	Bitmapset *os_targets = NULL;
 	Bitmapset *orig_targets = NULL;
 
-	matrel = heap_openrv_extended(state->base.query->matrel, RowExclusiveLock, true);
-	if (matrel == NULL)
-		return;
-
-
 	osrel = try_relation_open(state->base.query->osrelid, RowExclusiveLock);
 	if (osrel == NULL)
 		return;
+
+	matrel = heap_openrv_extended(state->base.query->matrel, RowExclusiveLock, true);
+	if (matrel == NULL)
+	{
+		heap_close(osrel, RowExclusiveLock);
+		return;
+	}
 
 	osri = CQOSRelOpen(osrel);
 
@@ -1227,7 +1229,6 @@ sync_combine(ContQueryCombinerState *state)
 	Assert(sis);
 
 	os_targets = orig_targets = sis->queries;
-
 
 	/*
 	 * If nothing is reading from the output stream, close it immediately.
@@ -1239,7 +1240,7 @@ sync_combine(ContQueryCombinerState *state)
 	{
 		EndStreamModify(NULL, osri);
 		CQOSRelClose(osri);
-		heap_close(osrel, NoLock);
+		heap_close(osrel, RowExclusiveLock);
 		sis = NULL;
 		os_targets = NULL;
 	}
@@ -1344,7 +1345,7 @@ sync_combine(ContQueryCombinerState *state)
 	{
 		EndStreamModify(NULL, osri);
 		CQOSRelClose(osri);
-		heap_close(osrel, NoLock);
+		heap_close(osrel, RowExclusiveLock);
 	}
 
 	/*
@@ -1364,7 +1365,7 @@ sync_combine(ContQueryCombinerState *state)
 	pgstat_increment_cq_write(ntups_inserted, nbytes_inserted);
 
 	CQMatRelClose(ri);
-	heap_close(matrel, NoLock);
+	heap_close(matrel, RowExclusiveLock);
 
 	FreeExecutorState(estate);
 }

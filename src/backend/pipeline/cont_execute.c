@@ -226,6 +226,7 @@ get_query_state(ContExecutor *exec)
 			MemoryContextDelete(state->state_cxt);
 			exec->states[exec->curr_query_id] = NULL;
 			state = NULL;
+			commit = true;
 		}
 		else
 		{
