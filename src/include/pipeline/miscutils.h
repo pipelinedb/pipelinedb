@@ -47,4 +47,6 @@ extern uint64_t MurmurHash3_64(const void *key, const Size len, const uint64_t s
 extern void SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf);
 extern void DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf);
 
+extern bool equalTupleDescsWeak(TupleDesc tupdesc1, TupleDesc tupdesc2, bool check_names);
+
 #endif   /* MISCUTILS_H */

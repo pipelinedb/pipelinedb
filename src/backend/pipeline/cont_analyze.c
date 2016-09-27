@@ -1395,39 +1395,36 @@ void
 transformCreateStreamStmt(CreateStreamStmt *stmt)
 {
 	ListCell *lc;
-	bool saw_atime = false;
+	ColumnDef *coldef;
+	TypeName *typename;
 
 	foreach(lc, stmt->base.tableElts)
 	{
 		ColumnDef *coldef = (ColumnDef *) lfirst(lc);
 		if (pg_strcasecmp(coldef->colname, ARRIVAL_TIMESTAMP) == 0)
 		{
-			saw_atime = true;
-			break;
+			ereport(ERROR,
+					(errcode(ERRCODE_DUPLICATE_COLUMN),
+					 errmsg("column name \"%s\" conflicts with a system column name",
+							ARRIVAL_TIMESTAMP)));
 		}
 	}
 
-	if (!saw_atime)
-	{
-		ColumnDef *coldef;
-		TypeName *typename;
+	typename = makeNode(TypeName);
+	typename->typeOid = TIMESTAMPTZOID;
+	typename->typemod = InvalidOid;
 
-		typename = makeNode(TypeName);
-		typename->typeOid = TIMESTAMPTZOID;
-		typename->typemod = InvalidOid;
+	coldef = makeNode(ColumnDef);
+	coldef->colname = ARRIVAL_TIMESTAMP;
+	coldef->inhcount = 0;
+	coldef->is_local = true;
+	coldef->is_not_null = false;
+	coldef->raw_default = NULL;
+	coldef->cooked_default = NULL;
+	coldef->constraints = NIL;
+	coldef->typeName = typename;
 
-		coldef = makeNode(ColumnDef);
-		coldef->colname = ARRIVAL_TIMESTAMP;
-		coldef->inhcount = 0;
-		coldef->is_local = true;
-		coldef->is_not_null = false;
-		coldef->raw_default = NULL;
-		coldef->cooked_default = NULL;
-		coldef->constraints = NIL;
-		coldef->typeName = typename;
-
-		stmt->base.tableElts = lappend(stmt->base.tableElts, coldef);
-	}
+	stmt->base.tableElts = lappend(stmt->base.tableElts, coldef);
 }
 
 /*
