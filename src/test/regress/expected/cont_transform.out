@@ -112,3 +112,11 @@ DROP CONTINUOUS VIEW ct_v;
 DROP TABLE ct_t;
 DROP STREAM ct_s1;
 DROP STREAM ct_s0;
+CREATE STREAM ct_s (x int, y text);
+CREATE CONTINUOUS TRANSFORM ct_invalid AS SELECT y, x FROM ct_s THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_s');
+ERROR:  "ct_s" must have the same schema as the transform
+CREATE CONTINUOUS TRANSFORM ct_invalid AS SELECT x, x AS y FROM ct_s THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_s');
+ERROR:  "ct_s" must have the same schema as the transform
+CREATE CONTINUOUS TRANSFORM ct_valid AS SELECT x, 'a'::text FROM ct_s THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_s');
+DROP STREAM ct_s CASCADE;
+NOTICE:  drop cascades to continuous transform ct_valid

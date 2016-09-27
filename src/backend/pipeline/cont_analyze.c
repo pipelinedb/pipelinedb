@@ -1395,36 +1395,51 @@ void
 transformCreateStreamStmt(CreateStreamStmt *stmt)
 {
 	ListCell *lc;
-	ColumnDef *coldef;
-	TypeName *typename;
+	bool saw_atime = false;
+	int i;
 
+	i = 0;
 	foreach(lc, stmt->base.tableElts)
 	{
 		ColumnDef *coldef = (ColumnDef *) lfirst(lc);
 		if (pg_strcasecmp(coldef->colname, ARRIVAL_TIMESTAMP) == 0)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_DUPLICATE_COLUMN),
-					 errmsg("column name \"%s\" conflicts with a system column name",
-							ARRIVAL_TIMESTAMP)));
+			/* HACK(usmanm): For making CREATE STREAM ... (LIKE ...) work. Should be fixed by #1616. */
+			if (i == list_length(stmt->base.tableElts) - 1 &&
+				coldef->typeName->typeOid == TIMESTAMPTZOID &&
+				coldef->typeName->typemod == -1)
+				saw_atime = true;
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_DUPLICATE_COLUMN),
+						 errmsg("column name \"%s\" conflicts with a system column name",
+								ARRIVAL_TIMESTAMP)));
 		}
+
+		i++;
 	}
 
-	typename = makeNode(TypeName);
-	typename->typeOid = TIMESTAMPTZOID;
-	typename->typemod = InvalidOid;
+	if (!saw_atime)
+	{
+		ColumnDef *coldef;
+		TypeName *typename;
 
-	coldef = makeNode(ColumnDef);
-	coldef->colname = ARRIVAL_TIMESTAMP;
-	coldef->inhcount = 0;
-	coldef->is_local = true;
-	coldef->is_not_null = false;
-	coldef->raw_default = NULL;
-	coldef->cooked_default = NULL;
-	coldef->constraints = NIL;
-	coldef->typeName = typename;
+		typename = makeNode(TypeName);
+		typename->typeOid = TIMESTAMPTZOID;
+		typename->typemod = -1;
 
-	stmt->base.tableElts = lappend(stmt->base.tableElts, coldef);
+		coldef = makeNode(ColumnDef);
+		coldef->colname = ARRIVAL_TIMESTAMP;
+		coldef->inhcount = 0;
+		coldef->is_local = true;
+		coldef->is_not_null = false;
+		coldef->raw_default = NULL;
+		coldef->cooked_default = NULL;
+		coldef->constraints = NIL;
+		coldef->typeName = typename;
+
+		stmt->base.tableElts = lappend(stmt->base.tableElts, coldef);
+	}
 }
 
 /*

@@ -477,10 +477,10 @@ SELECT
 FROM msw_stream
 WHERE arrival_timestamp > clock_timestamp() - INTERVAL '10 minute';
 \d+ msw5
-                       Continuous view "public.msw5"
- Column  |            Type             | Modifiers | Storage | Description 
----------+-----------------------------+-----------+---------+-------------
- sw_time | timestamp(0) with time zone |           | plain   | 
+                     Continuous view "public.msw5"
+ Column  |           Type           | Modifiers | Storage | Description 
+---------+--------------------------+-----------+---------+-------------
+ sw_time | timestamp with time zone |           | plain   | 
 View definition:
  SELECT arrival_timestamp AS sw_time
    FROM ONLY msw_stream
@@ -488,10 +488,10 @@ View definition:
 
 CREATE VIEW msw6 WITH (max_age = '1 minute') AS SELECT * FROM msw5;
 \d+ msw6
-                            View "public.msw6"
- Column  |            Type             | Modifiers | Storage | Description 
----------+-----------------------------+-----------+---------+-------------
- sw_time | timestamp(0) with time zone |           | plain   | 
+                           View "public.msw6"
+ Column  |           Type           | Modifiers | Storage | Description 
+---------+--------------------------+-----------+---------+-------------
+ sw_time | timestamp with time zone |           | plain   | 
 View definition:
  SELECT msw5.sw_time
    FROM msw5
@@ -504,10 +504,10 @@ SELECT * FROM msw6;
 
 CREATE VIEW msw7 AS SELECT * FROM msw5 WHERE sw_time > clock_timestamp() - INTERVAL '1 minute';
 \d+ msw7
-                            View "public.msw7"
- Column  |            Type             | Modifiers | Storage | Description 
----------+-----------------------------+-----------+---------+-------------
- sw_time | timestamp(0) with time zone |           | plain   | 
+                           View "public.msw7"
+ Column  |           Type           | Modifiers | Storage | Description 
+---------+--------------------------+-----------+---------+-------------
+ sw_time | timestamp with time zone |           | plain   | 
 View definition:
  SELECT msw5.sw_time
    FROM msw5
