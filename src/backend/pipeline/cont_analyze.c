@@ -1396,18 +1396,23 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 {
 	ListCell *lc;
 	bool saw_atime = false;
-	int i;
 
-	i = 0;
 	foreach(lc, stmt->base.tableElts)
 	{
 		ColumnDef *coldef = (ColumnDef *) lfirst(lc);
+
 		if (pg_strcasecmp(coldef->colname, ARRIVAL_TIMESTAMP) == 0)
 		{
-			/* HACK(usmanm): For making CREATE STREAM ... (LIKE ...) work. Should be fixed by #1616. */
-			if (i == list_length(stmt->base.tableElts) - 1 &&
-				coldef->typeName->typeOid == TIMESTAMPTZOID &&
-				coldef->typeName->typemod == -1)
+			Oid typ;
+			int typmod;
+
+			typenameTypeIdAndMod(NULL, coldef->typeName, &typ, &typmod);
+
+			/*
+			 * HACK(usmanm): If arrival_timestamp is the last column and has the correct type, then let it slide. This
+			 * it for making CREATE STREAM ... (LIKE ...) and pg_dump/pg_restore to work. Should be fixed by #1616.
+			 */
+			if (!lnext(lc) && typ == TIMESTAMPTZOID && typmod == -1)
 				saw_atime = true;
 			else
 				ereport(ERROR,
@@ -1415,8 +1420,6 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 						 errmsg("column name \"%s\" conflicts with a system column name",
 								ARRIVAL_TIMESTAMP)));
 		}
-
-		i++;
 	}
 
 	if (!saw_atime)
