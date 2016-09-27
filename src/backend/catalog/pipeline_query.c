@@ -829,7 +829,7 @@ GetContQueryId(RangeVar *name)
 }
 
 Oid
-DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, bool adhoc, List *args)
+DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid fnoid, bool adhoc, List *args)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -862,7 +862,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid fnoid, bool a
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
 	values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(fnoid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(typoid); /* HACK(usmanm): So matrel index works */
-	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(InvalidOid);
+	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 	values[Anum_pipeline_query_pkidxid - 1] = ObjectIdGetDatum(InvalidOid);
 	values[Anum_pipeline_query_lookupidxid - 1] = ObjectIdGetDatum(InvalidOid);
 
