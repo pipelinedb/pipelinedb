@@ -1927,48 +1927,6 @@ GetCombinerLookupPlan(ContQuery *view)
 	return plan;
 }
 
-/*
- * equal_tupdesc
- *
- * This is less strict than equalTupleDescs and enforces enough similarity that we can merge tuples.
- */
-static bool
-equal_tupdesc(TupleDesc tupdesc1, TupleDesc tupdesc2)
-{
-	int	i;
-
-	if (tupdesc1->natts != tupdesc2->natts)
-		return false;
-	if (tupdesc1->tdhasoid != tupdesc2->tdhasoid)
-		return false;
-
-	for (i = 0; i < tupdesc1->natts; i++)
-	{
-		Form_pg_attribute attr1 = tupdesc1->attrs[i];
-		Form_pg_attribute attr2 = tupdesc2->attrs[i];
-
-		if (strcmp(NameStr(attr1->attname), NameStr(attr2->attname)) != 0)
-			return false;
-		if (attr1->atttypid != attr2->atttypid)
-			return false;
-		if (attr1->attstattarget != attr2->attstattarget)
-			return false;
-		if (attr1->attndims != attr2->attndims)
-			return false;
-		if (attr1->attstorage != attr2->attstorage)
-			return false;
-		if (attr1->atthasdef != attr2->atthasdef)
-			return false;
-		if (attr1->attisdropped != attr2->attisdropped)
-			return false;
-		if (attr1->attcollation != attr2->attcollation)
-			return false;
-		/* attacl, attoptions and attfdwoptions are not even present... */
-	}
-
-	return true;
-}
-
 Datum
 pipeline_combine_table(PG_FUNCTION_ARGS)
 {
@@ -1992,7 +1950,7 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	matrel = heap_openrv(cv->matrel, ExclusiveLock);
 	srcrel = heap_openrv(rel_rv, AccessShareLock);
 
-	if (!equal_tupdesc(RelationGetDescr(matrel), RelationGetDescr(srcrel)))
+	if (!equalTupleDescsWeak(RelationGetDescr(matrel), RelationGetDescr(srcrel), true))
 		elog(ERROR, "schema of \"%s\" does not match the schema of \"%s\"",
 				text_to_cstring(relname), quote_qualified_identifier(cv->matrel->schemaname, cv->matrel->relname));
 

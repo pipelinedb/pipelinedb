@@ -180,8 +180,8 @@ def test_static_streams(pipeline, clean_db):
   assert result['y'] == 1
 
 def test_cont_transforms(pipeline, clean_db):
-  pipeline.create_stream('cv_stream', x='int', y='text')
-  pipeline.create_stream('ct_stream', x='int', y='text')
+  pipeline.execute('CREATE STREAM cv_stream (x int, y text)')
+  pipeline.execute('CREATE STREAM ct_stream (x int, y text)')
   pipeline.create_cv('test_cv', 'SELECT count(*) FROM cv_stream')
   pipeline.create_ct('test_ct1', 'SELECT x::int, y::text FROM ct_stream WHERE mod(x, 2) = 0',
                      "pipeline_stream_insert('cv_stream', 'cv_stream')")

@@ -1142,12 +1142,14 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query 
 	if (fnoid == PIPELINE_STREAM_INSERT_OID)
 	{
 		ListCell *lc;
-		Oid stream_relid;
+		Relation rel = heap_open(relid, AccessShareLock);
 
 		foreach(lc, args)
 		{
 			Value *v = (Value *) lfirst(lc);
 			RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(strVal(v)));
+			Relation srel;
+			TupleDesc desc;
 
 			if (!RangeVarIsForStream(rv))
 				ereport(ERROR,
@@ -1155,10 +1157,19 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query 
 						errmsg("\"%s\" is not a stream", strVal(v)),
 						errhint("Arguments to pipeline_stream_insert must be streams.")));
 
-			stream_relid = RangeVarGetRelid(rv, NoLock, false);
+			srel = heap_openrv(rv, NoLock);
+			desc = CreateTupleDescCopy(RelationGetDescr(srel));
+
+			/* HACK(usmanm): Ignore arrival_timestamp. Should be fixed by #1616. */
+			desc->natts--;
+
+			if (!equalTupleDescsWeak(RelationGetDescr(rel), desc, false))
+				ereport(ERROR,
+						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+						errmsg("\"%s\" must have the same schema as the transform", strVal(v))));
 
 			referenced.classId = RelationRelationId;
-			referenced.objectId = stream_relid;
+			referenced.objectId = RelationGetRelid(srel);
 			referenced.objectSubId = 0;
 
 			dependent.classId = RelationRelationId;
@@ -1166,7 +1177,11 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query 
 			dependent.objectSubId = 0;
 
 			recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
+
+			heap_close(srel, NoLock);
 		}
+
+		heap_close(rel, NoLock);
 	}
 }
 

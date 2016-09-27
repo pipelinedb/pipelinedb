@@ -1400,10 +1400,25 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 	foreach(lc, stmt->base.tableElts)
 	{
 		ColumnDef *coldef = (ColumnDef *) lfirst(lc);
+
 		if (pg_strcasecmp(coldef->colname, ARRIVAL_TIMESTAMP) == 0)
 		{
-			saw_atime = true;
-			break;
+			Oid typ;
+			int typmod;
+
+			typenameTypeIdAndMod(NULL, coldef->typeName, &typ, &typmod);
+
+			/*
+			 * HACK(usmanm): If arrival_timestamp is the last column and has the correct type, then let it slide. This
+			 * it for making CREATE STREAM ... (LIKE ...) and pg_dump/pg_restore to work. Should be fixed by #1616.
+			 */
+			if (!lnext(lc) && typ == TIMESTAMPTZOID && typmod == -1)
+				saw_atime = true;
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_DUPLICATE_COLUMN),
+						 errmsg("column name \"%s\" conflicts with a system column name",
+								ARRIVAL_TIMESTAMP)));
 		}
 	}
 
@@ -1414,7 +1429,7 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 
 		typename = makeNode(TypeName);
 		typename->typeOid = TIMESTAMPTZOID;
-		typename->typemod = InvalidOid;
+		typename->typemod = -1;
 
 		coldef = makeNode(ColumnDef);
 		coldef->colname = ARRIVAL_TIMESTAMP;

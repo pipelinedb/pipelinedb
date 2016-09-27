@@ -183,4 +183,7 @@ SELECT * FROM test_percent1 ORDER BY g;
 SELECT * FROM test_percent2 ORDER BY percent_rank;
 SELECT * FROM test_percent3 ORDER BY percent_rank;
 
+CREATE STREAM invalid (x int, arrival_timestamp text);
+CREATE STREAM invalid (arrival_timestamp timestamptz, x int);
+
 DROP SCHEMA test_typed_streams CASCADE;

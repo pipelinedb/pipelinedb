@@ -270,3 +270,45 @@ SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringI
 		DatumToBytes(d, typ, buf);
 	}
 }
+
+/*
+ * equalTupleDescsWeak
+ *
+ * This is less strict than equalTupleDescs and enforces enough similarity that we can merge tuples.
+ */
+bool
+equalTupleDescsWeak(TupleDesc tupdesc1, TupleDesc tupdesc2, bool check_names)
+{
+	int	i;
+
+	if (tupdesc1->natts != tupdesc2->natts)
+		return false;
+	if (tupdesc1->tdhasoid != tupdesc2->tdhasoid)
+		return false;
+
+	for (i = 0; i < tupdesc1->natts; i++)
+	{
+		Form_pg_attribute attr1 = tupdesc1->attrs[i];
+		Form_pg_attribute attr2 = tupdesc2->attrs[i];
+
+		if (check_names && strcmp(NameStr(attr1->attname), NameStr(attr2->attname)) != 0)
+			return false;
+		if (attr1->atttypid != attr2->atttypid)
+			return false;
+		if (attr1->attstattarget != attr2->attstattarget)
+			return false;
+		if (attr1->attndims != attr2->attndims)
+			return false;
+		if (attr1->attstorage != attr2->attstorage)
+			return false;
+		if (attr1->atthasdef != attr2->atthasdef)
+			return false;
+		if (attr1->attisdropped != attr2->attisdropped)
+			return false;
+		if (attr1->attcollation != attr2->attcollation)
+			return false;
+		/* attacl, attoptions and attfdwoptions are not even present... */
+	}
+
+	return true;
+}

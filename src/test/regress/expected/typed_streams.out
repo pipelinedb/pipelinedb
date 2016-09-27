@@ -17,12 +17,12 @@ HINT:  Streams can only be read by a continuous view's FROM clause.
 CREATE STREAM l0 (x integer, y integer);
 CREATE STREAM l1 (LIKE l0);
 \d l1;
-         Stream "test_typed_streams.l1"
-      Column       |            Type             
--------------------+-----------------------------
+        Stream "test_typed_streams.l1"
+      Column       |           Type           
+-------------------+--------------------------
  x                 | integer
  y                 | integer
- arrival_timestamp | timestamp(0) with time zone
+ arrival_timestamp | timestamp with time zone
 
 CREATE CONTINUOUS VIEW v0 AS
 SELECT x, COUNT(*) FROM test_typed_streams.s0 GROUP BY x;
@@ -304,6 +304,10 @@ SELECT * FROM test_percent3 ORDER BY percent_rank;
  0.183333333333333
 (1 row)
 
+CREATE STREAM invalid (x int, arrival_timestamp text);
+ERROR:  column name "arrival_timestamp" conflicts with a system column name
+CREATE STREAM invalid (arrival_timestamp timestamptz, x int);
+ERROR:  column name "arrival_timestamp" conflicts with a system column name
 DROP SCHEMA test_typed_streams CASCADE;
 NOTICE:  drop cascades to 26 other objects
 DETAIL:  drop cascades to stream s0
