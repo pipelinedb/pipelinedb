@@ -271,10 +271,10 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		replaces[Anum_pipeline_stream_queries - 1] = true;
 
 		tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(entry->relid));
-		Assert(HeapTupleIsValid(tup));
+		if (!HeapTupleIsValid(tup))
+			continue;
 
-		newtup = heap_modify_tuple(tup, pipeline_stream->rd_att,
-				values, nulls, replaces);
+		newtup = heap_modify_tuple(tup, pipeline_stream->rd_att, values, nulls, replaces);
 
 		simple_heap_update(pipeline_stream, &newtup->t_self, newtup);
 		CatalogUpdateIndexes(pipeline_stream, newtup);
@@ -290,7 +290,7 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 }
 
 /*
- * delete_nonexistent_streams
+ * mark_nonexistent_streams
  */
 static void
 mark_nonexistent_streams(Relation pipeline_stream, List *keys)

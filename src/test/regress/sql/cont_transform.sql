@@ -58,3 +58,17 @@ CREATE CONTINUOUS TRANSFORM ct_invalid AS SELECT x, x AS y FROM ct_s THEN EXECUT
 CREATE CONTINUOUS TRANSFORM ct_valid AS SELECT x, 'a'::text FROM ct_s THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_s');
 
 DROP STREAM ct_s CASCADE;
+
+CREATE STREAM ct_s0 (x int);
+CREATE STREAM ct_s1 (x int);
+
+CREATE CONTINUOUS TRANSFORM ct_t AS SELECT x % 4 AS x FROM ct_s0 THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_s1');
+CREATE CONTINUOUS VIEW ct_v0 AS SELECT x FROM ct_s1;
+CREATE CONTINUOUS VIEW ct_v1 AS SELECT x FROM output_of('ct_t');
+
+INSERT INTO ct_s0 SELECT generate_series(1, 10) x;
+
+SELECT * FROM ct_v0;
+SELECT * FROM ct_v1;
+
+DROP STREAM ct_s0 CASCADE;

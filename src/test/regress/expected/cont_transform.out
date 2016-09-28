@@ -120,3 +120,43 @@ ERROR:  "ct_s" must have the same schema as the transform
 CREATE CONTINUOUS TRANSFORM ct_valid AS SELECT x, 'a'::text FROM ct_s THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_s');
 DROP STREAM ct_s CASCADE;
 NOTICE:  drop cascades to continuous transform ct_valid
+CREATE STREAM ct_s0 (x int);
+CREATE STREAM ct_s1 (x int);
+CREATE CONTINUOUS TRANSFORM ct_t AS SELECT x % 4 AS x FROM ct_s0 THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_s1');
+CREATE CONTINUOUS VIEW ct_v0 AS SELECT x FROM ct_s1;
+CREATE CONTINUOUS VIEW ct_v1 AS SELECT x FROM output_of('ct_t');
+INSERT INTO ct_s0 SELECT generate_series(1, 10) x;
+SELECT * FROM ct_v0;
+ x 
+---
+ 1
+ 2
+ 3
+ 0
+ 1
+ 2
+ 3
+ 0
+ 1
+ 2
+(10 rows)
+
+SELECT * FROM ct_v1;
+ x 
+---
+ 1
+ 2
+ 3
+ 0
+ 1
+ 2
+ 3
+ 0
+ 1
+ 2
+(10 rows)
+
+DROP STREAM ct_s0 CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to continuous transform ct_t
+drop cascades to continuous view ct_v1
