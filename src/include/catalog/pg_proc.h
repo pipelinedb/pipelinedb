@@ -5942,7 +5942,7 @@ DATA(insert OID = 4497 (jsonb_object_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f 
 DESCR("jsonb object aggregation combination function");
 
 /* binary upgrade support */
-DATA(insert OID = 4498 ( create_cv_set_next_oids_for_matrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 6 0 2278 "26 26 26 26 26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_matrel _null_ _null_ _null_ ));
+DATA(insert OID = 4498 ( create_cq_set_next_oids_for_matrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 6 0 2278 "26 26 26 26 26 26" _null_ _null_ _null_ _null_ _null_ create_cq_set_next_oids_for_matrel _null_ _null_ _null_ ));
 DESCR("for use by pipeline-upgrade");
 DATA(insert OID = 4499 ( create_cv_set_next_oids_for_seqrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 2 0 2278 "26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_seqrel _null_ _null_ _null_ ));
 DESCR("for use by pipeline-upgrade");
@@ -5952,7 +5952,7 @@ DATA(insert OID = 4501 ( create_cv_set_next_oids_for_lookup_index PGNSP PGUID  1
 DESCR("for use by pipeline-upgrade");
 DATA(insert OID = 4502 ( create_cv_set_next_oids_for_overlay PGNSP PGUID  12 1 0 0 0 f f f f t f v 3 0 2278 "26 26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_overlay _null_ _null_ _null_ ));
 DESCR("for use by pipeline-upgrade");
-DATA(insert OID = 4503 ( create_cv_set_next_oids_for_osrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 3 0 2278 "26 26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_osrel _null_ _null_ _null_ ));
+DATA(insert OID = 4503 ( create_cq_set_next_oids_for_osrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 3 0 2278 "26 26 26" _null_ _null_ _null_ _null_ _null_ create_cq_set_next_oids_for_osrel _null_ _null_ _null_ ));
 DESCR("for use by pipeline-upgrade");
 
 /*
