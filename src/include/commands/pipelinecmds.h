@@ -36,11 +36,11 @@ extern void ExecDeactivateStmt(DeactivateStmt *stmt);
 extern void ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring);
 
 /* Binary upgrade support */
-extern Datum create_cv_set_next_oids_for_matrel(PG_FUNCTION_ARGS);
+extern Datum create_cq_set_next_oids_for_matrel(PG_FUNCTION_ARGS);
 extern Datum create_cv_set_next_oids_for_seqrel(PG_FUNCTION_ARGS);
 extern Datum create_cv_set_next_oids_for_pk_index(PG_FUNCTION_ARGS);
 extern Datum create_cv_set_next_oids_for_lookup_index(PG_FUNCTION_ARGS);
 extern Datum create_cv_set_next_oids_for_overlay(PG_FUNCTION_ARGS);
-extern Datum create_cv_set_next_oids_for_osrel(PG_FUNCTION_ARGS);
+extern Datum create_cq_set_next_oids_for_osrel(PG_FUNCTION_ARGS);
 
 #endif   /* PIPELINECMDS_H */

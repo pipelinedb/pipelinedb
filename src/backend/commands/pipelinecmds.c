@@ -1073,7 +1073,7 @@ ExecDeactivateStmt(DeactivateStmt *stmt)
 }
 
 static void
-record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query *query, List *args)
+record_ct_dependencies(Oid pqoid, Oid relid, Oid osrelid, Oid fnoid, SelectStmt *stmt, Query *query, List *args)
 {
 	ObjectAddress referenced;
 	ObjectAddress dependent;
@@ -1102,6 +1102,13 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid fnoid, SelectStmt *stmt, Query 
 
 	dependent.classId = PipelineQueryRelationId;
 	dependent.objectId = pqoid;
+	dependent.objectSubId = 0;
+
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
+
+	/* Record dependency with output stream */
+	dependent.classId = RelationRelationId;
+	dependent.objectId = osrelid;
 	dependent.objectSubId = 0;
 
 	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
@@ -1192,12 +1199,14 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	Relation pipeline_query;
 	Query *query;
 	Oid pqoid;
-	ObjectAddress relobj;
+	ObjectAddress address;
 	Oid relid;
 	Oid fargtypes[1];	/* dummy */
 	Oid tgfnid;
 	Oid funcrettype;
 	CreateStmt *create;
+	CreateStreamStmt *create_osrel;
+	Oid osrelid;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -1230,24 +1239,44 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	create->oncommit = stmt->into->onCommit;
 	create->options = stmt->into->options;
 
-	relobj = DefineRelation(create, RELKIND_CONTTRANSFORM, InvalidOid, NULL);
-	relid = relobj.objectId;
+	if (IsBinaryUpgrade)
+		set_next_oids_for_matrel();
+	address = DefineRelation(create, RELKIND_CONTTRANSFORM, InvalidOid, NULL);
+	relid = address.objectId;
 	CommandCounterIncrement();
 
-	pqoid = DefineContinuousTransform(relid, query, relid, tgfnid, false, stmt->args);
+	/* Create output stream */
+	create_osrel = makeNode(CreateStreamStmt);
+	create_osrel->servername = PIPELINE_STREAM_SERVER;
+	create_osrel->base.stream = true;
+	create_osrel->base.tableElts = create_coldefs_from_tlist(query);
+	create_osrel->base.relation = makeRangeVar(transform->schemaname, CVNameToOSRelName(transform->relname), -1);
+	transformCreateStreamStmt(create_osrel);
+
+	if (IsBinaryUpgrade)
+		set_next_oids_for_osrel();
+	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_STREAM, InvalidOid, NULL);
+	osrelid = address.objectId;
 	CommandCounterIncrement();
 
-	record_ct_dependencies(pqoid, relid, tgfnid, (SelectStmt *) stmt->query, query, stmt->args);
+	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, tgfnid, false, stmt->args);
+	CommandCounterIncrement();
+
+	CreateForeignTable((CreateForeignTableStmt *) create_osrel, address.objectId);
+	CreatePipelineStreamEntry((CreateStreamStmt *) create_osrel, address.objectId);
+	CommandCounterIncrement();
+
+	record_ct_dependencies(pqoid, relid, osrelid, tgfnid, (SelectStmt *) stmt->query, query, stmt->args);
 	CommandCounterIncrement();
 
 	heap_close(pipeline_query, NoLock);
 }
 
 /*
- * create_cv_set_next_oids_for_matrel
+ * create_cq_set_next_oids_for_matrel
  */
 Datum
-create_cv_set_next_oids_for_matrel(PG_FUNCTION_ARGS)
+create_cq_set_next_oids_for_matrel(PG_FUNCTION_ARGS)
 {
 	if (!IsBinaryUpgrade)
 		ereport(ERROR,
@@ -1335,10 +1364,10 @@ create_cv_set_next_oids_for_overlay(PG_FUNCTION_ARGS)
 }
 
 /*
- * create_cv_set_next_oids_for_osrel
+ * create_cq_set_next_oids_for_osrel
  */
 Datum
-create_cv_set_next_oids_for_osrel(PG_FUNCTION_ARGS)
+create_cq_set_next_oids_for_osrel(PG_FUNCTION_ARGS)
 {
 	if (!IsBinaryUpgrade)
 		ereport(ERROR,

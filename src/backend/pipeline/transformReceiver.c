@@ -23,6 +23,7 @@
 #include "parser/parse_type.h"
 #include "pipeline/transformReceiver.h"
 #include "pipeline/cont_execute.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
@@ -38,6 +39,7 @@ typedef struct TransformState
 	ContQuery *cont_query;
 	ContExecutor *cont_exec;
 	Relation tg_rel;
+	bool os_has_readers;
 	FunctionCallInfo trig_fcinfo;
 
 	/* only used by the optimized code path for pipeline_stream_insert */
@@ -66,7 +68,12 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 	MemoryContext old = MemoryContextSwitchTo(ContQueryBatchContext);
 
 	if (t->tg_rel == NULL)
+	{
+		Bitmapset *readers = GetAllStreamReaders(t->cont_query->osrelid);
+
+		t->os_has_readers = !bms_is_empty(readers);
 		t->tg_rel = heap_open(t->cont_query->matrelid, AccessShareLock);
+	}
 
 	if (t->cont_query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{
@@ -82,7 +89,8 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 		heap_freetuple(cxt->tg_trigtuple);
 		cxt->tg_trigtuple = NULL;
 	}
-	else
+
+	if (t->cont_query->tgfn == PIPELINE_STREAM_INSERT_OID || t->os_has_readers)
 	{
 		if (t->tups == NULL)
 		{
@@ -177,14 +185,41 @@ SetTransformDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery
 }
 
 static void
+insert_into_rel(TransformState *t, Relation rel)
+{
+	ResultRelInfo *rinfo = CQOSRelOpen(rel);
+	StreamInsertState *sis;
+
+	BeginStreamModify(NULL, rinfo, list_make2(t->cont_exec->batch->sync_acks, RelationGetDescr(t->tg_rel)),
+			0, REENTRANT_STREAM_INSERT);
+	sis = (StreamInsertState *) rinfo->ri_FdwState;
+	Assert(sis);
+
+	if (sis->queries)
+	{
+		TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
+		int j;
+
+		for (j = 0; j < t->ntups; j++)
+		{
+			ExecStoreTuple(t->tups[j], slot, InvalidBuffer, false);
+			ExecStreamInsert(NULL, rinfo, slot, NULL);
+			ExecClearTuple(slot);
+		}
+
+		ExecDropSingleTupleTableSlot(slot);
+		pgstat_increment_cq_write(t->ntups, sis->nbytes);
+	}
+
+	EndStreamModify(NULL, rinfo);
+	CQOSRelClose(rinfo);
+	pgstat_report_streamstat(false);
+}
+
+static void
 pipeline_stream_insert_batch(TransformState *t)
 {
 	int i;
-	ResultRelInfo rinfo;
-
-	MemSet(&rinfo, 0, sizeof(ResultRelInfo));
-	rinfo.ri_RangeTableIndex = 1; /* dummy */
-	rinfo.ri_TrigDesc = NULL;
 
 	if (t->ntups == 0)
 		return;
@@ -195,33 +230,17 @@ pipeline_stream_insert_batch(TransformState *t)
 	{
 		RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(t->cont_query->tgargs[i]));
 		Relation rel = heap_openrv(rv, AccessShareLock);
-		StreamInsertState *sis;
 
-		rinfo.ri_RelationDesc = rel;
+		insert_into_rel(t, rel);
 
-		BeginStreamModify(NULL, &rinfo, list_make2(t->cont_exec->batch->sync_acks, RelationGetDescr(t->tg_rel)),
-				0, REENTRANT_STREAM_INSERT);
-		sis = (StreamInsertState *) rinfo.ri_FdwState;
-		Assert(sis);
+		heap_close(rel, NoLock);
+	}
 
-		if (sis->queries)
-		{
-			TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
-			int j;
+	if (t->os_has_readers)
+	{
+		Relation rel = heap_open(t->cont_query->osrelid, AccessShareLock);
 
-			for (j = 0; j < t->ntups; j++)
-			{
-				ExecStoreTuple(t->tups[j], slot, InvalidBuffer, false);
-				ExecStreamInsert(NULL, &rinfo, slot, NULL);
-				ExecClearTuple(slot);
-			}
-
-			ExecDropSingleTupleTableSlot(slot);
-			pgstat_increment_cq_write(t->ntups, sis->nbytes);
-		}
-
-		EndStreamModify(NULL, &rinfo);
-		pgstat_report_streamstat(false);
+		insert_into_rel(t, rel);
 
 		heap_close(rel, NoLock);
 	}
@@ -249,9 +268,10 @@ TransformDestReceiverFlush(DestReceiver *self)
 	TransformState *t = (TransformState *) self;
 
 	/* Optimized path for stream insertions */
-	if (t->cont_query->tgfn == PIPELINE_STREAM_INSERT_OID)
+	if (t->cont_query->tgfn == PIPELINE_STREAM_INSERT_OID || t->os_has_readers)
 		pipeline_stream_insert_batch(t);
-	else
+
+	if (t->cont_query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{
 		TriggerData *cxt = (TriggerData *) t->trig_fcinfo->context;
 		cxt->tg_relation = NULL;
