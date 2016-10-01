@@ -467,6 +467,11 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	sis->db_meta = NULL;
 	sis->desc = RelationGetDescr(rel);
 
+	result_info->ri_FdwState = sis;
+
+	if (bms_is_empty(queries))
+		return;
+
 	if (eflags & REENTRANT_STREAM_INSERT)
 	{
 		Assert(list_length(fdw_private) == 1 || list_length(fdw_private) == 2);
@@ -484,23 +489,18 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 			sis->ack = microbatch_ack_new(stream_insert_level);
 	}
 
-	if (!bms_is_empty(queries))
+	sis->batch = microbatch_new(WorkerTuple, queries, sis->desc);
+
+	if (sis->ack)
 	{
-		sis->batch = microbatch_new(WorkerTuple, queries, sis->desc);
-
-		if (sis->ack)
-		{
-			Assert(!acks);
-			microbatch_add_ack(sis->batch, sis->ack);
-		}
-		else if (acks)
-		{
-			Assert(!sis->ack);
-			microbatch_add_acks(sis->batch, acks);
-		}
+		Assert(!acks);
+		microbatch_add_ack(sis->batch, sis->ack);
 	}
-
-	result_info->ri_FdwState = sis;
+	else if (acks)
+	{
+		Assert(!sis->ack);
+		microbatch_add_acks(sis->batch, acks);
+	}
 
 	if (!IsContQueryProcess())
 		pzmq_init();
