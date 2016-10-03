@@ -4,6 +4,7 @@
 [![Release](https://img.shields.io/github/release/pipelinedb/pipelinedb.svg?style=flat-square)](https://github.com/pipelinedb/pipelinedb/releases)
 [![License](https://img.shields.io/:license-GPLv3-blue.svg?style=flat-square)](https://github.com/pipelinedb/pipelinedb/blob/master/LICENSE)
 [![Gitter chat](https://img.shields.io/badge/gitter-join%20chat-brightgreen.svg?style=flat-square)](https://gitter.im/pipelinedb/pipelinedb)
+[![Twitter](https://img.shields.io/badge/twitter-@pipelinedb-55acee.svg?style=flat-square)](https://twitter.com/pipelinedb)
 
 ## Getting started
 
