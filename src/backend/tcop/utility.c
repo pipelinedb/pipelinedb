@@ -3258,6 +3258,7 @@ GetCommandLogLevel(Node *parsetree)
 
 			/* PipelineDB */
 			case T_CreateContViewStmt:
+			case T_CreateContTransformStmt:
 			case T_CreateStreamStmt:
 				lev = LOGSTMT_DDL;
 				break;
