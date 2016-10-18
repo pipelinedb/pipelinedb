@@ -46,6 +46,7 @@
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_func.h"
+#include "parser/parse_target.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_plan.h"
@@ -180,7 +181,7 @@ add_default_fillfactor(List *options)
  * 32-bit value
  */
 static Node *
-make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
+make_hashed_index_expr(RangeVar *cv, SelectStmt *select, TupleDesc desc)
 {
 	ListCell *lc;
 	List *args = NIL;
@@ -192,54 +193,27 @@ make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 	if (t_col)
 		t_colname = NameListToString(t_col->fields);
 
-	foreach(lc, query->groupClause)
+	foreach(lc, select->groupClause)
 	{
-		SortGroupClause *g = (SortGroupClause *) lfirst(lc);
-		TargetEntry *te = (TargetEntry *) get_sortgroupref_tle(g->tleSortGroupRef, query->targetList);
+		Node *node = lfirst(lc);
+		char *name;
+		bool found = false;
 		Form_pg_attribute attr;
 		Var *var;
-		bool found = false;
 		int i;
 
-		if (te->resjunk)
-		{
-			Var *v;
-			ListCell *lc2;
-			Assert(IsA(te->expr, Var));
+		Assert(IsA(node, ColumnRef));
 
-			v = (Var *) te->expr;
-			foreach(lc2, query->targetList)
-			{
-				TargetEntry *te2 = lfirst(lc2);
-				FuncExpr *fn;
-
-				if (!IsA(te2->expr, FuncExpr))
-					continue;
-
-				fn = (FuncExpr *) te2->expr;
-				if (list_length(fn->args) != 1)
-					continue;
-
-				if (equal(v, linitial(fn->args)))
-				{
-					te = te2;
-					break;
-				}
-			}
-		}
-
-		/* We must have a non-junk target entry */
-		Assert(!te->resjunk);
-		Assert(te->resname);
+		name = FigureColname(node);
 
 		/*
 		 * Instead of using the expression itself as an argument, we use a variable that
 		 * points to the column that stores the result of the expression.
 		 */
-		for (i=0; i<desc->natts; i++)
+		for (i = 0; i < desc->natts; i++)
 		{
 			attr = (Form_pg_attribute) desc->attrs[i];
-			if (pg_strcasecmp(te->resname, NameStr(attr->attname)) == 0)
+			if (pg_strcasecmp(name, NameStr(attr->attname)) == 0)
 			{
 				found = true;
 				break;
@@ -259,7 +233,7 @@ make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 		 * Always insert time column in the beginning so it is correctly picked for locality-sensitive
 		 * hashing by ls_hash_group.
 		 */
-		if (t_colname && pg_strcasecmp(t_colname, te->resname) == 0)
+		if (t_colname && pg_strcasecmp(t_colname, name) == 0)
 			args = list_concat(list_make1(var), args);
 		else
 			args = lappend(args, var);
@@ -275,7 +249,7 @@ make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 }
 
 static Oid
-create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query *query, bool is_sw)
+create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, SelectStmt *select, bool is_sw)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
@@ -284,10 +258,10 @@ create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query *query, 
 	Oid index_oid;
 	ObjectAddress address;
 
-	if (query->groupClause == NIL && !is_sw)
+	if (select->groupClause == NIL && !is_sw)
 		return InvalidOid;
 
-	if (query->groupClause == NIL && is_sw)
+	if (select->groupClause == NIL && is_sw)
 	{
 		/*
 		 * We still want an index on the timestamp column for sliding window
@@ -307,7 +281,7 @@ create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query *query, 
 	else
 	{
 		Relation rel = heap_open(matrelid, NoLock);
-		expr = make_hashed_index_expr(cv, query, RelationGetDescr(rel));
+		expr = make_hashed_index_expr(cv, select, RelationGetDescr(rel));
 		heap_close(rel, NoLock);
 	}
 
@@ -570,7 +544,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
 	SelectStmt *viewselect;
-	SelectStmt *cont_select;
+	SelectStmt *select;
 	char *cont_select_sql;
 	Query *cont_query;
 	bool saveAllowSystemTableMods;
@@ -619,15 +593,15 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/* Deparse query so that analyzer always see the same canonicalized SelectStmt */
 	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
 	cont_select_sql = deparse_query_def(cont_query);
-	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
-	cont_select->swStepFactor = ((SelectStmt *) stmt->query)->swStepFactor;
+	select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
+	select->swStepFactor = ((SelectStmt *) stmt->query)->swStepFactor;
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying matrel.
 	 */
-	workerselect = TransformSelectStmtForContProcess(matrel, copyObject(cont_select), &viewselect, Worker);
+	workerselect = TransformSelectStmtForContProcess(matrel, copyObject(select), &viewselect, Worker);
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
 	ValidateContQuery(query);
@@ -789,7 +763,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/* Create group look up index and record dependencies */
 	if (IsBinaryUpgrade)
 		set_next_oids_for_lookup_index();
-	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, query, AttributeNumberIsValid(sw_attno));
+	select = TransformSelectStmtForContProcess(matrel, copyObject(select), NULL, Combiner);
+	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, select, AttributeNumberIsValid(sw_attno));
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_pk_index();

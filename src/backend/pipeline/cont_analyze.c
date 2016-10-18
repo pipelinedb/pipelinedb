@@ -1653,6 +1653,22 @@ node_for_cref(Node *node)
 	return NULL;
 }
 
+static bool
+no_tc_equal(Node *node1, Node *node2)
+{
+	while (IsA(node1, TypeCast))
+	{
+		TypeCast *tc = (TypeCast *) node1;
+		node1 = tc->arg;
+	}
+	while (IsA(node2, TypeCast))
+	{
+		TypeCast *tc = (TypeCast *) node2;
+		node1 = tc->arg;
+	}
+	return equal(node1, node2);
+}
+
 static ResTarget *
 find_node_in_target_list(List *tlist, Node *node)
 {
@@ -1666,7 +1682,7 @@ find_node_in_target_list(List *tlist, Node *node)
 		char *resname;
 		char *colname;
 
-		if (equal(res->val, node))
+		if (no_tc_equal(res->val, node))
 			return res;
 
 		node_cref = node_for_cref(node);
