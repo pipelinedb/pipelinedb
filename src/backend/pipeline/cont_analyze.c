@@ -1664,7 +1664,7 @@ no_tc_equal(Node *node1, Node *node2)
 	while (IsA(node2, TypeCast))
 	{
 		TypeCast *tc = (TypeCast *) node2;
-		node1 = tc->arg;
+		node2 = tc->arg;
 	}
 	return equal(node1, node2);
 }
