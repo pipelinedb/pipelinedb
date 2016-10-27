@@ -613,6 +613,7 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 	FmgrInfo flinfo;
 	uint64 cv_name_hash = InvalidOid;
 	bool close_matrel = matrel == NULL;
+	Size size = 0;
 
 	/*
 	 * We only need to sync once, all other groups will be cached
@@ -681,6 +682,10 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 			continue;
 
 		entry = (HeapTupleEntry) LookupTupleHashEntry(state->sw->step_groups, state->slot, &isnew);
+		size += sizeof(HeapTupleEntry) + HEAPTUPLESIZE + tup->t_len;
+
+		if (size > continuous_query_combiner_work_mem)
+			elog(ERROR, "not enough continuous_query_combiner_work_mem to sync sliding-window groups");
 
 		old = MemoryContextSwitchTo(state->sw->step_groups->tablecxt);
 		entry->tuple = heap_copytuple(tup);
@@ -916,9 +921,6 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 	List *to_delete = NIL;
 	List *fdw_private;
 
-	/* Ensure matrel rows are synced into memory */
-	sync_sw_matrel_groups(state, matrel);
-
 	if (!force && !TimestampDifferenceExceeds(state->sw->last_tick,
 			GetCurrentTimestamp(), state->base.query->sw_step_ms))
 		return;
@@ -950,6 +952,9 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 		heap_close(osrel, NoLock);
 		return;
 	}
+
+	/* Ensure matrel rows are synced into memory */
+	sync_sw_matrel_groups(state, matrel);
 
 	/*
 	 * Compute instantaneous sliding-window values
