@@ -613,7 +613,6 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 	FmgrInfo flinfo;
 	uint64 cv_name_hash = InvalidOid;
 	bool close_matrel = matrel == NULL;
-	ResultRelInfo *osri;
 	Size size = 0;
 
 	/*
