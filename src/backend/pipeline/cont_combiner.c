@@ -613,6 +613,11 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 	FmgrInfo flinfo;
 	uint64 cv_name_hash = InvalidOid;
 	bool close_matrel = matrel == NULL;
+	ResultRelInfo *osri;
+	Relation osrel;
+	StreamInsertState *sis = NULL;
+	bool has_readers = false;
+	Size size = 0;
 
 	/*
 	 * We only need to sync once, all other groups will be cached
@@ -627,6 +632,26 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 
 	if (matrel == NULL)
 		return;
+
+	/* If there is nothing reading the output stream, don't sync anything */
+	osrel = try_relation_open(state->base.query->osrelid, RowExclusiveLock);
+	if (osrel == NULL)
+		return;
+
+	osri = CQOSRelOpen(osrel);
+	BeginStreamModify(NULL, osri, list_make1(state->acks), 0, REENTRANT_STREAM_INSERT);
+	sis = (StreamInsertState *) osri->ri_FdwState;
+	Assert(sis);
+
+	if (sis->queries != NULL)
+		has_readers = true;
+
+	EndStreamModify(NULL, osri);
+	CQOSRelClose(osri);
+	heap_close(osrel, RowExclusiveLock);
+
+	if (!has_readers)
+		return
 
 	Assert(state->sw);
 	Assert(state->sw->arrival_ts_attr);
@@ -681,6 +706,10 @@ sync_sw_matrel_groups(ContQueryCombinerState *state, Relation matrel)
 			continue;
 
 		entry = (HeapTupleEntry) LookupTupleHashEntry(state->sw->step_groups, state->slot, &isnew);
+		size += sizeof(HeapTupleEntry) + HEAPTUPLESIZE + tup->t_len;
+
+		if (size > continuous_query_combiner_work_mem)
+			elog(ERROR, "not enough continuous_query_combiner_work_mem to sync sliding-window groups");
 
 		old = MemoryContextSwitchTo(state->sw->step_groups->tablecxt);
 		entry->tuple = heap_copytuple(tup);
