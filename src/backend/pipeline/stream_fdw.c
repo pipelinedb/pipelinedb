@@ -166,8 +166,8 @@ GetStreamScanPlan(PlannerInfo *root, RelOptInfo *baserel,
 	List *physical_tlist = build_physical_tlist(root, baserel);
 	RangeTblEntry *rte = NULL;
 	int i;
-	TableSampleClause *sample = NULL;
-	Value *sample_cutoff;
+	TableSampleClause *sample;
+	Value *sample_cutoff = NULL;
 
 	/* Reduce RestrictInfo list to bare expressions; ignore pseudoconstants */
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
