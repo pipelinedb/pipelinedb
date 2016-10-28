@@ -23,7 +23,7 @@ CREATE VIEW msw1_ma WITH (max_age = '2 seconds') AS SELECT combine(count) AS cou
  avg    | numeric |           | main    | 
 View definition:
  SELECT combine(msw0.count) AS count,
-    int8_avg(combine(msw0.avg)) AS avg
+    combine(msw0.avg) AS avg
    FROM msw0
   WHERE arrival_timestamp > (clock_timestamp() - '00:00:02'::interval);
 
