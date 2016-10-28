@@ -78,7 +78,6 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 	query->cqId = id;
 
 	plan = pg_plan_query(query, 0, NULL);
-
 	plan->isContinuous = true;
 
 	/*

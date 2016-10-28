@@ -28,6 +28,7 @@ typedef struct StreamScanState
 	StreamProjectionInfo *pi;
 	Size nbytes;
 	int ntuples;
+	int sample_cutoff;
 } StreamScanState;
 
 typedef struct StreamInsertState

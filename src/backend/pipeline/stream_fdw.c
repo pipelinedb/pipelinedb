@@ -13,6 +13,7 @@
 #include "postgres.h"
 
 #include "access/htup_details.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "executor/executor.h"
@@ -23,8 +24,10 @@
 #include "optimizer/pathnode.h"
 #include "optimizer/plancat.h"
 #include "optimizer/planmain.h"
+#include "optimizer/planner.h"
 #include "optimizer/restrictinfo.h"
 #include "parser/parse_coerce.h"
+#include "parser/parse_expr.h"
 #include "parser/parsetree.h"
 #include "pgstat.h"
 #include "pipeline/cont_execute.h"
@@ -119,7 +122,7 @@ GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
  * GetStreamPaths
  */
 void
-GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
+GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid relid)
 {
 	ForeignPath *path;
 	Cost startup_cost;
@@ -138,7 +141,7 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("\"%s\" is a stream", get_rel_name(streamid)),
+					 errmsg("\"%s\" is a stream", get_rel_name(relid)),
 					 errhint("Streams can only be read by a continuous view's FROM clause.")));
 		}
 	}
@@ -157,16 +160,77 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
  */
 ForeignScan *
 GetStreamScanPlan(PlannerInfo *root, RelOptInfo *baserel,
-		Oid streamid, ForeignPath *best_path, List *tlist, List *scan_clauses, Plan *outer_plan)
+		Oid relid, ForeignPath *best_path, List *tlist, List *scan_clauses, Plan *outer_plan)
 {
 	StreamFdwInfo *sinfo = (StreamFdwInfo *) baserel->fdw_private;
 	List *physical_tlist = build_physical_tlist(root, baserel);
+	RangeTblEntry *rte = NULL;
+	int i;
+	TableSampleClause *sample = NULL;
+	Value *sample_cutoff;
 
 	/* Reduce RestrictInfo list to bare expressions; ignore pseudoconstants */
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
+	for (i = 1; i <= root->simple_rel_array_size; i++)
+	{
+		rte = root->simple_rte_array[i];
+		if (rte && rte->relid == relid)
+			break;
+	}
+
+	if (!rte || rte->relid != relid)
+		elog(ERROR, "stream RTE missing");
+
+	sample = rte->tablesample;
+	if (sample)
+	{
+		double dcutoff;
+		Datum d;
+		ExprContext *econtext;
+		bool isnull;
+		Node *node;
+		Expr *expr;
+		ExprState *estate;
+		ParseState *ps = make_parsestate(NULL);
+		float4 percent;
+
+		if (sample->tsmhandler != BERNOULLI_OID)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("tablesample method %s is not supported by streams", get_func_name(sample->tsmhandler)),
+					 errhint("Only bernoulli tablesample method can be used with streams.")));
+
+		if (sample->repeatable)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("streams don't support the REPEATABLE clause for tablesample")));
+
+		econtext = CreateStandaloneExprContext();
+
+		ps = make_parsestate(NULL);
+		node = (Node *) linitial(sample->args);
+		node = transformExpr(ps, node, EXPR_KIND_OTHER);
+		expr = expression_planner((Expr *) node);
+
+		estate = ExecInitExpr(expr, NULL);
+		d = ExecEvalExpr(estate, econtext, &isnull, NULL);
+
+		free_parsestate(ps);
+		FreeExprContext(econtext, false);
+
+		percent = DatumGetFloat4(d);
+		if (percent < 0 || percent > 100 || isnan(percent))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TABLESAMPLE_ARGUMENT),
+					 errmsg("sample percentage must be between 0 and 100")));
+
+		dcutoff = rint(((double) RAND_MAX + 1) * percent / 100);
+		sample_cutoff = makeInteger((int) dcutoff);
+	}
+
 	return make_foreignscan(tlist, scan_clauses, baserel->relid,
-							NIL, list_make2(sinfo->colnames, physical_tlist), NIL, NIL, outer_plan);
+							NIL, list_make3(sinfo->colnames, physical_tlist, sample_cutoff), NIL, NIL, outer_plan);
 }
 
 /*
@@ -180,6 +244,7 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 	ListCell *lc;
 	List *colnames = (List *) linitial(plan->fdw_private);
 	List *physical_tlist = (List *) lsecond(plan->fdw_private);
+	Value *sample_cutoff = (Value *) lthird(plan->fdw_private);
 	int i = 0;
 
 	state = palloc0(sizeof(StreamScanState));
@@ -194,6 +259,7 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 	state->pi->ecxt = CreateStandaloneExprContext();
 	state->pi->outdesc = ExecTypeFromTL(physical_tlist, false);
 	state->pi->indesc = NULL;
+	state->sample_cutoff = sample_cutoff ? intVal(sample_cutoff) : -1;
 
 	Assert(state->pi->outdesc->natts == list_length(colnames));
 
@@ -431,10 +497,13 @@ IterateStreamScan(ForeignScanState *node)
 	StreamScanState *state = (StreamScanState *) node->fdw_state;
 	HeapTuple tup;
 
-	itup = (ipc_tuple *) ipc_tuple_reader_next(state->cont_executor->curr_query_id);
+	do
+	{
+		itup = (ipc_tuple *) ipc_tuple_reader_next(state->cont_executor->curr_query_id);
 
-	if (itup == NULL)
-		return NULL;
+		if (itup == NULL)
+			return NULL;
+	} while (state->sample_cutoff != -1 && rand() > state->sample_cutoff);
 
 	state->ntuples++;
 	state->nbytes += itup->tup->t_len + HEAPTUPLESIZE;

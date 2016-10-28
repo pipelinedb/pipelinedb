@@ -1,0 +1,16 @@
+CREATE STREAM cqtablesample_stream (x int);
+CREATE CONTINUOUS VIEW cqtablesample AS SELECT count(*) FROM cqtablesample_stream TABLESAMPLE SYSTEM(10);
+ERROR:  tablesample method system is not supported by streams
+HINT:  Only bernoulli tablesample method can be used with streams.
+CREATE CONTINUOUS VIEW cqtablesample AS SELECT count(*) FROM cqtablesample_stream TABLESAMPLE BERNOULLI('a');
+ERROR:  invalid input syntax for type real: "a"
+LINE 1: ...unt(*) FROM cqtablesample_stream TABLESAMPLE BERNOULLI('a');
+                                                                  ^
+CREATE CONTINUOUS VIEW cqtablesample AS SELECT count(*) FROM cqtablesample_stream TABLESAMPLE BERNOULLI(10);
+INSERT INTO cqtablesample_stream SELECT generate_series(1, 100000) x;
+SELECT count > 9500 AND count < 10500 FROM cqtablesample;
+ ?column? 
+----------
+ t
+(1 row)
+
