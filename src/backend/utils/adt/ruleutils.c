@@ -8219,6 +8219,36 @@ get_oper_expr(OpExpr *expr, deparse_context *context)
 		appendStringInfoChar(buf, ')');
 }
 
+static bool
+is_finalize_func_expr(FuncExpr *expr)
+{
+	Node *arg;
+	Aggref *agg;
+	HeapTuple tup;
+	Oid finalfn;
+	Form_pg_aggregate aggform;
+
+	if (list_length(expr->args) != 1)
+		return false;
+
+	arg = (Node *) linitial(expr->args);
+	if (!IsA(arg, Aggref))
+		return false;
+
+	agg = (Aggref *) arg;
+	if (!AGGKIND_IS_COMBINE(agg->aggkind))
+		return false;
+
+	tup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(agg->aggfnoid));
+	if (!HeapTupleIsValid(tup))
+		elog(ERROR, "cache lookup failed for aggregate %u", agg->aggfnoid);
+	aggform = (Form_pg_aggregate) GETSTRUCT(tup);
+	finalfn = aggform->aggfinalfn;
+	ReleaseSysCache(tup);
+
+	return finalfn == expr->funcid;
+}
+
 /*
  * get_func_expr			- Parse back a FuncExpr node
  */
@@ -8284,6 +8314,20 @@ get_func_expr(FuncExpr *expr, deparse_context *context,
 			argnames = lappend(argnames, ((NamedArgExpr *) arg)->name);
 		argtypes[nargs] = exprType(arg);
 		nargs++;
+	}
+
+	/*
+	 * HACK(usmanm): When we rewrite the "combine" aggregate, it can be
+	 * rewritten as finalfn(combinefn(...)). In this case the combinefn is
+	 * an aggregate of aggkind combine so we'll rewrite it as combine(...),
+	 * but the output then becomes finalfn(combine(...)) which is incorrect.
+	 * We need to zap away the finalfn. Unfortunately, this is the only ugly
+	 * way to do it.
+	 */
+	if (is_finalize_func_expr(expr))
+	{
+		get_rule_expr((Node *) linitial(expr->args), context, true);
+		return;
 	}
 
 	appendStringInfo(buf, "%s(",

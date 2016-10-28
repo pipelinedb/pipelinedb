@@ -185,8 +185,33 @@ View definition:
     percentile_cont(0.1::double precision) WITHIN GROUP (ORDER BY (x::double precision)) AS percentile_cont
    FROM ONLY analyze_cont_stream;
 
+CREATE CONTINUOUS VIEW cqregress6 AS SELECT id, avg(x) FROM analyze_cont_stream GROUP BY id;
+\d+ cqregress6
+         Continuous view "public.cqregress6"
+ Column |  Type   | Modifiers | Storage | Description 
+--------+---------+-----------+---------+-------------
+ id     | integer |           | plain   | 
+ avg    | numeric |           | main    | 
+View definition:
+ SELECT id,
+    avg(x) AS avg
+   FROM ONLY analyze_cont_stream
+  GROUP BY id;
+
+CREATE VIEW cqregress7 AS SELECT combine(avg) FROM cqregress6;
+\d+ cqregress7
+               View "public.cqregress7"
+ Column  |  Type   | Modifiers | Storage | Description 
+---------+---------+-----------+---------+-------------
+ combine | numeric |           | main    | 
+View definition:
+ SELECT combine(cqregress6.avg) AS combine
+   FROM cqregress6;
+
 DROP STREAM analyze_cont_stream CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 5 other objects
 DETAIL:  drop cascades to continuous view cqregress1
 drop cascades to continuous view cqregress2
 drop cascades to continuous view cqregress5
+drop cascades to continuous view cqregress6
+drop cascades to view cqregress7

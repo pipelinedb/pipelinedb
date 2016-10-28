@@ -113,5 +113,9 @@ CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::integer FROM analyze_con
 CREATE CONTINUOUS VIEW cqregress4 AS SELECT x FROM cqregress4;
 CREATE CONTINUOUS VIEW cqregress5 AS SELECT count(DISTINCT x), percentile_cont(0.1) WITHIN GROUP (ORDER BY x) FROM analyze_cont_stream;
 \d+ cqregress5
+CREATE CONTINUOUS VIEW cqregress6 AS SELECT id, avg(x) FROM analyze_cont_stream GROUP BY id;
+\d+ cqregress6
+CREATE VIEW cqregress7 AS SELECT combine(avg) FROM cqregress6;
+\d+ cqregress7
 
 DROP STREAM analyze_cont_stream CASCADE;
