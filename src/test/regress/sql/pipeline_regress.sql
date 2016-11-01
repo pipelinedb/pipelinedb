@@ -196,4 +196,24 @@ INSERT INTO sw_ts_expr_s (x) VALUES (1), (1);
 SELECT * FROM sw_ts_expr1;
 SELECT count FROM sw_ts_expr2;
 
+CREATE CONTINUOUS VIEW unknown_type_cv AS SELECT x, 'a' FROM sw_ts_expr_s;
+CREATE CONTINUOUS VIEW unknown_type_cv AS SELECT x, 'a'::text FROM sw_ts_expr_s;
+
+\d+ unknown_type_cv
+
+DROP CONTINUOUS VIEW unknown_type_cv;
+
+CREATE STREAM ct_out_s (x integer, a text);
+CREATE CONTINUOUS TRANSFORM unknown_type_ct AS SELECT x, 'a' FROM sw_ts_expr_s
+  THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_out_s');
+CREATE CONTINUOUS TRANSFORM unknown_type_ct AS SELECT x, 'a'::text FROM sw_ts_expr_s
+  THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_out_s');
+
+\d+ unknown_type_ct
+
+DROP CONTINUOUS TRANSFORM unknown_type_ct;
+DROP STREAM ct_out_s;
+
+
 DROP STREAM sw_ts_expr_s CASCADE;
+
