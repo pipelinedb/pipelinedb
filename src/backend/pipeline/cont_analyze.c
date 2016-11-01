@@ -1271,6 +1271,18 @@ ValidateContQuery(Query *query)
 	List *aggs = pull_var_and_aggs((Node *) query->targetList);
 	ListCell *lc;
 
+	foreach(lc, query->targetList)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+		if (exprType((Node *) te->expr) == UNKNOWNOID)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_DEFINITION),
+					 errmsg("column %u has an unknown type", te->resno),
+					 errhint("Explicitly cast the expression to a known type.")));
+		}
+	}
+
 	foreach(lc, aggs)
 	{
 		Node *n = (Node *) lfirst(lc);

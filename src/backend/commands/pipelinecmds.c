@@ -1206,6 +1206,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	ValidateSubselect(stmt->query, "continuous transforms");
 
 	query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
+	ValidateContQuery(query);
 
 	create = makeNode(CreateStmt);
 	create->relation = stmt->into->rel;
