@@ -151,4 +151,16 @@ SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 
 DROP CONTINUOUS VIEW os3 CASCADE;
 
+-- Verify that transforms write to output streams
+CREATE CONTINUOUS TRANSFORM os_xform AS SELECT x, y FROM os_stream;
+
+CREATE CONTINUOUS VIEW os4 AS SELECT x, y FROM output_of('os_xform');
+
+INSERT INTO os_stream (x, y) VALUES (7, 7);
+INSERT INTO os_stream (x, y) VALUES (8, 8);
+INSERT INTO os_stream (x, y) VALUES (9, 9);
+
+SELECT * FROM os4 ORDER BY x;
+
 DROP STREAM os_stream CASCADE;
+

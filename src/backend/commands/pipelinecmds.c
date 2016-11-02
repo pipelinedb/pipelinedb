@@ -1057,15 +1057,18 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid osrelid, Oid fnoid, SelectStmt 
 
 	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
 
-	referenced.classId = ProcedureRelationId;
-	referenced.objectId = fnoid;
-	referenced.objectSubId = 0;
+	if (OidIsValid(fnoid))
+	{
+		referenced.classId = ProcedureRelationId;
+		referenced.objectId = fnoid;
+		referenced.objectSubId = 0;
 
-	dependent.classId = RelationRelationId;
-	dependent.objectId = relid;
-	dependent.objectSubId = 0;
+		dependent.classId = RelationRelationId;
+		dependent.objectId = relid;
+		dependent.objectSubId = 0;
 
-	recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
+		recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
+	}
 
 	/*
 	 * Record a dependency between the type its pipeline_query entry so that when
@@ -1177,8 +1180,8 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	ObjectAddress address;
 	Oid relid;
 	Oid fargtypes[1];	/* dummy */
-	Oid tgfnid;
-	Oid funcrettype;
+	Oid tgfnid = InvalidOid;
+	Oid funcrettype = InvalidOid;
 	CreateStmt *create;
 	CreateStreamStmt *create_osrel;
 	Oid osrelid;
@@ -1189,13 +1192,16 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	check_relation_already_exists(transform);
 
 	/* Find and validate the transform output function. */
-	tgfnid = LookupFuncName(stmt->funcname, 0, fargtypes, false);
-	funcrettype = get_func_rettype(tgfnid);
-	if (funcrettype != TRIGGEROID)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-				errmsg("function %s must return type \"trigger\"",
-				NameListToString(stmt->funcname))));
+	if (stmt->funcname)
+	{
+		tgfnid = LookupFuncName(stmt->funcname, 0, fargtypes, false);
+		funcrettype = get_func_rettype(tgfnid);
+		if (funcrettype != TRIGGEROID)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+					errmsg("function %s must return type \"trigger\"",
+					NameListToString(stmt->funcname))));
+	}
 
 	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 

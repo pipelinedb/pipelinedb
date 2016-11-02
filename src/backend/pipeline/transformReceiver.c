@@ -75,7 +75,8 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 		t->tg_rel = heap_open(t->cont_query->matrelid, AccessShareLock);
 	}
 
-	if (t->cont_query->tgfn != PIPELINE_STREAM_INSERT_OID)
+	if (OidIsValid(t->cont_query->tgfn) &&
+			t->cont_query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{
 		TriggerData *cxt = (TriggerData *) t->trig_fcinfo->context;
 
@@ -149,9 +150,7 @@ SetTransformDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery
 	Assert(query->type == CONT_TRANSFORM);
 	t->cont_query = query;
 
-	Assert(OidIsValid(query->tgfn));
-
-	if (query->tgfn != PIPELINE_STREAM_INSERT_OID)
+	if (OidIsValid(query->tgfn) && query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{
 		FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
 		FmgrInfo *finfo = palloc0(sizeof(FmgrInfo));
@@ -271,7 +270,7 @@ TransformDestReceiverFlush(DestReceiver *self)
 	if (t->cont_query->tgfn == PIPELINE_STREAM_INSERT_OID || t->os_has_readers)
 		pipeline_stream_insert_batch(t);
 
-	if (t->cont_query->tgfn != PIPELINE_STREAM_INSERT_OID)
+	if (OidIsValid(t->cont_query->tgfn) && t->cont_query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{
 		TriggerData *cxt = (TriggerData *) t->trig_fcinfo->context;
 		cxt->tg_relation = NULL;
