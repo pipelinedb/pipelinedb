@@ -1554,6 +1554,8 @@ rewrite_from_clause(Node *from)
 void
 RewriteFromClause(SelectStmt *stmt)
 {
+	if (stmt->op)
+		elog(ERROR, "set operations within continuous views are currently not supported");
 	stmt->fromClause = (List *) rewrite_from_clause((Node *) stmt->fromClause);
 }
 
