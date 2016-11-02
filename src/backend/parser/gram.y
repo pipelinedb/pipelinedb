@@ -2909,6 +2909,14 @@ CreateContTransformStmt:
           n->args = $12;
           $$ = (Node *) n;
         }
+    | CREATE CONTINUOUS TRANSFORM create_ct_target AS SelectStmt
+        {
+          CreateContTransformStmt *n = makeNode(CreateContTransformStmt);
+          n->into = $4;
+          n->query = $6;
+          ((SelectStmt *) n->query)->forContinuousView = true;
+          $$ = (Node *) n;
+        }
     ;
 
 create_ct_target:
