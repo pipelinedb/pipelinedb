@@ -1568,7 +1568,7 @@ arrayaggstaterecv(PG_FUNCTION_ARGS)
 	MemoryContext context;
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		context = fcinfo->flinfo->fn_mcxt;
+		context = CurrentMemoryContext;
 
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
