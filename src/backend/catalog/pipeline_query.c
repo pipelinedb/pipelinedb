@@ -211,7 +211,8 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int sw_attno, bool adhoc, Oid *pq_id)
+DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int ttl,
+		AttrNumber ttl_attno, AttrNumber sw_attno, bool adhoc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -244,7 +245,9 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int sw
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(matrelid);
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(seqrelid);
-	values[Anum_pipeline_query_sw_attno - 1] = ObjectIdGetDatum(sw_attno);
+	values[Anum_pipeline_query_sw_attno - 1] = Int16GetDatum(sw_attno);
+	values[Anum_pipeline_query_ttl - 1] = Int32GetDatum(ttl);
+	values[Anum_pipeline_query_ttl_attno - 1] = Int16GetDatum(ttl_attno);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 
 	if (AttributeNumberIsValid(sw_attno))
@@ -559,6 +562,25 @@ IsSWContView(RangeVar *name)
 	}
 
 	return sw;
+}
+
+/*
+ * IsTTLContView
+ */
+bool
+IsTTLContView(RangeVar *name)
+{
+	bool ttl = false;
+	HeapTuple tuple = GetPipelineQueryTuple(name);
+
+	if (HeapTupleIsValid(tuple))
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
+		ttl = AttributeNumberIsValid(row->sw_attno) || AttributeNumberIsValid(row->ttl_attno);
+		ReleaseSysCache(tuple);
+	}
+
+	return ttl;
 }
 
 ContQuery *
@@ -916,6 +938,8 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid 
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(InvalidOid);
 	values[Anum_pipeline_query_sw_attno - 1] = ObjectIdGetDatum(InvalidOid);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
+	values[Anum_pipeline_query_ttl - 1] = Int32GetDatum(0);
+	values[Anum_pipeline_query_ttl_attno - 1] = Int16GetDatum(0);
 	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);
 
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);

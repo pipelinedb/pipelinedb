@@ -35,9 +35,9 @@
 #include "catalog/pg_namespace.h"
 #include "commands/cluster.h"
 #include "commands/vacuum.h"
+#include "pipeline/ttl_vacuum.h"
 #include "miscadmin.h"
 #include "pgstat.h"
-#include "pipeline/sw_vacuum.h"
 #include "postmaster/autovacuum.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
@@ -1180,8 +1180,8 @@ vacuum_rel(Oid relid, RangeVar *relation, int options, VacuumParams *params)
 
 	Assert(params != NULL);
 
-	/* If this is a matrel for a SW continuous view, delete all expired tuples */
-	DeleteSWExpiredTuples(relid);
+	/* If this is a matrel for a continuous view with a TTL, delete all expired tuples */
+	DeleteTTLExpiredTuples(relid);
 
 	/* Begin a transaction for vacuuming this relation */
 	StartTransactionCommand();

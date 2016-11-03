@@ -3345,6 +3345,71 @@ GetSWExpr(RangeVar *cv)
 	return view->whereClause;
 }
 
+/*
+ * GetTTLExpiredExpr
+ */
+Node *
+GetTTLExpiredExpr(RangeVar *cv)
+{
+	HeapTuple tup = GetPipelineQueryTuple(cv);
+	Form_pipeline_query row;
+	Relation rel;
+	TupleDesc desc;
+	TypeCast *interval;
+	int i;
+	char *colname = NULL;
+	ColumnRef *ttl_col;
+	A_Expr *rexpr;
+	FuncCall *clock_ts;
+	A_Expr *where;
+	StringInfoData buf;
+	A_Const *arg;
+	Value *v;
+
+	Assert(HeapTupleIsValid(tup));
+
+	row = (Form_pipeline_query) GETSTRUCT(tup);
+	rel = heap_open(row->matrelid, NoLock);
+	desc = RelationGetDescr(rel);
+
+	for (i = 0; i < desc->natts; i++)
+	{
+		if (desc->attrs[i]->attnum == row->ttl_attno)
+		{
+			colname = pstrdup(NameStr(desc->attrs[i]->attname));
+			break;
+		}
+	}
+
+	Assert(colname);
+	heap_close(rel, NoLock);
+
+
+	initStringInfo(&buf);
+	appendStringInfo(&buf, "%d seconds", row->ttl);
+
+	arg = makeNode(A_Const);
+	v = makeString(buf.data);
+	arg->val = *v;
+
+	interval = makeNode(TypeCast);
+	interval->arg = (Node *) arg;
+	interval->typeName = SystemTypeName("interval");
+
+	ttl_col = makeNode(ColumnRef);
+	ttl_col->fields = list_make1(makeString(colname));
+
+	clock_ts = makeNode(FuncCall);
+	clock_ts->funcname = list_make1(makeString(CLOCK_TIMESTAMP));
+
+	rexpr = makeA_Expr(AEXPR_OP, list_make1(makeString("-")), (Node *) clock_ts, (Node *) interval, -1);
+	where = makeA_Expr(AEXPR_OP, list_make1(makeString("<")), (Node *) ttl_col, (Node *) rexpr, -1);
+
+	ReleaseSysCache(tup);
+
+	return (Node *) where;
+}
+
 static Interval *
 parse_node_to_interval(Node *inode)
 {
@@ -3655,15 +3720,18 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
  * ApplyStorageOptions
  */
 void
-ApplyStorageOptions(CreateContViewStmt *stmt)
+ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_max_age)
 {
 	DefElem *def;
 	SelectStmt *select = (SelectStmt *) stmt->query;
+
+	Assert(has_max_age);
 
 	/* max_age */
 	def = GetContinuousViewOption(stmt->into->options, OPTION_MAX_AGE);
 	if (def)
 	{
+		*has_max_age = true;
 		ApplyMaxAge(select, def);
 		stmt->into->options = list_delete(stmt->into->options, def);
 	}
@@ -3717,6 +3785,40 @@ FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid)
 
 	rel = heap_open(matrelid, AccessShareLock);
 	desc = RelationGetDescr(rel);
+
+	for (i = 0; i < desc->natts; i++)
+	{
+		Form_pg_attribute attr = desc->attrs[i];
+		if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
+		{
+			attno = i + 1;
+			break;
+		}
+	}
+
+	heap_close(rel, AccessShareLock);
+
+	Assert(AttributeNumberIsValid(attno));
+	return attno;
+}
+
+/*
+ * FindTTLColumnAttrNo
+ */
+AttrNumber
+FindTTLColumnAttrNo(char *colname, Oid matrelid)
+{
+	AttrNumber attno = InvalidAttrNumber;
+	Relation rel;
+	TupleDesc desc;
+	int i;
+
+	if (!colname)
+		return InvalidAttrNumber;
+
+	rel = heap_open(matrelid, AccessShareLock);
+	desc = RelationGetDescr(rel);
+
 
 	for (i = 0; i < desc->natts; i++)
 	{
