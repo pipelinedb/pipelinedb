@@ -7727,7 +7727,7 @@ numaggstaterecv(PG_FUNCTION_ARGS)
 	int i;
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		context = fcinfo->flinfo->fn_mcxt;
+		context = CurrentMemoryContext;
 
 	old = MemoryContextSwitchTo(context);
 
@@ -7826,7 +7826,7 @@ numpolyaggstaterecv(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		context = fcinfo->flinfo->fn_mcxt;
+		context = CurrentMemoryContext;
 
 	old = MemoryContextSwitchTo(context);
 	state = (Int128AggState *) VARDATA_ANY(PG_GETARG_ARRAYTYPE_P_COPY(0));
