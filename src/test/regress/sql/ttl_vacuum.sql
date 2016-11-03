@@ -20,6 +20,10 @@ CREATE CONTINUOUS VIEW ttl0 WITH (ttl='1 day', ttl_column=1)
 CREATE CONTINUOUS VIEW ttl0 WITH (ttl=10000, ttl_column='ts')
 	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
 
+-- TTL column isn't a timestamp or timestamptz
+CREATE CONTINUOUS VIEW ttl0 WITH (ttl='1 day', ttl_column='x')
+	AS SELECT x FROM ttl_stream;
+
 -- Can't specify TTLs with SWs
 CREATE CONTINUOUS VIEW ttl0 WITH (ttl='1 day', ttl_column='ts', max_age='2 days')
 	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
