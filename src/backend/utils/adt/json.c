@@ -2204,7 +2204,7 @@ jsonaggstaterecv(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		context = fcinfo->flinfo->fn_mcxt;
+		context = CurrentMemoryContext;
 
 	bytes = PG_GETARG_BYTEA_PP(0);
 

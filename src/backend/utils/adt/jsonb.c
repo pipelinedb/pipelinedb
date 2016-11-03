@@ -1966,7 +1966,7 @@ jsonbaggstaterecv(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		context = fcinfo->flinfo->fn_mcxt;
+		context = CurrentMemoryContext;
 
 	jsonb = PG_GETARG_JSONB(0);
 
