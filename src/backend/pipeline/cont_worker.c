@@ -220,7 +220,7 @@ static void
 cleanup_worker_state(ContQueryWorkerState *state)
 {
 	QueryDesc *query_desc;
-	EState *estate = NULL;
+	volatile EState *estate = NULL;
 
 	/*
 	 * We wrap this in a separate try/catch block because ExecInitNode call can potentially throw
@@ -296,7 +296,7 @@ ContinuousQueryWorkerMain(void)
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, 0)) != InvalidOid)
 		{
-			EState *estate = NULL;
+			volatile EState *estate = NULL;
 			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->curr_query;
 			volatile bool error = false;
 
