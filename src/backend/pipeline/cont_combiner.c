@@ -1062,6 +1062,36 @@ find_attr(TupleDesc desc, char *name)
 }
 
 /*
+ * set_overlay_group_attrs
+ *
+ * Set the attribute numbers that define the SW overlay group. The aggregate
+ * plan refers to the matrel, which will have an extra step column. Since this
+ * column is aggregated out of the overlay plan's output, we need to adjust
+ * the aggregate plan's attribute numbers to reflect their positions in the
+ */
+static void
+set_overlay_group_attrs(Agg *agg, AttrNumber *overlay_group_idx)
+{
+	int i = 0;
+	ListCell *lc;
+	AttrNumber attno = 1;
+
+	foreach(lc, agg->plan.targetlist)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+
+		/*
+		 * Since this is an overlay plan, if it's a Var then it must be in the grouping
+		 */
+		if (IsA(te->expr, Var))
+			overlay_group_idx[i++] = attno;
+		attno++;
+	}
+
+	Assert(i == agg->numCols);
+}
+
+/*
  * init_sw_state
  *
  * Initialize the state necessary to write SW results to output streams
@@ -1120,7 +1150,6 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	if (IsA(state->sw->overlay_plan->planTree, Agg))
 	{
 		Agg *agg = (Agg *) state->sw->overlay_plan->planTree;
-		int i;
 
 		group_ops = agg->grpOperators;
 		n_group_attr = agg->numCols;
@@ -1129,16 +1158,10 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 		 * Since this is a view over a matrel, these grouping attributes actually
 		 * refer to matrel attributes so we need to offset them by 1 to account for
 		 * the matrel's additional arrival_timestamp column.
-		 *
-		 * There is probably a better way to do this.
 		 */
 		group_idx = palloc0(sizeof(AttrNumber) * n_group_attr);
 		memcpy(group_idx, agg->grpColIdx, sizeof(AttrNumber) * n_group_attr);
-		for (i = 0; i < n_group_attr; i++)
-		{
-			Assert(group_idx[i] >= 1);
-			group_idx[i] -= 1;
-		}
+		set_overlay_group_attrs(agg, group_idx);
 	}
 
 	tmp_cxt = AllocSetContextCreate(CurrentMemoryContext, "SWOverlayOutputTmpCxt",
