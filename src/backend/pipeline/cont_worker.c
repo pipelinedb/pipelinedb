@@ -235,8 +235,9 @@ cleanup_worker_state(ContQueryWorkerState *state)
 
 		if (estate == NULL)
 		{
-			query_desc->estate = estate = CreateEState(state->query_desc);
-			SetEStateSnapshot(estate);
+			estate = CreateEState(state->query_desc);
+			query_desc->estate = (EState *) estate;
+			SetEStateSnapshot((EState *) estate);
 		}
 
 		/* The cleanup functions below expect these things to be registered. */
@@ -254,7 +255,7 @@ cleanup_worker_state(ContQueryWorkerState *state)
 		/* Clean up. */
 		ExecutorFinish(query_desc);
 		ExecutorEnd(query_desc);
-		UnsetEStateSnapshot(estate);
+		UnsetEStateSnapshot((EState *) estate);
 
 		FreeQueryDesc(query_desc);
 	}
@@ -269,7 +270,7 @@ cleanup_worker_state(ContQueryWorkerState *state)
 		FlushErrorState();
 
 		if (estate && ActiveSnapshotSet())
-			UnsetEStateSnapshot(estate);
+			UnsetEStateSnapshot((EState *) estate);
 	}
 	PG_END_TRY();
 }
@@ -306,16 +307,18 @@ ContinuousQueryWorkerMain(void)
 					goto next;
 
 				MemoryContextSwitchTo(state->base.tmp_cxt);
-				state->query_desc->estate = estate = CreateEState(state->query_desc);
 
-				SetEStateSnapshot(estate);
+				estate = CreateEState(state->query_desc);
+				state->query_desc->estate = (EState *) estate;
+				SetEStateSnapshot((EState *) estate);
+
 				CurrentResourceOwner = WorkerResOwner;
 
 				/* initialize the plan for execution within this xact */
 				init_plan(state->query_desc);
 				set_cont_executor(state->query_desc->planstate, cont_exec);
 
-				ExecutePlan(estate, state->query_desc->planstate, state->query_desc->operation,
+				ExecutePlan((EState *) estate, state->query_desc->planstate, state->query_desc->operation,
 						true, 0, ForwardScanDirection, state->dest);
 
 				/* free up any resources used by this plan before committing */
@@ -324,8 +327,9 @@ ContinuousQueryWorkerMain(void)
 				/* flush tuples to combiners or transform out functions */
 				flush_tuples(state);
 
-				UnsetEStateSnapshot(estate);
-				state->query_desc->estate = estate = NULL;
+				UnsetEStateSnapshot((EState *) estate);
+				state->query_desc->estate = NULL;
+				estate = NULL;
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
 				MemoryContextSwitchTo(state->base.state_cxt);
@@ -336,7 +340,7 @@ ContinuousQueryWorkerMain(void)
 				FlushErrorState();
 
 				if (estate && ActiveSnapshotSet())
-					UnsetEStateSnapshot(estate);
+					UnsetEStateSnapshot((EState *) estate);
 
 				AbortCurrentTransaction();
 				StartTransactionCommand();
