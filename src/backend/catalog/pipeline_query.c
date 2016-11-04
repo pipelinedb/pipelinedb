@@ -936,10 +936,10 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid 
 
 	/* unused */
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(InvalidOid);
-	values[Anum_pipeline_query_sw_attno - 1] = ObjectIdGetDatum(InvalidOid);
+	values[Anum_pipeline_query_sw_attno - 1] = Int16GetDatum(InvalidAttrNumber);
 	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 	values[Anum_pipeline_query_ttl - 1] = Int32GetDatum(0);
-	values[Anum_pipeline_query_ttl_attno - 1] = Int16GetDatum(0);
+	values[Anum_pipeline_query_ttl_attno - 1] = Int16GetDatum(InvalidAttrNumber);
 	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);
 
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);

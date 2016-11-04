@@ -594,7 +594,6 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 
 	*options = list_delete(*options, opt_ttl);
 	*options = list_delete(*options, opt_ttl_col);
-
 }
 
 /*
