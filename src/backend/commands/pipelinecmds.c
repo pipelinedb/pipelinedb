@@ -521,7 +521,7 @@ check_relation_already_exists(RangeVar *rv)
  * extract_ttl_params
  */
 static void
-extract_ttl_params(List **options, List *coldefs, bool has_max_age, int *ttl, char **ttl_column)
+extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **ttl_column)
 {
 	ListCell *lc;
 	DefElem *opt_ttl = NULL;
@@ -580,7 +580,7 @@ extract_ttl_params(List **options, List *coldefs, bool has_max_age, int *ttl, ch
 	if (!opt_ttl && !opt_ttl_col)
 		return;
 
-	if (has_max_age && (opt_ttl || opt_ttl_col))
+	if (has_sw && (opt_ttl || opt_ttl_col))
 		elog(ERROR, "TTLs cannot be specified in conjunction with sliding windows");
 
 	if (opt_ttl && !opt_ttl_col)
@@ -642,7 +642,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CreateStreamStmt *create_osrel;
 	Oid osrelid = InvalidOid;
 	AttrNumber sw_attno = InvalidAttrNumber;
-	bool has_max_age = false;
+	bool has_sw = false;
 	int ttl = -1;
 	AttrNumber ttl_attno = InvalidAttrNumber;
 	char *ttl_column = NULL;
@@ -671,7 +671,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
 	/* Apply any CQ storage options like max_age, step_factor */
-	ApplyStorageOptions(stmt, &has_max_age);
+	ApplyStorageOptions(stmt, &has_sw);
 
 	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
 
@@ -706,7 +706,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 
 	tableElts = create_coldefs_from_tlist(query);
-	extract_ttl_params(&stmt->into->options, tableElts, has_max_age, &ttl, &ttl_column);
+	extract_ttl_params(&stmt->into->options, tableElts, has_sw, &ttl, &ttl_column);
 
 	pk = GetContinuousViewOption(stmt->into->options, OPTION_PK);
 	if (pk)

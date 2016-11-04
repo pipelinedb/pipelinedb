@@ -44,7 +44,7 @@ typedef struct ContAnalyzeContext
 #define MATREL_FINALIZE "finalize"
 
 #define OPTION_FILLFACTOR "fillfactor"
-#define OPTION_MAX_AGE "max_age"
+#define OPTION_SLIDING_WINDOW "sw"
 #define OPTION_PK "pk"
 #define OPTION_STEP_FACTOR "step_factor"
 #define OPTION_TTL "ttl"
@@ -94,7 +94,7 @@ extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
 extern Node *CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var);
 
 extern DefElem *GetContinuousViewOption(List *options, char *name);
-extern void ApplyMaxAge(SelectStmt *stmt, DefElem *max_age);
+extern void ApplySlidingWindow(SelectStmt *stmt, DefElem *max_age);
 extern void ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_max_age);
 
 /* Deparsing */

@@ -63,7 +63,7 @@ def test_concurrent_sw_ticking(pipeline, clean_db):
   output_names = []
   for n in range(10):
     name = 'sw%d' % n
-    pipeline.create_cv(name, 'SELECT x::integer, count(*) FROM stream GROUP BY x', max_age='%d seconds' % (n + 10))
+    pipeline.create_cv(name, 'SELECT x::integer, count(*) FROM stream GROUP BY x', sw='%d seconds' % (n + 10))
     output_name = name + '_output'
 
     q = """
@@ -100,7 +100,7 @@ def test_transforms(pipeline, clean_db):
   """
   pipeline.create_stream('stream', x='int')
   pipeline.create_cv('sw', 'SELECT x::integer, COUNT(*) FROM stream GROUP BY x',
-                     max_age='5 seconds')
+                     sw='5 seconds')
 
   # Write a row to a stream each time a row goes out of window
   q = 'SELECT (old).x FROM sw_osrel WHERE old IS NOT NULL AND new IS NULL'

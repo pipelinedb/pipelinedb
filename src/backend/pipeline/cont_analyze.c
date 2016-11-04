@@ -3598,7 +3598,7 @@ CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var)
 	Assert(sw_cref);
 
 	/*
-	 * TODO(usmanm): For now we always allow ARRIVAL_TIMESTAMP because max_age hard codes it.
+	 * TODO(usmanm): For now we always allow ARRIVAL_TIMESTAMP because sw hard codes it.
 	 * Should fix it.
 	 */
 	if (pg_strcasecmp(colname, FigureColname((Node *) sw_cref)) != 0 &&
@@ -3637,12 +3637,12 @@ GetContinuousViewOption(List *options, char *name)
 }
 
 /*
- * ApplyMaxAge
+ * ApplySlidingWindow
  *
- * Transforms a max_age WITH parameter into a sliding-window WHERE predicate
+ * Transforms a sw WITH parameter into a sliding-window WHERE predicate
  */
 void
-ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
+ApplySlidingWindow(SelectStmt *stmt, DefElem *sw)
 {
 	A_Expr *where;
 	FuncCall *clock_ts;
@@ -3653,20 +3653,20 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	RangeVar *sw_cv;
 
 	if (has_clock_timestamp(stmt->whereClause, NULL))
-		elog(ERROR, "cannot specify both \"max_age\" and a sliding window expression in the WHERE clause");
+		elog(ERROR, "cannot specify both \"sw\" and a sliding window expression in the WHERE clause");
 
 	sw_cv = GetSWContinuousViewRangeVar(stmt->fromClause);
 	if (sw_cv == NULL && stmt->forContinuousView == false)
-		elog(ERROR, "\"max_age\" can only be specified when reading from a stream or continuous view");
+		elog(ERROR, "\"sw\" can only be specified when reading from a stream or continuous view");
 
-	if (!IsA(max_age->arg, String))
+	if (!IsA(sw->arg, String))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("\"max_age\" must be a valid interval string"),
-				 errhint("For example, ... WITH (max_age = '1 hour') ...")));
+				 errmsg("\"sw\" must be a valid interval string"),
+				 errhint("For example, ... WITH (sw = '1 hour') ...")));
 
 	arg = makeNode(A_Const);
-	arg->val = *((Value *) max_age->arg);
+	arg->val = *((Value *) sw->arg);
 
 	interval = makeNode(TypeCast);
 	interval->arg = (Node *) arg;
@@ -3674,7 +3674,7 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 
 	/*
 	 * If we are creating a view on top a continuous view, we must ensure that the step_size of the
-	 * continuous view is at most MIN_VIEW_MAX_AGE_FACTOR of the max_age being specified.
+	 * continuous view is at most MIN_VIEW_MAX_AGE_FACTOR of the sw being specified.
 	 */
 	if (sw_cv)
 	{
@@ -3697,8 +3697,8 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 		if (is_lt)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					errmsg("\"max_age\" value is too small"),
-					errhint("\"max_age\" must be at least twice as much as the step size of the base continuous view.")));
+					errmsg("\"sw\" value is too small"),
+					errhint("\"sw\" must be at least twice as much as the step size of the base continuous view.")));
 	}
 
 	arrival_ts = makeNode(ColumnRef);
@@ -3720,19 +3720,19 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
  * ApplyStorageOptions
  */
 void
-ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_max_age)
+ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw)
 {
 	DefElem *def;
 	SelectStmt *select = (SelectStmt *) stmt->query;
 
-	Assert(has_max_age);
+	Assert(has_sw);
 
-	/* max_age */
-	def = GetContinuousViewOption(stmt->into->options, OPTION_MAX_AGE);
+	/* sw */
+	def = GetContinuousViewOption(stmt->into->options, OPTION_SLIDING_WINDOW);
 	if (def)
 	{
-		*has_max_age = true;
-		ApplyMaxAge(select, def);
+		*has_sw = true;
+		ApplySlidingWindow(select, def);
 		stmt->into->options = list_delete(stmt->into->options, def);
 	}
 

@@ -21,7 +21,7 @@ SELECT pipeline_get_worker_querydef('test_gs2');
 SELECT pipeline_get_combiner_querydef('test_gs2');
 SELECT pipeline_get_overlay_viewdef('test_gs2');
 
-CREATE CONTINUOUS VIEW test_gs3 WITH (max_age = '5 seconds') AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
+CREATE CONTINUOUS VIEW test_gs3 WITH (sw = '5 seconds') AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY GROUPING SETS (x, y, z);
 
 SELECT pipeline_get_worker_querydef('test_gs3');

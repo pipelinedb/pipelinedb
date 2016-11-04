@@ -13,7 +13,7 @@ CREATE INDEX test_ci_idx2 ON test_cont_index0 (x, avg);
 
 DROP CONTINUOUS VIEW test_cont_index0;
 
-CREATE CONTINUOUS VIEW test_cont_index1 WITH (max_age = '1 hour') AS SELECT x::integer, y::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x, y;
+CREATE CONTINUOUS VIEW test_cont_index1 WITH (sw = '1 hour') AS SELECT x::integer, y::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x, y;
 
 CREATE INDEX test_ci_idx0 ON test_cont_index1 (x);
 \d+ test_cont_index1_mrel

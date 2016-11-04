@@ -1415,11 +1415,11 @@ ProcessUtilitySlow(Node *parsetree,
 			case T_ViewStmt:	/* CREATE VIEW */
 				{
 					ViewStmt *vstmt = (ViewStmt *) parsetree;
-					DefElem *max_age = GetContinuousViewOption(vstmt->options, OPTION_MAX_AGE);
-					if (max_age)
+					DefElem *sw = GetContinuousViewOption(vstmt->options, OPTION_SLIDING_WINDOW);
+					if (sw)
 					{
-						ApplyMaxAge((SelectStmt *) vstmt->query, max_age);
-						vstmt->options = list_delete(vstmt->options, max_age);
+						ApplySlidingWindow((SelectStmt *) vstmt->query, sw);
+						vstmt->options = list_delete(vstmt->options, sw);
 					}
 
 					EventTriggerAlterTableStart(parsetree);

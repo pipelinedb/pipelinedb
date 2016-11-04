@@ -67,7 +67,7 @@ SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 DROP CONTINUOUS VIEW os1 CASCADE;
 
 -- Verify SW ticking into output streams
-CREATE CONTINUOUS VIEW os2 WITH (max_age = '10 seconds') AS
+CREATE CONTINUOUS VIEW os2 WITH (sw = '10 seconds') AS
 SELECT x::integer, COUNT(*)
 FROM os_stream GROUP BY x;
 
