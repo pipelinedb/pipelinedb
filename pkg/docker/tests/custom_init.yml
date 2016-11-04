@@ -1,0 +1,12 @@
+version: "2"
+services:
+    pipelinedb:
+        build: ../
+        image: pipelinedb/pipelinedb:latest
+        volumes:
+            - ./init/:/docker-entrypoint-init.d/
+        environment:
+            - PIPELINEDB_DATA=/custom/data/directory
+            - PIPELINEDB_DB=test_db
+            - PIPELINEDB_USER=test_user
+            - PIPELINEDB_PASSWORD=42
