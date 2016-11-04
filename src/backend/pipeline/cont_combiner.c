@@ -10,6 +10,7 @@
  *-------------------------------------------------------------------------
  */
 
+#include "../../include/pipeline/ttl_vacuum.h"
 #include "postgres.h"
 
 #include "access/htup_details.h"
@@ -42,7 +43,6 @@
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
-#include "pipeline/sw_vacuum.h"
 #include "storage/ipc.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"

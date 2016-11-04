@@ -82,7 +82,7 @@
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "pgstat.h"
-#include "pipeline/sw_vacuum.h"
+#include "pipeline/ttl_vacuum.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -2764,7 +2764,7 @@ relation_needs_vacanalyze(Oid relid,
 		/*
 		 * All expired tuples in a SW continuous view should be considered as *dead*.
 		 */
-		uint64_t swvactuples = NumSWExpiredTuples(relid);
+		uint64_t swvactuples = NumTTLExpiredTuples(relid);
 		reltuples = classForm->reltuples;
 		vactuples = tabentry->n_dead_tuples + swvactuples;
 		anltuples = tabentry->changes_since_analyze + swvactuples;

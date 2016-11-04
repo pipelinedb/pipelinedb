@@ -37,11 +37,12 @@ CATALOG(pipeline_query,4242)
 
 	/* valid for views only */
 	Oid			matrelid;
-	Oid  	    seqrelid;
-	Oid  	    pkidxid;
-	Oid 	    lookupidxid;
-	Oid			sw_attno;
-	int16 		step_factor;
+	Oid  	  seqrelid;
+	Oid  	  pkidxid;
+	Oid 	  lookupidxid;
+	int16	step_factor;
+	int32		ttl;
+	int16		ttl_attno;
 
 	/* valid for transforms only */
 	Oid			tgfn;
@@ -64,7 +65,7 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query             15
+#define Natts_pipeline_query             16
 #define Anum_pipeline_query_id           1
 #define Anum_pipeline_query_type         2
 #define Anum_pipeline_query_relid	     3
@@ -74,12 +75,13 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define Anum_pipeline_query_seqrelid     7
 #define Anum_pipeline_query_pkidxid      8
 #define Anum_pipeline_query_lookupidxid  9
-#define Anum_pipeline_query_sw_attno     10
-#define Anum_pipeline_query_step_factor  11
-#define Anum_pipeline_query_tgfn         12
-#define Anum_pipeline_query_tgnargs	     13
-#define Anum_pipeline_query_tgargs       14
-#define Anum_pipeline_query_query        15
+#define Anum_pipeline_query_step_factor  10
+#define Anum_pipeline_query_ttl  		 11
+#define Anum_pipeline_query_ttl_attno  	 12
+#define Anum_pipeline_query_tgfn         13
+#define Anum_pipeline_query_tgnargs	     14
+#define Anum_pipeline_query_tgargs       15
+#define Anum_pipeline_query_query        16
 
 #define PIPELINE_QUERY_VIEW 		'v'
 #define PIPELINE_QUERY_TRANSFORM 	't'

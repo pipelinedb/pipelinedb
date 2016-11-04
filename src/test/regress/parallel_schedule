@@ -119,7 +119,7 @@ test: pipeline_stream
 # ----------
 # Another group of parallel tests
 # ----------
-test: sw_vacuum
+test: sw_vacuum ttl_vacuum
 
 # ----------
 # Another group of parallel tests

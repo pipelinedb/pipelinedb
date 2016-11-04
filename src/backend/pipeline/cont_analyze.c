@@ -3345,6 +3345,70 @@ GetSWExpr(RangeVar *cv)
 	return view->whereClause;
 }
 
+/*
+ * GetTTLExpiredExpr
+ */
+Node *
+GetTTLExpiredExpr(RangeVar *cv)
+{
+	HeapTuple tup = GetPipelineQueryTuple(cv);
+	Form_pipeline_query row;
+	Relation rel;
+	TupleDesc desc;
+	TypeCast *interval;
+	int i;
+	char *colname = NULL;
+	ColumnRef *ttl_col;
+	A_Expr *rexpr;
+	FuncCall *clock_ts;
+	A_Expr *where;
+	StringInfoData buf;
+	A_Const *arg;
+	Value *v;
+
+	Assert(HeapTupleIsValid(tup));
+
+	row = (Form_pipeline_query) GETSTRUCT(tup);
+	rel = heap_open(row->matrelid, NoLock);
+	desc = RelationGetDescr(rel);
+
+	for (i = 0; i < desc->natts; i++)
+	{
+		if (desc->attrs[i]->attnum == row->ttl_attno)
+		{
+			colname = pstrdup(NameStr(desc->attrs[i]->attname));
+			break;
+		}
+	}
+
+	Assert(colname);
+	heap_close(rel, NoLock);
+
+	initStringInfo(&buf);
+	appendStringInfo(&buf, "%d seconds", row->ttl);
+
+	arg = makeNode(A_Const);
+	v = makeString(buf.data);
+	arg->val = *v;
+
+	interval = makeNode(TypeCast);
+	interval->arg = (Node *) arg;
+	interval->typeName = SystemTypeName("interval");
+
+	ttl_col = makeNode(ColumnRef);
+	ttl_col->fields = list_make1(makeString(colname));
+
+	clock_ts = makeNode(FuncCall);
+	clock_ts->funcname = list_make1(makeString(CLOCK_TIMESTAMP));
+
+	rexpr = makeA_Expr(AEXPR_OP, list_make1(makeString("-")), (Node *) clock_ts, (Node *) interval, -1);
+	where = makeA_Expr(AEXPR_OP, list_make1(makeString("<")), (Node *) ttl_col, (Node *) rexpr, -1);
+
+	ReleaseSysCache(tup);
+
+	return (Node *) where;
+}
+
 static Interval *
 parse_node_to_interval(Node *inode)
 {
@@ -3533,7 +3597,7 @@ CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var)
 	Assert(sw_cref);
 
 	/*
-	 * TODO(usmanm): For now we always allow ARRIVAL_TIMESTAMP because max_age hard codes it.
+	 * TODO(usmanm): For now we always allow ARRIVAL_TIMESTAMP because sw hard codes it.
 	 * Should fix it.
 	 */
 	if (pg_strcasecmp(colname, FigureColname((Node *) sw_cref)) != 0 &&
@@ -3572,12 +3636,21 @@ GetContinuousViewOption(List *options, char *name)
 }
 
 /*
- * ApplyMaxAge
+ * IntervalToEpoch
+ */
+int
+IntervalToEpoch(Interval *i)
+{
+	return (int) DatumGetFloat8(DirectFunctionCall2(interval_part, CStringGetTextDatum("epoch"), (Datum) i));
+}
+
+/*
+ * ApplySlidingWindow
  *
- * Transforms a max_age WITH parameter into a sliding-window WHERE predicate
+ * Transforms a sw WITH parameter into a sliding-window WHERE predicate
  */
 void
-ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
+ApplySlidingWindow(SelectStmt *stmt, DefElem *sw, int *ttl)
 {
 	A_Expr *where;
 	FuncCall *clock_ts;
@@ -3588,20 +3661,20 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	RangeVar *sw_cv;
 
 	if (has_clock_timestamp(stmt->whereClause, NULL))
-		elog(ERROR, "cannot specify both \"max_age\" and a sliding window expression in the WHERE clause");
+		elog(ERROR, "cannot specify both \"sw\" and a sliding window expression in the WHERE clause");
 
 	sw_cv = GetSWContinuousViewRangeVar(stmt->fromClause);
 	if (sw_cv == NULL && stmt->forContinuousView == false)
-		elog(ERROR, "\"max_age\" can only be specified when reading from a stream or continuous view");
+		elog(ERROR, "\"sw\" can only be specified when reading from a stream or continuous view");
 
-	if (!IsA(max_age->arg, String))
+	if (!IsA(sw->arg, String))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("\"max_age\" must be a valid interval string"),
-				 errhint("For example, ... WITH (max_age = '1 hour') ...")));
+				 errmsg("\"sw\" must be a valid interval string"),
+				 errhint("For example, ... WITH (sw = '1 hour') ...")));
 
 	arg = makeNode(A_Const);
-	arg->val = *((Value *) max_age->arg);
+	arg->val = *((Value *) sw->arg);
 
 	interval = makeNode(TypeCast);
 	interval->arg = (Node *) arg;
@@ -3609,7 +3682,7 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 
 	/*
 	 * If we are creating a view on top a continuous view, we must ensure that the step_size of the
-	 * continuous view is at most MIN_VIEW_MAX_AGE_FACTOR of the max_age being specified.
+	 * continuous view is at most MIN_VIEW_MAX_AGE_FACTOR of the sw being specified.
 	 */
 	if (sw_cv)
 	{
@@ -3632,8 +3705,8 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 		if (is_lt)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					errmsg("\"max_age\" value is too small"),
-					errhint("\"max_age\" must be at least twice as much as the step size of the base continuous view.")));
+					errmsg("\"sw\" value is too small"),
+					errhint("\"sw\" must be at least twice as much as the step size of the base continuous view.")));
 	}
 
 	arrival_ts = makeNode(ColumnRef);
@@ -3649,22 +3722,31 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	  stmt->whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(where, stmt->whereClause), -1);
 	else
 	  stmt->whereClause = (Node *) where;
+
+	if (ttl)
+	{
+		Interval *i = parse_node_to_interval((Node *) interval);
+		*ttl = IntervalToEpoch(i);
+	}
 }
 
 /*
  * ApplyStorageOptions
  */
 void
-ApplyStorageOptions(CreateContViewStmt *stmt)
+ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw, int *ttl, char **ttl_column)
 {
 	DefElem *def;
 	SelectStmt *select = (SelectStmt *) stmt->query;
 
-	/* max_age */
-	def = GetContinuousViewOption(stmt->into->options, OPTION_MAX_AGE);
+	Assert(has_sw);
+
+	/* sw */
+	def = GetContinuousViewOption(stmt->into->options, OPTION_SLIDING_WINDOW);
 	if (def)
 	{
-		ApplyMaxAge(select, def);
+		*has_sw = true;
+		ApplySlidingWindow(select, def, ttl);
 		stmt->into->options = list_delete(stmt->into->options, def);
 	}
 
@@ -3692,12 +3774,14 @@ ApplyStorageOptions(CreateContViewStmt *stmt)
 		select->swStepFactor = factor;
 		stmt->into->options = list_delete(stmt->into->options, def);
 	}
-	else
+	else if (*has_sw)
+	{
 		select->swStepFactor = sliding_window_step_factor;
+	}
 }
 
 AttrNumber
-FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid)
+FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid, int *ttl)
 {
 	ContAnalyzeContext context;
 	char *colname;
@@ -3717,6 +3801,59 @@ FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid)
 
 	rel = heap_open(matrelid, AccessShareLock);
 	desc = RelationGetDescr(rel);
+
+	for (i = 0; i < desc->natts; i++)
+	{
+		Form_pg_attribute attr = desc->attrs[i];
+		if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
+		{
+			attno = i + 1;
+			break;
+		}
+	}
+
+	heap_close(rel, AccessShareLock);
+
+	Assert(AttributeNumberIsValid(attno));
+
+	if (ttl)
+	{
+		Node *expr;
+		Interval *i;
+
+		find_clock_timestamp_expr(viewselect->whereClause, &context);
+		Assert(IsA(context.expr, A_Expr));
+
+		/* arrival_timestamp > clock_timestamp() - interval... */
+		expr = ((A_Expr *) context.expr)->rexpr;
+		Assert(IsA(expr, A_Expr));
+
+		expr = ((A_Expr *) expr)->rexpr;
+
+		i = parse_node_to_interval(expr);
+		*ttl = IntervalToEpoch(i);
+	}
+
+	return attno;
+}
+
+/*
+ * FindTTLColumnAttrNo
+ */
+AttrNumber
+FindTTLColumnAttrNo(char *colname, Oid matrelid)
+{
+	AttrNumber attno = InvalidAttrNumber;
+	Relation rel;
+	TupleDesc desc;
+	int i;
+
+	if (!colname)
+		return InvalidAttrNumber;
+
+	rel = heap_open(matrelid, AccessShareLock);
+	desc = RelationGetDescr(rel);
+
 
 	for (i = 0; i < desc->natts; i++)
 	{

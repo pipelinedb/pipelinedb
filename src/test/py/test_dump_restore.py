@@ -68,7 +68,7 @@ def test_sliding_windows(pipeline, clean_db):
   Verify that sliding window queries are properly dumped and restored
   """
   pipeline.create_stream('stream', x='int')
-  pipeline.execute('CREATE CONTINUOUS VIEW sw_v WITH (max_age = \'20 seconds\') AS SELECT count(*) FROM stream')
+  pipeline.execute('CREATE CONTINUOUS VIEW sw_v WITH (sw = \'20 seconds\') AS SELECT count(*) FROM stream')
   pipeline.insert('stream', ('x',), [(x,) for x in range(10)])
 
   result = pipeline.execute('SELECT count FROM sw_v').first()

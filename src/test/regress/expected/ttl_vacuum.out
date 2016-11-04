@@ -1,0 +1,101 @@
+-- Test errors/invalid inputs
+CREATE STREAM ttl_stream (x integer);
+-- Invalid interval
+CREATE CONTINUOUS VIEW ttl0 WITH (ttl='not an interval', ttl_column='ts')
+	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
+ERROR:  invalid input syntax for type interval: "not an interval"
+-- No ttl_column
+CREATE CONTINUOUS VIEW ttl0 WITH (ttl='4 days')
+	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
+ERROR:  ttl_column must be specified in conjunction with ttl
+-- No ttl
+CREATE CONTINUOUS VIEW ttl0 WITH (ttl_column='ts')
+	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
+ERROR:  ttl must be specified in conjunction with ttl_column
+-- Wrong types
+CREATE CONTINUOUS VIEW ttl0 WITH (ttl='1 day', ttl_column=1)
+	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
+ERROR:  ttl_column must be expressed as a column name
+CREATE CONTINUOUS VIEW ttl0 WITH (ttl=10000, ttl_column='ts')
+	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
+ERROR:  ttl must be expressed as an interval
+-- TTL column isn't a timestamp or timestamptz
+CREATE CONTINUOUS VIEW ttl0 WITH (ttl='1 day', ttl_column='x')
+	AS SELECT x FROM ttl_stream;
+ERROR:  ttl_column must refer to a timestamp or timestamptz column
+-- Can't specify TTLs with SWs
+CREATE CONTINUOUS VIEW ttl0 WITH (ttl='1 day', ttl_column='ts', sw='2 days')
+	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
+ERROR:  TTLs cannot be specified in conjunction with sliding windows
+CREATE CONTINUOUS VIEW ttl0 WITH (ttl='3 seconds', ttl_column='ts')
+	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
+CREATE CONTINUOUS VIEW ttl1 WITH (ttl='1 month', ttl_column='ts')
+	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
+SELECT ttl, ttl_attno FROM pipeline_query pq
+JOIN pg_class c ON c.oid = pq.relid WHERE c.relname IN ('ttl0', 'ttl1');
+   ttl   | ttl_attno 
+---------+-----------
+       3 |         1
+ 2592000 |         1
+(2 rows)
+
+INSERT INTO ttl_stream (x) VALUES (0);
+INSERT INTO ttl_stream (x) VALUES (1);
+INSERT INTO ttl_stream (x) VALUES (2);
+SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
+ x | $pk 
+---+-----
+ 0 |   1
+ 1 |   2
+ 2 |   3
+(3 rows)
+
+SELECT pg_sleep(3);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+VACUUM ttl0;
+SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
+ x | $pk 
+---+-----
+(0 rows)
+
+INSERT INTO ttl_stream (x) VALUES (0);
+INSERT INTO ttl_stream (x) VALUES (1);
+INSERT INTO ttl_stream (x) VALUES (2);
+SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
+ x | $pk 
+---+-----
+ 0 |   4
+ 1 |   5
+ 2 |   6
+(3 rows)
+
+SELECT pg_sleep(3);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+VACUUM FULL ttl0;
+SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
+ x | $pk 
+---+-----
+(0 rows)
+
+SELECT x, "$pk" FROM ttl1_mrel ORDER BY ts;
+ x | $pk 
+---+-----
+ 0 |   1
+ 1 |   2
+ 2 |   3
+ 0 |   4
+ 1 |   5
+ 2 |   6
+(6 rows)
+
+DROP CONTINUOUS VIEW ttl0;
+DROP CONTINUOUS VIEW ttl1;
+DROP STREAM ttl_stream;
