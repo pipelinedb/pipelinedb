@@ -913,8 +913,6 @@ ERROR:  "sw" must be a valid interval string
 HINT:  For example, ... WITH (sw = '1 hour') ...
 CREATE CONTINUOUS VIEW mainvalid WITH (sw = 'not an interval') AS SELECT COUNT(*) FROM create_cont_stream;
 ERROR:  invalid input syntax for type interval: "not an interval"
-LINE 1: CREATE CONTINUOUS VIEW mainvalid WITH (sw = 'not an interval...
-        ^
 CREATE CONTINUOUS VIEW mawhere WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
 WHERE x::integer = 1;
 \d+ mawhere;

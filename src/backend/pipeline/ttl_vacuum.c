@@ -35,13 +35,6 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 
-static Node *
-get_sw_vacuum_expr(RangeVar *rv)
-{
-	Node *expr = GetSWExpr(rv);
-	Assert(expr);
-	return (Node *) make_notclause((Expr *) expr);
-}
 
 static Node *
 get_ttl_vacuum_expr(RangeVar *rv)
@@ -104,11 +97,7 @@ DeleteTTLExpiredTuples(Oid relid)
 	 */
 	stmt = makeNode(DeleteStmt);
 	stmt->relation = matrel;
-
-	if (IsSWContView(cvname))
-		stmt->whereClause = get_sw_vacuum_expr(cvname);
-	else
-		stmt->whereClause = get_ttl_vacuum_expr(cvname);
+	stmt->whereClause = get_ttl_vacuum_expr(cvname);
 
 	Assert(stmt->whereClause);
 	PushActiveSnapshot(GetTransactionSnapshot());
@@ -210,11 +199,7 @@ NumTTLExpiredTuples(Oid relid)
 	resetStringInfo(&sql);
 
 	stmt = (SelectStmt *) linitial(parsetree_list);
-
-	if (IsSWContView(cvname))
-		stmt->whereClause = get_sw_vacuum_expr(cvname);
-	else
-		stmt->whereClause = get_ttl_vacuum_expr(cvname);
+	stmt->whereClause = get_ttl_vacuum_expr(cvname);
 
 	Assert(stmt->whereClause);
 	PushActiveSnapshot(GetTransactionSnapshot());

@@ -3384,7 +3384,6 @@ GetTTLExpiredExpr(RangeVar *cv)
 	Assert(colname);
 	heap_close(rel, NoLock);
 
-
 	initStringInfo(&buf);
 	appendStringInfo(&buf, "%d seconds", row->ttl);
 
@@ -3637,12 +3636,21 @@ GetContinuousViewOption(List *options, char *name)
 }
 
 /*
+ * IntervalToEpoch
+ */
+int
+IntervalToEpoch(Interval *i)
+{
+	return (int) DatumGetFloat8(DirectFunctionCall2(interval_part, CStringGetTextDatum("epoch"), (Datum) i));
+}
+
+/*
  * ApplySlidingWindow
  *
  * Transforms a sw WITH parameter into a sliding-window WHERE predicate
  */
 void
-ApplySlidingWindow(SelectStmt *stmt, DefElem *sw)
+ApplySlidingWindow(SelectStmt *stmt, DefElem *sw, int *ttl)
 {
 	A_Expr *where;
 	FuncCall *clock_ts;
@@ -3714,13 +3722,19 @@ ApplySlidingWindow(SelectStmt *stmt, DefElem *sw)
 	  stmt->whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(where, stmt->whereClause), -1);
 	else
 	  stmt->whereClause = (Node *) where;
+
+	if (ttl)
+	{
+		Interval *i = parse_node_to_interval((Node *) interval);
+		*ttl = IntervalToEpoch(i);
+	}
 }
 
 /*
  * ApplyStorageOptions
  */
 void
-ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw)
+ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw, int *ttl, char **ttl_column)
 {
 	DefElem *def;
 	SelectStmt *select = (SelectStmt *) stmt->query;
@@ -3732,7 +3746,7 @@ ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw)
 	if (def)
 	{
 		*has_sw = true;
-		ApplySlidingWindow(select, def);
+		ApplySlidingWindow(select, def, ttl);
 		stmt->into->options = list_delete(stmt->into->options, def);
 	}
 
@@ -3760,12 +3774,14 @@ ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw)
 		select->swStepFactor = factor;
 		stmt->into->options = list_delete(stmt->into->options, def);
 	}
-	else
+	else if (*has_sw)
+	{
 		select->swStepFactor = sliding_window_step_factor;
+	}
 }
 
 AttrNumber
-FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid)
+FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid, int *ttl)
 {
 	ContAnalyzeContext context;
 	char *colname;
@@ -3799,6 +3815,25 @@ FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid)
 	heap_close(rel, AccessShareLock);
 
 	Assert(AttributeNumberIsValid(attno));
+
+	if (ttl)
+	{
+		Node *expr;
+		Interval *i;
+
+		find_clock_timestamp_expr(viewselect->whereClause, &context);
+		Assert(IsA(context.expr, A_Expr));
+
+		/* arrival_timestamp > clock_timestamp() - interval... */
+		expr = ((A_Expr *) context.expr)->rexpr;
+		Assert(IsA(expr, A_Expr));
+
+		expr = ((A_Expr *) expr)->rexpr;
+
+		i = parse_node_to_interval(expr);
+		*ttl = IntervalToEpoch(i);
+	}
+
 	return attno;
 }
 

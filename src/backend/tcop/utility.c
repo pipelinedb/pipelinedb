@@ -1418,7 +1418,7 @@ ProcessUtilitySlow(Node *parsetree,
 					DefElem *sw = GetContinuousViewOption(vstmt->options, OPTION_SLIDING_WINDOW);
 					if (sw)
 					{
-						ApplySlidingWindow((SelectStmt *) vstmt->query, sw);
+						ApplySlidingWindow((SelectStmt *) vstmt->query, sw, NULL);
 						vstmt->options = list_delete(vstmt->options, sw);
 					}
 

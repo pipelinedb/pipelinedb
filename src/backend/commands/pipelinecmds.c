@@ -543,7 +543,7 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 					(Datum) strVal(e->arg), 0, (Datum) -1);
 
 			opt_ttl = e;
-			*ttl = (int) DatumGetFloat8(DirectFunctionCall2(interval_part, CStringGetTextDatum("epoch"), (Datum) ttli));
+			*ttl = IntervalToEpoch(ttli);
 		}
 		else if (pg_strcasecmp(e->defname, OPTION_TTL_COLUMN) == 0)
 		{
@@ -640,7 +640,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ColumnDef *new;
 	CreateStreamStmt *create_osrel;
 	Oid osrelid = InvalidOid;
-	AttrNumber sw_attno = InvalidAttrNumber;
 	bool has_sw = false;
 	int ttl = -1;
 	AttrNumber ttl_attno = InvalidAttrNumber;
@@ -669,8 +668,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	RewriteFromClause((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
-	/* Apply any CQ storage options like max_age, step_factor */
-	ApplyStorageOptions(stmt, &has_sw);
+	/* Apply any CQ storage options like sw, step_factor */
+	ApplyStorageOptions(stmt, &has_sw, &ttl, &ttl_column);
 
 	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
 
@@ -702,7 +701,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 					 errhint("Define an operator class using CREATE OPERATOR CLASS.")));
 		}
 	}
-
 
 	tableElts = create_coldefs_from_tlist(query);
 	extract_ttl_params(&stmt->into->options, tableElts, has_sw, &ttl, &ttl_column);
@@ -784,8 +782,24 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	else
 		seqrelid = InvalidOid;
 
-	sw_attno = FindSWTimeColumnAttrNo(viewselect, matrelid);
-	ttl_attno = FindTTLColumnAttrNo(ttl_column, matrelid);
+	if (ttl_column)
+	{
+		ttl_attno = FindTTLColumnAttrNo(ttl_column, matrelid);
+	}
+	else
+	{
+		ttl_attno = FindSWTimeColumnAttrNo(viewselect, matrelid, &ttl);
+		/*
+		 * has_sw will already be true if the sw storage parameter was set,
+		 * but a sliding-window can still be expressed as a WHERE predicate,
+		 * which will be detected here.
+		 */
+		if (AttributeNumberIsValid(ttl_attno))
+		{
+			has_sw = true;
+			cont_query->swStepFactor = cont_query->swStepFactor ? cont_query->swStepFactor : sliding_window_step_factor;
+		}
+	}
 
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog relation. We don't have relid for
@@ -795,7 +809,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, ttl, ttl_attno, sw_attno, false, &cvid);
+	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, ttl, ttl_attno, false, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
@@ -851,7 +865,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	if (IsBinaryUpgrade)
 		set_next_oids_for_lookup_index();
 	select = TransformSelectStmtForContProcess(matrel, copyObject(select), NULL, Combiner);
-	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, select, AttributeNumberIsValid(sw_attno));
+	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, select, has_sw);
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_pk_index();

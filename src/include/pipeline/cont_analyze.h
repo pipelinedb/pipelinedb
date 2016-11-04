@@ -84,7 +84,7 @@ extern Query *GetContViewQuery(RangeVar *rv);
 extern Query *GetContWorkerQuery(RangeVar *rv);
 extern Query *GetContCombinerQuery(RangeVar *rv);
 
-extern AttrNumber FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrel);
+extern AttrNumber FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrel, int *ttl);
 extern AttrNumber FindTTLColumnAttrNo(char *colname, Oid matrelid);
 extern Node *GetSWExpr(RangeVar *rv);
 extern Node *GetTTLExpiredExpr(RangeVar *cv);
@@ -94,8 +94,9 @@ extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
 extern Node *CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var);
 
 extern DefElem *GetContinuousViewOption(List *options, char *name);
-extern void ApplySlidingWindow(SelectStmt *stmt, DefElem *max_age);
-extern void ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_max_age);
+extern void ApplySlidingWindow(SelectStmt *stmt, DefElem *max_age, int *ttl);
+extern int IntervalToEpoch(Interval *i);
+extern void ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_max_age, int *ttl, char **ttl_column);
 
 /* Deparsing */
 extern char *deparse_query_def(Query *query);
