@@ -26,7 +26,6 @@ typedef enum
 {
 	Combiner = 0,
 	Worker,
-	AdhocVacuumer,
 	Scheduler /* unused */
 } ContQueryProcType;
 
@@ -59,7 +58,6 @@ struct ContQueryDatabaseMetadata
 
 	/* Number of entries is equal to continuous_query_num_combiners + continuous_query_num_workers. */
 	ContQueryProc *db_procs;
-	ContQueryProc adhoc_vacuumer;
 };
 
 typedef struct ContQueryRunParams

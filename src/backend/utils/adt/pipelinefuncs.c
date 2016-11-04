@@ -490,7 +490,7 @@ pipeline_views(PG_FUNCTION_ARGS)
 		char *relname;
 		Oid nsp;
 
-		if (row->type != PIPELINE_QUERY_VIEW || row->adhoc)
+		if (row->type != PIPELINE_QUERY_VIEW)
 			continue;
 
 		relname = get_rel_name(row->relid);
@@ -896,7 +896,7 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 		char *relname;
 		Oid nsp;
 
-		if (row->type != PIPELINE_QUERY_TRANSFORM || row->adhoc)
+		if (row->type != PIPELINE_QUERY_TRANSFORM)
 			continue;
 
 		relname = get_rel_name(row->relid);

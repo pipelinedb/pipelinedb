@@ -809,7 +809,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, ttl, ttl_attno, false, &cvid);
+	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, ttl, ttl_attno, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
@@ -1342,7 +1342,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	osrelid = address.objectId;
 	CommandCounterIncrement();
 
-	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, tgfnid, false, stmt->args);
+	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, tgfnid, stmt->args);
 	CommandCounterIncrement();
 
 	CreateForeignTable((CreateForeignTableStmt *) create_osrel, address.objectId);
