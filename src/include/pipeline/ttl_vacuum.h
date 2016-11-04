@@ -2,17 +2,16 @@
  *
  * sw_vacuum.h
  *
- *   Support for vacuuming discarded tuples for sliding window
- *   continuous views.
+ *   Support for vacuuming discarded tuples for continuous views with TTLs.
  *
- * Copyright (c) 2013-2015, PipelineDB
+ * Copyright (c) 2013-2016, PipelineDB
  *
  * src/include/pipeline/sw_vacuum.h
  *
  *-------------------------------------------------------------------------
  */
-#ifndef SW_VACUUM_H
-#define SW_VACUUM_H
+#ifndef TTL_VACUUM_H
+#define TTL_VACUUM_H
 
 #include "postgres.h"
 #include "catalog/pg_class.h"
@@ -20,7 +19,7 @@
 #include "pgstat.h"
 #include "utils/relcache.h"
 
-extern uint64_t NumSWExpiredTuples(Oid relid);
-extern void DeleteSWExpiredTuples(Oid relid);
+extern uint64_t NumTTLExpiredTuples(Oid relid);
+extern void DeleteTTLExpiredTuples(Oid relid);
 
-#endif /* SW_VACUUM_H */
+#endif /* TTL_VACUUM_H */

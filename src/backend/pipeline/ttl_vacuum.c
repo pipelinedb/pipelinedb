@@ -1,16 +1,17 @@
 /*-------------------------------------------------------------------------
  *
- * sw_vacuum.c
+ * ttl_vacuum.c
  *
- *   Support for vacuuming discarded tuples for sliding window
- *   continuous views.
+ *   Support for vacuuming discarded tuples for continuous views with TTLs.
  *
- * Copyright (c) 2013-2015, PipelineDB
+ * Copyright (c) 2013-2016, PipelineDB
  *
- * src/backend/pipeline/sw_vacuum.c
+ * src/backend/pipeline/ttl_vacuum.c
  *
  *-------------------------------------------------------------------------
  */
+#include "pipeline/ttl_vacuum.h"
+
 #include "postgres.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
@@ -25,7 +26,6 @@
 #include "parser/parse_expr.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cqmatrel.h"
-#include "pipeline/sw_vacuum.h"
 #include "storage/lmgr.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
@@ -35,20 +35,18 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 
+
 static Node *
-get_sw_vacuum_expr(RangeVar *rv)
+get_ttl_vacuum_expr(RangeVar *rv)
 {
-	Node *expr = GetSWExpr(rv);
-	Assert(expr);
-	return (Node *) make_notclause((Expr *) expr);
+	return GetTTLExpiredExpr(rv);
 }
 
-
 /*
- * DeleteSWExpiredTuples
+ * DeleteTTLExpiredTuples
  */
 void
-DeleteSWExpiredTuples(Oid relid)
+DeleteTTLExpiredTuples(Oid relid)
 {
 	char *relname;
 	char *namespace;
@@ -89,25 +87,26 @@ DeleteSWExpiredTuples(Oid relid)
 	if (!cvname)
 		goto end;
 
-	if (!IsSWContView(cvname))
+	if (!IsTTLContView(cvname))
 		goto end;
 
-	/* Now we're certain relid is for a SW continuous view's matrel */
+	/* Now we're certain relid is for a TTL continuous view's matrel */
 
 	/*
 	 * TODO(usmanm): Use lock contention free strategy here. See https://news.ycombinator.com/item?id=9018129
 	 */
 	stmt = makeNode(DeleteStmt);
 	stmt->relation = matrel;
-	stmt->whereClause = get_sw_vacuum_expr(cvname);
+	stmt->whereClause = get_ttl_vacuum_expr(cvname);
 
+	Assert(stmt->whereClause);
 	PushActiveSnapshot(GetTransactionSnapshot());
 
 	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DELETE",
 			NULL, 0);
 	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
 
-	portal = CreatePortal("__sw_delete_expired__", true, true);
+	portal = CreatePortal("__delete_expired__", true, true);
 	portal->visible = false;
 	PortalDefineQuery(portal,
 			NULL,
@@ -141,10 +140,10 @@ end:
 }
 
 /*
- * NumSWVacuumTuples
+ * NumTTLExpiredTuples
  */
 uint64_t
-NumSWExpiredTuples(Oid relid)
+NumTTLExpiredTuples(Oid relid)
 {
 	uint64_t count;
 	char *relname = get_rel_name(relid);
@@ -181,7 +180,7 @@ NumSWExpiredTuples(Oid relid)
 	if (!cvname)
 		return 0;
 
-	if (!IsSWContView(cvname))
+	if (!IsTTLContView(cvname))
 		return 0;
 
 	runctx = AllocSetContextCreate(CurrentMemoryContext,
@@ -200,15 +199,16 @@ NumSWExpiredTuples(Oid relid)
 	resetStringInfo(&sql);
 
 	stmt = (SelectStmt *) linitial(parsetree_list);
-	stmt->whereClause = get_sw_vacuum_expr(cvname);
+	stmt->whereClause = get_ttl_vacuum_expr(cvname);
 
+	Assert(stmt->whereClause);
 	PushActiveSnapshot(GetTransactionSnapshot());
 
 	querytree_list = pg_analyze_and_rewrite((Node *) stmt, sql.data,
 			NULL, 0);
 	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
 
-	portal = CreatePortal("__sw_num_expired__", true, true);
+	portal = CreatePortal("__num_expired__", true, true);
 	portal->visible = false;
 	PortalDefineQuery(portal,
 			NULL,

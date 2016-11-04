@@ -47,6 +47,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_func.h"
 #include "parser/parse_target.h"
+#include "parser/parse_type.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_plan.h"
@@ -517,6 +518,85 @@ check_relation_already_exists(RangeVar *rv)
 }
 
 /*
+ * extract_ttl_params
+ */
+static void
+extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **ttl_column)
+{
+	ListCell *lc;
+	DefElem *opt_ttl = NULL;
+	DefElem *opt_ttl_col = NULL;
+
+	Assert(ttl);
+
+	foreach(lc, *options)
+	{
+		DefElem *e = (DefElem *) lfirst(lc);
+		if (pg_strcasecmp(e->defname, OPTION_TTL) == 0)
+		{
+			Interval *ttli;
+
+			if (!IsA(e->arg, String))
+				elog(ERROR, "ttl must be expressed as an interval");
+
+			ttli = (Interval *) DirectFunctionCall3(interval_in,
+					(Datum) strVal(e->arg), 0, (Datum) -1);
+
+			opt_ttl = e;
+			*ttl = IntervalToEpoch(ttli);
+		}
+		else if (pg_strcasecmp(e->defname, OPTION_TTL_COLUMN) == 0)
+		{
+			Oid type;
+			ListCell *clc;
+
+			if (!IsA(e->arg, String))
+				elog(ERROR, "ttl_column must be expressed as a column name");
+
+			/*
+			 * Verify that ttl_column refers to a valid column. We'll figure out the attribute number later.
+			 */
+			foreach(clc, coldefs)
+			{
+				ColumnDef *def = (ColumnDef *) lfirst(clc);
+
+				type = typenameTypeId(NULL, def->typeName);
+
+				if (pg_strcasecmp(def->colname, strVal(e->arg)) == 0 &&
+						(type == TIMESTAMPOID || type == TIMESTAMPTZOID))
+				{
+					*ttl_column = strVal(e->arg);
+					break;
+				}
+			}
+
+			if (!*ttl_column)
+				elog(ERROR, "ttl_column must refer to a timestamp or timestamptz column");
+
+			opt_ttl_col = e;
+		}
+	}
+
+	if (!opt_ttl && !opt_ttl_col)
+		return;
+
+	if (has_sw && (opt_ttl || opt_ttl_col))
+		elog(ERROR, "TTLs cannot be specified in conjunction with sliding windows");
+
+	if (opt_ttl && !opt_ttl_col)
+		elog(ERROR, "ttl_column must be specified in conjunction with ttl");
+
+	if (opt_ttl_col && !opt_ttl)
+		elog(ERROR, "ttl must be specified in conjunction with ttl_column");
+
+	Assert(opt_ttl);
+	Assert(opt_ttl_col);
+
+	*options = list_delete(*options, opt_ttl);
+	*options = list_delete(*options, opt_ttl_col);
+}
+
+/*
  * ExecCreateContViewStmt
  *
  * Creates a table for backing the result of the continuous query,
@@ -560,7 +640,10 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ColumnDef *new;
 	CreateStreamStmt *create_osrel;
 	Oid osrelid = InvalidOid;
-	AttrNumber sw_attno = InvalidAttrNumber;
+	bool has_sw = false;
+	int ttl = -1;
+	AttrNumber ttl_attno = InvalidAttrNumber;
+	char *ttl_column = NULL;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -585,8 +668,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	RewriteFromClause((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
-	/* Apply any CQ storage options like max_age, step_factor */
-	ApplyStorageOptions(stmt);
+	/* Apply any CQ storage options like sw, step_factor */
+	ApplyStorageOptions(stmt, &has_sw, &ttl, &ttl_column);
 
 	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
 
@@ -620,6 +703,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	}
 
 	tableElts = create_coldefs_from_tlist(query);
+	extract_ttl_params(&stmt->into->options, tableElts, has_sw, &ttl, &ttl_column);
 
 	pk = GetContinuousViewOption(stmt->into->options, OPTION_PK);
 	if (pk)
@@ -698,7 +782,24 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	else
 		seqrelid = InvalidOid;
 
-	sw_attno = FindSWTimeColumnAttrNo(viewselect, matrelid);
+	if (ttl_column)
+	{
+		ttl_attno = FindTTLColumnAttrNo(ttl_column, matrelid);
+	}
+	else
+	{
+		ttl_attno = FindSWTimeColumnAttrNo(viewselect, matrelid, &ttl);
+		/*
+		 * has_sw will already be true if the sw storage parameter was set,
+		 * but a sliding-window can still be expressed as a WHERE predicate,
+		 * which will be detected here.
+		 */
+		if (AttributeNumberIsValid(ttl_attno))
+		{
+			has_sw = true;
+			cont_query->swStepFactor = cont_query->swStepFactor ? cont_query->swStepFactor : sliding_window_step_factor;
+		}
+	}
 
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog relation. We don't have relid for
@@ -708,7 +809,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, sw_attno, false, &cvid);
+	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, ttl, ttl_attno, false, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
@@ -764,7 +865,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	if (IsBinaryUpgrade)
 		set_next_oids_for_lookup_index();
 	select = TransformSelectStmtForContProcess(matrel, copyObject(select), NULL, Combiner);
-	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, select, AttributeNumberIsValid(sw_attno));
+	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, select, has_sw);
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_pk_index();

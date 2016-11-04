@@ -160,28 +160,28 @@ CREATE CONTINUOUS VIEW arrts AS SELECT x AS arrival_timestamp FROM create_cont_s
 CREATE CONTINUOUS VIEW arrts AS SELECT arrival_timestamp AS arrival_timestamp FROM create_cont_stream;
 DROP CONTINUOUS VIEW arrts;
 
--- WITH max_age
-CREATE CONTINUOUS VIEW ma0 WITH (max_age = '1 day') AS SELECT COUNT(*) FROM create_cont_stream;
+-- WITH sw
+CREATE CONTINUOUS VIEW ma0 WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream;
 \d+ ma0;
-CREATE VIEW ma1 WITH (max_age = '10 hours') AS SELECT COUNT(*) FROM ma0;
+CREATE VIEW ma1 WITH (sw = '10 hours') AS SELECT COUNT(*) FROM ma0;
 \d+ ma1;
 
--- max_age must be a valid interval string
-CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42) AS SELECT COUNT(*) FROM create_cont_stream;
-CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42.1) AS SELECT COUNT(*) FROM create_cont_stream;
-CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an interval') AS SELECT COUNT(*) FROM create_cont_stream;
+-- sw must be a valid interval string
+CREATE CONTINUOUS VIEW mainvalid WITH (sw = 42) AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW mainvalid WITH (sw = 42.1) AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW mainvalid WITH (sw = 'not an interval') AS SELECT COUNT(*) FROM create_cont_stream;
 
-CREATE CONTINUOUS VIEW mawhere WITH (max_age = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
+CREATE CONTINUOUS VIEW mawhere WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
 WHERE x::integer = 1;
 \d+ mawhere;
 
 DROP CONTINUOUS VIEW mawhere;
 
--- max_age can't be used on non-sliding window continuous views
-CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM withff;
+-- sw can't be used on non-sliding window continuous views
+CREATE VIEW manosw WITH (sw = '1 day') AS SELECT COUNT(*) FROM withff;
 
 -- or in conjunction with another sliding-window predicate
-CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
+CREATE VIEW manosw WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
 WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
 
 DROP STREAM create_cont_stream CASCADE;
