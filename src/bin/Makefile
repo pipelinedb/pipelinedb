@@ -30,8 +30,7 @@ SUBDIRS = \
 	pg_xlogdump \
 	pgbench \
 	psql \
-	scripts \
-	pipeline
+	scripts
 
 ifeq ($(PORTNAME), win32)
 SUBDIRS += pgevent

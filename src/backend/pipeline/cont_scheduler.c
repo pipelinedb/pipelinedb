@@ -152,9 +152,6 @@ GetContQueryProcName(ContQueryProc *proc)
 		case Worker:
 			snprintf(buf, NAMEDATALEN, "worker%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
 			break;
-		case AdhocVacuumer:
-			snprintf(buf, NAMEDATALEN, "adhoc vacuumer [%s]", NameStr(proc->db_meta->db_name));
-			break;
 		case Scheduler:
 			return pstrdup("scheduler");
 			break;
@@ -315,73 +312,6 @@ refresh_database_list(void)
 	DatabaseList = dbs;
 }
 
-static void
-purge_adhoc_query(ContQuery *view)
-{
-	DestReceiver *receiver = 0;
-	DropStmt *stmt = makeNode(DropStmt);
-	List *querytree_list;
-	Node *plan;
-	Portal portal;
-
-	if (!view)
-		return;
-
-	stmt->objects = list_make1(
-			list_make2(makeString(view->name->schemaname), makeString(view->name->relname)));
-	stmt->removeType = OBJECT_CONTVIEW;
-
-	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DROP",
-			NULL, 0);
-
-	plan = ((Query *) linitial(querytree_list))->utilityStmt;
-	PushActiveSnapshot(GetTransactionSnapshot());
-
-	portal = CreatePortal("__cleanup_cont_view__", true, true);
-	portal->visible = false;
-
-	PortalDefineQuery(portal,
-			NULL,
-			"DROP",
-			"DROP",
-			list_make1(plan),
-			NULL);
-
-	receiver = CreateDestReceiver(DestNone);
-
-	PortalStart(portal, NULL, 0, GetActiveSnapshot());
-
-	(void) PortalRun(portal,
-			FETCH_ALL,
-			true,
-			receiver,
-			receiver,
-			NULL);
-
-	(*receiver->rDestroy) (receiver);
-	PortalDrop(portal, false);
-	PopActiveSnapshot();
-}
-
-static void
-purge_adhoc_queries(void)
-{
-	int id;
-	Bitmapset *view_ids;
-
-	StartTransactionCommand();
-
-	view_ids = GetAdhocContinuousViewIds();
-
-	while ((id = bms_first_member(view_ids)) >= 0)
-	{
-		ContQuery *cv = GetContQueryForViewId(id);
-		purge_adhoc_query(cv);
-	}
-
-	CommitTransactionCommand();
-}
-
 static int
 set_nice_priority()
 {
@@ -426,10 +356,6 @@ cont_bgworker_main(Datum arg)
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
 			break;
-		case AdhocVacuumer:
-			/* Clean up and die. */
-			purge_adhoc_queries();
-			return;
 		default:
 			elog(ERROR, "unknown continuous process type: %d", proc->type);
 	}
@@ -589,16 +515,6 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 		success &= run_cont_bgworker(proc);
 	}
-
-	/* Start a single adhoc process for initial state clean up. */
-	proc = &db_meta->adhoc_vacuumer;
-	MemSet(proc, 0, sizeof(ContQueryProc));
-
-	proc->type = AdhocVacuumer;
-	proc->group_id = -1;
-	proc->db_meta = db_meta;
-
-	success &= run_cont_bgworker(proc);
 
 	SpinLockRelease(&db_meta->mutex);
 

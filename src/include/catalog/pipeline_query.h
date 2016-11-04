@@ -41,7 +41,6 @@ CATALOG(pipeline_query,4242)
 	Oid  	    pkidxid;
 	Oid 	    lookupidxid;
 	Oid			sw_attno;
-	bool 		adhoc;
 	int16 		step_factor;
 
 	/* valid for transforms only */
@@ -65,7 +64,7 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query             16
+#define Natts_pipeline_query             15
 #define Anum_pipeline_query_id           1
 #define Anum_pipeline_query_type         2
 #define Anum_pipeline_query_relid	     3
@@ -75,13 +74,12 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define Anum_pipeline_query_seqrelid     7
 #define Anum_pipeline_query_pkidxid      8
 #define Anum_pipeline_query_lookupidxid  9
-#define Anum_pipeline_query_sw_attno      10
-#define Anum_pipeline_query_adhoc        11
-#define Anum_pipeline_query_step_factor  12
-#define Anum_pipeline_query_tgfn         13
-#define Anum_pipeline_query_tgnargs	     14
-#define Anum_pipeline_query_tgargs       15
-#define Anum_pipeline_query_query        16
+#define Anum_pipeline_query_sw_attno     10
+#define Anum_pipeline_query_step_factor  11
+#define Anum_pipeline_query_tgfn         12
+#define Anum_pipeline_query_tgnargs	     13
+#define Anum_pipeline_query_tgargs       14
+#define Anum_pipeline_query_query        15
 
 #define PIPELINE_QUERY_VIEW 		'v'
 #define PIPELINE_QUERY_TRANSFORM 	't'

@@ -60,10 +60,10 @@ typedef struct ContQuery
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern void RemovePipelineQueryById(Oid oid);
 
-extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid seqrel, int sw_attno, bool adhoc, Oid *pq_id);
+extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid seqrel, int sw_attno, Oid *pq_id);
 extern void UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid);
 extern void UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid);
-extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid fnoid, bool adhoc, List *args);
+extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid fnoid, List *args);
 
 extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);
 extern bool IsAContinuousView(RangeVar *name);
@@ -76,7 +76,6 @@ extern RangeVar *GetCVNameFromMatRelName(RangeVar *matrel);
 
 extern Bitmapset *GetContinuousQueryIds(void);
 extern Bitmapset *GetContinuousViewIds(void);
-extern Bitmapset *GetAdhocContinuousViewIds(void);
 extern Bitmapset *GetContinuousTransformIds(void);
 
 extern Oid GetContQueryId(RangeVar *name);

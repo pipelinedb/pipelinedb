@@ -211,7 +211,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int sw_attno, bool adhoc, Oid *pq_id)
+DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int sw_attno, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -245,7 +245,6 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int sw
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(matrelid);
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(seqrelid);
 	values[Anum_pipeline_query_sw_attno - 1] = ObjectIdGetDatum(sw_attno);
-	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 
 	if (AttributeNumberIsValid(sw_attno))
 		values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(query->swStepFactor);
@@ -780,37 +779,6 @@ RemovePipelineQueryById(Oid oid)
 	heap_close(pipeline_query, NoLock);
 }
 
-/*
- * GetAdhocContinuousViewIds
- *
- * Returns a bitmapset of all the continuous views that
- * are marked as adhoc.
- */
-Bitmapset *
-GetAdhocContinuousViewIds(void)
-{
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
-	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
-	HeapTuple tup;
-	Bitmapset *result = NULL;
-
-	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
-	{
-		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		Oid id = row->id;
-
-		if (row->type != PIPELINE_QUERY_VIEW || !row->adhoc)
-			continue;
-
-		result = bms_add_member(result, id);
-	}
-
-	heap_endscan(scan_desc);
-	heap_close(pipeline_query, AccessShareLock);
-
-	return result;
-}
-
 Oid
 GetContQueryId(RangeVar *name)
 {
@@ -829,7 +797,7 @@ GetContQueryId(RangeVar *name)
 }
 
 Oid
-DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid fnoid, bool adhoc, List *args)
+DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid fnoid, List *args)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -915,7 +883,6 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid 
 	/* unused */
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(InvalidOid);
 	values[Anum_pipeline_query_sw_attno - 1] = ObjectIdGetDatum(InvalidOid);
-	values[Anum_pipeline_query_adhoc - 1] = BoolGetDatum(adhoc);
 	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(0);
 
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
