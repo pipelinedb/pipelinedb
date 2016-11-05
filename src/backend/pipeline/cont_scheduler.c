@@ -731,10 +731,10 @@ ContQuerySchedulerMain(int argc, char *argv[])
 	pzmq_purge_sock_files();
 	refresh_database_list();
 	if (list_length(DatabaseList) * (NUM_BG_WORKERS_PER_DB + 1) > max_worker_processes)
-		ereport(ERROR,
+		ereport(FATAL,
 				(errmsg("%d background worker slots are required but there are only %d available",
 						list_length(DatabaseList) * NUM_BG_WORKERS_PER_DB, max_worker_processes),
-				errhint("Each database requires %d background worker slots. Increase max_worker_processes to enable more capacity.", NUM_BG_WORKERS_PER_DB)));
+				errhint("Each database requires (continuous_query_num_combiners + continuous_query_num_workers) background worker slots. Increase max_worker_processes to enable more capacity.")));
 
 	/* Loop forever */
 	for (;;)
