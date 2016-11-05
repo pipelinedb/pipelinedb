@@ -1759,7 +1759,7 @@ get_min_tick_ms(void)
 	while ((id = bms_first_member(queries)) >= 0)
 	{
 		ContQuery *q = GetContQueryForViewId(id);
-		if (!q->is_sw)
+		if (!q || !q->is_sw)
 			continue;
 		Assert(q->sw_step_ms);
 		min_tick_ms = min_tick_ms ? Min(min_tick_ms, q->sw_step_ms) : q->sw_step_ms;
