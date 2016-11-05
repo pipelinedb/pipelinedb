@@ -5,3 +5,4 @@
 /analyze_new_cluster.sh
 /delete_old_cluster.sh
 test_binary_upgrade_data_dir/
+.cache
