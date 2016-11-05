@@ -14007,7 +14007,6 @@ unreserved_keyword:
       | STDIN
       | STDOUT
       | STORAGE
-      | STREAM
       | STRICT_P
       | STRIP_P
       | SYSID
@@ -14222,6 +14221,7 @@ reserved_keyword:
       | SELECT
       | SESSION_USER
       | SOME
+      | STREAM
       | SYMMETRIC
       | TABLE
       | THEN

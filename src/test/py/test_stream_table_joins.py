@@ -40,7 +40,7 @@ def test_join_with_aggs(pipeline, clean_db):
     sum(a0.col0::integer) AS s1,
     sum(a1.col0::integer) AS s2
     FROM a1 JOIN a0 ON a1.col1 = a0.col1
-    JOIN stream s ON s.col1::integer = a0.col1
+    JOIN stream0 s ON s.col1::integer = a0.col1
     """
     a0_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
     a1_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
@@ -55,9 +55,9 @@ def test_join_with_aggs(pipeline, clean_db):
     _insert(pipeline, 'a0', a0, 0.1)
     _insert(pipeline, 'a1', a1, 0.1)
 
-    pipeline.create_stream('stream', **a0_cols)
+    pipeline.create_stream('stream0', **a0_cols)
     pipeline.create_cv('test_agg_join', q)
-    _insert(pipeline, 'stream', s)
+    _insert(pipeline, 'stream0', s)
 
     expected = _join(a1, _join(a0, s, join_cols), join_cols)
     result = pipeline.execute('SELECT * FROM test_agg_join').first()
@@ -81,7 +81,7 @@ def test_join_with_where(pipeline, clean_db):
     """
     num_cols = 4
     q = """
-    SELECT s.col0::integer FROM stream s, wt WHERE s.col0 = 1 AND wt.col0 = 1
+    SELECT s.col0::integer FROM stream0 s, wt WHERE s.col0 = 1 AND wt.col0 = 1
     """
     wt_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
 
@@ -94,9 +94,9 @@ def test_join_with_where(pipeline, clean_db):
     _insert(pipeline, 'wt', wt, 0.1)
     _insert(pipeline, 'wt_s', s, 0.1)
 
-    pipeline.create_stream('stream', **wt_cols)
+    pipeline.create_stream('stream0', **wt_cols)
     pipeline.create_cv('test_join_where', q)
-    _insert(pipeline, 'stream', s)
+    _insert(pipeline, 'stream0', s)
 
     expected = pipeline.execute('SELECT COUNT(*) FROM wt_s s, wt WHERE s.col0 = 1 AND wt.col0 = 1').first()
     result = pipeline.execute('SELECT COUNT(*) FROM test_join_where').first()
@@ -121,12 +121,12 @@ def test_join_ordering(pipeline, clean_db):
     _insert(pipeline, 'ordering0', ordering0, 0.1)
     _insert(pipeline, 'ordering1', ordering1, 0.1)
 
-    pipeline.create_stream('stream', **ordering0_cols)
+    pipeline.create_stream('stream0', **ordering0_cols)
 
     # stream, table, table
     q0 = """
     SELECT s.col0::integer, ordering0.col3, ordering1.col4 FROM
-    stream s JOIN ordering0 ON s.col0 = ordering0.col0
+    stream0 s JOIN ordering0 ON s.col0 = ordering0.col0
     JOIN ordering1 ON ordering0.col0 = ordering1.col0
     """
     pipeline.create_cv('test_ordering0', q0)
@@ -134,7 +134,7 @@ def test_join_ordering(pipeline, clean_db):
     # table, stream, table
     q1 = """
     SELECT s.col0::integer, ordering0.col3, ordering1.col4 FROM
-    ordering0 JOIN stream s ON s.col0 = ordering0.col0
+    ordering0 JOIN stream0 s ON s.col0 = ordering0.col0
     JOIN ordering1 ON ordering0.col0 = ordering1.col0
     """
     pipeline.create_cv('test_ordering1', q1)
@@ -143,12 +143,12 @@ def test_join_ordering(pipeline, clean_db):
     q2 = """
     SELECT s.col0::integer, ordering0.col3, ordering1.col4 FROM
     ordering0 JOIN ordering1 ON ordering0.col0 = ordering1.col0
-    JOIN stream s ON s.col0 = ordering0.col0
+    JOIN stream0 s ON s.col0 = ordering0.col0
     """
     pipeline.create_cv('test_ordering2', q2)
 
     s = _generate_rows(num_cols, 64)
-    _insert(pipeline, 'stream', s)
+    _insert(pipeline, 'stream0', s)
 
     expected = _join(ordering0, _join(ordering1, s, join_cols), join_cols)
 
@@ -169,10 +169,10 @@ def test_join_across_batches(pipeline, clean_db):
     join_cols = [0]
     t_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
     pipeline.create_table('batch', **t_cols)
-    pipeline.create_stream('stream', **t_cols)
+    pipeline.create_stream('stream0', **t_cols)
 
     q = """
-    SELECT s.col0::integer FROM batch JOIN stream s ON batch.col0 = s.col0
+    SELECT s.col0::integer FROM batch JOIN stream0 s ON batch.col0 = s.col0
     """
 
     t = _generate_rows(num_cols, 64)
@@ -180,7 +180,7 @@ def test_join_across_batches(pipeline, clean_db):
 
     s = _generate_rows(num_cols, 64)
     pipeline.create_cv('test_batched_join', q)
-    _insert(pipeline, 'stream', s)
+    _insert(pipeline, 'stream0', s)
 
     expected = _join(t, s, join_cols)
     result = pipeline.execute('SELECT COUNT(*) FROM test_batched_join').first()
@@ -196,10 +196,10 @@ def test_incremental_join(pipeline, clean_db):
     join_cols = [0, 1]
     t_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
     pipeline.create_table('inc', **t_cols)
-    pipeline.create_stream('stream', **t_cols)
+    pipeline.create_stream('stream0', **t_cols)
 
     q = """
-    SELECT s.col0::integer FROM inc JOIN stream s ON inc.col0 = s.col0
+    SELECT s.col0::integer FROM inc JOIN stream0 s ON inc.col0 = s.col0
     AND inc.col1 = s.col1::integer
     """
     t = _generate_rows(num_cols, 64)
@@ -209,7 +209,7 @@ def test_incremental_join(pipeline, clean_db):
     s = []
     for n in range(2):
         row = _generate_row(num_cols)
-        _insert(pipeline, 'stream', [row])
+        _insert(pipeline, 'stream0', [row])
         s.append(row)
 
     expected = _join(t, s, join_cols)
@@ -228,10 +228,10 @@ def test_join_multiple_tables(pipeline, clean_db):
 
     pipeline.create_table('t0', **t0_cols)
     pipeline.create_table('t1', **t1_cols)
-    pipeline.create_stream('stream', **t0_cols)
+    pipeline.create_stream('stream0', **t0_cols)
     q = """
     SELECT s.col0::integer FROM t0 JOIN t1 ON t0.col0 = t1.col0
-    JOIN stream s ON t1.col0 = s.col0
+    JOIN stream0 s ON t1.col0 = s.col0
     """
 
     t0 = _generate_rows(num_cols, 64)
@@ -242,7 +242,7 @@ def test_join_multiple_tables(pipeline, clean_db):
     _insert(pipeline, 't0', t0, 0.1)
 
     pipeline.create_cv('test_join_multi', q)
-    _insert(pipeline, 'stream', s)
+    _insert(pipeline, 'stream0', s)
 
     expected = _join(t0, _join(s, t1, join_cols), join_cols)
     result = pipeline.execute('SELECT COUNT(*) FROM test_join_multi').first()
@@ -253,10 +253,10 @@ def test_indexed(pipeline, clean_db):
     """
     Verify that stream-table joins involving indexed tables work
     """
-    pipeline.create_stream('stream', x='int', y='int')
+    pipeline.create_stream('stream0', x='int', y='int')
     q = """
-    SELECT stream.x::integer, count(*) FROM stream
-    JOIN test_indexed_t t ON stream.x = t.x GROUP BY stream.x
+    SELECT stream0.x::integer, count(*) FROM stream0
+    JOIN test_indexed_t t ON stream0.x = t.x GROUP BY stream0.x
     """
     pipeline.create_table('test_indexed_t', x='integer', y='integer')
     pipeline.execute('CREATE INDEX idx ON test_indexed_t(x)')
@@ -268,7 +268,7 @@ def test_indexed(pipeline, clean_db):
     time.sleep(0.1)
 
     pipeline.create_cv('test_indexed', q)
-    pipeline.insert('stream', ('x', 'y'), s)
+    pipeline.insert('stream0', ('x', 'y'), s)
 
     expected = _join(s, t, [0])
     result = pipeline.execute('SELECT sum(count) FROM test_indexed').first()

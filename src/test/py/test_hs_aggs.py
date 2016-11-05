@@ -21,11 +21,11 @@ def _test_hs_agg(pipeline, agg):
     values = [random.randint(-100, 100) for n in range(1000)]
     h = random.choice(values) + random.randint(-10, 10)
 
-    pipeline.create_stream('stream', x='int')
-    cq = 'SELECT %s(%d) WITHIN GROUP (ORDER BY x::integer) FROM stream' % (agg, h)
+    pipeline.create_stream('stream0', x='int')
+    cq = 'SELECT %s(%d) WITHIN GROUP (ORDER BY x::integer) FROM stream0' % (agg, h)
     pipeline.create_cv('test_%s' % agg, cq)
 
-    pipeline.insert('stream', ('x',), [(v,) for v in values])
+    pipeline.insert('stream0', ('x',), [(v,) for v in values])
 
     result = pipeline.execute('SELECT %s FROM test_%s' % (agg, agg)).first()
 

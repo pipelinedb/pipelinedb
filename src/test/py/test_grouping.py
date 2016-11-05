@@ -6,9 +6,9 @@ def test_null_groups(pipeline, clean_db):
     """
     Verify that null group columns are considered equal
     """
-    pipeline.create_stream('stream', x='int', y='int', z='int')
+    pipeline.create_stream('s', x='int', y='int', z='int')
     q = """
-    SELECT x::integer, y::integer, z::integer, COUNT(*) FROM stream
+    SELECT x::integer, y::integer, z::integer, COUNT(*) FROM s
     GROUP BY x, y, z;
     """
     desc = ('x', 'y', 'z')
@@ -21,7 +21,7 @@ def test_null_groups(pipeline, clean_db):
         vals = map(lambda n: random.random() > 0.1 and n or None, vals)
         rows.append(tuple(vals))
 
-    pipeline.insert('stream', desc, rows)
+    pipeline.insert('s', desc, rows)
     pipeline.insert('test_null_groups_t', desc, rows)
 
     table_q = """

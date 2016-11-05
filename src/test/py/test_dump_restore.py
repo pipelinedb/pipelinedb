@@ -26,15 +26,15 @@ def test_dump(pipeline, clean_db):
   """
   Verify that we can dump and restore CVs using INSERT statements
   """
-  pipeline.create_stream('stream', x='int')
+  pipeline.create_stream('stream0', x='int')
   q = """
-  SELECT x::integer %% 100 AS g, avg(x) + 1 AS avg, count(*), count(distinct x) AS distincts FROM stream
+  SELECT x::integer %% 100 AS g, avg(x) + 1 AS avg, count(*), count(distinct x) AS distincts FROM stream0
   GROUP BY g
   """
   pipeline.create_cv('test_dump', q)
 
   rows = [(x,) for x in range(1000)]
-  pipeline.insert('stream', ('x',), rows)
+  pipeline.insert('stream0', ('x',), rows)
 
   def _verify():
     result = pipeline.execute('SELECT count(*) FROM test_dump').first()
@@ -55,7 +55,7 @@ def test_dump(pipeline, clean_db):
 
   # Now verify that we can successfully add more data to the restored CV
   rows = [(x,) for x in range(2000)]
-  pipeline.insert('stream', ('x',), rows)
+  pipeline.insert('stream0', ('x',), rows)
 
   result = pipeline.execute('SELECT sum(count) FROM test_dump').first()
   assert result['sum'] == 3000
@@ -67,9 +67,9 @@ def test_sliding_windows(pipeline, clean_db):
   """
   Verify that sliding window queries are properly dumped and restored
   """
-  pipeline.create_stream('stream', x='int')
-  pipeline.execute('CREATE CONTINUOUS VIEW sw_v WITH (sw = \'20 seconds\') AS SELECT count(*) FROM stream')
-  pipeline.insert('stream', ('x',), [(x,) for x in range(10)])
+  pipeline.create_stream('stream0', x='int')
+  pipeline.execute('CREATE CONTINUOUS VIEW sw_v WITH (sw = \'20 seconds\') AS SELECT count(*) FROM stream0')
+  pipeline.insert('stream0', ('x',), [(x,) for x in range(10)])
 
   result = pipeline.execute('SELECT count FROM sw_v').first()
   assert result['count'] == 10
@@ -95,10 +95,10 @@ def test_single_continuous_view(pipeline, clean_db):
   """
   Verify that specific continuous views can be dropped and restored
   """
-  pipeline.create_stream('stream', x='int')
-  pipeline.create_cv('test_single0', 'SELECT COUNT(*) FROM stream')
-  pipeline.create_cv('test_single1', 'SELECT COUNT(*) FROM stream')
-  pipeline.insert('stream', ('x',), [(x,) for x in range(10)])
+  pipeline.create_stream('stream0', x='int')
+  pipeline.create_cv('test_single0', 'SELECT COUNT(*) FROM stream0')
+  pipeline.create_cv('test_single1', 'SELECT COUNT(*) FROM stream0')
+  pipeline.insert('stream0', ('x',), [(x,) for x in range(10)])
 
   result = pipeline.execute('SELECT count FROM test_single0').first()
   assert result['count'] == 10
@@ -106,7 +106,7 @@ def test_single_continuous_view(pipeline, clean_db):
   result = pipeline.execute('SELECT count FROM test_single1').first()
   assert result['count'] == 10
 
-  _dump(pipeline, 'test_single.sql', tables=['test_single0', 'stream', 'test_single0_mrel'])
+  _dump(pipeline, 'test_single.sql', tables=['test_single0', 'stream0', 'test_single0_mrel'])
 
   pipeline.drop_all()
   _restore(pipeline, 'test_single.sql')
@@ -122,9 +122,9 @@ def test_dump_data_only(pipeline, clean_db):
   """
   Verify that it is possible to only dump continuous view data and not schemas
   """
-  pipeline.create_stream('stream', x='int')
-  pipeline.create_cv('test_data', 'SELECT COUNT(*) FROM stream')
-  pipeline.insert('stream', ('x',), [(x,) for x in range(10)])
+  pipeline.create_stream('stream0', x='int')
+  pipeline.create_cv('test_data', 'SELECT COUNT(*) FROM stream0')
+  pipeline.insert('stream0', ('x',), [(x,) for x in range(10)])
 
   result = pipeline.execute('SELECT count FROM test_data').first()
   assert result['count'] == 10
@@ -133,8 +133,8 @@ def test_dump_data_only(pipeline, clean_db):
 
   pipeline.drop_all()
 
-  pipeline.create_stream('stream', x='int')
-  pipeline.create_cv('test_data', 'SELECT COUNT(*) FROM stream')
+  pipeline.create_stream('stream0', x='int')
+  pipeline.create_cv('test_data', 'SELECT COUNT(*) FROM stream0')
   _restore(pipeline, 'test_data.sql')
 
   result = pipeline.execute('SELECT count FROM test_data').first()
@@ -144,9 +144,9 @@ def test_schema_only(pipeline, clean_db):
   """
   Verify that it is possible to only dump continuous view schemas and not data
   """
-  pipeline.create_stream('stream', x='int')
-  pipeline.create_cv('test_schema', 'SELECT COUNT(*) FROM stream')
-  pipeline.insert('stream', ('x',), [(x,) for x in range(10)])
+  pipeline.create_stream('stream0', x='int')
+  pipeline.create_cv('test_schema', 'SELECT COUNT(*) FROM stream0')
+  pipeline.insert('stream0', ('x',), [(x,) for x in range(10)])
 
   result = pipeline.execute('SELECT count FROM test_schema').first()
   assert result['count'] == 10

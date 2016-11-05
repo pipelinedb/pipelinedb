@@ -6,13 +6,13 @@ import time
 
 
 def test_userset_sync(pipeline, clean_db):
-  pipeline.create_stream('stream', x='int')
+  pipeline.create_stream('s', x='int')
   pipeline.create_cv('sync',
-                     'SELECT count(*) FROM stream WHERE x = 0')
+                     'SELECT count(*) FROM s WHERE x = 0')
   pipeline.create_cv('async',
-                     'SELECT count(*) FROM stream WHERE x = 1')
+                     'SELECT count(*) FROM s WHERE x = 1')
   pipeline.create_cv('delay',
-                     'SELECT x::int, pg_sleep(0.1) FROM stream')
+                     'SELECT x::int, pg_sleep(0.1) FROM s')
 
   NUM_INSERTS = 100
 
@@ -23,12 +23,12 @@ def test_userset_sync(pipeline, clean_db):
     cur.execute('SET stream_insert_level=sync_%s' %
                 ('commit' if sync else 'receive'))
     for i in xrange(NUM_INSERTS):
-      cur.execute('INSERT INTO stream (x) VALUES (%d)' % (0 if sync else 1))
+      cur.execute('INSERT INTO s (x) VALUES (%d)' % (0 if sync else 1))
       conn.commit()
     conn.close()
 
-  sync = threading.Thread(target=insert, args=(True, ))
-  async = threading.Thread(target=insert, args=(False, ))
+  sync = threading.Thread(target=insert, args=(True,))
+  async = threading.Thread(target=insert, args=(False,))
 
   start = time.time()
 

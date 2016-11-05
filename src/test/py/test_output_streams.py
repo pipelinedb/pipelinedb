@@ -59,11 +59,11 @@ def test_concurrent_sw_ticking(pipeline, clean_db):
   Verify that several concurrent sliding-window queries each
   having different windows tick correctly at different intervals.
   """
-  pipeline.create_stream('stream', x='int')
+  pipeline.create_stream('stream0', x='int')
   output_names = []
   for n in range(10):
     name = 'sw%d' % n
-    pipeline.create_cv(name, 'SELECT x::integer, count(*) FROM stream GROUP BY x', sw='%d seconds' % (n + 10))
+    pipeline.create_cv(name, 'SELECT x::integer, count(*) FROM stream0 GROUP BY x', sw='%d seconds' % (n + 10))
     output_name = name + '_output'
 
     q = """
@@ -76,7 +76,7 @@ def test_concurrent_sw_ticking(pipeline, clean_db):
   names = [r[0] for r in pipeline.execute('SELECT name FROM pipeline_views() ORDER BY name DESC')]
   assert len(names) == 2 * 10
 
-  pipeline.insert('stream', ('x',), [(x % 100,) for x in range(10000)])
+  pipeline.insert('stream0', ('x',), [(x % 100,) for x in range(10000)])
   time.sleep(25)
 
   for name in output_names:
@@ -98,8 +98,8 @@ def test_transforms(pipeline, clean_db):
   """
   Verify that continuous transforms work properly on output streams
   """
-  pipeline.create_stream('stream', x='int')
-  pipeline.create_cv('sw', 'SELECT x::integer, COUNT(*) FROM stream GROUP BY x',
+  pipeline.create_stream('stream0', x='int')
+  pipeline.create_cv('sw', 'SELECT x::integer, COUNT(*) FROM stream0 GROUP BY x',
                      sw='5 seconds')
 
   # Write a row to a stream each time a row goes out of window
@@ -108,7 +108,7 @@ def test_transforms(pipeline, clean_db):
   pipeline.create_ct('ct', q, "pipeline_stream_insert('oow_stream')")
   pipeline.create_cv('ct_recv', 'SELECT x FROM oow_stream')
 
-  pipeline.insert('stream', ('x',), [(x % 100,) for x in range(10000)])
+  pipeline.insert('stream0', ('x',), [(x % 100,) for x in range(10000)])
   time.sleep(7)
 
   rows = list(pipeline.execute('SELECT * FROM ct_recv'))

@@ -57,12 +57,12 @@ def test_binary_upgrade(pipeline, clean_db):
   """
   pipeline.execute(create_fn)
 
-  pipeline.create_stream('stream', z='text')
+  pipeline.create_stream('stream0', z='text')
 
   # Create some transforms
   for n in range(8):
     name = 'ct_%d' % n
-    pipeline.create_ct(name, 'SELECT z::text FROM stream', 'tg_fn()')
+    pipeline.create_ct(name, 'SELECT z::text FROM stream0', 'tg_fn()')
 
   time.sleep(10)
 

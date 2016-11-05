@@ -6,12 +6,12 @@ import time
 
 
 def test_combine_table(pipeline, clean_db):
-  pipeline.create_stream('stream', x='int')
+  pipeline.create_stream('s', x='int')
   pipeline.create_cv('combine_table',
                      'SELECT x::int, COUNT(*) FROM stream GROUP BY x')
 
   values = [(i,) for i in xrange(1000)]
-  pipeline.insert('stream', ('x',), values)
+  pipeline.insert('s', ('x',), values)
 
   pipeline.execute('SELECT * INTO tmprel FROM combine_table_mrel')
 
@@ -20,7 +20,7 @@ def test_combine_table(pipeline, clean_db):
 
   def insert():
     while not stop:
-      pipeline.insert('stream', ('x',), values)
+      pipeline.insert('s', ('x',), values)
       ninserts[0] += 1
       time.sleep(0.01)
 
@@ -50,10 +50,10 @@ def test_combine_table(pipeline, clean_db):
 
 
 def test_combine_table_no_groups(pipeline, clean_db):
-  pipeline.create_stream('stream', x='int')
-  pipeline.create_cv('no_groups', 'SELECT COUNT(*) FROM stream')
+  pipeline.create_stream('s', x='int')
+  pipeline.create_cv('no_groups', 'SELECT COUNT(*) FROM s')
   values = [(i,) for i in xrange(1000)]
-  pipeline.insert('stream', ('x',), values)
+  pipeline.insert('s', ('x',), values)
 
   pipeline.execute('SELECT * INTO tmprel FROM no_groups_mrel')
   pipeline.execute("SELECT pipeline_combine_table('no_groups', 'tmprel')")
@@ -66,15 +66,15 @@ def test_combine_table_no_groups(pipeline, clean_db):
 
 def test_pipeline_flush(pipeline, clean_db):
   pipeline.execute('SET stream_insert_level=async')
-  pipeline.create_stream('stream', x='int')
-  pipeline.create_cv('flush', 'SELECT x, pg_sleep(0.01) FROM stream')
+  pipeline.create_stream('s', x='int')
+  pipeline.create_cv('flush', 'SELECT x, pg_sleep(0.01) FROM s')
 
   values = [(i,) for i in xrange(1000)]
   start = time.time()
 
   # This will take 0.01 * 1000 = 10s to process but return immediately since
   # inserts are async and values will fit in one batch.
-  pipeline.insert('stream', ('x',), values)
+  pipeline.insert('s', ('x',), values)
   insert_end = time.time()
 
   pipeline.execute('SELECT pipeline_flush()')
