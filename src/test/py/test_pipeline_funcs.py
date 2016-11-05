@@ -8,7 +8,7 @@ import time
 def test_combine_table(pipeline, clean_db):
   pipeline.create_stream('s', x='int')
   pipeline.create_cv('combine_table',
-                     'SELECT x::int, COUNT(*) FROM stream GROUP BY x')
+                     'SELECT x::int, COUNT(*) FROM s GROUP BY x')
 
   values = [(i,) for i in xrange(1000)]
   pipeline.insert('s', ('x',), values)

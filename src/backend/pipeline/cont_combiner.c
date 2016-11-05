@@ -469,7 +469,7 @@ select_existing_groups(ContQueryCombinerState *state)
 					 NULL);
 	PortalDrop(portal, false);
 
-	heap_close(matrel, RowShareLock);
+	heap_close(matrel, NoLock);
 
 finish:
 	batchgroups = hash_groups(state);
