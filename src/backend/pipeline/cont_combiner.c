@@ -1982,6 +1982,8 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 		elog(ERROR, "schema of \"%s\" does not match the schema of \"%s\"",
 				text_to_cstring(relname), quote_qualified_identifier(cv->matrel->schemaname, cv->matrel->relname));
 
+	heap_close(matrel, ExclusiveLock);
+
 	exec.cxt = CurrentMemoryContext;
 	exec.curr_query_id = cv->id;
 	exec.all_queries = bms_make_singleton(cv->id);
@@ -2049,7 +2051,6 @@ pipeline_combine_table(PG_FUNCTION_ARGS)
 	heap_endscan(scan);
 
 	heap_close(srcrel, NoLock);
-	heap_close(matrel, NoLock);
 
 	PG_RETURN_BOOL(true);
 }
