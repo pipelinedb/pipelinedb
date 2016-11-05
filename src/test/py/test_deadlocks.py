@@ -11,19 +11,19 @@ def test_concurrent_add_drop(pipeline, clean_db):
   Adds and drops continuous views while inserting into a stream so that we
   see add/drops in the middle of transactions in workers and combiners.
   """
-  pipeline.create_stream('stream', x='int')
-  q = 'SELECT x::int,  COUNT(*) FROM stream GROUP BY x'
+  pipeline.create_stream('stream0', x='int')
+  q = 'SELECT x::int,  COUNT(*) FROM stream0 GROUP BY x'
   pipeline.create_cv('cv', q)
 
   stop = False
-  values = map(lambda x: (x, ), xrange(10000))
+  values = map(lambda x: (x,), xrange(10000))
   num_inserted = [0]
 
   def insert():
     while True:
       if stop:
         break
-      pipeline.insert('stream', ['x'], values)
+      pipeline.insert('stream0', ['x'], values)
       num_inserted[0] += 1
 
   def add_drop(prefix):
@@ -58,8 +58,8 @@ def test_concurrent_add_drop(pipeline, clean_db):
     conn.close()
 
   threads = [threading.Thread(target=insert),
-             threading.Thread(target=add_drop, args=('cv1_', )),
-             threading.Thread(target=add_drop, args=('cv2_', ))]
+             threading.Thread(target=add_drop, args=('cv1_',)),
+             threading.Thread(target=add_drop, args=('cv2_',))]
 
   map(lambda t: t.start(), threads)
 

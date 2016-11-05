@@ -29,16 +29,16 @@ CREATE CONTINUOUS VIEW cqanalyze23 AS SELECT col FROM analyze_cont_stream;
 
 -- Verify that NOTICEs are properly shown when joining on unindexed columns
 CREATE TABLE tnotice (x integer, y integer);
-CREATE CONTINUOUS VIEW cvnotice0 AS SELECT stream.x FROM analyze_cont_stream AS stream JOIN tnotice ON stream.x = tnotice.x;
+CREATE CONTINUOUS VIEW cvnotice0 AS SELECT s.x FROM analyze_cont_stream AS s JOIN tnotice ON s.x = tnotice.x;
 
 -- tnotice.x NOTICE should only be shown once
-CREATE CONTINUOUS VIEW cvnotice1 AS SELECT stream.x FROM analyze_cont_stream AS stream JOIN tnotice ON stream.x = tnotice.x AND stream.x = tnotice.x;
-CREATE CONTINUOUS VIEW cvnotice2 AS SELECT stream.x FROM analyze_cont_stream AS stream, tnotice WHERE tnotice.x = stream.x;
+CREATE CONTINUOUS VIEW cvnotice1 AS SELECT s.x FROM analyze_cont_stream AS s JOIN tnotice ON s.x = tnotice.x AND s.x = tnotice.x;
+CREATE CONTINUOUS VIEW cvnotice2 AS SELECT s.x FROM analyze_cont_stream AS s, tnotice WHERE tnotice.x = s.x;
 
 CREATE INDEX tnotice_idx ON tnotice(x);
 
 -- No NOTICE should be given now that an index exists
-CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x FROM analyze_cont_stream AS stream, tnotice WHERE tnotice.x = stream.x;
+CREATE CONTINUOUS VIEW cvnotice3 AS SELECT s.x FROM analyze_cont_stream AS s, tnotice WHERE tnotice.x = s.x;
 
 DROP TABLE tnotice CASCADE;
 
@@ -109,7 +109,7 @@ CREATE STREAM analyze_cont_stream (id int, ts timestamp, sid int, x int);
 -- Regression
 CREATE CONTINUOUS VIEW cqregress1 AS SELECT id + avg(id) FROM analyze_cont_stream GROUP BY id;
 CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM analyze_cont_stream;
-CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::integer FROM analyze_cont_stream;
+CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream0.sid::integer FROM analyze_cont_stream;
 CREATE CONTINUOUS VIEW cqregress4 AS SELECT x FROM cqregress4;
 CREATE CONTINUOUS VIEW cqregress5 AS SELECT count(DISTINCT x), percentile_cont(0.1) WITHIN GROUP (ORDER BY x) FROM analyze_cont_stream;
 \d+ cqregress5

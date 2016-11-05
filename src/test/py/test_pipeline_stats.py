@@ -10,25 +10,25 @@ def test_cq_stats(pipeline, clean_db):
     num_combiners = int(pipeline.execute('SHOW continuous_query_num_combiners').first()['continuous_query_num_combiners'])
     num_workers = int(pipeline.execute('SHOW continuous_query_num_workers').first()['continuous_query_num_workers'])
 
-    pipeline.create_stream('stream', x='int')
+    pipeline.create_stream('stream0', x='int')
 
     # 10 rows
-    q = 'SELECT x::integer %% 10 AS g, COUNT(*) FROM stream GROUP BY g'
+    q = 'SELECT x::integer %% 10 AS g, COUNT(*) FROM stream0 GROUP BY g'
     pipeline.create_cv('test_10_groups', q)
 
     # 1 row
-    q = 'SELECT COUNT(*) FROM stream'
+    q = 'SELECT COUNT(*) FROM stream0'
     pipeline.create_cv('test_1_group', q)
 
     values = [(random.randint(1, 1024),) for n in range(1000)]
 
-    pipeline.insert('stream', ('x',), values)
-    pipeline.insert('stream', ('x',), values)
+    pipeline.insert('stream0', ('x',), values)
+    pipeline.insert('stream0', ('x',), values)
     # Sleep a little so that the next time we insert, we force the stats collector.
     # Must be >= 1s since that's the force interval.
     time.sleep(1)
-    pipeline.insert('stream', ('x',), values)
-    pipeline.insert('stream', ('x',), values)
+    pipeline.insert('stream0', ('x',), values)
+    pipeline.insert('stream0', ('x',), values)
 
     # Sleep a little so the stats collector flushes all the stats.
     time.sleep(1)

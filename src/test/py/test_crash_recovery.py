@@ -58,31 +58,31 @@ def test_simple_crash(pipeline, clean_db):
   """
   Test simple worker and combiner crashes.
   """
-  pipeline.create_stream('stream', x='int')
-  q = 'SELECT COUNT(*) FROM stream'
+  pipeline.create_stream('stream0', x='int')
+  q = 'SELECT COUNT(*) FROM stream0'
   pipeline.create_cv('test_simple_crash', q)
 
-  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+  pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
   result = pipeline.execute('SELECT * FROM test_simple_crash').first()
   assert result['count'] == 2
 
   # This batch can potentially get lost.
-  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+  pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
   assert kill_worker()
 
-  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+  pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
   result = pipeline.execute('SELECT * FROM test_simple_crash').first()
   assert result['count'] in [4, 6]
 
   # This batch can potentially get lost.
-  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+  pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
   assert kill_combiner()
 
-  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+  pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
   result = pipeline.execute('SELECT * FROM test_simple_crash').first()
   assert result['count'] in [6, 8, 10]
@@ -95,17 +95,17 @@ def test_concurrent_crash(pipeline, clean_db):
   """
   Test simple worker and combiner crashes.
   """
-  pipeline.create_stream('stream', x='int')
-  q = 'SELECT COUNT(*) FROM stream'
+  pipeline.create_stream('stream0', x='int')
+  q = 'SELECT COUNT(*) FROM stream0'
   pipeline.create_cv('test_concurrent_crash', q)
   batch_size = 25000
 
   desc = [0, 0, False]
-  vals = [(1, )] * batch_size
+  vals = [(1,)] * batch_size
 
   def insert():
     while True:
-        pipeline.insert('stream', ['x'], vals)
+        pipeline.insert('stream0', ['x'], vals)
         desc[1] += batch_size
         if desc[2]:
           break
@@ -140,11 +140,11 @@ def test_concurrent_crash(pipeline, clean_db):
 
 
 def test_restart_recovery(pipeline, clean_db):
-  pipeline.create_stream('stream', x='int')
-  q = 'SELECT COUNT(*) FROM stream'
+  pipeline.create_stream('stream0', x='int')
+  q = 'SELECT COUNT(*) FROM stream0'
   pipeline.create_cv('test_restart_recovery', q)
 
-  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+  pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
   assert result['count'] == 2
@@ -160,7 +160,7 @@ def test_restart_recovery(pipeline, clean_db):
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
   assert result['count'] == 2
 
-  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+  pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
   assert result['count'] == 4

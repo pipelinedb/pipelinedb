@@ -41,16 +41,16 @@ LINE 1: CREATE CONTINUOUS VIEW cqanalyze23 AS SELECT col FROM analyz...
                                                      ^
 -- Verify that NOTICEs are properly shown when joining on unindexed columns
 CREATE TABLE tnotice (x integer, y integer);
-CREATE CONTINUOUS VIEW cvnotice0 AS SELECT stream.x FROM analyze_cont_stream AS stream JOIN tnotice ON stream.x = tnotice.x;
+CREATE CONTINUOUS VIEW cvnotice0 AS SELECT s.x FROM analyze_cont_stream AS s JOIN tnotice ON s.x = tnotice.x;
 NOTICE:  consider creating an index on tnotice.x for improved stream-table join performance
 -- tnotice.x NOTICE should only be shown once
-CREATE CONTINUOUS VIEW cvnotice1 AS SELECT stream.x FROM analyze_cont_stream AS stream JOIN tnotice ON stream.x = tnotice.x AND stream.x = tnotice.x;
+CREATE CONTINUOUS VIEW cvnotice1 AS SELECT s.x FROM analyze_cont_stream AS s JOIN tnotice ON s.x = tnotice.x AND s.x = tnotice.x;
 NOTICE:  consider creating an index on tnotice.x for improved stream-table join performance
-CREATE CONTINUOUS VIEW cvnotice2 AS SELECT stream.x FROM analyze_cont_stream AS stream, tnotice WHERE tnotice.x = stream.x;
+CREATE CONTINUOUS VIEW cvnotice2 AS SELECT s.x FROM analyze_cont_stream AS s, tnotice WHERE tnotice.x = s.x;
 NOTICE:  consider creating an index on tnotice.x for improved stream-table join performance
 CREATE INDEX tnotice_idx ON tnotice(x);
 -- No NOTICE should be given now that an index exists
-CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x FROM analyze_cont_stream AS stream, tnotice WHERE tnotice.x = stream.x;
+CREATE CONTINUOUS VIEW cvnotice3 AS SELECT s.x FROM analyze_cont_stream AS s, tnotice WHERE tnotice.x = s.x;
 DROP TABLE tnotice CASCADE;
 NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to continuous view cvnotice0
@@ -167,9 +167,9 @@ CREATE STREAM analyze_cont_stream (id int, ts timestamp, sid int, x int);
 -- Regression
 CREATE CONTINUOUS VIEW cqregress1 AS SELECT id + avg(id) FROM analyze_cont_stream GROUP BY id;
 CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM analyze_cont_stream;
-CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::integer FROM analyze_cont_stream;
-ERROR:  missing FROM-clause entry for table "stream"
-LINE 1: CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::inte...
+CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream0.sid::integer FROM analyze_cont_stream;
+ERROR:  missing FROM-clause entry for table "stream0"
+LINE 1: CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream0.sid::int...
                                                     ^
 CREATE CONTINUOUS VIEW cqregress4 AS SELECT x FROM cqregress4;
 ERROR:  relation "cqregress4" does not exist

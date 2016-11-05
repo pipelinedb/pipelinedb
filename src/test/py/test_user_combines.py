@@ -8,10 +8,10 @@ def test_simple_aggs(pipeline, clean_db):
     """
     q = """
     SELECT x::integer %% 10 AS k,
-    avg(x), sum(y::float8), count(*) FROM stream GROUP BY k;
+    avg(x), sum(y::float8), count(*) FROM stream0 GROUP BY k;
     """
     desc = ('x', 'y')
-    pipeline.create_stream('stream', x='int', y='float8')
+    pipeline.create_stream('stream0', x='int', y='float8')
     pipeline.create_cv('test_simple_aggs', q)
     pipeline.create_table('test_simple_aggs_t', x='integer', y='float8')
 
@@ -20,7 +20,7 @@ def test_simple_aggs(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random())
         rows.append(row)
 
-    pipeline.insert('stream', desc, rows)
+    pipeline.insert('stream0', desc, rows)
     pipeline.insert('test_simple_aggs_t', desc, rows)
 
     table_result = list(pipeline.execute('SELECT avg(x), sum(y::float8), count(*) FROM test_simple_aggs_t'))
@@ -39,10 +39,10 @@ def test_object_aggs(pipeline, clean_db):
     """
     q = """
     SELECT x::integer %% 10 AS k,
-    json_agg(x), json_object_agg(x, y::float8), string_agg(s::text, \' :: \')FROM stream GROUP BY k;
+    json_agg(x), json_object_agg(x, y::float8), string_agg(s::text, \' :: \')FROM stream0 GROUP BY k;
     """
     desc = ('x', 'y', 's')
-    pipeline.create_stream('stream', x='int', y='float8', s='text')
+    pipeline.create_stream('stream0', x='int', y='float8', s='text')
     pipeline.create_cv('test_object_aggs', q)
     pipeline.create_table('test_object_aggs_t', x='integer', y='float8', s='text')
 
@@ -51,7 +51,7 @@ def test_object_aggs(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random(), str(n) * random.randint(1, 8))
         rows.append(row)
 
-    pipeline.insert('stream', desc, rows)
+    pipeline.insert('stream0', desc, rows)
     pipeline.insert('test_object_aggs_t', desc, rows)
 
     tq = """
@@ -77,10 +77,10 @@ def test_stats_aggs(pipeline, clean_db):
     """
     q = """
     SELECT x::integer %% 10 AS k,
-    regr_sxx(x, y::float8), stddev(x) FROM stream GROUP BY k;
+    regr_sxx(x, y::float8), stddev(x) FROM stream0 GROUP BY k;
     """
     desc = ('x', 'y')
-    pipeline.create_stream('stream', x='int', y='float8')
+    pipeline.create_stream('stream0', x='int', y='float8')
     pipeline.create_cv('test_stats_aggs', q)
     pipeline.create_table('test_stats_aggs_t', x='integer', y='float8')
 
@@ -89,7 +89,7 @@ def test_stats_aggs(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random())
         rows.append(row)
 
-    pipeline.insert('stream', desc, rows)
+    pipeline.insert('stream0', desc, rows)
     pipeline.insert('test_stats_aggs_t', desc, rows)
 
     tq = """
@@ -116,10 +116,10 @@ def test_hypothetical_set_aggs(pipeline, clean_db):
     SELECT x::integer %% 10 AS k,
     rank(256) WITHIN GROUP (ORDER BY x),
     dense_rank(256) WITHIN GROUP (ORDER BY x)
-    FROM stream GROUP BY k
+    FROM stream0 GROUP BY k
     """
     desc = ('x', 'y')
-    pipeline.create_stream('stream', x='int', y='float8')
+    pipeline.create_stream('stream0', x='int', y='float8')
     pipeline.create_cv('test_hs_aggs', q)
     pipeline.create_table('test_hs_aggs_t', x='integer', y='float8')
 
@@ -128,7 +128,7 @@ def test_hypothetical_set_aggs(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random())
         rows.append(row)
 
-    pipeline.insert('stream', desc, rows)
+    pipeline.insert('stream0', desc, rows)
     pipeline.insert('test_hs_aggs_t', desc, rows)
 
     # Note that the CQ will use the HLL variant of dense_rank,
@@ -154,10 +154,10 @@ def test_hll_distinct(pipeline, clean_db):
     Verify that combines work on HLL COUNT DISTINCT queries
     """
     q = """
-    SELECT x::integer %% 10 AS k, COUNT(DISTINCT x) AS count FROM stream GROUP BY k
+    SELECT x::integer %% 10 AS k, COUNT(DISTINCT x) AS count FROM stream0 GROUP BY k
     """
     desc = ('x', 'y')
-    pipeline.create_stream('stream', x='int', y='float8')
+    pipeline.create_stream('stream0', x='int', y='float8')
     pipeline.create_cv('test_hll_distinct', q)
     pipeline.create_table('test_hll_distinct_t', x='integer', y='float8')
 
@@ -166,7 +166,7 @@ def test_hll_distinct(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random())
         rows.append(row)
 
-    pipeline.insert('stream', desc, rows)
+    pipeline.insert('stream0', desc, rows)
     pipeline.insert('test_hll_distinct_t', desc, rows)
 
     # Note that the CQ will use the HLL variant of COUNT DISTINCT,
@@ -191,10 +191,10 @@ def test_windowed_combine(pipeline, clean_db):
     Verify that windowed queries with combines work
     """
     q = """
-    SELECT x::integer, avg(y::integer) FROM stream GROUP BY x
+    SELECT x::integer, avg(y::integer) FROM stream0 GROUP BY x
     """
     desc = ('x', 'y')
-    pipeline.create_stream('stream', x='int', y='float8')
+    pipeline.create_stream('stream0', x='int', y='float8')
     pipeline.create_cv('test_windowed_combine', q)
     pipeline.create_table('test_windowed_combine_t', x='integer', y='integer')
 
@@ -203,7 +203,7 @@ def test_windowed_combine(pipeline, clean_db):
         row = (n, n)
         rows.append(row)
 
-    pipeline.insert('stream', desc, rows)
+    pipeline.insert('stream0', desc, rows)
     pipeline.insert('test_windowed_combine_t', desc, rows)
 
     table = """
@@ -229,10 +229,10 @@ def test_combine_in_view(pipeline, clean_db):
     Verify that combines in views on top of continuous views work
     """
     q = """
-    SELECT x::integer, avg(y::integer) FROM stream GROUP BY x
+    SELECT x::integer, avg(y::integer) FROM stream0 GROUP BY x
     """
     desc = ('x', 'y')
-    pipeline.create_stream('stream', x='int', y='float8')
+    pipeline.create_stream('stream0', x='int', y='float8')
     pipeline.create_cv('test_combine_view', q)
     pipeline.execute('CREATE VIEW v AS SELECT combine(avg) FROM test_combine_view')
 
@@ -240,7 +240,7 @@ def test_combine_in_view(pipeline, clean_db):
     for n in range(10000):
         rows.append((random.randint(1, 256), random.randint(1, 1024)))
 
-    pipeline.insert('stream', desc, rows)
+    pipeline.insert('stream0', desc, rows)
 
     view = list(pipeline.execute('SELECT * FROM v'))
 

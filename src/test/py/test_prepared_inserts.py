@@ -10,15 +10,15 @@ def test_prepared_inserts(pipeline, clean_db):
   """
   Verify that we can PREPARE and EXECUTE an INSERT statement
   """
-  pipeline.create_stream('stream', x='int', y='float8')
+  pipeline.create_stream('stream0', x='int', y='float8')
 
   conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
   db = conn.cursor()
-  db.execute('CREATE CONTINUOUS VIEW test_prepared0 AS SELECT x::integer, COUNT(*), sum(y::integer) FROM stream GROUP BY x')
-  db.execute('CREATE CONTINUOUS VIEW test_prepared1 AS SELECT x::integer, COUNT(*), sum(y::float8) FROM stream GROUP BY x')
+  db.execute('CREATE CONTINUOUS VIEW test_prepared0 AS SELECT x::integer, COUNT(*), sum(y::integer) FROM stream0 GROUP BY x')
+  db.execute('CREATE CONTINUOUS VIEW test_prepared1 AS SELECT x::integer, COUNT(*), sum(y::float8) FROM stream0 GROUP BY x')
   conn.commit()
 
-  db.execute('PREPARE ins AS INSERT INTO stream (x, y) VALUES ($1, $2)')
+  db.execute('PREPARE ins AS INSERT INTO stream0 (x, y) VALUES ($1, $2)')
 
   for n in range(10000):
     row = (n % 100, random.random())
