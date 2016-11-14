@@ -414,6 +414,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	ipc_tuple_reader_reset();
 
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
+	MemoryContextResetAndDeleteChildren(ErrorContext);
 	exec->exec_queries = NULL;
 	exec->batch = NULL;
 

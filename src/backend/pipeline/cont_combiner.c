@@ -1448,6 +1448,7 @@ sync_all(ContExecutor *cont_exec)
 
 		MemSet(state->group_hashes, 0, state->group_hashes_len);
 		MemoryContextResetAndDeleteChildren(state->combine_cxt);
+		MemoryContextResetAndDeleteChildren(ErrorContext);
 	}
 }
 
