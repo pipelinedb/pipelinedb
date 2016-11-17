@@ -275,6 +275,26 @@ cleanup_worker_state(ContQueryWorkerState *state)
 	PG_END_TRY();
 }
 
+static bool
+should_exec_query(ContQuery *query)
+{
+	Bitmapset *readers;
+
+	if (query->type != CONT_TRANSFORM)
+		return true;
+
+	/*
+	 * If it's a transform with no trigger function and no output stream readers,
+	 * it's a noop
+	 */
+	readers = GetAllStreamReaders(query->osrelid);
+
+	if (!OidIsValid(query->tgfn) && bms_is_empty(readers))
+		return false;
+
+	return true;
+}
+
 void
 ContinuousQueryWorkerMain(void)
 {
@@ -300,7 +320,6 @@ ContinuousQueryWorkerMain(void)
 			volatile EState *estate = NULL;
 			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->curr_query;
 			volatile bool error = false;
-			bool execute_plan = true;
 
 			PG_TRY();
 			{
@@ -315,19 +334,7 @@ ContinuousQueryWorkerMain(void)
 
 				CurrentResourceOwner = WorkerResOwner;
 
-				if (state->base.query->type == CONT_TRANSFORM)
-				{
-					/*
-					 * If it's a transform with no trigger function and no output stream readers,
-					 * it's a noop
-					 */
-					Bitmapset *readers = GetAllStreamReaders(state->base.query->osrelid);
-
-					if (!OidIsValid(state->base.query->tgfn) && bms_is_empty(readers))
-						execute_plan = false;
-				}
-
-				if (execute_plan)
+				if (should_exec_query(state->base.query))
 				{
 					/* initialize the plan for execution within this xact */
 					init_plan(state->query_desc);
