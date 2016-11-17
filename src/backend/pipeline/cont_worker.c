@@ -300,6 +300,7 @@ ContinuousQueryWorkerMain(void)
 			volatile EState *estate = NULL;
 			ContQueryWorkerState *state = (ContQueryWorkerState *) cont_exec->curr_query;
 			volatile bool error = false;
+			bool execute_plan = true;
 
 			PG_TRY();
 			{
@@ -314,18 +315,33 @@ ContinuousQueryWorkerMain(void)
 
 				CurrentResourceOwner = WorkerResOwner;
 
-				/* initialize the plan for execution within this xact */
-				init_plan(state->query_desc);
-				set_cont_executor(state->query_desc->planstate, cont_exec);
+				if (state->base.query->type == CONT_TRANSFORM)
+				{
+					/*
+					 * If it's a transform with no trigger function and no output stream readers,
+					 * it's a noop
+					 */
+					Bitmapset *readers = GetAllStreamReaders(state->base.query->osrelid);
 
-				ExecutePlan((EState *) estate, state->query_desc->planstate, state->query_desc->operation,
-						true, 0, ForwardScanDirection, state->dest);
+					if (!OidIsValid(state->base.query->tgfn) && bms_is_empty(readers))
+						execute_plan = false;
+				}
 
-				/* free up any resources used by this plan before committing */
-				end_plan(state->query_desc);
+				if (execute_plan)
+				{
+					/* initialize the plan for execution within this xact */
+					init_plan(state->query_desc);
+					set_cont_executor(state->query_desc->planstate, cont_exec);
 
-				/* flush tuples to combiners or transform out functions */
-				flush_tuples(state);
+					ExecutePlan((EState *) estate, state->query_desc->planstate, state->query_desc->operation,
+							true, 0, ForwardScanDirection, state->dest);
+
+					/* free up any resources used by this plan before committing */
+					end_plan(state->query_desc);
+
+					/* flush tuples to combiners or transform out functions */
+					flush_tuples(state);
+				}
 
 				UnsetEStateSnapshot((EState *) estate);
 				state->query_desc->estate = NULL;
