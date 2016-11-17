@@ -4335,7 +4335,7 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 				hash_ctl.entrysize = sizeof(PgStat_StatStreamEntry);
 				hash_ctl.hash = oid_hash;
 				dbentry->streams = hash_create("Per-stream", 256, &hash_ctl,
-									   HASH_ELEM | HASH_FUNCTION);
+									   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
 
 				/*
 				 * If requested, read the data from the database-specific
