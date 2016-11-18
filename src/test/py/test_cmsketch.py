@@ -49,3 +49,22 @@ def test_cmsketch_type(pipeline, clean_db):
                                  'FROM test_cmsketch_type ORDER BY x'))
   assert result[0] == (1000, 0)
   assert result[1] == (500, 500)
+
+def test_cksketch_frequency(pipeline, clean_db):
+  pipeline.create_stream('test_cmsketch_stream', k='int', x='int')
+
+  q = """
+  SELECT k::integer, cmsketch_agg(x::int) AS c FROM test_cmsketch_stream
+  GROUP BY k
+  """
+  desc = ('k', 'x')
+  pipeline.create_cv('test_cmsketch_frequency', q)
+
+  rows = [(n, None) for n in range(100)]
+  pipeline.insert('test_cmsketch_stream', desc, rows)
+
+  result = list(pipeline.execute(
+    'SELECT cmsketch_frequency(c, null) AS x FROM test_cmsketch_frequency ORDER BY k').fetchall())
+  assert len(result) == 100
+  for row in result:
+    assert row[0] == 0
