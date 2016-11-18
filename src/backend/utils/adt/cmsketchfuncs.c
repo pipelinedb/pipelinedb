@@ -194,7 +194,7 @@ Datum
 cmsketch_frequency(PG_FUNCTION_ARGS)
 {
 	CountMinSketch *cms;
-	Datum elem = PG_GETARG_DATUM(1);
+	Datum elem;
 	uint32_t count = 0;
 	Oid	val_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	TypeCacheEntry *typ;
@@ -205,8 +205,10 @@ cmsketch_frequency(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("could not determine input data type")));
 
-	if (PG_ARGISNULL(0))
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_INT32(count);
+
+	elem = PG_GETARG_DATUM(1);
 
 	cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 	typ = lookup_type_cache(val_type, 0);
