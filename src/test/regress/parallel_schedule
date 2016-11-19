@@ -186,3 +186,9 @@ test: cont_pk
 # Another group of parallel tests
 # ----------
 test: pipeline_stats
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: bloom fss tdigest hll cmsketch
+

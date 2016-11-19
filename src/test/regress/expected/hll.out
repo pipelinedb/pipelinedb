@@ -1,0 +1,42 @@
+SELECT hll_cardinality(hll_agg('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' || x)) FROM generate_series(1, 100) AS x;
+ hll_cardinality 
+-----------------
+             100
+(1 row)
+
+SELECT hll_cardinality(hll_agg(x * 1.1)) FROM generate_series(1, 100) AS x;
+ hll_cardinality 
+-----------------
+              99
+(1 row)
+
+SELECT hll_cardinality(hll_agg(x::numeric)) FROM generate_series(1, 100) AS x;
+ hll_cardinality 
+-----------------
+             100
+(1 row)
+
+SELECT hll_cardinality(hll_agg(x)) FROM generate_series(1, 10000) AS x;
+ hll_cardinality 
+-----------------
+            9976
+(1 row)
+
+SELECT hll_cardinality(hll_agg(x)) FROM generate_series(1, 100000) AS x;
+ hll_cardinality 
+-----------------
+           99703
+(1 row)
+
+SELECT hll_cardinality(hll_union_agg(hll_agg)) FROM (SELECT hll_agg(x) FROM generate_series(1, 100) AS x UNION ALL SELECT hll_agg(x) FROM generate_series(101, 200) AS x) _;
+ hll_cardinality 
+-----------------
+             200
+(1 row)
+
+SELECT hll_cardinality(hll_union_agg(hll_agg)) FROM (SELECT hll_agg(x) FROM generate_series(1, 100) AS x UNION ALL SELECT hll_agg(x) FROM generate_series(101, 2000) AS x) _;
+ hll_cardinality 
+-----------------
+            1996
+(1 row)
+
