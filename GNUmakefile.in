@@ -67,7 +67,6 @@ check check-tests installcheck installcheck-parallel installcheck-tests:
 	$(MAKE) -C src/test/regress $@
 	$(MAKE) -C src/test/isolation $@
 	$(MAKE) -C src/test/py $@
-	$(MAKE) -C src/test/unit $@
 
 $(call recurse,check-world,src/test src/pl src/interfaces/ecpg contrib src/bin,check)
 
