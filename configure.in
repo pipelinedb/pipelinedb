@@ -2205,10 +2205,6 @@ AC_CONFIG_HEADERS([src/interfaces/ecpg/include/ecpg_config.h],
 
 AC_OUTPUT
 
-# check
-AC_HAVE_LIBRARY(check, [],
-               [AC_MSG_ERROR([check library not found (http://check.sourceforge.net/web/install.html)])])
-
 # ZMQ
 AC_HAVE_LIBRARY(zmq, [],
                [AC_MSG_ERROR([zmq library not found (http://zeromq.org/intro:get-the-software)])])
