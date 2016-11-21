@@ -9,7 +9,7 @@ apt-get install -y wget nano
 # install dependencies
 apt-get install -y sudo
 
-wget -q http://www.pipelinedb.com/download/0.9.5/debian8
+wget -q http://www.pipelinedb.com/download/0.9.6/debian8
 
 dpkg --install debian8
 
