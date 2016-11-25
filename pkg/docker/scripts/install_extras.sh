@@ -6,16 +6,18 @@ PGVER=9.5.0
 
 # install some build tools, we'll remove these later
 apt-get install -y unzip gcc make g++ git zlib1g-dev libssl-dev
-apt-get install -y protobuf-c-compiler libprotobuf-c0-dev
+apt-get install -y protobuf-c-compiler libprotobuf-c0-dev python
 
 cd /usr/local/src/
 
 # First get librdkafka and pipelinedb kafka
-git clone -b 0.8 https://github.com/edenhill/librdkafka.git
+git clone https://github.com/edenhill/librdkafka.git
 git clone https://github.com/pipelinedb/pipeline_kafka.git
 cd librdkafka
+git checkout 0.9.1
+
 # Install it into /usr/lib/
-./configure --prefix=/usr
+./configure --CFLAGS="-fPIC" --prefix=/usr
 make
 make install
 # Install kafka extension
