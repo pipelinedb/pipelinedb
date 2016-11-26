@@ -21,7 +21,6 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
-#include "catalog/pipeline_tstate_fn.h"
 #include "libpq/libpq.h"
 #include "miscadmin.h"
 #include "catalog/namespace.h"
@@ -261,9 +260,6 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int tt
 	result = simple_heap_insert(pipeline_query, tup);
 	CatalogUpdateIndexes(pipeline_query, tup);
 	CommandCounterIncrement();
-
-	/* Create transition state entry */
-	CreateTStateEntry(id);
 
 	heap_freetuple(tup);
 
@@ -773,18 +769,12 @@ RemovePipelineQueryById(Oid oid)
 {
 	Relation pipeline_query;
 	HeapTuple tuple;
-	Form_pipeline_query row;
 
 	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	tuple = SearchSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "cache lookup failed for continuous view with OID %u", oid);
-
-	row = (Form_pipeline_query) GETSTRUCT(tuple);
-
-	/* Remove transition state entry */
-	RemoveTStateEntry(row->id);
 
 	simple_heap_delete(pipeline_query, &tuple->t_self);
 

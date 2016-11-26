@@ -70,6 +70,5 @@ DECLARE_TOAST(pg_shseclabel, 4060, 4061);
 /* pipeline catalogs */
 DECLARE_TOAST(pipeline_query, 7000, 7001);
 DECLARE_TOAST(pipeline_stream, 7002, 7003);
-DECLARE_TOAST(pipeline_tstate, 7004, 7005);
 
 #endif   /* TOASTING_H */

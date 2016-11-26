@@ -21,7 +21,6 @@
 #include "executor/nodeBitmapHeapscan.h"
 #include "executor/nodeBitmapIndexscan.h"
 #include "executor/nodeBitmapOr.h"
-#include "executor/nodeContinuousUnique.h"
 #include "executor/nodeCtescan.h"
 #include "executor/nodeCustom.h"
 #include "executor/nodeForeignscan.h"
@@ -244,10 +243,6 @@ ExecReScan(PlanState *node)
 
 		case T_UniqueState:
 			ExecReScanUnique((UniqueState *) node);
-			break;
-
-		case T_ContinuousUniqueState:
-			ExecReScanContinuousUnique((ContinuousUniqueState *) node);
 			break;
 
 		case T_HashState:
