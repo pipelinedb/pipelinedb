@@ -458,11 +458,9 @@ typedef enum NodeTag
 	 */
 	T_TuplestoreScan = 5000,
 	T_PhysicalGroupLookup,
-	T_ContinuousUnique,
 
 	T_TuplestoreScanState,
 	T_PhysicalGroupLookupState,
-	T_ContinuousUniqueState,
 
 	T_PhysicalGroupLookupPath,
 

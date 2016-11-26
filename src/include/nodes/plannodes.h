@@ -805,12 +805,6 @@ typedef struct Unique
 	Oid		   *uniqOperators;	/* equality operators to compare with */
 } Unique;
 
-typedef struct ContinuousUnique
-{
-	Unique unique;
-	Oid cq_id;
-} ContinuousUnique;
-
 /* ----------------
  *		hash build node
  *

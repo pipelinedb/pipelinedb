@@ -81,28 +81,6 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 
 	plan->isContinuous = true;
 
-	/*
-	 * Unique plans get transformed into ContinuousUnique plans for
-	 * continuous query processes.
-	 */
-	if (IsA(plan->planTree, Unique))
-	{
-		ContinuousUnique *cunique = makeNode(ContinuousUnique);
-		Unique *unique = (Unique *) plan->planTree;
-
-		memcpy((char *) &cunique->unique, (char *) unique, sizeof(Unique));
-
-		cunique->cq_id = id;
-		cunique->unique.plan.type = T_ContinuousUnique;
-
-		plan->planTree = (Plan *) cunique;
-
-		Assert(IsA(plan->planTree->lefttree, Sort));
-
-		/* Strip out the sort since its not needed */
-		plan->planTree->lefttree = plan->planTree->lefttree->lefttree;
-	}
-
 	return plan;
 }
 
@@ -227,7 +205,7 @@ SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
 
 	if (IsA(plan->planTree, TuplestoreScan))
 		scan = (TuplestoreScan *) plan->planTree;
-	else if ((IsA(plan->planTree, Agg) || IsA(plan->planTree, ContinuousUnique)) &&
+	else if ((IsA(plan->planTree, Agg)) &&
 			IsA(plan->planTree->lefttree, TuplestoreScan))
 		scan = (TuplestoreScan *) plan->planTree->lefttree;
 	else if (IsA(plan->planTree, Agg) &&
