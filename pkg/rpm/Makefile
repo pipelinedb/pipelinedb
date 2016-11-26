@@ -6,7 +6,7 @@ BINDIR = $(PREFIX)/bin
 LIBDIR = $(PREFIX)/lib
 BUILDROOT = $(CURDIR)/build
 
-all: spec conf pipeline pipeline-debug clean-libs set-perms
+all: spec conf pipeline pipeline_kafka pipeline-debug clean-libs set-perms
 	mkdir $(CURDIR)/build
 	cp -p -r --parents $(PREFIX) $(BUILDROOT)
 	rpmbuild -bb -vv \
@@ -29,6 +29,11 @@ pipeline:
 	(cd $(TOP_BUILDDIR) && ./configure PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo CFLAGS="$(PIPELINE_CFLAGS)" --disable-rpath $(PIPELINE_WITH_OPTIONS))
 	(cd $(TOP_BUILDDIR) && $(MAKE))
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
+
+pipeline_kafka:
+	git clone https://github.com/pipelinedb/pipeline_kafka.git
+	(cd pipeline_kafka && ./configure && make PG_CONFIG=$(BINDIR)/pg_config install)
+	rm -rf pipeline_kafka
 
 pipeline-debug:
 	(cd $(TOP_BUILDDIR) && make clean)
