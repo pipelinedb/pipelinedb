@@ -25,6 +25,11 @@ pipeline:
 	(cd $(TOP_BUILDDIR) && $(MAKE))
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
 
+pipeline_kafka:
+	git clone https://github.com/pipelinedb/pipeline_kafka.git
+	(cd pipeline_kafka && ./configure && make PG_CONFIG=$(BINDIR)/pg_config install)
+	rm -rf pipeline_kafka
+
 pipeline-debug:
 	(cd $(TOP_BUILDDIR) && make clean)
 	(cd $(TOP_BUILDDIR) && ./configure CFLAGS="-g -O0 -DDUMP_CORE" PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo --enable-cassert --disable-rpath $(PIPELINE_WITH_OPTIONS))
@@ -38,7 +43,7 @@ move-installation:
 	mkdir $(DESTDIR)
 	cp -r --parents $(PREFIX) $(DESTDIR)
 
-binary-arch: conf pipeline pipeline-debug clean-libs move-installation
+binary-arch: conf pipeline pipeline_kafka pipeline-debug clean-libs move-installation
 	dh_installdocs -a
 	dh_installchangelogs -a
 	dh_strip --exclude=pipelinedb

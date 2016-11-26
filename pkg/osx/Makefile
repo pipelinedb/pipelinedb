@@ -8,7 +8,7 @@ BINDIR = $(PREFIX)/bin
 LIBDIR = $(PREFIX)/lib
 SCRIPTS = $(CURDIR)/scripts
 
-all: conf pipeline pipeline-debug
+all: conf pipeline pipeline_kafka pipeline-debug
 	find $(PREFIX) -type d -exec chmod 775 {} +
 	find $(PREFIX)/share/pipelinedb/timezone -type f -exec chmod 644 {} +
 	mkdir $(SCRIPTS)
@@ -25,6 +25,11 @@ pipeline:
 	(cd $(TOP_BUILDDIR) && ./configure PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) CFLAGS="$(PIPELINE_CFLAGS)" $(PIPELINE_WITH_OPTIONS))
 	(cd $(TOP_BUILDDIR) && $(MAKE))
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
+
+pipeline_kafka:
+	git clone https://github.com/pipelinedb/pipeline_kafka.git
+	(cd pipeline_kafka && ./configure && make PG_CONFIG=$(BINDIR)/pg_config install)
+	rm -rf pipeline_kafka
 
 pipeline-debug:
 	(cd $(TOP_BUILDDIR) && make clean)
