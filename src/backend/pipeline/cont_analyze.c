@@ -2150,6 +2150,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	ListCell *lc;
 	int i;
 	bool has_aggs = false;
+	List *distinct_on = NIL;
 
 	Assert(proc_type == Worker || proc_type == Combiner);
 
@@ -2249,7 +2250,8 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	foreach(lc, proc->distinctClause)
 	{
 		Node *node = (Node *) lfirst(lc);
-		hoist_node(&proc->targetList, node, context);
+		ColumnRef *cref = hoist_node(&proc->targetList, node, context);
+		distinct_on = lappend(distinct_on, cref);
 	}
 
 	/*
@@ -2416,6 +2418,8 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 
 		proc->distinctClause = NIL;
 		proc->groupClause = tl_cols;
+
+		view->distinctClause = distinct_on;
 	}
 
 	/* Copy over worker limit/offsets to the view */

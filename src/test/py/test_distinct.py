@@ -8,6 +8,7 @@ def test_distinct(pipeline, clean_db):
   Verify that streaming SELECT DISTINCT ON (...) works
   """
   pipeline.create_stream('stream0', x='int', y='int', z='int')
+  pipeline.create_table('table0', x='int', y='int', z='int')
   q = 'SELECT DISTINCT ON (x::int, y::int - z::int) x::int, y::int FROM stream0'
   pipeline.create_cv('test_distinct', q)
 
@@ -19,16 +20,19 @@ def test_distinct(pipeline, clean_db):
     uniques[(x, y - z)].add(y)
 
   pipeline.insert('stream0', ['x', 'y', 'z'], values)
+  pipeline.insert('table0', ['x', 'y', 'z'], values)
 
-  expected = len(uniques)
-  result = pipeline.execute('SELECT COUNT(*) FROM test_distinct').first()
+  q = """
+  SELECT DISTINCT ON (x::int, y::int - z::int) x::int, y::int FROM table0
+  """
+  expected = list(pipeline.execute(q))
+  expected = len(expected)
 
   assert expected < 2000
 
-  # Error rate should be well below %2
-  delta = abs(expected - result['count'])
+  result = pipeline.execute('SELECT COUNT(*) FROM test_distinct').first()
 
-  assert delta / float(expected) <= 0.02
+  assert expected == result['count']
 
   # Check if the first row was selected for uniques
   result = pipeline.execute('SELECT * FROM test_distinct')
