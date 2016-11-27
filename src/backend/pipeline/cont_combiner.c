@@ -64,6 +64,8 @@
 #define GROUPS_PLAN_LIFESPAN (10 * 1000)
 #define MURMUR_SEED 0x155517D2
 
+#define SHOULD_UPDATE(state) ((state)->base.query->cvdef->distinctClause == NIL)
+
 /*
  * Flag that indicates whether or not an on-disk tuple has already been added to
  * an ongoing combine result.
@@ -1305,7 +1307,7 @@ sync_combine(ContQueryCombinerState *state)
 		if (existing)
 			update = (HeapTupleEntry) LookupTupleHashEntry(existing, slot, NULL);
 
-		if (update)
+		if (update && SHOULD_UPDATE(state))
 		{
 			ExecStoreTuple(update->tuple, state->prev_slot, InvalidBuffer, false);
 			replaces = compare_slots(state->prev_slot, state->slot,

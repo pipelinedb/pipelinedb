@@ -618,6 +618,7 @@ GetContQueryForId(Oid id)
 	tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 	cq->sql = deparse_query_def(query);
+	cq->cvdef = query;
 
 	if (is_sw(row))
 	{
