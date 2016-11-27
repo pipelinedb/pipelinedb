@@ -5956,6 +5956,14 @@ DESCR("for use by pipeline-upgrade");
 DATA(insert OID = 4503 ( create_cq_set_next_oids_for_osrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 3 0 2278 "26 26 26" _null_ _null_ _null_ _null_ _null_ create_cq_set_next_oids_for_osrel _null_ _null_ _null_ ));
 DESCR("for use by pipeline-upgrade");
 
+DATA(insert OID = 4504 ( bloom_union PGNSP PGUID 12 1 0 2276 0 f f f f f f i 1 0 5030 "2276" "{2276}" "{v}" _null_ _null_ _null_ bloom_union _null_ _null_ _null_ ));
+DESCR("bloom filter union");
+DATA(insert OID = 4505 ( bloom_intersection PGNSP PGUID 12 1 0 2276 0 f f f f f f i 1 0 5030 "2276" "{2276}" "{v}" _null_ _null_ _null_ bloom_intersection _null_ _null_ _null_ ));
+DESCR("bloom filter union");
+
+DATA(insert OID = 4506 ( hll_union PGNSP PGUID 12 1 0 2276 0 f f f f f f i 1 0 3998 "2276" "{2276}" "{v}" _null_ _null_ _null_ hll_union _null_ _null_ _null_ ));
+DESCR("hyperloglog union");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
