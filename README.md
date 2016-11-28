@@ -15,7 +15,7 @@ If you'd like to build PipelineDB from source, keep reading!
 ## Building from source
 Install some dependencies first:
 ```
-sudo apt-get install libreadline6 libreadline6-dev check g++ flex bison python-pip pkgconf zlib1g-dev python-dev libpq-dev libcurl4-openssl-dev expect
+sudo apt-get install libreadline6 libreadline6-dev g++ flex bison python-pip pkgconf zlib1g-dev python-dev libpq-dev
 sudo pip install -r src/test/py/requirements.txt
 ```
 
