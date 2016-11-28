@@ -19,7 +19,7 @@ sudo apt-get install libreadline6 libreadline6-dev g++ flex bison python-pip pkg
 sudo pip install -r src/test/py/requirements.txt
 ```
 
-Next you'll have to install [ZeroMQ](http://zeromq.org/) which PipelineDB uses for inter-process communication. [Here's](https://gist.github.com/usmanm/32a54a6b0f1f29d7737f86e29f837afa) a gist with instructions to build and install ZeroMQ 4.1.5 from source.
+Next you'll have to install [ZeroMQ](http://zeromq.org/) which PipelineDB uses for inter-process communication. [Here's](https://gist.github.com/usmanm/32a54a6b0f1f29d7737f86e29f837afa) a gist with instructions to build and install ZeroMQ from source.
 
 #### Build the PipelineDB core (with debug symbols)
 ```
