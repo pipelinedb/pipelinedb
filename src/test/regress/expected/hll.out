@@ -40,3 +40,25 @@ SELECT hll_cardinality(hll_union_agg(hll_agg)) FROM (SELECT hll_agg(x) FROM gene
             1996
 (1 row)
 
+SELECT hll_cardinality(
+    hll_union(
+      (SELECT hll_agg(x) FROM generate_series(1, 1000) AS x),
+      (SELECT hll_agg(x) FROM generate_series(100, 1100) AS x),
+      NULL));
+ hll_cardinality 
+-----------------
+            1094
+(1 row)
+
+-- Different HLL dimensions
+SELECT hll_cardinality(
+    hll_union(
+      (SELECT hll_agg(x, 12) FROM generate_series(1, 1000) AS x),
+      (SELECT hll_agg(x) FROM generate_series(100, 1100) AS x)));
+ERROR:  hyperloglogs must have the same p
+-- Wrong type
+SELECT hll_cardinality(
+    hll_union(
+      'not an hll',
+      (SELECT hll_agg(x) FROM generate_series(100, 1100) AS x)));
+ERROR:  argument 1 is not of type "hll"

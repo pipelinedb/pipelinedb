@@ -17,6 +17,8 @@
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
+#include "parser/parse_type.h"
+#include "parser/parser.h"
 #include "pipeline/bloom.h"
 #include "pipeline/miscutils.h"
 #include "utils/builtins.h"
@@ -189,6 +191,74 @@ bloom_union_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContextSwitchTo(old);
 
 	PG_RETURN_POINTER(state);
+}
+
+static BloomFilter *
+bloom_operation(FunctionCallInfo fcinfo, bool intersection)
+{
+	Oid bf_type = LookupTypeNameOid(NULL, SystemTypeName("bloom"), false);
+	BloomFilter *result = NULL;
+	int i;
+
+	for (i = 0; i < PG_NARGS(); i++)
+	{
+		BloomFilter *bf;
+		if (PG_ARGISNULL(i))
+			continue;
+
+		if (get_fn_expr_argtype(fcinfo->flinfo, i) != bf_type)
+			elog(ERROR, "argument %d is not of type \"bloom\"", i + 1);
+
+		bf = (BloomFilter *) PG_GETARG_VARLENA_P(i);
+
+		if (result)
+		{
+			if (bf->m != result->m)
+				elog(ERROR, "bloom filters must have the same p");
+			else if (bf->k != result->k)
+				elog(ERROR, "bloom filters must have the same n");
+		}
+		if (result == NULL)
+			result = bf;
+		else if (intersection)
+			result = BloomFilterIntersection(result, bf);
+		else
+			result = BloomFilterUnion(result, bf);
+	}
+
+	return result;
+}
+
+/*
+ * bloom_union
+ *
+ * Returns the union of the given Bloom filters
+ */
+Datum
+bloom_union(PG_FUNCTION_ARGS)
+{
+	BloomFilter *result = bloom_operation(fcinfo, false);
+
+	if (result == NULL)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_POINTER(result);
+}
+
+/*
+ * bloom_intersection
+ *
+ * Returns the intersection of the given Bloom filters
+ */
+Datum
+bloom_intersection(PG_FUNCTION_ARGS)
+{
+	BloomFilter *result = bloom_operation(fcinfo, true);
+
+	if (result == NULL)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_POINTER(result);
 }
 
 /*

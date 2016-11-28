@@ -15,6 +15,8 @@
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
+#include "parser/parse_type.h"
+#include "parser/parser.h"
 #include "pipeline/hll.h"
 #include "pipeline/miscutils.h"
 #include "utils/array.h"
@@ -185,6 +187,46 @@ hll_union_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContextSwitchTo(old);
 
 	PG_RETURN_POINTER(state);
+}
+
+/*
+ * hll_union
+ *
+ * Returns the union of the given HLLs
+ */
+Datum
+hll_union(PG_FUNCTION_ARGS)
+{
+	Oid hll_type = LookupTypeNameOid(NULL, SystemTypeName("hll"), false);
+	HyperLogLog *result = NULL;
+	int i;
+
+	for (i = 0; i < PG_NARGS(); i++)
+	{
+		HyperLogLog *hll;
+		if (PG_ARGISNULL(i))
+			continue;
+
+		if (get_fn_expr_argtype(fcinfo->flinfo, i) != hll_type)
+			elog(ERROR, "argument %d is not of type \"hll\"", i + 1);
+
+		hll = (HyperLogLog *) PG_GETARG_VARLENA_P(i);
+		if (result)
+		{
+			if (hll->p != result->p)
+				elog(ERROR, "hyperloglogs must have the same p");
+		}
+
+		if (result == NULL)
+			result = hll;
+		else
+			result = HLLUnion(result, hll);
+	}
+
+	if (result == NULL)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_POINTER(result);
 }
 
 /*
