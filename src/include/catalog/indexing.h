@@ -330,9 +330,6 @@ DECLARE_UNIQUE_INDEX(pipeline_stream_relid_index, 4250, on pipeline_stream using
 DECLARE_UNIQUE_INDEX(pipeline_stream_oid_index, 4254, on pipeline_stream using btree(oid oid_ops));
 #define PipelineStreamOidIndexId  4254
 
-DECLARE_UNIQUE_INDEX(pipeline_tstate_id_index, 4252, on pipeline_tstate using btree(id int4_ops));
-#define PipelineTStateIdIndexId					4252
-
 DECLARE_UNIQUE_INDEX(pipeline_combine_oid_index, 4256, on pipeline_combine using btree(oid oid_ops));
 #define PipelineCombineOidIndexId					4256
 

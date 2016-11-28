@@ -2149,6 +2149,8 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	List *tmp_list;
 	ListCell *lc;
 	int i;
+	bool has_aggs = false;
+	List *distinct_on = NIL;
 
 	Assert(proc_type == Worker || proc_type == Combiner);
 
@@ -2243,18 +2245,14 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	proc->groupClause = tmp_list;
 
 	/*
-	 * Hoist any nodes in the distinctClause that are not being projected. The overlay view
-	 * doesn't need any distinctClause.
+	 * Hoist any nodes in the distinctClause that are not being projected
 	 */
-	tmp_list = NIL;
 	foreach(lc, proc->distinctClause)
 	{
 		Node *node = (Node *) lfirst(lc);
 		ColumnRef *cref = hoist_node(&proc->targetList, node, context);
-		tmp_list = lappend(tmp_list, (Node *) cref);
+		distinct_on = lappend(distinct_on, cref);
 	}
-
-	proc->distinctClause = tmp_list;
 
 	/*
 	 * Add all hoisted items to the target list before trying to hoist columns out of expressions. This
@@ -2295,6 +2293,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 		}
 
 		agg = (FuncCall *) linitial(context->funcs);
+		has_aggs = true;
 
 		/* No need to re-write top level aggregates */
 		if (is_res_target_for_node((Node *) res, (Node *) agg))
@@ -2397,6 +2396,31 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	}
 
 	proc->targetList = tmp_list;
+
+	/*
+	 * We use grouping for SELECT DISTINCT since results are updated incrementally across xacts over time
+	 *
+	 * e.g. SELECT DISTINCT x, y, z FROM stream becomes,
+	 *
+	 * SELECT x, y, z FROM stream GROUP BY x, y, z
+	 */
+	if (proc->distinctClause && !has_aggs)
+	{
+		List *tl_cols = NIL;
+
+		foreach(lc, tmp_list)
+		{
+			ResTarget *rt = (ResTarget *) lfirst(lc);
+			ColumnRef *cref = create_colref_for_res_target(rt);
+
+			tl_cols = lappend(tl_cols, cref);
+		}
+
+		proc->distinctClause = NIL;
+		proc->groupClause = tl_cols;
+
+		view->distinctClause = distinct_on;
+	}
 
 	/* Copy over worker limit/offsets to the view */
 	view->limitCount = proc->limitCount;

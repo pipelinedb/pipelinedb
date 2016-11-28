@@ -69,7 +69,6 @@
 #include "catalog/pipeline_combine.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
-#include "catalog/pipeline_tstate.h"
 #include "utils/rel.h"
 #include "utils/catcache.h"
 #include "utils/syscache.h"
@@ -654,17 +653,6 @@ static const struct cachedesc cacheinfo[] = {
 		1,
 		{
 			ObjectIdAttributeNumber,
-			0,
-			0,
-			0
-		},
-		2048
-	},
-	{PipelineTStateRelationId,	/* PIPELINETSTATEID */
-		PipelineTStateIdIndexId,
-		1,
-		{
-			Anum_pipeline_tstate_id,
 			0,
 			0,
 			0

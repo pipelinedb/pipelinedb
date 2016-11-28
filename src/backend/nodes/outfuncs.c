@@ -824,15 +824,6 @@ _outUnique(StringInfo str, const Unique *node)
 }
 
 static void
-_outContinuousUnique(StringInfo str, const ContinuousUnique *node)
-{
-	WRITE_NODE_TYPE("CONTINUOUSUNIQUE");
-	_out_base_unique(str, (Unique *) node);
-	appendStringInfoString(str, " :CQId");
-	appendStringInfo(str, " %d", node->cq_id);
-}
-
-static void
 _outHash(StringInfo str, const Hash *node)
 {
 	WRITE_NODE_TYPE("HASH");
@@ -3111,9 +3102,6 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_Unique:
 				_outUnique(str, obj);
-				break;
-			case T_ContinuousUnique:
-				_outContinuousUnique(str, obj);
 				break;
 			case T_Hash:
 				_outHash(str, obj);

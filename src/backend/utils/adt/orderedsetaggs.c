@@ -22,7 +22,6 @@
 #include "catalog/pg_operator.h"
 #include "catalog/pg_type.h"
 #include "executor/executor.h"
-#include "executor/nodeContinuousUnique.h"
 #include "funcapi.h"
 #include "miscadmin.h"
 #include "lib/stringinfo.h"

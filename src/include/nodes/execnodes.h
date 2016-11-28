@@ -1978,18 +1978,6 @@ typedef struct UniqueState
 	MemoryContext tempContext;	/* short-term context for comparisons */
 } UniqueState;
 
-/*
- * ContinuousUniqueState
- */
-typedef struct ContinuousUniqueState
-{
-	PlanState ps;
-	BloomFilter *distinct;
-	Oid cq_id;
-	bool dirty;
-	MemoryContext tmpContext;
-} ContinuousUniqueState;
-
 /* ----------------
  *	 HashState information
  * ----------------

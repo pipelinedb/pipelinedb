@@ -33,7 +33,6 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
-#include "catalog/pipeline_tstate_fn.h"
 #include "catalog/toasting.h"
 #include "executor/execdesc.h"
 #include "executor/tstoreReceiver.h"
@@ -929,10 +928,6 @@ ExecTruncateContViewStmt(TruncateContViewStmt *stmt)
 
 	trunc->restart_seqs = stmt->restart_seqs;
 	trunc->behavior = stmt->behavior;
-
-	/* Reset all CQ level transition state */
-	foreach(lc, views)
-		ResetTStateEntry(lfirst_oid(lc));
 
 	/* Call TRUNCATE on the backing view table(s). */
 	ExecuteTruncate(trunc);
