@@ -1465,6 +1465,9 @@ rewrite_from_clause(Node *from)
 {
 	Node *new_from = from;
 
+	if (from == NULL)
+		return NULL;
+
 	if (IsA(from, RangeSubselect))
 	{
 		RangeSubselect *sub = (RangeSubselect *) from;
