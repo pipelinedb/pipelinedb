@@ -959,3 +959,41 @@ ContQuerySetActive(Oid id, bool active)
 
 	return changed;
 }
+
+void
+GetTTLInfo(RangeVar *cvname, char **ttl_col, int *ttl)
+{
+	HeapTuple tup = GetPipelineQueryTuple(cvname);
+	Form_pipeline_query row;
+	Relation rel;
+	TupleDesc desc;
+	int i;
+
+	if (!HeapTupleIsValid(tup))
+		elog(ERROR, "continuous view \"%s\" does not exist", cvname->relname);
+
+	Assert(ttl_col);
+	Assert(ttl);
+
+	row = (Form_pipeline_query) GETSTRUCT(tup);
+	Assert(AttributeNumberIsValid(row->ttl_attno));
+	Assert(row->ttl > 0);
+	*ttl = row->ttl;
+
+	rel = heap_open(row->matrelid, NoLock);
+	desc = RelationGetDescr(rel);
+
+	for (i = 0; i < desc->natts; i++)
+	{
+		if (desc->attrs[i]->attnum == row->ttl_attno)
+		{
+			*ttl_col = pstrdup(NameStr(desc->attrs[i]->attname));
+			break;
+		}
+	}
+
+	Assert(*ttl_col);
+
+	heap_close(rel, NoLock);
+	ReleaseSysCache(tup);
+}

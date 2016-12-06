@@ -17,6 +17,7 @@
 #include "access/xact.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "executor/spi.h"
 #include "executor/tstoreReceiver.h"
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
@@ -30,16 +31,30 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "utils/hsearch.h"
+#include "utils/int8.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
+#include "utils/ruleutils.h"
 #include "utils/snapmgr.h"
 
+#define DELETE_TEMPLATE "DELETE FROM %s.%s WHERE \"$pk\" IN " \
+                           "(SELECT \"$pk\" FROM %s.%s WHERE %s < now() - interval '%d seconds' FOR UPDATE SKIP LOCKED);"
 
-static Node *
-get_ttl_vacuum_expr(RangeVar *rv)
+static char *
+get_delete_sql(RangeVar *cvname, RangeVar *matrelname)
 {
-	return GetTTLExpiredExpr(rv);
+	StringInfoData buf;
+	char *ttl_col;
+	int ttl;
+
+	GetTTLInfo(cvname, &ttl_col, &ttl);
+
+	initStringInfo(&buf);
+	appendStringInfo(&buf, DELETE_TEMPLATE,
+			matrelname->schemaname, matrelname->relname, matrelname->schemaname, matrelname->relname, ttl_col, ttl);
+
+	return buf.data;
 }
 
 /*
@@ -52,15 +67,10 @@ DeleteTTLExpiredTuples(Oid relid)
 	char *namespace;
 	RangeVar *matrel;
 	RangeVar *cvname;
-	DeleteStmt *stmt;
-	CommandDest dest = DestNone;
-	List *querytree_list;
-	PlannedStmt *plan;
-	Portal portal;
-	DestReceiver *receiver;
 	MemoryContext oldcxt;
 	MemoryContext runctx;
 	bool save_continuous_query_materialization_table_updatable = continuous_query_materialization_table_updatable;
+	char *delete_cmd;
 
 	continuous_query_materialization_table_updatable = true;
 
@@ -91,42 +101,18 @@ DeleteTTLExpiredTuples(Oid relid)
 		goto end;
 
 	/* Now we're certain relid is for a TTL continuous view's matrel */
+	delete_cmd = get_delete_sql(cvname, matrel);
 
-	/*
-	 * TODO(usmanm): Use lock contention free strategy here. See https://news.ycombinator.com/item?id=9018129
-	 */
-	stmt = makeNode(DeleteStmt);
-	stmt->relation = matrel;
-	stmt->whereClause = get_ttl_vacuum_expr(cvname);
-
-	Assert(stmt->whereClause);
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	querytree_list = pg_analyze_and_rewrite((Node *) stmt, "DELETE",
-			NULL, 0);
-	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI manager");
 
-	portal = CreatePortal("__delete_expired__", true, true);
-	portal->visible = false;
-	PortalDefineQuery(portal,
-			NULL,
-			"DELETE",
-			"DELETE",
-			list_make1(plan),
-			NULL);
+	if (SPI_execute(delete_cmd, false, 0) != SPI_OK_DELETE)
+		elog(ERROR, "SPI_execute failed: %s", delete_cmd);
 
-	receiver = CreateDestReceiver(dest);
-
-	PortalStart(portal, NULL, 0, GetActiveSnapshot());
-	(void) PortalRun(portal,
-			FETCH_ALL,
-			true,
-			receiver,
-			receiver,
-			NULL);
-
-	(*receiver->rDestroy) (receiver);
-	PortalDrop(portal, false);
+	if (SPI_finish() != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed");
 
 	PopActiveSnapshot();
 
@@ -145,24 +131,12 @@ end:
 uint64_t
 NumTTLExpiredTuples(Oid relid)
 {
-	uint64_t count;
+	uint64_t count = 0;
 	char *relname = get_rel_name(relid);
 	char *namespace = get_namespace_name(get_rel_namespace(relid));
 	RangeVar *matrel = makeRangeVar(namespace, relname, -1);
 	RangeVar *cvname;
-	SelectStmt *stmt;
-	CommandDest dest = DestTuplestore;
-	Tuplestorestate *store = NULL;
-	List *querytree_list;
-	List *parsetree_list;
-	PlannedStmt *plan;
-	Portal portal;
-	DestReceiver *receiver;
-	TupleTableSlot *slot;
-	QueryDesc *queryDesc;
 	StringInfoData sql;
-	Datum *datum;
-	bool isnull;
 	MemoryContext oldcontext;
 	MemoryContext runctx;
 	bool locked;
@@ -194,57 +168,22 @@ NumTTLExpiredTuples(Oid relid)
 	initStringInfo(&sql);
 	appendStringInfo(&sql, "SELECT COUNT(*) FROM %s.%s", namespace, relname);
 
-	parsetree_list = pg_parse_query(sql.data);
-	Assert(parsetree_list->length == 1);
-	resetStringInfo(&sql);
-
-	stmt = (SelectStmt *) linitial(parsetree_list);
-	stmt->whereClause = get_ttl_vacuum_expr(cvname);
-
-	Assert(stmt->whereClause);
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	querytree_list = pg_analyze_and_rewrite((Node *) stmt, sql.data,
-			NULL, 0);
-	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI manager");
 
-	portal = CreatePortal("__num_expired__", true, true);
-	portal->visible = false;
-	PortalDefineQuery(portal,
-			NULL,
-			sql.data,
-			"SELECT",
-			list_make1(plan),
-			NULL);
+	if (SPI_execute(sql.data, false, 0) != SPI_OK_SELECT)
+		elog(ERROR, "SPI_execute failed: %s", sql.data);
 
-	store = tuplestore_begin_heap(true, true, work_mem);
-	receiver = CreateDestReceiver(dest);
-	SetTuplestoreDestReceiverParams(receiver, store, PortalGetHeapMemory(portal), true);
-
-	PortalStart(portal, NULL, 0, GetActiveSnapshot());
-	(void) PortalRun(portal,
-			FETCH_ALL,
-			true,
-			receiver,
-			receiver,
-			NULL);
-
-	queryDesc = PortalGetQueryDesc(portal);
-	slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
-	tuplestore_gettupleslot(store, true, false, slot);
-
-	if (TupIsNull(slot))
-		count = 0;
-	else
+	if (SPI_processed > 0)
 	{
-		slot_getallattrs(slot);
-		datum = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
-		count = DatumGetInt64(datum);
+		char *v = SPI_getvalue(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1);
+		count = DatumGetInt64(DirectFunctionCall1(int8in, (Datum) v));
 	}
 
-	(*receiver->rDestroy) (receiver);
-	tuplestore_end(store);
-	PortalDrop(portal, false);
+	if (SPI_finish() != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed");
 
 	PopActiveSnapshot();
 

@@ -88,4 +88,6 @@ extern ContQuery *GetContQueryForTransformId(Oid id);
 
 extern bool ContQuerySetActive(Oid id, bool active);
 
+extern void GetTTLInfo(RangeVar *cvname, char **ttl_col, int *ttl);
+
 #endif
