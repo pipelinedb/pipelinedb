@@ -39,7 +39,7 @@
 #include "utils/snapmgr.h"
 
 #define DELETE_TEMPLATE "DELETE FROM %s.%s WHERE \"$pk\" IN " \
-												   "(SELECT \"$pk\" FROM %s.%s WHERE %s < now() - interval '%d seconds' FOR UPDATE SKIP LOCKED);"
+                           "(SELECT \"$pk\" FROM %s.%s WHERE %s < now() - interval '%d seconds' FOR UPDATE SKIP LOCKED);"
 
 static char *
 get_delete_sql(RangeVar *cvname, RangeVar *matrelname)
