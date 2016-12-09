@@ -1198,7 +1198,7 @@ HLLCardinality(HyperLogLog *hll)
 		initialized = true;
   }
 
-  if (HLL_IS_UNION(hll))
+  if (HLL_IS_UNPACKED(hll))
 		hll = HLLGetUnionResult(hll);
 
   /*
@@ -1270,7 +1270,7 @@ hll_dense_union(HyperLogLog *hllu, HyperLogLog *incoming)
 	int reg;
 	int m = (1 << hllu->p);
 
-	Assert(HLL_IS_UNION(hllu));
+	Assert(HLL_IS_UNPACKED(hllu));
 
 	if (HLL_IS_DENSE(incoming))
 	{
@@ -1465,7 +1465,7 @@ HLLCreateUnion(HyperLogLog *initial)
 	if (HLL_IS_SPARSE(initial))
 		initial = hll_sparse_to_dense(initial);
 
-	result->encoding = HLL_UNION;
+	result->encoding = HLL_UNPACKED;
 	result->mlen = m;
 	result->p = initial->p;
 

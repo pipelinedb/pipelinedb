@@ -29,12 +29,12 @@
 #define HLL_DENSE_CLEAN 'D'
 #define HLL_EXPLICIT_DIRTY 'e'
 #define HLL_EXPLICIT_CLEAN 'E'
-#define HLL_UNION 'u'
+#define HLL_UNPACKED 'u'
 
 #define HLL_IS_SPARSE(hll) ((hll)->encoding == HLL_SPARSE_DIRTY || (hll)->encoding == HLL_SPARSE_CLEAN)
 #define HLL_IS_EXPLICIT(hll) ((hll)->encoding == HLL_EXPLICIT_DIRTY || (hll)->encoding == HLL_EXPLICIT_CLEAN)
 #define HLL_IS_DENSE(hll) ((hll)->encoding == HLL_DENSE_DIRTY || (hll)->encoding == HLL_DENSE_CLEAN)
-#define HLL_IS_UNION(hll) ((hll)->encoding == HLL_UNION)
+#define HLL_IS_UNPACKED(hll) ((hll)->encoding == HLL_UNPACKED)
 
 #define HLL_EXPLICIT_GET_NUM_REGISTERS(hll) ((hll)->mlen / 4)
 
