@@ -17,6 +17,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_type.h"
 #include "parser/parser.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/hll.h"
 #include "pipeline/miscutils.h"
 #include "utils/array.h"
@@ -173,15 +174,30 @@ hll_union_agg_trans(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 	{
 		incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
-		state = HLLCopy(incoming);
+		if (IsContQueryProcess())
+		{
+			state = HLLCopy(incoming);
+		}
+		else
+		{
+			old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+			state = HLLCreateUnion(incoming);
+			MemoryContextSwitchTo(old);
+		}
 	}
 	else if (PG_ARGISNULL(1))
+	{
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
+	}
 	else
 	{
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 		incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
-		state = HLLUnion(state, incoming);
+
+		if (IsContQueryProcess())
+			state = HLLUnion(state, incoming);
+		else
+			state = HLLUnionAdd(state, incoming);
 	}
 
 	MemoryContextSwitchTo(old);

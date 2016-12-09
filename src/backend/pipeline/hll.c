@@ -1180,6 +1180,9 @@ HLLCardinality(HyperLogLog *hll)
   int j;
   int ez; /* Number of registers equal to 0. */
 
+  if (HLL_IS_UNION(hll))
+		hll = HLLGetUnionResult(hll);
+
   /*
    * Precompute 2^(-reg[j]) in order to speedup the
    * computation of SUM(2^-register[0..i])
