@@ -1446,14 +1446,6 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 	return result;
 }
 
-
-
-
-
-
-
-
-
 /*
  * HLLCreateUnion
  */
