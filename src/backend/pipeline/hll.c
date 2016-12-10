@@ -386,8 +386,6 @@ hll_sparse_to_dense(HyperLogLog *sparse)
 		}
   }
 
-  pfree(sparse);
-
   return dense;
 }
 
@@ -1199,6 +1197,13 @@ HLLCardinality(HyperLogLog *hll)
   }
 
   /*
+   * XXX(derekjn) This function should accept a (HyperLogLog **) that we can store
+   * this new pointer in for the caller, since it will likely want to use the new HLL.
+   */
+  if (HLL_IS_UNPACKED(hll))
+		hll = HLLPack(hll);
+
+  /*
    * If nothing has changed since the last cardinality computation,
    * we can just use the last result
    */
@@ -1262,24 +1267,34 @@ HLLCardinality(HyperLogLog *hll)
 }
 
 static HyperLogLog *
-hll_dense_union(HyperLogLog *result, HyperLogLog *incoming)
+hll_dense_union(HyperLogLog *hllu, HyperLogLog *incoming)
 {
 	int reg;
-	int m = (1 << result->p);
+	int m = (1 << hllu->p);
 
-	Assert(HLL_IS_DENSE(result));
+	Assert(HLL_IS_UNPACKED(hllu));
 
-	if (HLL_IS_DENSE(incoming))
+	if (HLL_IS_UNPACKED(incoming))
 	{
 		/* easy, just take the max of each HLL's registers */
 		for (reg=0; reg<m; reg++)
 		{
-			uint8 r0;
-			uint8 r1;
+			uint8 v = incoming->M[reg];
 
-			HLL_DENSE_GET_REGISTER(r0, result->M, reg);
-			HLL_DENSE_GET_REGISTER(r1, incoming->M, reg);
-			HLL_DENSE_SET_REGISTER(result->M, reg, Max(r0, r1));
+			if (v > hllu->M[reg])
+				hllu->M[reg] = v;
+		}
+	}
+	else if (HLL_IS_DENSE(incoming))
+	{
+		/* easy, just take the max of each HLL's registers */
+		for (reg=0; reg<m; reg++)
+		{
+			uint8 v;
+
+			HLL_DENSE_GET_REGISTER(v, incoming->M, reg);
+			if (v > hllu->M[reg])
+				hllu->M[reg] = v;
 		}
 	}
 	else if (HLL_IS_SPARSE(incoming))
@@ -1311,10 +1326,8 @@ hll_dense_union(HyperLogLog *result, HyperLogLog *incoming)
 				regval = HLL_SPARSE_VAL_VALUE(pos);
 				while (runlen--)
 				{
-					uint8 resval;
-
-					HLL_DENSE_GET_REGISTER(resval, result->M, reg);
-					HLL_DENSE_SET_REGISTER(result->M, reg, Max(resval, regval));
+					if (regval > hllu->M[reg])
+						hllu->M[reg] = regval;
 					reg++;
 				}
 				pos++;
@@ -1331,18 +1344,17 @@ hll_dense_union(HyperLogLog *result, HyperLogLog *incoming)
 		{
 			int reg = HLL_EXPLICIT_GET_REGISTER(pos);
 			uint8 r0 = HLL_EXPLICIT_GET_NUM_LEADING(pos);
-			uint8 r1;
 
-			HLL_DENSE_GET_REGISTER(r1, result->M, reg);
-			HLL_DENSE_SET_REGISTER(result->M, reg, Max(r0, r1));
+			if (r0 > hllu->M[reg])
+				hllu->M[reg] = r0;
 
 			pos += HLL_EXPLICIT_ENTRY_SIZE;
 		}
 	}
 
-	result->encoding = HLL_DENSE_DIRTY;
+	SET_VARSIZE(hllu, HLLSize(hllu));
 
-	return result;
+	return hllu;
 }
 
 static HyperLogLog *
@@ -1417,6 +1429,8 @@ hll_sparse_union(HyperLogLog *result, HyperLogLog *incoming)
 HyperLogLog *
 HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 {
+	HyperLogLog *hllu;
+
 	/* EXPLICIT + EXPLICIT */
 	if (HLL_IS_EXPLICIT(result) && HLL_IS_EXPLICIT(incoming))
 	{
@@ -1436,18 +1450,82 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 		return result;
 	}
 
+	hllu = HLLUnpack(result);
+
+	/* DENSE + (DENSE | SPARSE | EXPLICIT) */
+	hllu = HLLUnionAdd(hllu, incoming);
+	result = HLLPack(hllu);
+
+	return result;
+}
+
+/*
+ * HLLUnpack
+ */
+HyperLogLog *
+HLLUnpack(HyperLogLog *initial)
+{
+	int reg;
+	int m = (1 << initial->p);
+	HyperLogLog *result = palloc0(sizeof(HyperLogLog) + m);
+
 	/*
 	 * We don't support any other unions for now, so just upgrade result
 	 * to the DENSE representation.
 	 */
-	if (HLL_IS_EXPLICIT(result))
-		result = hll_explicit_to_sparse(result);
-	if (HLL_IS_SPARSE(result))
-		result = hll_sparse_to_dense(result);
+	if (HLL_IS_UNPACKED(initial))
+		return initial;
 
-	/* DENSE + (DENSE | SPARSE | EXPLICIT) */
-	result = hll_dense_union(result, incoming);
+	if (HLL_IS_EXPLICIT(initial))
+		initial = hll_explicit_to_sparse(initial);
+	if (HLL_IS_SPARSE(initial))
+		initial = hll_sparse_to_dense(initial);
+
+	result->encoding = HLL_UNPACKED;
+	result->mlen = m;
+	result->p = initial->p;
+
+	for (reg = 0; reg < m; reg++)
+	{
+		uint8 v;
+		HLL_DENSE_GET_REGISTER(v, initial->M, reg);
+		result->M[reg] = v;
+	}
+
 	SET_VARSIZE(result, HLLSize(result));
 
 	return result;
+}
+
+/*
+ * HLLPack
+ */
+HyperLogLog *
+HLLPack(HyperLogLog *hllu)
+{
+	int reg;
+	int m = (((1 << hllu->p) * HLL_BITS_PER_REGISTER) / 8);
+	HyperLogLog *result = palloc0(sizeof(HyperLogLog) + m);
+
+	result->encoding = HLL_DENSE_DIRTY;
+	result->p = hllu->p;
+	result->mlen = m;
+
+	for (reg = 0; reg < hllu->mlen; reg++)
+	{
+		HLL_DENSE_SET_REGISTER(result->M, reg, hllu->M[reg]);
+	}
+
+	SET_VARSIZE(result, HLLSize(result));
+
+	return result;
+}
+
+/*
+ * HLLUnionAdd
+ */
+HyperLogLog *
+HLLUnionAdd(HyperLogLog *hllu, HyperLogLog *incoming)
+{
+	return hll_dense_union(hllu, incoming);
 }
