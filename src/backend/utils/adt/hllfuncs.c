@@ -15,6 +15,9 @@
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
+#include "parser/parse_type.h"
+#include "parser/parser.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/hll.h"
 #include "pipeline/miscutils.h"
 #include "utils/array.h"
@@ -170,16 +173,29 @@ hll_union_agg_trans(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(0))
 	{
+		old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
 		incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
-		state = HLLCopy(incoming);
+
+		if (IsContQueryProcess())
+			state = HLLCopy(incoming);
+		else
+			state = HLLUnpack(incoming);
+
+		MemoryContextSwitchTo(old);
 	}
 	else if (PG_ARGISNULL(1))
+	{
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
+	}
 	else
 	{
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 		incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
-		state = HLLUnion(state, incoming);
+
+		if (IsContQueryProcess())
+			state = HLLUnion(state, incoming);
+		else
+			state = HLLUnionAdd(state, incoming);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -199,6 +215,8 @@ hll_cardinality(PG_FUNCTION_ARGS)
 		PG_RETURN_INT64(0);
 
 	hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
+	if (HLL_IS_UNPACKED(hll))
+		hll = HLLPack(hll);
 
 	PG_RETURN_INT64(HLLCardinality(hll));
 }
@@ -213,6 +231,11 @@ hll_cache_cardinality(PG_FUNCTION_ARGS)
 
 	hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 	/* Calling this will cache the cardinality */
+
+	/* We need to pack this first since we need to return a pointer to the HLL */
+	if (HLL_IS_UNPACKED(hll))
+		hll = HLLPack(hll);
+
 	HLLCardinality(hll);
 
 	PG_RETURN_POINTER(hll);
