@@ -175,12 +175,7 @@ hll_union_agg_trans(PG_FUNCTION_ARGS)
 	{
 		old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
 		incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
-
-		if (IsContQueryProcess())
-			state = HLLCopy(incoming);
-		else
-			state = HLLUnpack(incoming);
-
+		state = HLLCopy(incoming);
 		MemoryContextSwitchTo(old);
 	}
 	else if (PG_ARGISNULL(1))

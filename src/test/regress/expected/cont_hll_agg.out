@@ -152,18 +152,18 @@ SELECT * FROM test_hll_agg2 ORDER BY k;
 (10 rows)
 
 SELECT * FROM test_sw_hll_agg0 ORDER BY k;
- k |                 hll_print                 
----+-------------------------------------------
- 0 | { p = 14, cardinality = 10, size = 12kB }
- 1 | { p = 14, cardinality = 10, size = 12kB }
- 2 | { p = 14, cardinality = 10, size = 12kB }
- 3 | { p = 14, cardinality = 10, size = 12kB }
- 4 | { p = 14, cardinality = 10, size = 12kB }
- 5 | { p = 14, cardinality = 10, size = 12kB }
- 6 | { p = 14, cardinality = 10, size = 12kB }
- 7 | { p = 14, cardinality = 10, size = 12kB }
- 8 | { p = 14, cardinality = 10, size = 12kB }
- 9 | { p = 14, cardinality = 10, size = 12kB }
+ k |                hll_print                 
+---+------------------------------------------
+ 0 | { p = 14, cardinality = 10, size = 0kB }
+ 1 | { p = 14, cardinality = 10, size = 0kB }
+ 2 | { p = 14, cardinality = 10, size = 0kB }
+ 3 | { p = 14, cardinality = 10, size = 0kB }
+ 4 | { p = 14, cardinality = 10, size = 0kB }
+ 5 | { p = 14, cardinality = 10, size = 0kB }
+ 6 | { p = 14, cardinality = 10, size = 0kB }
+ 7 | { p = 14, cardinality = 10, size = 0kB }
+ 8 | { p = 14, cardinality = 10, size = 0kB }
+ 9 | { p = 14, cardinality = 10, size = 0kB }
 (10 rows)
 
 SELECT * FROM test_sw_hll_agg1 ORDER BY k;

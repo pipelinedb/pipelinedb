@@ -1527,5 +1527,8 @@ HLLPack(HyperLogLog *hllu)
 HyperLogLog *
 HLLUnionAdd(HyperLogLog *hllu, HyperLogLog *incoming)
 {
+	if (!HLL_IS_UNPACKED(hllu))
+		hllu = HLLUnpack(hllu);
+
 	return hll_dense_union(hllu, incoming);
 }
