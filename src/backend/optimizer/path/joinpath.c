@@ -183,9 +183,12 @@ add_paths_to_joinrel(PlannerInfo *root,
 		HashPath *path;
 		Path *outerpath = outerrel->cheapest_total_path;
 		Path *innerpath = innerrel->cheapest_total_path;
-		Relids requiredouter = calc_non_nestloop_required_outer(outerpath, innerpath);
+		Relids requiredouter = NULL;
 		ListCell *lc;
 		List *hashclauses = NIL;
+
+		if (outerrel->rtekind == RTE_RELATION)
+		 requiredouter = calc_non_nestloop_required_outer(outerpath, innerpath);
 
 		foreach(lc, restrictlist)
 		{
