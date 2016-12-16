@@ -265,6 +265,10 @@ void
 TransformDestReceiverFlush(DestReceiver *self)
 {
 	TransformState *t = (TransformState *) self;
+	int save_batch_size = continuous_query_batch_size;
+	int save_batch_mem = continuous_query_batch_mem;
+
+	continuous_query_batch_size = continuous_query_batch_mem = INT_MAX / 1024;
 
 	/* Optimized path for stream insertions */
 	if (t->cont_query->tgfn == PIPELINE_STREAM_INSERT_OID || t->os_has_readers)
@@ -281,4 +285,8 @@ TransformDestReceiverFlush(DestReceiver *self)
 		heap_close(t->tg_rel, AccessShareLock);
 		t->tg_rel = NULL;
 	}
+
+	continuous_query_batch_size = save_batch_size;
+	continuous_query_batch_mem = save_batch_mem;
+
 }

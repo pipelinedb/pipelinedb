@@ -74,3 +74,33 @@ SELECT * FROM ct_v1;
 CREATE CONTINUOUS TRANSFORM ct_ostream AS SELECT 1 AS a, 2 AS b, 3 AS c, x + 42 AS d FROM ct_s1;
 
 DROP STREAM ct_s0 CASCADE;
+
+CREATE STREAM fanout (x integer);
+
+CREATE CONTINUOUS TRANSFORM fanout0 AS SELECT generate_series(1, 2) FROM fanout;
+CREATE CONTINUOUS TRANSFORM fanout1 AS SELECT generate_series(1, 2) FROM output_of('fanout0');
+CREATE CONTINUOUS TRANSFORM fanout2 AS SELECT generate_series(1, 2) FROM output_of('fanout1');
+CREATE CONTINUOUS TRANSFORM fanout3 AS SELECT generate_series(1, 2) FROM output_of('fanout2');
+CREATE CONTINUOUS TRANSFORM fanout4 AS SELECT generate_series(1, 2) FROM output_of('fanout3');
+CREATE CONTINUOUS TRANSFORM fanout5 AS SELECT generate_series(1, 2) FROM output_of('fanout4');
+CREATE CONTINUOUS TRANSFORM fanout6 AS SELECT generate_series(1, 2) FROM output_of('fanout5');
+CREATE CONTINUOUS TRANSFORM fanout7 AS SELECT generate_series(1, 2) FROM output_of('fanout6');
+CREATE CONTINUOUS TRANSFORM fanout8 AS SELECT generate_series(1, 2) FROM output_of('fanout7');
+CREATE CONTINUOUS TRANSFORM fanout9 AS SELECT generate_series(1, 2) FROM output_of('fanout8');
+CREATE CONTINUOUS TRANSFORM fanout10 AS SELECT generate_series(1, 2) FROM output_of('fanout9');
+
+CREATE CONTINUOUS VIEW fanout11 AS SELECT count(*) FROM output_of('fanout10');
+
+INSERT INTO fanout (x) VALUES (0);
+
+SELECT * FROM fanout11;
+
+INSERT INTO fanout (x) VALUES (0);
+
+SELECT * FROM fanout11;
+
+INSERT INTO fanout (x) VALUES (0);
+
+SELECT * FROM fanout11;
+
+DROP STREAM fanout CASCADE;
