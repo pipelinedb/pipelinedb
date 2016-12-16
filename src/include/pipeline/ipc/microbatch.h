@@ -21,10 +21,10 @@
 #include "pipeline/stream.h"
 #include "port/atomics.h"
 
-#define MAX_MICROBATCH_SIZE (continuous_query_batch_length * 1024)
+#define MAX_MICROBATCH_SIZE (continuous_query_batch_mem * 1024)
 
 /* guc */
-extern int continuous_query_batch_length;
+extern int continuous_query_batch_mem;
 extern int continuous_query_batch_size;
 
 extern Size MicrobatchAckShmemSize(void);
