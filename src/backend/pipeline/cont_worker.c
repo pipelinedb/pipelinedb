@@ -336,6 +336,10 @@ ContinuousQueryWorkerMain(void)
 
 				if (should_exec_query(state->base.query))
 				{
+					TimestampTz start_time = GetCurrentTimestamp();
+					long secs;
+					int usecs;
+
 					/* initialize the plan for execution within this xact */
 					init_plan(state->query_desc);
 					set_cont_executor(state->query_desc->planstate, cont_exec);
@@ -348,6 +352,10 @@ ContinuousQueryWorkerMain(void)
 
 					/* flush tuples to combiners or transform out functions */
 					flush_tuples(state);
+
+					/* record execution time */
+					TimestampDifference(start_time, GetCurrentTimestamp(), &secs, &usecs);
+					pgstat_increment_cq_exec_time(secs * 1000 + (usecs / 1000));
 				}
 
 				UnsetEStateSnapshot((EState *) estate);
