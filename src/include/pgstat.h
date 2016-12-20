@@ -1101,6 +1101,7 @@ typedef struct PgStat_StatCQEntry
 	PgStat_Counter tuples_pb;
 
 	TimestampTz last_report;
+	PgStat_Counter exec_ms;
 } PgStat_StatCQEntry;
 
 typedef struct PgStat_StatCQEntryLocal
@@ -1176,6 +1177,13 @@ extern void pgstat_increment_cq_read(uint64 nrows, Size nbytes);
 		MyProcStatCQEntry->errors += (n); \
 		if (MyStatCQEntry) \
 			MyStatCQEntry->errors += (n); \
+	} while(0)
+
+#define pgstat_increment_cq_exec_time(ms) \
+	do { \
+		MyProcStatCQEntry->exec_ms += (ms); \
+		if (MyStatCQEntry) \
+			MyStatCQEntry->exec_ms += (ms); \
 	} while(0)
 
 extern void pgstat_init_cqstat(volatile PgStat_StatCQEntry *entry, Oid viewid, pid_t pid);

@@ -1409,6 +1409,9 @@ sync_all(ContExecutor *cont_exec)
 	Bitmapset *tmp = bms_copy(cont_exec->all_queries);
 	ContQueryCombinerState **states = (ContQueryCombinerState **) cont_exec->states;
 	int id;
+	TimestampTz start_time;
+	long secs;
+	int usecs;
 
 	while ((id = bms_first_member(tmp)) >= 0)
 	{
@@ -1417,6 +1420,7 @@ sync_all(ContExecutor *cont_exec)
 		if (!state)
 			continue;
 
+		start_time = GetCurrentTimestamp();
 		debug_query_string = state->base.query->name->relname;
 		MyStatCQEntry = (PgStat_StatCQEntry *) &state->base.stats;
 
@@ -1434,6 +1438,9 @@ sync_all(ContExecutor *cont_exec)
 			StartTransactionCommand();
 		}
 		PG_END_TRY();
+
+		TimestampDifference(start_time, GetCurrentTimestamp(), &secs, &usecs);
+		pgstat_increment_cq_exec_time(secs * 1000 + (usecs / 1000));
 
 		pgstat_report_cqstat(false);
 
@@ -1805,9 +1812,14 @@ ContinuousQueryCombinerMain(void)
 
 			PG_TRY();
 			{
+				TimestampTz start_time;
+				long secs;
+				int usecs;
+
 				if (state == NULL)
 					goto next;
 
+				start_time = GetCurrentTimestamp();
 				MemoryContextSwitchTo(state->base.tmp_cxt);
 
 				count = read_batch(cont_exec, state, query_id);
@@ -1830,6 +1842,9 @@ ContinuousQueryCombinerMain(void)
 				}
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
+
+				TimestampDifference(start_time, GetCurrentTimestamp(), &secs, &usecs);
+				pgstat_increment_cq_exec_time(secs * 1000 + (usecs / 1000));
 			}
 			PG_CATCH();
 			{

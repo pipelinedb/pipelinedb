@@ -5824,6 +5824,8 @@ cq_stat_aggregate(PgStat_StatCQEntry *result, PgStat_StatCQEntry *incoming)
 	result->bytes_ps = incoming->bytes_ps;
 	result->time_pb = incoming->time_pb;
 	result->tuples_pb = incoming->tuples_pb;
+
+	result->exec_ms = incoming->exec_ms;
 }
 
 static void
