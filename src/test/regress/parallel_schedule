@@ -180,7 +180,7 @@ test: cont_transform cont_activate output_streams cont_tablesample
 # ----------
 # Another group of parallel tests
 # ----------
-test: cont_pk
+test: cont_pk matrel_constraints
 
 # ----------
 # Another group of parallel tests

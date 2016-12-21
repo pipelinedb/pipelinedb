@@ -1241,6 +1241,8 @@ sync_combine(ContQueryCombinerState *state)
 	Bitmapset *os_targets = NULL;
 	Bitmapset *orig_targets = NULL;
 
+	estate->es_range_table = state->combine_plan->rtable;
+
 	osrel = try_relation_open(state->base.query->osrelid, RowExclusiveLock);
 	if (osrel == NULL)
 		return;
