@@ -153,8 +153,34 @@ ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot, ESt
 void
 ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 {
-	HeapTuple tup = ExecMaterializeSlot(slot);
+	HeapTuple tup;
+	bool result = true;
+
+	if (ri->ri_RelationDesc->rd_att->constr)
+	{
+		/*
+		 * We don't want the entire sync transaction to fail when a constraint fails
+		 */
+		PG_TRY();
+		{
+			ExecConstraints(ri, slot, estate);
+		}
+		PG_CATCH();
+		{
+			EmitErrorReport();
+			FlushErrorState();
+
+			result = false;
+		}
+		PG_END_TRY();
+	}
+
+	if (!result)
+		return;
+
+	tup = ExecMaterializeSlot(slot);
 	simple_heap_update(ri->ri_RelationDesc, &tup->t_self, tup);
+
 	if (!HeapTupleIsHeapOnly(tup))
 		ExecInsertCQMatRelIndexTuples(ri, slot, estate);
 }
@@ -167,7 +193,32 @@ ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 void
 ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 {
-	HeapTuple tup = ExecMaterializeSlot(slot);
+	HeapTuple tup;
+	bool result = true;
+
+	if (ri->ri_RelationDesc->rd_att->constr)
+	{
+		/*
+		 * We don't want the entire sync transaction to fail when a constraint fails
+		 */
+		PG_TRY();
+		{
+			ExecConstraints(ri, slot, estate);
+		}
+		PG_CATCH();
+		{
+			EmitErrorReport();
+			FlushErrorState();
+
+			result = false;
+		}
+		PG_END_TRY();
+	}
+
+	if (!result)
+		return;
+
+	tup = ExecMaterializeSlot(slot);
 
 	heap_insert(ri->ri_RelationDesc, tup, GetCurrentCommandId(true), 0, NULL);
 	ExecInsertCQMatRelIndexTuples(ri, slot, estate);

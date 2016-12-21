@@ -1,0 +1,31 @@
+CREATE STREAM mc_s0 (x integer, y integer);
+CREATE CONTINUOUS VIEW mc_v0 AS SELECT x, sum(y), count(*) FROM mc_s0 GROUP BY x;
+ALTER TABLE mc_v0_mrel ADD CONSTRAINT chk0 CHECK (x > 5);
+ALTER TABLE mc_v0_mrel ADD CONSTRAINT chk1 CHECK (count < 3);
+ALTER TABLE mc_v0_mrel ADD CONSTRAINT chk2 CHECK (sum < 3);
+INSERT INTO mc_s0 (x, y) SELECT x, 1 AS y FROM generate_series(1, 10) AS x;
+SELECT * FROM mc_v0 ORDER BY x;
+ x  | sum | count 
+----+-----+-------
+  6 |   1 |     1
+  7 |   1 |     1
+  8 |   1 |     1
+  9 |   1 |     1
+ 10 |   1 |     1
+(5 rows)
+
+INSERT INTO mc_s0 (x, y) SELECT x, 1 AS y FROM generate_series(1, 10) AS x;
+INSERT INTO mc_s0 (x, y) SELECT x, 1 AS y FROM generate_series(1, 10) AS x;
+INSERT INTO mc_s0 (x, y) SELECT x, 1 AS y FROM generate_series(1, 10) AS x;
+SELECT * FROM mc_v0 ORDER BY x;
+ x  | sum | count 
+----+-----+-------
+  6 |   2 |     2
+  7 |   2 |     2
+  8 |   2 |     2
+  9 |   2 |     2
+ 10 |   2 |     2
+(5 rows)
+
+DROP STREAM mc_s0 CASCADE; 
+NOTICE:  drop cascades to continuous view mc_v0
