@@ -1,12 +1,12 @@
 /*-------------------------------------------------------------------------
  *
- * cont_plan.h
+ * planner.h
  * 		Interface for generating/modifying CQ plans
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *	  src/include/pipeline/cont_plan.h
+ *	  src/include/pipeline/planner.h
  *
  */
 #ifndef CONT_PLAN_H
@@ -17,7 +17,7 @@
 #include "nodes/execnodes.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "tcop/utility.h"
 #include "utils/rel.h"
 #include "utils/relcache.h"

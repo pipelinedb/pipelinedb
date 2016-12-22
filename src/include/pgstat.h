@@ -15,7 +15,7 @@
 #include "datatype/timestamp.h"
 #include "fmgr.h"
 #include "libpq/pqcomm.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "portability/instr_time.h"
 #include "postmaster/pgarch.h"
 #include "storage/barrier.h"

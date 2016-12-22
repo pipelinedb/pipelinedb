@@ -1,12 +1,12 @@
 /*-------------------------------------------------------------------------
  *
- * cont_plan.c
+ * planner.c
  * 		Functionality for generating/modifying CQ plans
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/cont_plan.c
+ *	  src/backend/pipeline/planner.c
  */
 #include "postgres.h"
 
@@ -32,8 +32,8 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_relation.h"
-#include "pipeline/cont_analyze.h"
-#include "pipeline/cont_plan.h"
+#include "pipeline/analyzer.h"
+#include "pipeline/planner.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"

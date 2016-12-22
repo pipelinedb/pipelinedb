@@ -43,7 +43,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parsetree.h"
 #include "pgstat.h"
-#include "pipeline/cont_analyze.h"
+#include "pipeline/analyzer.h"
 #include "rewrite/rewriteManip.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"

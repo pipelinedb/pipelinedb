@@ -16,7 +16,7 @@
 #include "lib/stringinfo.h"
 #include "nodes/bitmapset.h"
 #include "nodes/pg_list.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "port/atomics.h"

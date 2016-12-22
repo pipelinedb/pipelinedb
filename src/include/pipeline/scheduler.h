@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cont_scheduler.h
+ * scheduler.h
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *    src/include/pipeline/cont_scheduler.h
+ *    src/include/pipeline/scheduler.h
  *
  *-------------------------------------------------------------------------
  */

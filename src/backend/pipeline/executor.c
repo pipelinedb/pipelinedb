@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cont_execute.c
+ * executor.c
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/cont_execute.c
+ *	  src/backend/pipeline/executor.c
  *
  */
 
@@ -21,8 +21,8 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "pgstat.h"
-#include "pipeline/cont_execute.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/executor.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/ipc/reader.h"
 #include "pipeline/miscutils.h"

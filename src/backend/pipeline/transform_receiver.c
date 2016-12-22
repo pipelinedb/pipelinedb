@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * transformReceiver.c
+ * transform_receiver.c
  *
  * Copyright (c) 2013-2016, PipelineDB
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/transformReceiver.c
+ *	  src/backend/pipeline/transform_receiver.c
  *
  */
 #include "postgres.h"
@@ -21,9 +21,9 @@
 #include "commands/trigger.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
-#include "pipeline/transformReceiver.h"
-#include "pipeline/cont_execute.h"
-#include "pipeline/cqmatrel.h"
+#include "pipeline/transform_receiver.h"
+#include "pipeline/executor.h"
+#include "pipeline/matrel.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"

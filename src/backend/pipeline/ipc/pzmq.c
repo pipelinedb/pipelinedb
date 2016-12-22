@@ -13,7 +13,7 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/ipc/pzmq.h"
 #include "utils/hsearch.h"

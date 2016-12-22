@@ -27,7 +27,7 @@
 #include "optimizer/restrictinfo.h"
 #include "optimizer/var.h"
 #include "parser/parsetree.h"
-#include "pipeline/cont_plan.h"
+#include "pipeline/planner.h"
 #include "utils/lsyscache.h"
 #include "utils/selfuncs.h"
 

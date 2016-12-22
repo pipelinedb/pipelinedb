@@ -56,7 +56,7 @@
 #include "commands/defrem.h"
 #include "executor/executor.h"
 #include "optimizer/planner.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "utils/builtins.h"
 #include "utils/catcache.h"
 #include "utils/fmgroids.h"

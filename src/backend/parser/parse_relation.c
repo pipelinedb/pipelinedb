@@ -29,7 +29,7 @@
 #include "parser/parsetree.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_type.h"
-#include "pipeline/cont_analyze.h"
+#include "pipeline/analyzer.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"

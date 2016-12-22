@@ -52,7 +52,7 @@
 #include "nodes/makefuncs.h"
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
-#include "pipeline/cqmatrel.h"
+#include "pipeline/matrel.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "tcop/utility.h"

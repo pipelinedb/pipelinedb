@@ -22,7 +22,7 @@
 #include "catalog/pipeline_stream_fn.h"
 #include "executor/spi.h"
 #include "fmgr.h"
-#include "pipeline/cont_analyze.h"
+#include "pipeline/analyzer.h"
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/stream.h"
 #include "miscadmin.h"

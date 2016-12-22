@@ -1,12 +1,12 @@
 /*-------------------------------------------------------------------------
  *
- * cont_analyze.c
+ * analyzer.c
  *	  Support for parsing and analyzing continuous queries
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/cont_analyze.c
+ *	  src/backend/pipeline/analyzer.c
  *
  *-------------------------------------------------------------------------
  */
@@ -49,9 +49,9 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
-#include "pipeline/cont_analyze.h"
-#include "pipeline/cont_scheduler.h"
-#include "pipeline/cqmatrel.h"
+#include "pipeline/analyzer.h"
+#include "pipeline/scheduler.h"
+#include "pipeline/matrel.h"
 #include "pipeline/stream.h"
 #include "rewrite/rewriteHandler.h"
 #include "storage/lock.h"

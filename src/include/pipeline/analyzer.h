@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cont_analyze.h
+ * analyzer.h
  *	  Interface for for parsing and analyzing continuous queries
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
- * src/include/catalog/pipeline/cont_analyze.h
+ * src/include/catalog/pipeline/analyzer.h
  *
  *-------------------------------------------------------------------------
  */
@@ -13,7 +13,7 @@
 #define CONT_ANALYZE_H
 
 #include "parser/parse_node.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 
 extern double sliding_window_step_factor;
 

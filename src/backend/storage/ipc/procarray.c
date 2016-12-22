@@ -54,7 +54,7 @@
 #include "access/xlog.h"
 #include "catalog/catalog.h"
 #include "miscadmin.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "storage/proc.h"
 #include "storage/procarray.h"
 #include "storage/spin.h"

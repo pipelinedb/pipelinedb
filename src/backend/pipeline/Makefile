@@ -14,10 +14,9 @@ subdir = src/backend/pipeline
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
-OBJS = combinerReceiver.o cont_plan.o update.o stream.o \
-			 cqmatrel.o ttl_vacuum.o tdigest.o miscutils.o bloom.o hll.o cmsketch.o \
-			 cont_analyze.o cont_scheduler.o cont_worker.o cont_combiner.o \
-			 fss.o stream_fdw.o cont_execute.o transformReceiver.o
+OBJS = combiner_receiver.o planner.o update.o stream.o \
+			 matrel.o ttl_vacuum.o tdigest.o miscutils.o bloom.o hll.o cmsketch.o \
+			 analyzer.o scheduler.o worker.o combiner.o fss.o stream_fdw.o executor.o transform_receiver.o
 
 SUBDIRS = ipc
 

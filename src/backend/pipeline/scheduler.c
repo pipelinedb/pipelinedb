@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cont_scheduler.c
+ * scheduler.c
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *    src/backend/pipeline/cont_scheduler.c
+ *    src/backend/pipeline/scheduler.c
  *
  *-------------------------------------------------------------------------
  */
@@ -24,8 +24,8 @@
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "pgstat.h"
-#include "pipeline/cont_execute.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/executor.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/ipc/pzmq.h"
 #include "pipeline/miscutils.h"
 #include "postmaster/fork_process.h"

@@ -61,7 +61,7 @@
 #include "commands/view.h"
 #include "miscadmin.h"
 #include "parser/parse_utilcmd.h"
-#include "pipeline/cont_analyze.h"
+#include "pipeline/analyzer.h"
 #include "postmaster/bgwriter.h"
 #include "rewrite/rewriteDefine.h"
 #include "rewrite/rewriteRemove.h"
