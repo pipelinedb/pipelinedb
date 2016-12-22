@@ -20,6 +20,7 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "executor/spi.h"
 #include "fmgr.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/ipc/microbatch.h"
@@ -847,7 +848,6 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 
 	if (SRF_IS_FIRSTCALL())
 	{
-
 		TupleDesc	tupdesc;
 		MemoryContext oldcontext;
 
@@ -988,4 +988,119 @@ pipeline_flush(PG_FUNCTION_ARGS)
 	microbatch_ack_free(ack);
 
 	PG_RETURN_BOOL(success);
+}
+
+#define UPDATE_TTL_TEMPLATE "UPDATE pipeline_query SET ttl = %d, ttl_attno = %d WHERE id = %d;"
+
+/*
+ * set_ttl
+ *
+ * Set a continuous view's TTL info
+ */
+Datum
+set_ttl(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	HeapTuple tup;
+	Datum result;
+	RangeVar *cv_name;
+	Datum values[2];
+	bool nulls[2];
+	TupleDesc	tupdesc;
+	MemoryContext oldcontext;
+	Interval *ttli = PG_ARGISNULL(1) ? NULL : PG_GETARG_INTERVAL_P(1);
+	text *ttl_col = PG_ARGISNULL(2) ? NULL : PG_GETARG_TEXT_P(2);
+	TupleDesc desc;
+	ContQuery *cv;
+	Relation matrel;
+	int ttl = -1;
+	char *ttl_colname = ttl_col ? TextDatumGetCString(ttl_col) : NULL;
+	AttrNumber ttl_attno = InvalidAttrNumber;
+	int i;
+	StringInfoData buf;
+
+	if (PG_ARGISNULL(0))
+		elog(ERROR, "continuous view name is null");
+
+	cv_name = makeRangeVarFromNameList(textToQualifiedNameList(PG_GETARG_TEXT_P(0)));
+
+	if (!SRF_IS_FIRSTCALL())
+	{
+		funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
+		SRF_RETURN_DONE(funcctx);
+	}
+
+	/* create a function context for cross-call persistence */
+	funcctx = SRF_FIRSTCALL_INIT();
+
+	oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+	/* build tupdesc for result tuples */
+	tupdesc = CreateTemplateTupleDesc(2, false);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "ttl", INT4OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "ttl_attno", INT2OID, -1, 0);
+
+	funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+
+	MemoryContextSwitchTo(oldcontext);
+
+	cv = GetContQueryForView(cv_name);
+
+	if (cv == NULL)
+		elog(ERROR, "continuous view \"%s\" does not exist", cv_name->relname);
+
+	if (IsSWContView(cv_name))
+		elog(ERROR, "the ttl of a sliding-window continuous view cannot be changed");
+
+	if (ttl_colname)
+	{
+		matrel = heap_openrv(cv->matrel, NoLock);
+
+		/*
+		 * Find which attribute number corresponds to the given column name
+		 */
+		desc = RelationGetDescr(matrel);
+		for (i = 0; i < desc->natts; i++)
+		{
+			Form_pg_attribute att = desc->attrs[i];
+			if (pg_strcasecmp(ttl_colname, NameStr(att->attname)) == 0)
+			{
+				ttl_attno = att->attnum;
+				if (att->atttypid != TIMESTAMPOID && att->atttypid != TIMESTAMPTZOID)
+					elog(ERROR, "ttl_column must refer to a timestamp or timestamptz column");
+				break;
+			}
+		}
+		heap_close(matrel, NoLock);
+
+		if (!AttributeNumberIsValid(ttl_attno))
+			elog(ERROR, "column \"%s\" does not exist", ttl_colname);
+	}
+
+	ttl = ttli ? IntervalToEpoch(ttli) : -1;
+
+	initStringInfo(&buf);
+	appendStringInfo(&buf, UPDATE_TTL_TEMPLATE, ttl, ttl_attno, cv->id);
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI manager");
+
+	if (SPI_execute(buf.data, false, 0) != SPI_OK_UPDATE)
+		elog(ERROR, "SPI_execute failed: %s", buf.data);
+
+	if (SPI_finish() != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed");
+
+	values[0] = Int32GetDatum(ttl);
+
+	if (!AttributeNumberIsValid(ttl_attno))
+		nulls[1] = true;
+
+	values[1] = Int16GetDatum(ttl_attno);
+
+	MemSet(nulls, false, sizeof(nulls));
+
+	tup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
+	result = HeapTupleGetDatum(tup);
+	SRF_RETURN_NEXT(funcctx, result);
 }
