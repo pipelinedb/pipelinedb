@@ -33,7 +33,7 @@
 #include "optimizer/tlist.h"
 #include "parser/parse_relation.h"
 #include "parser/parsetree.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "rewrite/rewriteManip.h"
 
 

@@ -25,7 +25,7 @@
 #include "commands/async.h"
 #include "miscadmin.h"
 #include "pgstat.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/ipc/microbatch.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"

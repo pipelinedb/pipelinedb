@@ -15,8 +15,8 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
-#include "pipeline/cont_plan.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/planner.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/ipc/microbatch.h"
 #include "tcop/utility.h"
 

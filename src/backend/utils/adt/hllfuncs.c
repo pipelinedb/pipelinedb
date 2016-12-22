@@ -17,7 +17,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_type.h"
 #include "parser/parser.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/hll.h"
 #include "pipeline/miscutils.h"
 #include "utils/array.h"

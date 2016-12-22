@@ -48,7 +48,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
-#include "pipeline/cont_analyze.h"
+#include "pipeline/analyzer.h"
 #include "pipeline/stream.h"
 #include "rewrite/rewriteManip.h"
 #include "tcop/tcopprot.h"

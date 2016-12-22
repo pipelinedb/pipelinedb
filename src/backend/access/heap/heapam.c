@@ -57,7 +57,7 @@
 #include "catalog/namespace.h"
 #include "miscadmin.h"
 #include "pgstat.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "storage/bufmgr.h"
 #include "storage/freespace.h"
 #include "storage/lmgr.h"

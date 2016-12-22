@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cqmatrel.h
+ * matrel.h
  *	  Interface for modifying continuous view materialization tables
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
- * src/include/catalog/pipeline/cqmatrel.h
+ * src/include/catalog/pipeline/matrel.h
  *
  *-------------------------------------------------------------------------
  */

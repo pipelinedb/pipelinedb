@@ -43,7 +43,7 @@
 
 #include "storage/fd.h"
 
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 
 /* private date for writing out data */
 typedef struct DecodingOutputState

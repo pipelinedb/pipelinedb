@@ -16,7 +16,7 @@
 #include "nodes/primnodes.h"
 #include "parser/parse_coerce.h"
 #include "pipeline/miscutils.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "utils/datum.h"
 #include "utils/hashfuncs.h"
 #include "utils/memutils.h"

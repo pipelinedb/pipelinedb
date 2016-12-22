@@ -40,8 +40,8 @@
 #include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
-#include "pipeline/combinerReceiver.h"
-#include "pipeline/transformReceiver.h"
+#include "pipeline/combiner_receiver.h"
+#include "pipeline/transform_receiver.h"
 #include "utils/portal.h"
 
 

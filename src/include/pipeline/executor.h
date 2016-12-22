@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cont_execute.h
+ * executor.h
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *	  src/include/pipeline/cont_execute.h
+ *	  src/include/pipeline/executor.h
  *
  */
 #ifndef CONT_EXECUTE_H
@@ -20,7 +20,7 @@
 #include "nodes/bitmapset.h"
 #include "nodes/pg_list.h"
 #include "pgstat.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/ipc/reader.h"
 #include "port/atomics.h"
 #include "storage/spin.h"

@@ -72,7 +72,7 @@
 #include "commands/typecmds.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parsetree.h"
-#include "pipeline/cont_analyze.h"
+#include "pipeline/analyzer.h"
 #include "rewrite/rewriteRemove.h"
 #include "storage/lmgr.h"
 #include "utils/fmgroids.h"

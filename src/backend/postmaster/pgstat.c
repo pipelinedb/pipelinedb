@@ -47,7 +47,7 @@
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "pg_trace.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/fork_process.h"

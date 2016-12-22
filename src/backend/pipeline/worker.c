@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cont_worker.c
+ * worker.c
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *    src/include/pipeline/cont_worker.c
+ *    src/include/pipeline/worker.c
  *
  *-------------------------------------------------------------------------
  */
@@ -20,13 +20,13 @@
 #include "executor/executor.h"
 #include "miscadmin.h"
 #include "pgstat.h"
-#include "pipeline/combinerReceiver.h"
-#include "pipeline/cont_execute.h"
-#include "pipeline/cont_plan.h"
-#include "pipeline/cont_scheduler.h"
-#include "pipeline/cqmatrel.h"
+#include "pipeline/combiner_receiver.h"
+#include "pipeline/executor.h"
+#include "pipeline/planner.h"
+#include "pipeline/scheduler.h"
+#include "pipeline/matrel.h"
 #include "pipeline/stream_fdw.h"
-#include "pipeline/transformReceiver.h"
+#include "pipeline/transform_receiver.h"
 #include "storage/ipc.h"
 #include "tcop/dest.h"
 #include "utils/builtins.h"

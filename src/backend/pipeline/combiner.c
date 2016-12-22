@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cont_combiner.c
+ * combiner.c
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *    src/include/pipeline/cont_combiner.c
+ *    src/include/pipeline/combiner.c
  *
  *-------------------------------------------------------------------------
  */
@@ -35,11 +35,11 @@
 #include "parser/parse_oper.h"
 #include "parser/parse_type.h"
 #include "pgstat.h"
-#include "pipeline/combinerReceiver.h"
-#include "pipeline/cont_analyze.h"
-#include "pipeline/cont_plan.h"
-#include "pipeline/cont_scheduler.h"
-#include "pipeline/cqmatrel.h"
+#include "pipeline/combiner_receiver.h"
+#include "pipeline/analyzer.h"
+#include "pipeline/planner.h"
+#include "pipeline/scheduler.h"
+#include "pipeline/matrel.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"

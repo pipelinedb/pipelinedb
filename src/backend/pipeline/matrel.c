@@ -1,12 +1,12 @@
 /*-------------------------------------------------------------------------
  *
- * cqmatrel.c
+ * matrel.c
  *	  Support for interacting with CV materialization tables and their indexes
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/cqmatrel.c
+ *	  src/backend/pipeline/matrel.c
  *
  *-------------------------------------------------------------------------
  */
@@ -17,7 +17,7 @@
 #include "catalog/index.h"
 #include "executor/executor.h"
 #include "nodes/execnodes.h"
-#include "pipeline/cqmatrel.h"
+#include "pipeline/matrel.h"
 #include "pipeline/miscutils.h"
 #include "utils/rel.h"
 #include "utils/lsyscache.h"

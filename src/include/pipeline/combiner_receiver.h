@@ -1,20 +1,20 @@
 /*-------------------------------------------------------------------------
  *
- * combinerReceiver.h
+ * combiner_receiver.h
  *	  An implementation of DestReceiver that that allows combiners to receive
  *	  tuples from worker processes.
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *	  src/include/pipeline/combinerReceiver.h
+ *	  src/include/pipeline/combiner_receiver.h
  *
  */
 #ifndef COMBINER_RECEIVER_H
 #define COMBINER_RECEIVER_H
 
 #include "tcop/dest.h"
-#include "pipeline/cont_execute.h"
+#include "pipeline/executor.h"
 
 typedef bool (*CombinerReceiveFunc) (ContQuery *query, uint32 shard_hash, uint64 group_hash, HeapTuple tup);
 extern CombinerReceiveFunc CombinerReceiveHook;

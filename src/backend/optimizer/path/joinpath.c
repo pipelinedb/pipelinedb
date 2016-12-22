@@ -25,7 +25,7 @@
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
 #include "parser/parsetree.h"
-#include "pipeline/cont_plan.h"
+#include "pipeline/planner.h"
 #include "utils/rel.h"
 
 /* Hook for plugins to get control in add_paths_to_joinrel() */

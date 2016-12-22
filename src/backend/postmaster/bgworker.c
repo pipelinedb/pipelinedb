@@ -19,7 +19,7 @@
 #include "miscadmin.h"
 #include "libpq/pqsignal.h"
 #include "nodes/print.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/postmaster.h"
 #include "storage/barrier.h"

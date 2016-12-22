@@ -1,13 +1,13 @@
 /*-------------------------------------------------------------------------
  *
- * combinerReceiver.c
+ * combiner_receiver.c
  *	  An implementation of DestReceiver that that allows combiners to receive
  *	  tuples from worker processes.
  *
  * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/combinerReceiver.c
+ *	  src/backend/pipeline/combiner_receiver.c
  *
  */
 #include "postgres.h"
@@ -18,8 +18,8 @@
 #include "access/printtup.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
-#include "pipeline/combinerReceiver.h"
-#include "pipeline/cont_execute.h"
+#include "pipeline/combiner_receiver.h"
+#include "pipeline/executor.h"
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"

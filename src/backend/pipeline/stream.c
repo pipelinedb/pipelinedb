@@ -30,7 +30,7 @@
 #include "parser/parse_collate.h"
 #include "parser/parse_target.h"
 #include "pgstat.h"
-#include "pipeline/cont_scheduler.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/stream.h"
 #include "pipeline/stream_fdw.h"
 #include "storage/ipc.h"

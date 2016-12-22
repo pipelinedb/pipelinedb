@@ -67,7 +67,7 @@
 #include "parser/parse_clause.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_type.h"
-#include "pipeline/cont_analyze.h"
+#include "pipeline/analyzer.h"
 #include "pipeline/stream.h"
 #include "pg_getopt.h"
 #include "postmaster/autovacuum.h"
