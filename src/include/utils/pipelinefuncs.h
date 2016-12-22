@@ -56,4 +56,6 @@ extern Datum json_object_int_sum_transout(PG_FUNCTION_ARGS);
 
 extern Datum pipeline_flush(PG_FUNCTION_ARGS);
 
+extern Datum set_ttl(PG_FUNCTION_ARGS);
+
 #endif

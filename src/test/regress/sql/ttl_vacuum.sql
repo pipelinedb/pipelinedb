@@ -62,4 +62,58 @@ SELECT x, "$pk" FROM ttl1_mrel ORDER BY ts;
 
 DROP CONTINUOUS VIEW ttl0;
 DROP CONTINUOUS VIEW ttl1;
+
+CREATE CONTINUOUS VIEW ttl2 AS SELECT second(clock_timestamp()) AS ts, x, COUNT(*) FROM ttl_stream GROUP BY ts, x;
+CREATE CONTINUOUS VIEW ttl3 WITH (sw = '1 second') AS SELECT count(*) FROM ttl_stream;
+
+-- Can't change the TTL of a SW CV
+SELECT set_ttl('ttl3', '1 day', 'count');
+DROP CONTINUOUS VIEW ttl3;
+
+-- Bad CV names
+SELECT set_ttl(NULL, '1 day', 'x');
+SELECT set_ttl('does_not_exist', '1 day', 'x');
+
+-- Bad interval
+SELECT set_ttl('ttl2', 'not an interval', 'x');
+
+-- Bad column name
+SELECT set_ttl('ttl2', '1 day', 'does not exist');
+SELECT set_ttl('ttl2', '1 day', 'x');
+
+-- Ok, now verify legitimate invocations
+SELECT set_ttl('ttl2', '5 seconds', 'ts');
+
+INSERT INTO ttl_stream (x) VALUES (2);
+INSERT INTO ttl_stream (x) VALUES (2);
+
+SELECT x, count FROM ttl2;
+
+SELECT pg_sleep(6);
+VACUUM FULL ttl2;
+
+SELECT x, count FROM ttl2;
+
+SELECT set_ttl('ttl2', '1 second', 'ts');
+
+INSERT INTO ttl_stream (x) VALUES (2);
+INSERT INTO ttl_stream (x) VALUES (2);
+
+SELECT x, count FROM ttl2;
+
+SELECT pg_sleep(2);
+VACUUM FULL ttl2;
+
+SELECT x, count FROM ttl2;
+
+-- No verify we can remove a TTL
+SELECT set_ttl('ttl2', null, null);
+
+INSERT INTO ttl_stream (x) VALUES (2);
+INSERT INTO ttl_stream (x) VALUES (2);
+VACUUM FULL ttl2;
+
+SELECT x, count FROM ttl2;
+
+DROP CONTINUOUS VIEW ttl2;
 DROP STREAM ttl_stream;

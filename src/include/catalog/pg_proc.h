@@ -5964,6 +5964,9 @@ DESCR("bloom filter union");
 DATA(insert OID = 4506 ( hll_union PGNSP PGUID 12 1 0 2276 0 f f f f f f i 1 0 3998 "2276" "{2276}" "{v}" _null_ _null_ _null_ hll_union _null_ _null_ _null_ ));
 DESCR("hyperloglog union");
 
+DATA(insert OID = 4507 ( set_ttl	PGNSP PGUID 12 1 0 0 0 f f f f f t s 3 0 2249 "25 1186 25" "{23,21}" "{o,o}" "{ttl,ttl_attno}" _null_ _null_ set_ttl _null_ _null_ _null_ ));
+DESCR("set ttl info for a continuous view");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

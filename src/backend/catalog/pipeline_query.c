@@ -536,7 +536,6 @@ RelIdIsForMatRel(Oid relid, Oid *id)
 	return true;
 }
 
-
 /*
  * IsSWContView
  */
