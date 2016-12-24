@@ -1863,6 +1863,8 @@ agg_fill_hash_table(AggState *aggstate)
 		outerslot = fetch_input_tuple(aggstate);
 		if (TupIsNull(outerslot))
 			break;
+//		if (IsContQueryCombinerProcess())
+//			print_slot(outerslot);
 		/* set up for advance_aggregates call */
 		tmpcontext->ecxt_outertuple = outerslot;
 

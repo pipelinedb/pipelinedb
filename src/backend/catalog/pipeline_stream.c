@@ -499,7 +499,8 @@ RangeVarIsForStream(RangeVar *rv)
 /*
  * IsStream
  */
-bool IsStream(Oid relid)
+bool
+IsStream(Oid relid)
 {
 	Relation rel = try_relation_open(relid, NoLock);
 	bool result;
@@ -577,4 +578,15 @@ RemovePipelineStreamById(Oid oid)
 	CommandCounterIncrement();
 
 	heap_close(pipeline_stream, RowExclusiveLock);
+}
+
+/*
+ * RelIdIsForOutputStream
+ */
+bool
+RelIdIsForOutputStream(Oid id, Oid *cqid)
+{
+	// scan pipeline query osrelid column
+	// return cq id
+	return false;
 }

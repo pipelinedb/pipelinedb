@@ -378,6 +378,7 @@ subquery_planner(PlannerGlobal *glob, Query *parse,
 	 */
 	pull_up_subqueries(root);
 
+
 	/*
 	 * If this is a simple UNION ALL query, flatten it into an appendrel. We
 	 * do this now because it requires applying pull_up_subqueries to the leaf

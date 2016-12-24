@@ -821,6 +821,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_overlay();
+
 	address = DefineView(view_stmt, cont_select_sql);
 
 	CommandCounterIncrement();

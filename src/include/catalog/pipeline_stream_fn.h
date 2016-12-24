@@ -38,5 +38,6 @@ extern bool IsStream(Oid relid);
 
 extern void CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid);
 extern void RemovePipelineStreamById(Oid oid);
+extern bool RelIdIsForOutputStream(Oid id, Oid *cqid);
 
 #endif
