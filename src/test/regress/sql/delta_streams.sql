@@ -1,0 +1,11 @@
+-- Test for memory leaks since this is in the combine loop
+-- Verify non-SWs don't even get a delta row in the osrel
+-- Unfinalized
+-- Finalized
+-- STJs
+-- CVs using old/new + delta
+-- User combines on delta combine CVs
+-- STJ + user combine on delta combine CVs
+
+-- Serialized (transout/combinein)
+-- ordered set aggs

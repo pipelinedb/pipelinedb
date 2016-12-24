@@ -2924,38 +2924,27 @@ find_cv_attr(ParseState *pstate, RangeVar *cvrv, RangeTblEntry *joinrte, Var *va
  * combine_target_for_osrel
  */
 static bool
-combine_target_for_osrel(Node *node, List *rtable, RangeVar **rv)
+combine_target_for_osrel(Node *node, List *rtable, Oid *cqid)
 {
 	FieldSelect *fs;
-	RangeTblEntry *rte;
 	Var *v;
-	Oid combinefn;
-	Oid transoutfn;
-	Oid combineinfn;
-	Oid statetype;
+	RangeTblEntry *rte;
 
 	if (!IsA(node, FieldSelect))
 		return false;
 
 	fs = (FieldSelect *) node;
-	Assert(IsA(fs->arg, Var));
+
+	if (!IsA(fs->arg, Var))
+		return false;
+
 	v = (Var *) fs->arg;
 
-	rte = list_nth(rtable, v->varno - 1);
+	rte = rt_fetch(v->varno, rtable);
+	if (rte->relkind != RELKIND_STREAM)
+		return false;
 
-//	if (true || RelIdIsForOutputStream(rte->relid, NULL))
-//	{
-		ContQuery *cq = GetContQueryForId(14);
-		Query *q = GetContViewQuery(cq->name);
-		TargetEntry *target = (TargetEntry *) list_nth(q->targetList, v->varattno - 1);
-//	}
-
-
-		/* combines on continuous views should always finalize */
-//		return coerce_to_finalize(pstate, fnoid, type, finaltype, result, combineinfn);
-//	}
-
-	return true;
+	return RelIdIsForOutputStream(rte->relid, cqid);
 }
 
 /*
@@ -2980,6 +2969,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	TargetEntry *target;
 	RangeTblEntry *rte;
 	AttrNumber cvatt = InvalidAttrNumber;
+	Oid cqid;
 
 	if (list_length(fargs) != 1)
 		ereport(ERROR,
@@ -3000,59 +2990,28 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	/*
 	 * 1) Is it a combine call on an output stream?
 	 */
-	if (true)
+	if (combine_target_for_osrel(arg, pstate->p_rtable, &cqid))
 	{
-		// we need to handle CQ procs here too
+		FieldSelect *fs = (FieldSelect *) arg;
+		AttrNumber attno = fs->fieldnum;
+		ContQuery *cq = GetContQueryForId(cqid);
+		Query *q = GetContViewQuery(cq->name);
 
-		FieldSelect *fs = NULL;
-
-		if (IsA(arg, FieldSelect))
-		{
-			fs = (FieldSelect *) arg;
-			Assert(IsA(fs->arg, Var));
-			var = (Var *) fs->arg;
-		}
-		else
-		{
-			// should never have to handle
-			var = (Var *) arg;
-			goto next;
-		}
-
-
-		// verify that it's a fieldselect on the delta column
-
-		rte = list_nth(pstate->p_rtable, var->varno - 1);
-
-		AttrNumber attno = fs ? fs->fieldnum : var->varattno;
-
-	//	if (true || RelIdIsForOutputStream(rte->relid, NULL))
-	//	{
-			ContQuery *cq = GetContQueryForId(5);
-			Query *q = GetContViewQuery(cq->name);
-			target = (TargetEntry *) list_nth(q->targetList, attno - 1);
-	//	}
+		target = (TargetEntry *) list_nth(q->targetList, attno - 1);
 
 		if (IsA(target->expr, Aggref))
 		{
 			Oid fnoid = InvalidOid;
 			Oid type = InvalidOid;
 			Oid finaltype = InvalidOid;
-			Oid aggtype;
-			Var *v;
 			Node *result;
+			Aggref *agg = makeNode(Aggref);
+			Aggref *orig_agg = (Aggref *) target->expr;
 
 			extract_agg_final_info((Node *) target->expr, &fnoid, &type, &finaltype);
 			GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
 
-			aggtype = OidIsValid(statetype) ? statetype : finaltype;
-
-			// make this the original fieldselect with this var in it!
-			v = makeVar(var->varno, var->varattno, aggtype, InvalidOid, InvalidOid, InvalidOid);
-			args = make_combine_args(pstate, combineinfn, (Node *) (fs ? fs : v));
-
-			Aggref *agg = makeNode(Aggref);
-			Aggref *orig_agg = (Aggref *) target->expr;
+			args = make_combine_args(pstate, combineinfn, (Node *) fs);
 
 			Assert(IsA(orig_agg, Aggref));
 
@@ -3071,15 +3030,12 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 			result = (Node *) agg;
 
 			return result;
-//			Node *rr = coerce_to_finalize(pstate, fnoid, type, finaltype, result, combineinfn);
 		}
 		else
 		{
 			// windowfunc
 		}
 	}
-
-next:
 
 	if (!IsA(arg, Var))
 		ereport(ERROR,
@@ -3095,7 +3051,7 @@ next:
 	if (!combine_target_for_cv(var, pstate->p_rtable, &rv))
 	{
 		Oid cvid;
-		RangeTblEntry *rte = list_nth(pstate->p_rtable, var->varno - 1);
+		RangeTblEntry *rte = rt_fetch(var->varno, pstate->p_rtable);
 
 		if (rte->relkind != RELKIND_RELATION)
 			ereport(ERROR,
@@ -3122,7 +3078,7 @@ next:
 	 */
 	cont_qry = GetContViewQuery(rv);
 
-	rte = (RangeTblEntry *) list_nth(pstate->p_rtable, var->varno - 1);
+	rte = (RangeTblEntry *) rt_fetch(var->varno, pstate->p_rtable);
 
 	/*
 	 * If this is a join, our varattno will point to the position of the target
@@ -3264,7 +3220,7 @@ ParseFinalizeFuncCall(ParseState *pstate, List *fargs, int location)
 	}
 
 	var = (Var *) linitial(vars);
-	rte = list_nth(pstate->p_rtable, var->varno - 1);
+	rte = rt_fetch(var->varno, pstate->p_rtable);
 
 	rel = heap_open(rte->relid, NoLock);
 	matrelrv = makeRangeVar(get_namespace_name(RelationGetNamespace(rel)), RelationGetRelationName(rel), -1);

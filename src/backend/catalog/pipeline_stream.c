@@ -36,10 +36,12 @@
 #include "pipeline/stream.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
+#include "utils/fmgroids.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
+#include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
@@ -586,7 +588,29 @@ RemovePipelineStreamById(Oid oid)
 bool
 RelIdIsForOutputStream(Oid id, Oid *cqid)
 {
-	// scan pipeline query osrelid column
-	// return cq id
-	return false;
+	HeapScanDesc scan;
+	HeapTuple tup;
+	ScanKeyData skey[1];
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
+	bool result = false;
+
+	ScanKeyInit(&skey[0], Anum_pipeline_query_osrelid,
+			BTEqualStrategyNumber, F_OIDEQ, ObjectIdGetDatum(id));
+	scan = heap_beginscan(pipeline_query, GetTransactionSnapshot(), 1, skey);
+
+	tup = heap_getnext(scan, ForwardScanDirection);
+	if (HeapTupleIsValid(tup))
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+
+		if (cqid)
+			*cqid = row->id;
+
+		result = true;
+	}
+
+	heap_endscan(scan);
+	heap_close(pipeline_query, NoLock);
+
+	return result;
 }
