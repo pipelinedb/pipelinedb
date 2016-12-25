@@ -2596,6 +2596,8 @@ make_combine_args(ParseState *pstate, Oid combineinfn, Node *arg)
 		fn->args = list_make1(placeholder ? placeholder : arg);
 
 		result = transformFuncCall(pstate, fn);
+		Assert(IsA(result, FuncExpr));
+
 		expr = (FuncExpr *) result;
 		expr->args = list_make1(arg);
 		args = list_make1(expr);
