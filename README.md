@@ -78,7 +78,7 @@ make run
 Now let's generate some test data and stream it into a simple continuous view. First, create the stream and the continuous view that reads from it:
 
     pipeline
-    =# CREATE STREAM test_stream (key text, value integer);
+    =# CREATE STREAM test_stream (key integer, value integer);
     CREATE STREAM
     =# CREATE CONTINUOUS VIEW test_view AS SELECT key, COUNT(*) FROM test_stream GROUP BY key;
     CREATE CONTINUOUS VIEW
@@ -86,18 +86,15 @@ Now let's generate some test data and stream it into a simple continuous view. F
 Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Any `INSERT` target that isn't a table is considered a stream by PipelineDB, meaning streams don't need to have a schema created in advance. Let's emit a single event into the `test_stream` stream since our continuous view is reading from it:
 
     pipeline
-    =# INSERT INTO test_stream (key, value) VALUES ('key', 42);
+    =# INSERT INTO test_stream (key, value) VALUES (0, 42);
     INSERT 0 1
 
-The 1 in the `INSERT 0 1` response means that 1 event was emitted into a stream that is actually being read by a continuous query.
+The 1 in the `INSERT 0 1` response means that 1 event was emitted into a stream that is actually being read by a continuous query. Now let's insert some random data:
 
-The `generate-inserts` script is useful for generating and streaming larger amounts of test data. The following invocation of `generate-inserts` will build a SQL multi `INSERT` with 100,000 tuples having random strings assigned to the `key` field, and random `ints` assigned to the `value` field. All of these events will be emitted to `test_stream`, and subsequently read by the `test_view` continuous view. And since our script is just generating SQL, we can pipe its output directly into the `pipeline` client:
+    =# INSERT INTO test_stream (key, value) SELECT random() * 10, random() * 10 FROM generate_series(1, 100000);
+    INSERT 0 100000
 
-    bin/generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
-
-Try running `generate-inserts` without piping it into `pipeline` to get an idea of what's actually happening (reduce the `batchsize` first!).
-
-Let's verify that the continuous view was properly updated. Were there actually 100,001 events counted?
+Query the continuous view to verify that the continuous view was properly updated. Were there actually 100,001 events counted?
 
     pipeline -c "SELECT sum(count) FROM test_view"
       sum
@@ -108,20 +105,21 @@ Let's verify that the continuous view was properly updated. Were there actually 
 What were the 10 most common randomly generated keys?
 
     pipeline -c "SELECT * FROM test_view ORDER BY count DESC limit 10"
-     key | count
-    -----+-------
-    a   |  4571
-    e   |  4502
-    c   |  4479
-    f   |  4473
-    d   |  4462
-    b   |  4451
-    9   |  2358
-    5   |  2350
-    4   |  2350
-    7   |  2327
+	key  | count 
+	-----+-------
+	 2   | 10124
+	 8   | 10100
+	 1   | 10042
+	 7   |  9996
+	 4   |  9991
+	 5   |  9977
+	 3   |  9963
+	 6   |  9927
+	 9   |  9915
+	10   |  4997
+	 0   |  4969
 
-    (10 rows)
+	(11 rows)
 
 ## License
 
