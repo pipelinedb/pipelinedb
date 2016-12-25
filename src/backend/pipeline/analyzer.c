@@ -2996,19 +2996,30 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		AttrNumber attno = fs->fieldnum;
 		ContQuery *cq = GetContQueryForId(cqid);
 		Query *q = GetContViewQuery(cq->name);
+		Expr *expr;
 
 		target = (TargetEntry *) list_nth(q->targetList, attno - 1);
+		expr = target->expr;
 
-		if (IsA(target->expr, Aggref))
+		/*
+		 * It may be a final function we need to pull off to get to the aggregate
+		 */
+		if (IsA(expr, FuncExpr))
+		{
+			FuncExpr *f = (FuncExpr *) target->expr;
+			if (list_length(f->args) == 1)
+				expr = linitial(f->args);
+		}
+
+		if (IsA(expr, Aggref))
 		{
 			Oid fnoid = InvalidOid;
 			Oid type = InvalidOid;
 			Oid finaltype = InvalidOid;
-			Node *result;
 			Aggref *agg = makeNode(Aggref);
-			Aggref *orig_agg = (Aggref *) target->expr;
+			Aggref *orig_agg = (Aggref *) expr;
 
-			extract_agg_final_info((Node *) target->expr, &fnoid, &type, &finaltype);
+			extract_agg_final_info((Node *) expr, &fnoid, &type, &finaltype);
 			GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
 
 			args = make_combine_args(pstate, combineinfn, (Node *) fs);
@@ -3027,13 +3038,11 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 
 			transformAggregateCall(pstate, agg, args, order, false);
 
-			result = (Node *) agg;
-
-			return result;
+			return (Node *) agg;
 		}
 		else
 		{
-			// windowfunc
+			// Handle windowfunc?
 		}
 	}
 
