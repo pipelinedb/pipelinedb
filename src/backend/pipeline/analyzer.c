@@ -3072,7 +3072,11 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		}
 		else
 		{
-			// Handle windowfunc?
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("combine called with an invalid expression"),
+					 errhint("combine must be called with a single aggregate continuous view column reference.")));
+
 		}
 	}
 
