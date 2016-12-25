@@ -3126,7 +3126,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	/*
 	 * If this is a join, our varattno will point to the position of the target
 	 * combine column within the joined target list, so we need to pull out the
-	 * table-level var that will point us sto the CQ's target list
+	 * table-level var that will point us to the CQ's target list
 	 */
 	cvatt = find_cv_attr(pstate, rv, rte, var);
 
