@@ -2576,10 +2576,29 @@ make_combine_args(ParseState *pstate, Oid combineinfn, Node *arg)
 
 	if (OidIsValid(combineinfn))
 	{
+		Node *placeholder = NULL;
 		FuncCall *fn = makeNode(FuncCall);
+		Node *result;
+		FuncExpr *expr;
+
+		/*
+		 * The below transformFuncCall call doesn't handle FieldSelects, so if
+		 * we have one we use a null constant as a placeholder and swap in the
+		 * FieldSelect when we get the analyzed function call back.
+		 */
+		if (IsA(arg, FieldSelect))
+		{
+			FieldSelect *fs = (FieldSelect *) arg;
+			placeholder = (Node *) makeNullConst(fs->resulttype, fs->resulttypmod, fs->resultcollid);
+		}
+
 		fn->funcname = list_make1(makeString(get_func_name(combineinfn)));
-		fn->args = list_make1(arg);
-		args = list_make1(transformFuncCall(pstate, fn));
+		fn->args = list_make1(placeholder ? placeholder : arg);
+
+		result = transformFuncCall(pstate, fn);
+		expr = (FuncExpr *) result;
+		expr->args = list_make1(arg);
+		args = list_make1(expr);
 	}
 	else
 	{
@@ -2924,11 +2943,21 @@ find_cv_attr(ParseState *pstate, RangeVar *cvrv, RangeTblEntry *joinrte, Var *va
  * combine_target_for_osrel
  */
 static bool
-combine_target_for_osrel(Node *node, List *rtable, Oid *cqid)
+combine_target_for_osrel(Node *node, List *rtable, FieldSelect **fsp, Oid *cqid)
 {
-	FieldSelect *fs;
 	Var *v;
 	RangeTblEntry *rte;
+	FieldSelect *fs;
+
+	/*
+	 * The FieldSelect may be wrapped in a final function
+	 */
+	if (IsA(node, FuncExpr))
+	{
+		FuncExpr *f = (FuncExpr *) node;
+		if (list_length(f->args) == 1)
+			node = linitial(f->args);
+	}
 
 	if (!IsA(node, FieldSelect))
 		return false;
@@ -2944,6 +2973,7 @@ combine_target_for_osrel(Node *node, List *rtable, Oid *cqid)
 	if (rte->relkind != RELKIND_STREAM)
 		return false;
 
+	*fsp = fs;
 	return RelIdIsForOutputStream(rte->relid, cqid);
 }
 
@@ -2970,6 +3000,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	RangeTblEntry *rte;
 	AttrNumber cvatt = InvalidAttrNumber;
 	Oid cqid;
+	FieldSelect *fs;
 
 	if (list_length(fargs) != 1)
 		ereport(ERROR,
@@ -2990,9 +3021,8 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	/*
 	 * 1) Is it a combine call on an output stream?
 	 */
-	if (combine_target_for_osrel(arg, pstate->p_rtable, &cqid))
+	if (combine_target_for_osrel(arg, pstate->p_rtable, &fs, &cqid))
 	{
-		FieldSelect *fs = (FieldSelect *) arg;
 		AttrNumber attno = fs->fieldnum;
 		ContQuery *cq = GetContQueryForId(cqid);
 		Query *q = GetContViewQuery(cq->name);
@@ -3002,7 +3032,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		expr = target->expr;
 
 		/*
-		 * It may be a final function we need to pull off to get to the aggregate
+		 * We may need to pull off a final function to get to the aggregate
 		 */
 		if (IsA(expr, FuncExpr))
 		{

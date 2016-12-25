@@ -56,5 +56,23 @@ INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS
 -- User combine
 SELECT combine(count) AS count, combine(sum) AS sum, combine(avg) AS avg FROM delta7;
 
+-- Ordered sets with serialization/deserializtion functions
+CREATE CONTINUOUS VIEW delta8 AS SELECT x,
+  percentile_cont(0.50) WITHIN GROUP (ORDER BY y) AS p50,
+  percentile_cont(0.99) WITHIN GROUP (ORDER BY y) AS p99
+  FROM delta_stream GROUP BY x;
+
+CREATE CONTINUOUS VIEW delta9 AS
+  SELECT (delta).x % 2 AS x, combine((delta).p50) AS p50, combine((delta).p99) AS p99
+  FROM output_of('delta8') GROUP BY x;
+
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS x;
+SELECT * FROM delta9 ORDER BY x;
+
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(101, 200) AS x;
+SELECT * FROM delta9 ORDER BY x;
+
+SELECT combine(p50) AS p50, combine(p99) AS p99 FROM delta9;
+
 DROP STREAM delta_stream CASCADE;
 DROP TABLE delta_t;
