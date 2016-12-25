@@ -608,8 +608,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CreateSeqStmt *create_seq_stmt;
 	ViewStmt *view_stmt;
 	Query *query;
-	RangeVar *matrel;
-	RangeVar *seqrel;
+	RangeVar *matrel_name;
+	RangeVar *seqrel_name;
 	RangeVar *view;
 	List *tableElts = NIL;
 	ListCell *lc;
@@ -629,6 +629,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	bool saveAllowSystemTableMods;
 	Relation pipeline_query;
 	Relation overlayrel;
+	Relation matrel;
 	ContQuery *cv;
 	Oid cvid;
 	Constraint *pkey;
@@ -637,6 +638,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ObjectAddress address;
 	ColumnDef *old;
 	ColumnDef *new;
+	ColumnDef *delta;
 	CreateStreamStmt *create_osrel;
 	Oid osrelid = InvalidOid;
 	bool has_sw = false;
@@ -650,9 +652,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	check_relation_already_exists(view);
 
-	matrel = makeRangeVar(view->schemaname, CVNameToMatRelName(view->relname), -1);
-	matrel->inhOpt = INH_NO;
-	seqrel = makeRangeVar(view->schemaname, CVNameToSeqRelName(view->relname), -1);
+	matrel_name = makeRangeVar(view->schemaname, CVNameToMatRelName(view->relname), -1);
+	matrel_name->inhOpt = INH_NO;
+	seqrel_name = makeRangeVar(view->schemaname, CVNameToSeqRelName(view->relname), -1);
 
 	/*
 	 * allowSystemTableMods is a global flag that, when true, allows certain column types
@@ -683,7 +685,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying matrel.
 	 */
-	workerselect = TransformSelectStmtForContProcess(matrel, copyObject(select), &viewselect, Worker);
+	workerselect = TransformSelectStmtForContProcess(matrel_name, copyObject(select), &viewselect, Worker);
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
 	ValidateContQuery(query);
@@ -745,7 +747,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * Create the actual underlying materialization relation.
 	 */
 	create_stmt = makeNode(CreateStmt);
-	create_stmt->relation = matrel;
+	create_stmt->relation = matrel_name;
 	create_stmt->tableElts = tableElts;
 	create_stmt->tablespacename = stmt->into->tableSpaceName;
 	create_stmt->oncommit = stmt->into->onCommit;
@@ -769,7 +771,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	if (!pk)
 	{
 		create_seq_stmt = makeNode(CreateSeqStmt);
-		create_seq_stmt->sequence = seqrel;
+		create_seq_stmt->sequence = seqrel_name;
 
 		if (IsBinaryUpgrade)
 			set_next_oids_for_seqrel();
@@ -819,6 +821,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_overlay();
+
 	address = DefineView(view_stmt, cont_select_sql);
 
 	CommandCounterIncrement();
@@ -841,10 +844,29 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	heap_close(overlayrel, NoLock);
 
+	delta = NULL;
+	if (!has_sw)
+	{
+		/* Only non-SW output streams have delta tuples */
+		matrel = heap_open(matrelid, NoLock);
+
+		delta = makeNode(ColumnDef);
+		delta->colname = "delta";
+		delta->typeName = makeNode(TypeName);
+		delta->typeName->typeOid = matrel->rd_rel->reltype;
+		delta->typeName->typemod = -1;
+
+		heap_close(matrel, NoLock);
+	}
+
 	create_osrel = makeNode(CreateStreamStmt);
 	create_osrel->servername = PIPELINE_STREAM_SERVER;
 	create_osrel->base.stream = true;
 	create_osrel->base.tableElts = list_make2(old, new);
+
+	if (delta)
+		create_osrel->base.tableElts = lappend(create_osrel->base.tableElts, delta);
+
 	create_osrel->base.relation = makeRangeVar(view->schemaname, CVNameToOSRelName(view->relname), -1);
 	transformCreateStreamStmt(create_osrel);
 
@@ -863,12 +885,12 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/* Create group look up index and record dependencies */
 	if (IsBinaryUpgrade)
 		set_next_oids_for_lookup_index();
-	select = TransformSelectStmtForContProcess(matrel, copyObject(select), NULL, Combiner);
-	lookup_idx_oid = create_lookup_index(view, matrelid, matrel, select, has_sw);
+	select = TransformSelectStmtForContProcess(matrel_name, copyObject(select), NULL, Combiner);
+	lookup_idx_oid = create_lookup_index(view, matrelid, matrel_name, select, has_sw);
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_pk_index();
-	pkey_idx_oid = create_pkey_index(view, matrelid, matrel, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
+	pkey_idx_oid = create_pkey_index(view, matrelid, matrel_name, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
 
 	UpdateContViewIndexIds(cvid, pkey_idx_oid, lookup_idx_oid);
 	CommandCounterIncrement();

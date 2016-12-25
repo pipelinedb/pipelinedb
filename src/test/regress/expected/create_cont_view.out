@@ -33,6 +33,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cqcreate0                | extended
  new               | cqcreate0                | extended
+ delta             | cqcreate0_mrel           | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate0');
@@ -74,6 +75,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cqcreate1                | extended
  new               | cqcreate1                | extended
+ delta             | cqcreate1_mrel           | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate1');
@@ -118,6 +120,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cqcreate2                | extended
  new               | cqcreate2                | extended
+ delta             | cqcreate2_mrel           | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate2');
@@ -175,6 +178,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cqcreate3                | extended
  new               | cqcreate3                | extended
+ delta             | cqcreate3_mrel           | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate3');
@@ -224,6 +228,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cqcreate4                | extended
  new               | cqcreate4                | extended
+ delta             | cqcreate4_mrel           | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqcreate4');
@@ -366,6 +371,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cvavg                    | extended
  new               | cvavg                    | extended
+ delta             | cvavg_mrel               | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvavg');
@@ -404,6 +410,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cvjson                   | extended
  new               | cvjson                   | extended
+ delta             | cvjson_mrel              | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvjson');
@@ -439,6 +446,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cvjsonobj                | extended
  new               | cvjsonobj                | extended
+ delta             | cvjsonobj_mrel           | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvjsonobj');
@@ -475,6 +483,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cvcount                  | extended
  new               | cvcount                  | extended
+ delta             | cvcount_mrel             | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvcount');
@@ -510,6 +519,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cvarray                  | extended
  new               | cvarray                  | extended
+ delta             | cvarray_mrel             | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvarray');
@@ -550,6 +560,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cvtext                   | extended
  new               | cvtext                   | extended
+ delta             | cvtext_mrel              | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cvtext');
@@ -588,6 +599,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cqaggexpr1               | extended
  new               | cqaggexpr1               | extended
+ delta             | cqaggexpr1_mrel          | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
@@ -629,6 +641,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cqaggexpr2               | extended
  new               | cqaggexpr2               | extended
+ delta             | cqaggexpr2_mrel          | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
@@ -715,6 +728,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cqaggexpr4               | extended
  new               | cqaggexpr4               | extended
+ delta             | cqaggexpr4_mrel          | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
@@ -759,6 +773,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | cqgroupby                | extended
  new               | cqgroupby                | extended
+ delta             | cqgroupby_mrel           | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('cqgroupby');
@@ -814,6 +829,7 @@ Options: fillfactor=50
 -------------------+--------------------------+----------
  old               | multigroupindex          | extended
  new               | multigroupindex          | extended
+ delta             | multigroupindex_mrel     | extended
  arrival_timestamp | timestamp with time zone | plain
 
 SELECT pipeline_get_overlay_viewdef('multigroupindex');

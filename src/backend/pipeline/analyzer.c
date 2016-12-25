@@ -2576,10 +2576,31 @@ make_combine_args(ParseState *pstate, Oid combineinfn, Node *arg)
 
 	if (OidIsValid(combineinfn))
 	{
+		Node *placeholder = NULL;
 		FuncCall *fn = makeNode(FuncCall);
+		Node *result;
+		FuncExpr *expr;
+
+		/*
+		 * The below transformFuncCall call doesn't handle FieldSelects, so if
+		 * we have one we use a null constant as a placeholder and swap in the
+		 * FieldSelect when we get the analyzed function call back.
+		 */
+		if (IsA(arg, FieldSelect))
+		{
+			FieldSelect *fs = (FieldSelect *) arg;
+			placeholder = (Node *) makeNullConst(fs->resulttype, fs->resulttypmod, fs->resultcollid);
+		}
+
 		fn->funcname = list_make1(makeString(get_func_name(combineinfn)));
-		fn->args = list_make1(arg);
-		args = list_make1(transformFuncCall(pstate, fn));
+		fn->args = list_make1(placeholder ? placeholder : arg);
+
+		result = transformFuncCall(pstate, fn);
+		Assert(IsA(result, FuncExpr));
+
+		expr = (FuncExpr *) result;
+		expr->args = list_make1(arg);
+		args = list_make1(expr);
 	}
 	else
 	{
@@ -2805,14 +2826,14 @@ make_finalize_for_viewdef(ParseState *pstate, Oid cvid, Var *var, Node *arg)
 }
 
 /*
- * combine_target_belongs_to_cv
+ * combine_target_for_cv
  *
  * Verify that the given combine target actually belongs to a continuous view.
  * This allows us to run combines on complex range tables such as joins, as long
  * as the target combine column is from a CV.
  */
 static bool
-combine_target_belongs_to_cv(Var *target, List *rangetable, RangeVar **cv)
+combine_target_for_cv(Var *target, List *rangetable, RangeVar **cv)
 {
 	RangeTblEntry *targetrte;
 	ListCell *lc;
@@ -2921,6 +2942,44 @@ find_cv_attr(ParseState *pstate, RangeVar *cvrv, RangeTblEntry *joinrte, Var *va
 }
 
 /*
+ * combine_target_for_osrel
+ */
+static bool
+combine_target_for_osrel(Node *node, List *rtable, FieldSelect **fsp, Oid *cqid)
+{
+	Var *v;
+	RangeTblEntry *rte;
+	FieldSelect *fs;
+
+	/*
+	 * The FieldSelect may be wrapped in a final function
+	 */
+	if (IsA(node, FuncExpr))
+	{
+		FuncExpr *f = (FuncExpr *) node;
+		if (list_length(f->args) == 1)
+			node = linitial(f->args);
+	}
+
+	if (!IsA(node, FieldSelect))
+		return false;
+
+	fs = (FieldSelect *) node;
+
+	if (!IsA(fs->arg, Var))
+		return false;
+
+	v = (Var *) fs->arg;
+
+	rte = rt_fetch(v->varno, rtable);
+	if (rte->relkind != RELKIND_STREAM)
+		return false;
+
+	*fsp = fs;
+	return RelIdIsForOutputStream(rte->relid, cqid);
+}
+
+/*
  * ParseCombineFuncCall
  *
  * Builds an expression for a combine() call on an aggregate CV column.
@@ -2942,6 +3001,8 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	TargetEntry *target;
 	RangeTblEntry *rte;
 	AttrNumber cvatt = InvalidAttrNumber;
+	Oid cqid;
+	FieldSelect *fs;
 
 	if (list_length(fargs) != 1)
 		ereport(ERROR,
@@ -2951,6 +3012,76 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 
 	arg = linitial(fargs);
 
+	/*
+	 * There are 3 types of combine calls that we must handle:
+	 *
+	 * 1) combine on an output stream's delta row, at CV create time.
+	 * 2) combine call in a SW's overlay view, at overlay create time and thus CV create time.
+	 * 3) combine call within user-issued query against a CV, at SELECT time.
+	 */
+
+	/*
+	 * 1) Is it a combine call on an output stream?
+	 */
+	if (combine_target_for_osrel(arg, pstate->p_rtable, &fs, &cqid))
+	{
+		AttrNumber attno = fs->fieldnum;
+		ContQuery *cq = GetContQueryForId(cqid);
+		Query *q = GetContViewQuery(cq->name);
+		Expr *expr;
+
+		target = (TargetEntry *) list_nth(q->targetList, attno - 1);
+		expr = target->expr;
+
+		/*
+		 * We may need to pull off a final function to get to the aggregate
+		 */
+		if (IsA(expr, FuncExpr))
+		{
+			FuncExpr *f = (FuncExpr *) target->expr;
+			if (list_length(f->args) == 1)
+				expr = linitial(f->args);
+		}
+
+		if (IsA(expr, Aggref))
+		{
+			Oid fnoid = InvalidOid;
+			Oid type = InvalidOid;
+			Oid finaltype = InvalidOid;
+			Aggref *agg = makeNode(Aggref);
+			Aggref *orig_agg = (Aggref *) expr;
+
+			extract_agg_final_info((Node *) expr, &fnoid, &type, &finaltype);
+			GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
+
+			args = make_combine_args(pstate, combineinfn, (Node *) fs);
+
+			Assert(IsA(orig_agg, Aggref));
+
+			agg->aggfnoid = fnoid;
+			agg->aggtype = finaltype;
+			agg->args = args;
+			agg->aggstar = false;
+			agg->aggfilter = filter;
+			agg->aggkind = AGGKIND_COMBINE;
+			agg->orig_args = orig_agg->args;
+			agg->orig_directargs = orig_agg->aggdirectargs;
+			agg->orig_order = orig_agg->aggorder;
+
+			transformAggregateCall(pstate, agg, args, order, false);
+
+			return (Node *) agg;
+		}
+		else
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("combine called with an invalid expression"),
+					 errhint("combine must be called with a single aggregate continuous view column reference.")));
+
+		}
+	}
+
 	if (!IsA(arg, Var))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
@@ -2959,10 +3090,13 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 
 	var = (Var *) arg;
 
-	if (!combine_target_belongs_to_cv(var, pstate->p_rtable, &rv))
+	/*
+	 * 2) Are we creating a SW overlay view that has a combine call?
+	 */
+	if (!combine_target_for_cv(var, pstate->p_rtable, &rv))
 	{
 		Oid cvid;
-		RangeTblEntry *rte = list_nth(pstate->p_rtable, var->varno - 1);
+		RangeTblEntry *rte = rt_fetch(var->varno, pstate->p_rtable);
 
 		if (rte->relkind != RELKIND_RELATION)
 			ereport(ERROR,
@@ -2984,10 +3118,12 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		return make_combine_agg_for_viewdef(pstate, cvid, var, order, over);
 	}
 
-	/* Ok, it's a user combine query against an existing continuous view */
+	/*
+	 * 3) It must be a combine call within user-issued query against a CV at SELECT time
+	 */
 	cont_qry = GetContViewQuery(rv);
 
-	rte = (RangeTblEntry *) list_nth(pstate->p_rtable, var->varno - 1);
+	rte = (RangeTblEntry *) rt_fetch(var->varno, pstate->p_rtable);
 
 	/*
 	 * If this is a join, our varattno will point to the position of the target
@@ -3129,7 +3265,7 @@ ParseFinalizeFuncCall(ParseState *pstate, List *fargs, int location)
 	}
 
 	var = (Var *) linitial(vars);
-	rte = list_nth(pstate->p_rtable, var->varno - 1);
+	rte = rt_fetch(var->varno, pstate->p_rtable);
 
 	rel = heap_open(rte->relid, NoLock);
 	matrelrv = makeRangeVar(get_namespace_name(RelationGetNamespace(rel)), RelationGetRelationName(rel), -1);

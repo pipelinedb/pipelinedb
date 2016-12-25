@@ -1,0 +1,126 @@
+CREATE STREAM delta_stream (x integer, y integer);
+-- SWs don't have delta streams
+CREATE CONTINUOUS VIEW delta_sw  WITH (sw = '1 hour') AS SELECT x, count(*) FROM delta_stream GROUP BY x;
+CREATE CONTINUOUS VIEW delta0 AS SELECT combine((delta).count) FROM output_of('delta_sw');
+ERROR:  column "delta" does not exist
+LINE 1: CREATE CONTINUOUS VIEW delta0 AS SELECT combine((delta).coun...
+                                                         ^
+-- Several delta input columns
+CREATE CONTINUOUS VIEW delta1 AS SELECT x, count(*), sum(y), avg(x + y) FROM delta_stream GROUP BY x;
+CREATE CONTINUOUS VIEW delta2 AS
+  SELECT
+    combine((delta).count) AS count,
+    combine((delta).sum) AS sum,
+    combine((delta).avg) AS avg
+  FROM output_of('delta1');
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS x;
+SELECT * FROM delta2;
+ count | sum  |         avg         
+-------+------+---------------------
+   100 | 5050 | 55.0000000000000000
+(1 row)
+
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS x;
+SELECT * FROM delta2;
+ count |  sum  |         avg         
+-------+-------+---------------------
+   200 | 10100 | 55.0000000000000000
+(1 row)
+
+-- COUNT DISTINCT
+CREATE CONTINUOUS VIEW delta3 AS SELECT x, COUNT(DISTINCT y) FROM delta_stream GROUP BY x;
+CREATE CONTINUOUS VIEW delta4 AS SELECT combine((delta).count) AS count FROM output_of('delta3');
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS x;
+SELECT * FROM delta4;
+ count 
+-------
+   100
+(1 row)
+
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(101, 200) AS x;
+SELECT * FROM delta4;
+ count 
+-------
+   200
+(1 row)
+
+-- Large values in delta stream
+CREATE CONTINUOUS VIEW delta5 AS SELECT x, bloom_agg(y) FROM delta_stream GROUP BY x;
+CREATE CONTINUOUS VIEW delta6 AS SELECT (new).x % 2 AS x, combine((delta).bloom_agg) AS bloom_agg FROM output_of('delta5') GROUP BY x;
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS x;
+SELECT x, bloom_cardinality(bloom_agg) FROM delta6 ORDER BY x;
+ x | bloom_cardinality 
+---+-------------------
+ 0 |                49
+ 1 |                50
+(2 rows)
+
+-- User combine
+SELECT bloom_cardinality(combine(bloom_agg)) FROM delta6;
+ bloom_cardinality 
+-------------------
+                99
+(1 row)
+
+-- STJs with delta streams
+CREATE TABLE delta_t AS SELECT generate_series(1, 10) AS x;
+CREATE CONTINUOUS VIEW delta7 AS
+  SELECT
+    t.x,
+    combine((os.delta).count) AS count,
+    combine((os.delta).sum) AS sum,
+    combine((os.delta).avg) AS avg
+  FROM delta1_osrel os JOIN delta_t t ON (os.delta).x = t.x
+  GROUP BY t.x;
+NOTICE:  consider creating an index on t.x for improved stream-table join performance
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS x;
+-- User combine
+SELECT combine(count) AS count, combine(sum) AS sum, combine(avg) AS avg FROM delta7;
+ count | sum  |         avg         
+-------+------+---------------------
+    90 | 4500 | 55.0000000000000000
+(1 row)
+
+-- Ordered sets with serialization/deserializtion functions
+CREATE CONTINUOUS VIEW delta8 AS SELECT x,
+  percentile_cont(0.50) WITHIN GROUP (ORDER BY y) AS p50,
+  percentile_cont(0.99) WITHIN GROUP (ORDER BY y) AS p99
+  FROM delta_stream GROUP BY x;
+CREATE CONTINUOUS VIEW delta9 AS
+  SELECT (delta).x % 2 AS x, combine((delta).p50) AS p50, combine((delta).p99) AS p99
+  FROM output_of('delta8') GROUP BY x;
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS x;
+SELECT * FROM delta9 ORDER BY x;
+ x | p50 | p99  
+---+-----+------
+ 0 |  51 | 99.5
+ 1 |  50 | 98.5
+(2 rows)
+
+INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(101, 200) AS x;
+SELECT * FROM delta9 ORDER BY x;
+ x | p50 | p99 
+---+-----+-----
+ 0 | 101 | 199
+ 1 | 100 | 198
+(2 rows)
+
+SELECT combine(p50) AS p50, combine(p99) AS p99 FROM delta9;
+  p50  |  p99  
+-------+-------
+ 100.5 | 198.5
+(1 row)
+
+DROP STREAM delta_stream CASCADE;
+NOTICE:  drop cascades to 10 other objects
+DETAIL:  drop cascades to continuous view delta_sw
+drop cascades to continuous view delta1
+drop cascades to continuous view delta2
+drop cascades to continuous view delta7
+drop cascades to continuous view delta3
+drop cascades to continuous view delta4
+drop cascades to continuous view delta5
+drop cascades to continuous view delta6
+drop cascades to continuous view delta8
+drop cascades to continuous view delta9
+DROP TABLE delta_t;
