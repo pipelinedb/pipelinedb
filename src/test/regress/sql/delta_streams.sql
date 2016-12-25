@@ -35,7 +35,7 @@ CREATE CONTINUOUS VIEW delta6 AS SELECT (new).x % 2 AS x, combine((delta).bloom_
 
 INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS x;
 
-SELECT x, bloom_cardinality(bloom_agg) FROM delta6;
+SELECT x, bloom_cardinality(bloom_agg) FROM delta6 ORDER BY x;
 
 -- User combine
 SELECT bloom_cardinality(combine(bloom_agg)) FROM delta6;

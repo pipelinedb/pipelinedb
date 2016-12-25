@@ -48,11 +48,11 @@ SELECT * FROM delta4;
 CREATE CONTINUOUS VIEW delta5 AS SELECT x, bloom_agg(y) FROM delta_stream GROUP BY x;
 CREATE CONTINUOUS VIEW delta6 AS SELECT (new).x % 2 AS x, combine((delta).bloom_agg) AS bloom_agg FROM output_of('delta5') GROUP BY x;
 INSERT INTO delta_stream (x, y) SELECT x % 10, x FROM generate_series(1, 100) AS x;
-SELECT x, bloom_cardinality(bloom_agg) FROM delta6;
+SELECT x, bloom_cardinality(bloom_agg) FROM delta6 ORDER BY x;
  x | bloom_cardinality 
 ---+-------------------
- 1 |                50
  0 |                49
+ 1 |                50
 (2 rows)
 
 -- User combine
