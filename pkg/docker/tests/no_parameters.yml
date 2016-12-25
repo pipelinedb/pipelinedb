@@ -1,0 +1,5 @@
+version: "2"
+services:
+    pipelinedb:
+        build: ../
+        image: pipelinedb/pipelinedb:latest
