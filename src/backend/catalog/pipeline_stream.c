@@ -362,13 +362,32 @@ UpdatePipelineStreamCatalog(void)
 	Relation pipeline_stream;
 	HTAB *hash;
 	List *keys = NIL;
+	MemoryContext old;
+	MemoryContext tmp_cxt;
+
+	tmp_cxt = AllocSetContextCreate(CurrentMemoryContext, "UpdatePipelineStreamCatalogCxt",
+					ALLOCSET_DEFAULT_MINSIZE,
+					ALLOCSET_DEFAULT_INITSIZE,
+					ALLOCSET_DEFAULT_MAXSIZE);
 
 	pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
 	pipeline_stream = heap_open(PipelineStreamRelationId, RowExclusiveLock);
 
+	/*
+	 * The following series of function calls can consume quite a bit
+	 * of memory and UpdatePipelineStreamCatalog can be called may times
+	 * in one transaction, so we free everything aggressively.
+	 */
+	old = MemoryContextSwitchTo(tmp_cxt);
+
 	hash = streams_to_meta(pipeline_query);
 	keys = update_pipeline_stream_catalog(pipeline_stream, hash);
 	mark_nonexistent_streams(pipeline_stream, keys);
+
+	hash_destroy(hash);
+
+	MemoryContextSwitchTo(old);
+	MemoryContextDelete(tmp_cxt);
 
 	heap_close(pipeline_stream, NoLock);
 	heap_close(pipeline_query, NoLock);
