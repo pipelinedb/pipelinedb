@@ -87,7 +87,7 @@ RUN test -z "${WITH_CSTORE}" \
         && apt-get purge -y --auto-remove ca-certificates wget build-essential)
 
 ARG WITH_KAFKA=
-ENV PIPELINEDB_KAFKA_VERSION 0.9.4
+ENV PIPELINEDB_KAFKA_VERSION 0.9.5
 ENV RDKAFKA_VERSION 0.9.2
 RUN test -z "${WITH_KAFKA}" \
     || (set -x \
@@ -101,7 +101,7 @@ RUN test -z "${WITH_KAFKA}" \
             | tar xzf - -C /tmp/pipelinedb_kafka --strip-components=1 \
         && export PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config \
         && cd /tmp/rdkafka \
-        && ./configure --CFLAGS="-fPIC" --prefix=/usr \
+        && ./configure --CFLAGS="-fPIC" --prefix=/usr --disable-ssl --disable-sasl \
         && make \
         && make install \
         && cd /tmp/pipelinedb_kafka \
