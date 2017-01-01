@@ -184,6 +184,9 @@ slot_hash_group_skip_attr(TupleTableSlot *slot, AttrNumber skip_attno, FuncExpr 
 	Datum result;
 	int i = 0;
 
+	Assert(fcinfo);
+	Assert(hash);
+
 	foreach(lc, hash->args)
 	{
 		AttrNumber attno = ((Var *) lfirst(lc))->varattno;

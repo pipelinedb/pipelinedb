@@ -126,6 +126,7 @@ typedef struct
 	int group_hashes_len;
 	AttrNumber pk;
 	bool seq_pk;
+	FunctionCallInfo hash_fcinfo;
 
 	/* Projection to execute on output stream tuples */
 	ProjectionInfo *output_stream_proj;
@@ -1279,6 +1280,30 @@ combine(ContQueryCombinerState *state, bool lookup)
 }
 
 /*
+ * set_group_hash
+ *
+ * Set the group hash at the given index, increasing the size of the group hashes array if necessary
+ */
+static void
+set_group_hash(ContQueryCombinerState *state, int index, int64 hash)
+{
+	int start = state->group_hashes_len;
+
+	while (index >= state->group_hashes_len)
+		state->group_hashes_len *= 2;
+
+	if (start != state->group_hashes_len)
+	{
+		MemoryContext old = MemoryContextSwitchTo(state->base.state_cxt);
+		state->group_hashes = repalloc(state->group_hashes, state->group_hashes_len * sizeof(int64));
+		MemoryContextSwitchTo(old);
+	}
+
+	Assert(index < state->group_hashes_len);
+	state->group_hashes[index] = hash;
+}
+
+/*
  * sync_combine
  *
  * Writes the combine results to a continuous view's table, performing
@@ -1303,6 +1328,7 @@ sync_combine(ContQueryCombinerState *state)
 	StreamInsertState *sis = NULL;
 	Bitmapset *os_targets = NULL;
 	Bitmapset *orig_targets = NULL;
+	int pending = 0;
 
 	estate->es_range_table = state->combine_plan->rtable;
 
@@ -1332,6 +1358,12 @@ sync_combine(ContQueryCombinerState *state)
 
 		entry->tuple = ExecCopySlotTuple(state->slot);
 		tuplestore_puttupleslot(state->batch, state->slot);
+
+		if (state->hashfunc)
+		{
+			uint64 hash =  slot_hash_group(state->slot, state->hashfunc, state->hash_fcinfo);
+			set_group_hash(state, pending++, hash);
+		}
 	}
 
 	/* Do a final combine with existing on-disk groups */
@@ -1678,7 +1710,18 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 		ri = CQMatRelOpen(matrel);
 
 		if (state->ngroupatts)
+		{
 			state->hashfunc = GetGroupHashIndexExpr(ri);
+			state->hash_fcinfo = palloc0(sizeof(FunctionCallInfoData));
+			state->hash_fcinfo->flinfo = palloc0(sizeof(FmgrInfo));
+			state->hash_fcinfo->flinfo->fn_mcxt = state->base.tmp_cxt;
+
+			fmgr_info(state->hashfunc->funcid, state->hash_fcinfo->flinfo);
+			fmgr_info_set_expr((Node *) state->hashfunc, state->hash_fcinfo->flinfo);
+
+			state->hash_fcinfo->fncollation = state->hashfunc->funccollid;
+			state->hash_fcinfo->nargs = list_length(state->hashfunc->args);
+		}
 
 		CQMatRelClose(ri);
 
@@ -1717,30 +1760,6 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	state->seq_pk = OidIsValid(base->query->seqrelid);
 
 	return base;
-}
-
-/*
- * set_group_hash
- *
- * Set the group hash at the given index, increasing the size of the group hashes array if necessary
- */
-static void
-set_group_hash(ContQueryCombinerState *state, int index, int64 hash)
-{
-	int start = state->group_hashes_len;
-
-	while (index >= state->group_hashes_len)
-		state->group_hashes_len *= 2;
-
-	if (start != state->group_hashes_len)
-	{
-		MemoryContext old = MemoryContextSwitchTo(state->base.state_cxt);
-		state->group_hashes = repalloc(state->group_hashes, state->group_hashes_len * sizeof(int64));
-		MemoryContextSwitchTo(old);
-	}
-
-	Assert(index < state->group_hashes_len);
-	state->group_hashes[index] = hash;
 }
 
 static int
