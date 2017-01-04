@@ -1664,7 +1664,7 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 	{
 		{"track_continuous_queries", PGC_POSTMASTER, STATS_COLLECTOR,
-			gettext_noop("Collects statistics on continuous query activiy."),
+			gettext_noop("Collects statistics on continuous query activity."),
 			NULL
 		},
 		&pgstat_track_continuous_queries,
