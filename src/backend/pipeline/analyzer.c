@@ -1424,7 +1424,7 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 			 * HACK(usmanm): If arrival_timestamp is the last column and has the correct type, then let it slide. This
 			 * it for making CREATE STREAM ... (LIKE ...) and pg_dump/pg_restore to work. Should be fixed by #1616.
 			 */
-			if (!lnext(lc) && typ == TIMESTAMPTZOID && typmod == -1)
+			if (!lnext(lc) && typ == TIMESTAMPTZOID)
 				saw_atime = true;
 			else
 				ereport(ERROR,
