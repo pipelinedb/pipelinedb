@@ -1780,12 +1780,16 @@ typedef struct CQOSAAggState
 Datum
 cqosastatesend(PG_FUNCTION_ARGS)
 {
-	CQOSAAggState *state = (CQOSAAggState *) PG_GETARG_POINTER(0);
-	TDigest *t = state->tdigest;
+	CQOSAAggState *state = PG_ARGISNULL(0) ? NULL : (CQOSAAggState *) PG_GETARG_POINTER(0);
+	TDigest *t;
 	bytea *result;
 	int nbytes;
 	char *pos;
 
+	if (!state)
+		PG_RETURN_NULL();
+
+	t = state->tdigest;
 	t = TDigestCompress(t);
 
 	nbytes = (sizeof(CQOSAAggState) + sizeof(float8) * state->num_percentiles + sizeof(bool) * state->num_percentiles +
@@ -1814,10 +1818,16 @@ cqosastatesend(PG_FUNCTION_ARGS)
 Datum
 cqosastaterecv(PG_FUNCTION_ARGS)
 {
-	bytea *bytes = (bytea *) PG_GETARG_BYTEA_P(0);
-	char *pos = VARDATA(bytes);
-	CQOSAAggState *state = palloc(sizeof(CQOSAAggState));
+	bytea *bytes = PG_ARGISNULL(0) ? NULL : (bytea *) PG_GETARG_BYTEA_P(0);
+	char *pos;
+	CQOSAAggState *state;
 	TDigest *t;
+
+	if (!bytes)
+		PG_RETURN_NULL();
+
+	pos = VARDATA(bytes);
+	state = palloc(sizeof(CQOSAAggState));
 
 	memcpy(state, pos, sizeof(CQOSAAggState));
 	pos += sizeof(CQOSAAggState);
@@ -2081,13 +2091,16 @@ typedef struct FirstValuesPerGroupState
 Datum
 first_values_send(PG_FUNCTION_ARGS)
 {
-	FirstValuesPerGroupState *state = (FirstValuesPerGroupState *) PG_GETARG_POINTER(0);
+	FirstValuesPerGroupState *state = PG_ARGISNULL(0) ? NULL : (FirstValuesPerGroupState *) PG_GETARG_POINTER(0);
 	MemoryContext old;
 	MemoryContext context;
 	bytea *result;
 	int nbytes;
 	char *pos;
 	bytea *array = NULL;
+
+	if (!state)
+		PG_RETURN_NULL();
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = fcinfo->flinfo->fn_mcxt;
@@ -2127,6 +2140,9 @@ first_values_recv(PG_FUNCTION_ARGS)
 	FirstValuesPerGroupState *state;
 	MemoryContext old;
 	MemoryContext context;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = fcinfo->flinfo->fn_mcxt;

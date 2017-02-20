@@ -7726,6 +7726,9 @@ numaggstaterecv(PG_FUNCTION_ARGS)
 	int digitssize;
 	int i;
 
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;
 
@@ -7777,11 +7780,14 @@ numaggstaterecv(PG_FUNCTION_ARGS)
 Datum
 numaggstatesend(PG_FUNCTION_ARGS)
 {
-	NumericAggState *nagg = (NumericAggState *) PG_GETARG_POINTER(0);
+	NumericAggState *nagg = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
 	bytea *result;
 	int nbytes;
 	int i;
+
+	if (!nagg)
+		PG_RETURN_NULL();
 
 	initStringInfo(&buf);
 

@@ -4363,6 +4363,9 @@ stringaggstatesend(PG_FUNCTION_ARGS)
 	bytea *result;
 	int nbytes;
 
+	if (!state)
+		PG_RETURN_NULL();
+
 	initStringInfo(&buf);
 
 	pq_sendint(&buf, state->dlen, sizeof(int));
@@ -4384,10 +4387,15 @@ stringaggstatesend(PG_FUNCTION_ARGS)
 Datum
 stringaggstaterecv(PG_FUNCTION_ARGS)
 {
-	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
+	bytea *bytesin = PG_ARGISNULL(0) ? NULL : (bytea *) PG_GETARG_BYTEA_P(0);
 	StringAggState *result;
 	StringInfoData buf;
-	int nbytes = VARSIZE(bytesin) - VARHDRSZ;
+	int nbytes;
+
+	if (!bytesin)
+		PG_RETURN_NULL();
+
+	nbytes = VARSIZE(bytesin) - VARHDRSZ;
 
 	result = (StringAggState *) palloc0(sizeof(StringAggState));
 
