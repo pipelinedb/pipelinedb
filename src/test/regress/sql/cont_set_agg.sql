@@ -48,4 +48,22 @@ INSERT INTO test_set_agg_stream (t) VALUES ('a'), (1), (NULL);
 SELECT * FROM test_set_agg5;
 
 DROP CONTINUOUS VIEW test_set_agg5;
+
+CREATE CONTINUOUS VIEW test_set_agg6 AS SELECT x, set_agg(t) FROM test_set_agg_stream GROUP BY x;
+
+INSERT INTO test_set_agg_stream (x, t) VALUES (0, 'x'), (0, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'), (0, 'z');
+INSERT INTO test_set_agg_stream (x, t) VALUES (0, 'x'), (1, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'), (2, 'z'), (0, '0000000000000000'), (3, '000000000000000');
+
+SELECT x, unnest(set_agg) FROM test_set_agg6 ORDER BY x, unnest;
+SELECT x, unnest(combine(set_agg)) FROM test_set_agg6 GROUP BY x ORDER BY x, unnest;
+SELECT unnest(combine(set_agg)) FROM test_set_agg6 ORDER BY unnest;
+
+INSERT INTO test_set_agg_stream (x, t) VALUES (0, 'x'), (0, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'), (0, 'z');
+INSERT INTO test_set_agg_stream (x, t) VALUES (0, 'x'), (1, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'), (2, 'z'), (0, '0000000000000000'), (3, '000000000000000');
+
+SELECT x, unnest(set_agg) FROM test_set_agg6 ORDER BY x, unnest;
+SELECT x, unnest(combine(set_agg)) FROM test_set_agg6 GROUP BY x ORDER BY x, unnest;
+SELECT unnest(combine(set_agg)) FROM test_set_agg6 ORDER BY unnest;
+
+DROP CONTINUOUS VIEW test_set_agg6;
 DROP STREAM test_set_agg_stream CASCADE;
