@@ -20,57 +20,11 @@
 #include "utils/setfuncs.h"
 #include "utils/typcache.h"
 
-#define MURMUR_SEED 0x02cffb4c45ee1fb8L
-
-typedef struct SetKey
-{
-	uint32 hash;
-	Datum value;
-	TypeCacheEntry *typ;
-} SetKey;
-
 typedef struct SetAggState
 {
-	HTAB *htab;
 	TypeCacheEntry *typ;
 	bool has_null;
 } SetAggState;
-
-/*
- * set_key_match
- */
-static int
-set_key_match(const void *kl, const void *kr, Size keysize)
-{
-	SetKey *l = (SetKey *) kl;
-	SetKey *r = (SetKey *) kr;
-	int cmp;
-
-	Assert(l->typ->type_id == r->typ->type_id);
-
-	cmp = datumIsEqual(l->value, r->value, l->typ->typbyval, l->typ->typlen) ? 0 : 1;
-
-	return DatumGetInt32(cmp);
-}
-
-/*
- * set_key_hash
- */
-static uint32
-set_key_hash(const void *key, Size keysize)
-{
-	SetKey *k = (SetKey *) key;
-	StringInfoData buf;
-	uint64_t h;
-
-	initStringInfo(&buf);
-	DatumToBytes(k->value, k->typ, &buf);
-
-	h = MurmurHash3_64(buf.data, buf.len, MURMUR_SEED);
-	pfree(buf.data);
-
-	return DatumGetUInt32(h);
-}
 
 /*
  * set_agg_startup
@@ -79,7 +33,6 @@ static void
 set_agg_startup(FunctionCallInfo fcinfo, Oid type)
 {
 	MemoryContext old;
-	HASHCTL ctl;
 	SetAggState *state;
 
 	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
@@ -92,13 +45,6 @@ set_agg_startup(FunctionCallInfo fcinfo, Oid type)
 	if (type == RECORDOID || state->typ->typtype == TYPTYPE_COMPOSITE)
 		elog(ERROR, "composite types are not supported by set_agg");
 
-	MemSet(&ctl, 0, sizeof(ctl));
-	ctl.keysize = sizeof(SetKey);
-	ctl.entrysize = sizeof(SetKey);
-	ctl.match = set_key_match;
-	ctl.hash = set_key_hash;
-
-	state->htab = hash_create("SetAggHashTable", 1024, &ctl, HASH_FUNCTION | HASH_ELEM | HASH_COMPARE);
 	MemoryContextSwitchTo(old);
 
 	fcinfo->flinfo->fn_extra = (void *) state;
@@ -110,12 +56,8 @@ set_agg_startup(FunctionCallInfo fcinfo, Oid type)
 static ArrayBuildState *
 set_add(FunctionCallInfo fcinfo, MemoryContext aggcontext, Datum d, bool isnull, ArrayBuildState *state)
 {
-	SetKey key;
-	bool found;
 	SetAggState *sas;
-	StringInfoData buf;
-	uint64_t h;
-	Datum copy;
+	int i;
 
 	sas = (SetAggState *) fcinfo->flinfo->fn_extra;
 
@@ -130,23 +72,19 @@ set_add(FunctionCallInfo fcinfo, MemoryContext aggcontext, Datum d, bool isnull,
 		return state;
 	}
 
-	copy = datumCopy(d, sas->typ->typbyval, sas->typ->typlen);
+	if (state)
+	{
+		for (i = 0; i < state->nelems; i++)
+		{
+			if ((isnull && state->dnulls[i]) || datumIsEqual(d, state->dvalues[i], sas->typ->typbyval, sas->typ->typlen))
+			{
+				/* Duplicate value, no need to add it */
+				return state;
+			}
+		}
+	}
 
-	initStringInfo(&buf);
-	DatumToBytes(copy, sas->typ, &buf);
-
-	h = MurmurHash3_64(buf.data, buf.len, MURMUR_SEED);
-	pfree(buf.data);
-
-	MemSet(&key, 0, sizeof(SetKey));
-	key.hash = h;
-	key.value = copy;
-	key.typ = sas->typ;
-
-	hash_search_with_hash_value(sas->htab, &key, h, HASH_ENTER, &found);
-
-	if (!found)
-		state = accumArrayResult(state, d, false, sas->typ->type_id, aggcontext);
+	state = accumArrayResult(state, d, false, sas->typ->type_id, aggcontext);
 
 	return state;
 }
