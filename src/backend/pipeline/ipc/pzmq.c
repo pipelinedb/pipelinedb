@@ -127,10 +127,9 @@ pzmq_bind(uint64 id)
 	sprintf(zsock->addr, PZMQ_SOCKNAME_STR, DataDir, id);
 	zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PULL);
 
-	optval = 10;
+	optval = continuous_query_ipc_hwm;
 	if (zmq_setsockopt(zsock->sock, ZMQ_RCVHWM, &optval, sizeof(int)) != 0)
 		elog(WARNING, "pzmq_bind failed to set rcvhwm: %s", zmq_strerror(errno));
-
 
 	if (zmq_bind(zsock->sock, zsock->addr) != 0)
 	{
@@ -166,7 +165,7 @@ pzmq_connect(uint64 id)
 		sprintf(zsock->addr, PZMQ_SOCKNAME_STR, DataDir, id);
 		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
 
-		optval = 10;
+		optval = continuous_query_ipc_hwm;
 		if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &optval, sizeof(int)) != 0)
 			elog(WARNING, "pzmq_connect failed to set sndhwm: %s", zmq_strerror(errno));
 

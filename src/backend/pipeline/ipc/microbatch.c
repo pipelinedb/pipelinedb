@@ -21,6 +21,7 @@
 
 int continuous_query_batch_size;
 int continuous_query_batch_mem;
+int continuous_query_ipc_hwm;
 
 #define MAX_PACKED_SIZE (MAX_MICROBATCH_SIZE - 2048) /* subtract 2kb for buffer for acks */
 #define MAX_TUPDESC_SIZE(desc) ((desc)->natts * (sizeof(NameData) + (3 * sizeof(int))))

@@ -26,6 +26,7 @@
 /* guc */
 extern int continuous_query_batch_mem;
 extern int continuous_query_batch_size;
+extern int continuous_query_ipc_hwm;
 
 extern Size MicrobatchAckShmemSize(void);
 extern void MicrobatchAckShmemInit(void);
