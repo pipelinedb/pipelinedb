@@ -359,6 +359,26 @@ unpack_tupdesc(char *buf, TupleDesc *desc)
 }
 
 char *
+microbatch_pack_for_queue(uint64 recv_id, char *packed, int *len)
+{
+	int new_len;
+
+	Assert(len);
+
+	new_len = *len;
+	new_len += sizeof(uint64);
+
+	// cleanup
+	packed = repalloc(packed, new_len);
+	memmove(packed + sizeof(uint64), packed, *len);
+	memcpy(packed, &recv_id, sizeof(uint64));
+
+	*len = new_len;
+
+	return packed;
+}
+
+char *
 microbatch_pack(microbatch_t *mb, int *len)
 {
 	char *buf = palloc0(mb->packed_size + mb->buf->len);
@@ -528,20 +548,47 @@ microbatch_unpack(char *buf, int len)
 }
 
 void
-microbatch_send(microbatch_t *mb, uint64 recv_id)
+microbatch_send(microbatch_t *mb, uint64 recv_id, bool async, ContQueryDatabaseMetadata *db_meta)
 {
 	int len;
 	char *buf = microbatch_pack(mb, &len);
 
 	pzmq_connect(recv_id);
 
-	for (;;)
+	if (!async)
 	{
-		if (pzmq_send(recv_id, buf, len, true))
-			break;
+		// comment
+		for (;;)
+		{
+			if (pzmq_send(recv_id, buf, len, true))
+				break;
 
-		if (get_sigterm_flag())
-			break;
+			if (get_sigterm_flag())
+				break;
+		}
+	}
+	else if (true || !pzmq_send(recv_id, buf, len, false))
+	{
+		// nonblocking write to socket failed
+		// do a blocking write to the queue
+
+		int queue_id = rand() % continuous_query_num_queues;
+		int offset = continuous_query_num_workers + continuous_query_num_combiners;
+
+		/* TODO(derekjn) encapsulate this offset arithmetic in a function */
+		queue_id = db_meta->db_procs[offset + queue_id].pzmq_id;
+		buf = microbatch_pack_for_queue(recv_id, buf, &len);
+
+		pzmq_connect(queue_id);
+
+		for (;;)
+		{
+			if (pzmq_send(queue_id, buf, len, true))
+				break;
+
+			if (get_sigterm_flag())
+				break;
+		}
 	}
 
 	pfree(buf);
@@ -570,19 +617,33 @@ microbatch_send_to_worker(microbatch_t *mb, int worker_id)
 {
 	ContQueryDatabaseMetadata *db_meta = GetMyContQueryDatabaseMetadata();
 	int recv_id;
+	bool async = false;
 
 	if (worker_id == -1)
 	{
 		if (IsContQueryCombinerProcess())
 		{
 			/*
-			 * Combiners need to shard over works so that updates to a specific group are always
+			 * Combiners need to shard over workers so that updates to a specific group are always
 			 * written in order to the output stream.
 			 */
 			worker_id = MyContQueryProc->group_id % continuous_query_num_workers;
+
+			// combiner -> worker
+			async = true;
+		}
+		else if (IsContQueryWorkerProcess())
+		{
+			// worker process writing to an output stream
+			// worker -> worker
+
+			worker_id = rand() % continuous_query_num_workers;
+			async = true;
 		}
 		else
 		{
+			// We're a client write process, ok to block indefinitely
+
 			/* TODO(usmanm): Poll all workers and send to first non-blocking one? */
 			worker_id = rand() % continuous_query_num_workers;
 		}
@@ -590,7 +651,11 @@ microbatch_send_to_worker(microbatch_t *mb, int worker_id)
 
 	recv_id = db_meta->db_procs[worker_id].pzmq_id;
 
-	microbatch_send(mb, recv_id);
+	// microbatch_send should use the queue where necessary
+	// if we give async flag, it should use the queue if the first
+	// nonblocking call fails
+
+	microbatch_send(mb, recv_id, async, db_meta);
 	microbatch_reset(mb);
 }
 
@@ -605,6 +670,7 @@ microbatch_send_to_combiner(microbatch_t *mb, int combiner_id)
 
 	recv_id = db_meta->db_procs[continuous_query_num_workers + combiner_id].pzmq_id;
 
-	microbatch_send(mb, recv_id);
+	// not async
+	microbatch_send(mb, recv_id, false, db_meta);
 	microbatch_reset(mb);
 }

@@ -26,6 +26,7 @@ typedef enum
 {
 	Combiner = 0,
 	Worker,
+	Queue,
 	Scheduler /* unused */
 } ContQueryProcType;
 
@@ -75,6 +76,7 @@ extern char *GetContQueryProcName(ContQueryProc *proc);
 extern bool continuous_queries_enabled;
 extern int  continuous_query_num_combiners;
 extern int  continuous_query_num_workers;
+extern int  continuous_query_num_queues;
 extern int  continuous_query_max_wait;
 extern int  continuous_query_combiner_work_mem;
 extern int  continuous_query_combiner_synchronous_commit;
@@ -94,16 +96,18 @@ extern bool am_cont_combiner;
 extern bool IsContQuerySchedulerProcess(void);
 extern bool IsContQueryWorkerProcess(void);
 extern bool IsContQueryCombinerProcess(void);
+extern bool IsContQueryQueueProcess(void);
 extern bool IsContQueryTriggerProcess(void);
 
 #define IsContQueryProcess() \
-	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess())
+	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess() || IsContQueryQueueProcess())
 
 /* functions to start the scheduler process */
 extern pid_t StartContQueryScheduler(void);
 
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
+extern void ContinuousQueryQueueMain(void);
 
 extern void SignalContQuerySchedulerDropDB(Oid db_oid);
 extern void SignalContQuerySchedulerRefreshDBList(void);

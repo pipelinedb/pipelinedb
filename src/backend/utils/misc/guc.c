@@ -2801,6 +2801,16 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
+		{"continuous_query_num_queues", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+		 gettext_noop("Sets the number of parallel continuous query IPC queues."),
+		 NULL,
+		},
+		&continuous_query_num_queues,
+		1, 1, MAX_BACKENDS,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"continuous_view_fillfactor", PGC_BACKEND, QUERY_TUNING_OTHER,
 		 gettext_noop("Sets the default fillfactor to use for continuous views."),
 		 NULL,

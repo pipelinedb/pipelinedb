@@ -48,7 +48,7 @@
 
 #define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
-#define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners)
+#define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners + continuous_query_num_queues)
 #define NUM_LOCKS_PER_DB NUM_BG_WORKERS_PER_DB
 
 #define BG_PROC_STATUS_TIMEOUT 10000
@@ -68,12 +68,14 @@ ContQueryProc *MyContQueryProc = NULL;
 /* flags to tell if we are in a continuous query process */
 static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
+static bool am_cont_queue = false;
 bool am_cont_combiner = false;
 
 /* guc parameters */
 bool continuous_queries_enabled;
 int  continuous_query_num_combiners;
 int  continuous_query_num_workers;
+int  continuous_query_num_queues;
 int  continuous_query_max_wait;
 int  continuous_query_combiner_work_mem;
 int  continuous_query_combiner_synchronous_commit;
@@ -152,6 +154,9 @@ GetContQueryProcName(ContQueryProc *proc)
 		case Worker:
 			snprintf(buf, NAMEDATALEN, "worker%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
 			break;
+		case Queue:
+			snprintf(buf, NAMEDATALEN, "queue%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
+			break;
 		case Scheduler:
 			return pstrdup("scheduler");
 			break;
@@ -177,6 +182,12 @@ bool
 IsContQueryCombinerProcess(void)
 {
 	return am_cont_combiner;
+}
+
+bool
+IsContQueryQueueProcess(void)
+{
+	return am_cont_queue;
 }
 
 pid_t
@@ -352,6 +363,10 @@ cont_bgworker_main(Datum arg)
 			am_cont_combiner = true;
 			run = &ContinuousQueryCombinerMain;
 			break;
+		case Queue:
+			am_cont_queue = true;
+			run = &ContinuousQueryQueueMain;
+			break;
 		case Worker:
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
@@ -483,6 +498,7 @@ static void
 start_database_workers(ContQueryDatabaseMetadata *db_meta)
 {
 	int i;
+	int offset = 0;
 	ContQueryProc *proc;
 	bool success = true;
 
@@ -495,23 +511,43 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	db_meta->terminate = false;
 
 	/* Start background processes */
-	for (i = 0; i < NUM_BG_WORKERS_PER_DB; i++)
+	for (i = 0; i < continuous_query_num_workers; i++)
 	{
 		proc = &db_meta->db_procs[i];
 		MemSet(proc, 0, sizeof(ContQueryProc));
 		proc->db_meta = db_meta;
 		proc->pzmq_id = rand() ^ MyProcPid;
 
-		if (i >= continuous_query_num_workers)
-		{
-			proc->type = Combiner;
-			proc->group_id = i - continuous_query_num_workers;
-		}
-		else
-		{
-			proc->type = Worker;
-			proc->group_id = i;
-		}
+		proc->type = Worker;
+		proc->group_id = i;
+
+		success &= run_cont_bgworker(proc);
+	}
+	offset = continuous_query_num_workers;
+
+	for (i = 0; i < continuous_query_num_combiners; i++)
+	{
+		proc = &db_meta->db_procs[i + offset];
+		MemSet(proc, 0, sizeof(ContQueryProc));
+		proc->db_meta = db_meta;
+		proc->pzmq_id = rand() ^ MyProcPid;
+
+		proc->type = Combiner;
+		proc->group_id = i;
+
+		success &= run_cont_bgworker(proc);
+	}
+	offset += continuous_query_num_combiners;
+
+	for (i = 0; i < continuous_query_num_queues; i++)
+	{
+		proc = &db_meta->db_procs[i + offset];
+		MemSet(proc, 0, sizeof(ContQueryProc));
+		proc->db_meta = db_meta;
+		proc->pzmq_id = rand() ^ MyProcPid;
+
+		proc->type = Queue;
+		proc->group_id = i;
 
 		success &= run_cont_bgworker(proc);
 	}
