@@ -2811,6 +2811,17 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
+		{"continuous_query_queue_mem", PGC_BACKEND, RESOURCES_MEM,
+		 gettext_noop("Sets the maximum amount of memory each queue process will use."),
+		 NULL,
+		 GUC_UNIT_KB
+		},
+		&continuous_query_queue_mem,
+		256 * 1024, 8192, MAX_KILOBYTES,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"continuous_view_fillfactor", PGC_BACKEND, QUERY_TUNING_OTHER,
 		 gettext_noop("Sets the default fillfactor to use for continuous views."),
 		 NULL,

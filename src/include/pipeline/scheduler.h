@@ -77,6 +77,7 @@ extern bool continuous_queries_enabled;
 extern int  continuous_query_num_combiners;
 extern int  continuous_query_num_workers;
 extern int  continuous_query_num_queues;
+extern int  continuous_query_queue_mem;
 extern int  continuous_query_max_wait;
 extern int  continuous_query_combiner_work_mem;
 extern int  continuous_query_combiner_synchronous_commit;

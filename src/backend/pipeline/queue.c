@@ -36,12 +36,15 @@ peek_microbatch(char *buf, uint64 *recv_id, int *len)
 typedef struct pending_microbatch_t
 {
 	char *batch;
+	char *buf;
 	uint64 recv_id;
 	int len;
 } pending_microbatch_t;
 
 static HTAB *pending = NULL;
 
+#define MAX_QUEUE_FLUSH_ATTEMPTS 10
+#define QUEUE_RECV_TIMEOUT 2 * 1000 /* 2s */
 #define PENDING_MICROBATCH_SIZE(mb) (mb->len + sizeof(pending_microbatch_t))
 
 static bool
@@ -62,6 +65,10 @@ retry_pending(Size *memory_freed)
 	int count = 0;
 
 	Assert(pending);
+
+	if (!hash_get_num_entries(pending))
+		return 0;
+
 	hash_seq_init(&iter, pending);
 
 	while ((entry = (pending_microbatch_t *) hash_seq_search(&iter)) != NULL)
@@ -75,6 +82,8 @@ retry_pending(Size *memory_freed)
 	{
 		pending_microbatch_t *entry = (pending_microbatch_t *) lfirst(lc);
 		bool found;
+
+		pfree(entry->buf);
 		hash_search(pending, &entry->batch, HASH_REMOVE, &found);
 		Assert(found);
 
@@ -117,15 +126,30 @@ ContinuousQueryQueueMain(void)
 		char *batch;
 		int timeout = 0;
 		int remaining;
+		int flush_attempts = 0;
 		uint64 recv_id;
 
 		CHECK_FOR_INTERRUPTS();
+
 		if (get_sigterm_flag())
 			break;
 
 		remaining = retry_pending(&memory_consumed);
 
-		buf = pzmq_recv(&len, 100);
+		/*
+		 * If we're above memory capacity, aggressively try to send all batches until
+		 * we're under capacity, but don't try forever
+		 */
+		while (memory_consumed >= continuous_query_queue_mem * 1024 &&
+				flush_attempts < MAX_QUEUE_FLUSH_ATTEMPTS)
+		{
+			remaining = retry_pending(&memory_consumed);
+			flush_attempts++;
+		}
+
+		timeout = remaining ? 0 : QUEUE_RECV_TIMEOUT;
+		buf = pzmq_recv(&len, timeout);
+
 		if (!buf)
 			continue;
 
@@ -145,6 +169,7 @@ ContinuousQueryQueueMain(void)
 			bool found;
 			pending_microbatch_t *entry = (pending_microbatch_t *) hash_search(pending, &batch, HASH_ENTER, &found);
 			entry->batch = batch;
+			entry->buf = buf;
 			entry->recv_id = recv_id;
 			entry->len = len;
 			memory_consumed += PENDING_MICROBATCH_SIZE(entry);
