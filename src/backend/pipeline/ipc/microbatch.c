@@ -359,6 +359,28 @@ unpack_tupdesc(char *buf, TupleDesc *desc)
 }
 
 char *
+microbatch_pack_for_queue(uint64 recv_id, char *packed, int *len)
+{
+	int new_len;
+
+	Assert(len);
+
+	new_len = *len;
+	new_len += sizeof(uint64);
+
+	/*
+	 * We prefix the microbatch with the recv_id so that the queue proc knows where to send it
+	 */
+	packed = repalloc(packed, new_len);
+	memmove(packed + sizeof(uint64), packed, *len);
+	memcpy(packed, &recv_id, sizeof(uint64));
+
+	*len = new_len;
+
+	return packed;
+}
+
+char *
 microbatch_pack(microbatch_t *mb, int *len)
 {
 	char *buf = palloc0(mb->packed_size + mb->buf->len);
@@ -528,20 +550,58 @@ microbatch_unpack(char *buf, int len)
 }
 
 void
-microbatch_send(microbatch_t *mb, uint64 recv_id)
+microbatch_send(microbatch_t *mb, uint64 recv_id, bool async, ContQueryDatabaseMetadata *db_meta)
 {
 	int len;
 	char *buf = microbatch_pack(mb, &len);
 
 	pzmq_connect(recv_id);
 
-	for (;;)
+	if (!async)
 	{
-		if (pzmq_send(recv_id, buf, len, true))
-			break;
+		/*
+		 * Simple blocking write
+		 */
+		for (;;)
+		{
+			if (pzmq_send(recv_id, buf, len, true))
+				break;
 
-		if (get_sigterm_flag())
-			break;
+			if (get_sigterm_flag())
+				break;
+		}
+	}
+	else if (!pzmq_send(recv_id, buf, len, false))
+	{
+		/*
+		 * It's an asynchronous write, which works as follows:
+		 *
+		 * 1) Attempt a nonblocking write to the given socket, if it succeeds, we're done
+		 * 2) The nonblocking write failed, so we do a blocking write to the queue process, which
+		 *    will eventually write the batch to the target receiver.
+		 */
+		int queue_id = rand() % continuous_query_num_queues;
+		int offset = continuous_query_num_workers + continuous_query_num_combiners;
+
+		/* TODO(derekjn) encapsulate this offset arithmetic in a function */
+		queue_id = db_meta->db_procs[offset + queue_id].pzmq_id;
+		buf = microbatch_pack_for_queue(recv_id, buf, &len);
+
+		pzmq_connect(queue_id);
+
+		/*
+		 * Async writes are used to prevent blocking write cycles between processes,
+		 * so it might seem strange to do a blocking write here. However, the queue process
+		 * by design will never block indefinitely, so this is fine.
+		 */
+		for (;;)
+		{
+			if (pzmq_send(queue_id, buf, len, true))
+				break;
+
+			if (get_sigterm_flag())
+				break;
+		}
 	}
 
 	pfree(buf);
@@ -570,19 +630,41 @@ microbatch_send_to_worker(microbatch_t *mb, int worker_id)
 {
 	ContQueryDatabaseMetadata *db_meta = GetMyContQueryDatabaseMetadata();
 	int recv_id;
+	bool async = false;
 
 	if (worker_id == -1)
 	{
 		if (IsContQueryCombinerProcess())
 		{
 			/*
-			 * Combiners need to shard over works so that updates to a specific group are always
+			 * Combiners need to shard over workers so that updates to a specific group are always
 			 * written in order to the output stream.
 			 */
 			worker_id = MyContQueryProc->group_id % continuous_query_num_workers;
+
+			/*
+			 * It's a combiner -> worker (output stream) write, so we need the write to be asynchronous
+			 * to prevent blocking write cycles between combiner and worker procs.
+			 */
+			async = true;
+		}
+		else if (IsContQueryWorkerProcess())
+		{
+			worker_id = rand() % continuous_query_num_workers;
+
+			/*
+			 * It's a worker -> worker write, which means we're a transform writing to a stream.
+			 * We make these writes asynchronous to prevent blocking write cycles between worker procs.
+			 */
+			async = true;
 		}
 		else
 		{
+			/*
+			 * We're a client write process (INSERT or COPY), so we can do a blocking write to the worker
+			 * proc because blocking write cycles are not possible in this case.
+			 */
+
 			/* TODO(usmanm): Poll all workers and send to first non-blocking one? */
 			worker_id = rand() % continuous_query_num_workers;
 		}
@@ -590,7 +672,7 @@ microbatch_send_to_worker(microbatch_t *mb, int worker_id)
 
 	recv_id = db_meta->db_procs[worker_id].pzmq_id;
 
-	microbatch_send(mb, recv_id);
+	microbatch_send(mb, recv_id, async, db_meta);
 	microbatch_reset(mb);
 }
 
@@ -605,6 +687,6 @@ microbatch_send_to_combiner(microbatch_t *mb, int combiner_id)
 
 	recv_id = db_meta->db_procs[continuous_query_num_workers + combiner_id].pzmq_id;
 
-	microbatch_send(mb, recv_id);
+	microbatch_send(mb, recv_id, false, db_meta);
 	microbatch_reset(mb);
 }
