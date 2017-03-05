@@ -28,6 +28,7 @@
 #include "nodes/print.h"
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
+#include "tcop/tcopprot.h"
 #include "utils/lsyscache.h"
 
 
@@ -50,6 +51,7 @@ debug_segfault(SIGNAL_ARGS)
 	size_t size = backtrace(array, 32);
 	fprintf(stderr, "Segmentation fault (PID %d)\n", MyProcPid);
 	fprintf(stderr, "version: %s\n", PIPELINE_VERSION_STR);
+	fprintf(stderr, "query: %s\n", debug_query_string);
 	fprintf(stderr, "backtrace:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
 
