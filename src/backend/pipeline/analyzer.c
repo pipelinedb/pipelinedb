@@ -3391,6 +3391,7 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 	ListCell *lc;
 	RangeTblEntry *rte;
 	Var *dummy;
+	List *unfinalized = NIL;
 
 	/* RTE is not a view? */
 	rte = rt_fetch(rtindex, query->rtable);
@@ -3470,6 +3471,13 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 
 		te = list_nth(rule->targetList, v->varattno - 1);
 
+		/*
+		 * The TL may contain duplicate combine calls, in which case we may
+		 * have already processed this entry
+		 */
+		if (list_member_ptr(unfinalized, te->expr))
+			continue;
+
 		Assert(IsA(te->expr, FuncExpr));
 
 		/* Strip away the finalize func */
@@ -3488,6 +3496,8 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 		}
 		else
 			te->expr = expr;
+
+		unfinalized = lappend(unfinalized, te->expr);
 	}
 
 	return rule;

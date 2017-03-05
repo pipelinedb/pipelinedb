@@ -256,6 +256,13 @@ WINDOW w AS (ORDER BY minute DESC ROWS 4 PRECEDING);
 
 DROP VIEW over_5m;
 DROP CONTINUOUS VIEW over_1m;
+
+CREATE CONTINUOUS VIEW test_uc3 AS SELECT x, avg(x::numeric), count(distinct s) FROM test_uc_stream GROUP BY x;
+INSERT INTO test_uc_stream (x, y, s) SELECT x % 20, x % 10, (x % 5)::text AS s FROM generate_series(1, 100) AS x;
+SELECT combine(avg) + combine(avg) + combine(avg), combine(avg), combine(avg), combine(count), combine(count) FROM test_uc3;
+SELECT combine(avg) + combine(avg) + combine(avg), combine(avg), combine(avg), combine(count), combine(count) FROM test_uc3 GROUP BY x ORDER BY x;
+DROP CONTINUOUS VIEW test_uc3;
+
 DROP STREAM test_uc_stream CASCADE;
 DROP STREAM test_uc_systat_stream CASCADE;
 DROP STREAM sysstat CASCADE;
