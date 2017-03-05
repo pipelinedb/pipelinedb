@@ -50,6 +50,7 @@ ExceptionalCondition(const char *conditionName,
 	size = backtrace(array, 32);
 	fprintf(stderr, "Assertion failure (PID %d)\n", MyProcPid);
 	fprintf(stderr, "version: %s\n", PIPELINE_VERSION_STR);
+	fprintf(stderr, "query: %s\n", debug_query_string);
 	fprintf(stderr, "backtrace:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
 
