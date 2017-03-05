@@ -209,3 +209,35 @@ drop cascades to continuous transform fanout8
 drop cascades to continuous transform fanout9
 drop cascades to continuous transform fanout10
 drop cascades to continuous view fanout11
+CREATE STREAM ct_a (n int);
+CREATE STREAM ct_b (n int);
+CREATE CONTINUOUS VIEW ct_stream_insert0 AS SELECT n FROM ct_b;
+CREATE FUNCTION insert_into_b () RETURNS TRIGGER AS
+$$
+BEGIN
+  INSERT INTO ct_b VALUES (NEW.n);
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+CREATE CONTINUOUS TRANSFORM ct_stream_insert1 AS
+SELECT n FROM ct_a
+THEN EXECUTE PROCEDURE insert_into_b();
+INSERT INTO ct_a SELECT generate_series(1, 100);
+INSERT INTO ct_a SELECT generate_series(1, 100);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT count(*) FROM ct_stream_insert0;
+ count 
+-------
+   200
+(1 row)
+
+DROP FUNCTION insert_into_b() CASCADE;
+NOTICE:  drop cascades to continuous transform ct_stream_insert1
+DROP STREAM ct_b CASCADE;
+NOTICE:  drop cascades to continuous view ct_stream_insert0
+DROP STREAM ct_a;

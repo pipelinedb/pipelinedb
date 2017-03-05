@@ -104,3 +104,30 @@ INSERT INTO fanout (x) VALUES (0);
 SELECT * FROM fanout11;
 
 DROP STREAM fanout CASCADE;
+
+CREATE STREAM ct_a (n int);
+CREATE STREAM ct_b (n int);
+
+CREATE CONTINUOUS VIEW ct_stream_insert0 AS SELECT n FROM ct_b;
+
+CREATE FUNCTION insert_into_b () RETURNS TRIGGER AS
+$$
+BEGIN
+  INSERT INTO ct_b VALUES (NEW.n);
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE CONTINUOUS TRANSFORM ct_stream_insert1 AS
+SELECT n FROM ct_a
+THEN EXECUTE PROCEDURE insert_into_b();
+
+INSERT INTO ct_a SELECT generate_series(1, 100);
+INSERT INTO ct_a SELECT generate_series(1, 100);
+
+SELECT pg_sleep(1);
+SELECT count(*) FROM ct_stream_insert0;
+
+DROP FUNCTION insert_into_b() CASCADE;
+DROP STREAM ct_b CASCADE;
+DROP STREAM ct_a;

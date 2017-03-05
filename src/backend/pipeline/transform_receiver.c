@@ -79,13 +79,21 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 			t->cont_query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{
 		TriggerData *cxt = (TriggerData *) t->trig_fcinfo->context;
+		StreamInsertLevel save_stream_insert_level = stream_insert_level;
 
 		Assert(t->trig_fcinfo);
 
 		cxt->tg_relation = t->tg_rel;
 		cxt->tg_trigtuple = ExecCopySlotTuple(slot);
 
+		/*
+		 * If it's a trigger function that inserts into another stream, we need to make
+		 * sure that the insert is fully asynchronous. Otherwise, we could end up stalled
+		 * if this worker were to wait for an ack that we ourselves are responsible for producing.
+		 */
+		stream_insert_level = STREAM_INSERT_ASYNCHRONOUS;
 		FunctionCallInvoke(t->trig_fcinfo);
+		stream_insert_level = save_stream_insert_level;
 
 		heap_freetuple(cxt->tg_trigtuple);
 		cxt->tg_trigtuple = NULL;
