@@ -3428,12 +3428,7 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 		Oid finalfn;
 		HeapTuple tup;
 		Form_pg_aggregate aggform;
-		FuncExpr *fexpr;
-		Expr *expr;
-		Oid combinefn;
-		Oid transoutfn;
-		Oid combineinfn;
-		Oid statetype;
+		Var *matrel_ref;
 
 		pull_vars(lfirst(lc), &l);
 		Assert(list_length(l) == 1);
@@ -3478,24 +3473,16 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 		if (list_member_ptr(unfinalized, te->expr))
 			continue;
 
-		Assert(IsA(te->expr, FuncExpr));
+		/*
+		 * We want the Var referencing the matrel, which could be wrapped in
+		 * a combinein function
+		 */
+		l = NIL;
+		pull_vars((Node *) te->expr, &l);
+		Assert(list_length(l) == 1);
 
-		/* Strip away the finalize func */
-		fexpr = (FuncExpr *) te->expr;
-
-		Assert(fexpr->funcid == finalfn);
-		expr = linitial(fexpr->args);
-
-		GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
-
-		/* XXX(usmanm): We can probably avoid this extra serialize/deserialize step */
-		if (OidIsValid(transoutfn))
-		{
-			fexpr->funcid = transoutfn;
-			fexpr->funcresulttype = statetype;
-		}
-		else
-			te->expr = expr;
+		matrel_ref = (Var *) linitial(l);
+		te->expr = (Expr *) matrel_ref;
 
 		unfinalized = lappend(unfinalized, te->expr);
 	}
