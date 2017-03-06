@@ -2781,6 +2781,16 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
+		{"continuous_query_ipc_hwm", PGC_SIGHUP, QUERY_TUNING,
+		 gettext_noop("Sets the high watermark for IPC between worker and combiner processes."),
+		 gettext_noop("A value will queue more IPC messages in memory.")
+		},
+		&continuous_query_ipc_hwm,
+		10, 1, INT_MAX,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"continuous_query_num_combiners", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
 		 gettext_noop("Sets the number of parallel continuous query combiner processes to use for each database."),
 		 gettext_noop("A higher number will utilize multiple cores and increase throughput.")
