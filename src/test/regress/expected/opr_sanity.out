@@ -283,8 +283,8 @@ SELECT p1.oid, p1.proname
 FROM pg_proc as p1
 WHERE p1.prorettype = 'internal'::regtype AND NOT
     'internal'::regtype = ANY (p1.proargtypes);
- oid  |        proname         
-------+------------------------
+ oid  |                 proname                  
+------+------------------------------------------
  2304 | internal_in
  5021 | cqosastaterecv
  4308 | numaggstaterecv
@@ -295,7 +295,8 @@ WHERE p1.prorettype = 'internal'::regtype AND NOT
  4482 | arrayaggarraystaterecv
  4491 | numpolyaggstaterecv
  4495 | jsonbaggstaterecv
-(10 rows)
+ 4514 | exclusive_set_cardinality_agg_state_recv
+(11 rows)
 
 -- Look for functions that return a polymorphic type and do not have any
 -- polymorphic argument.  Calls of such functions would be unresolvable
