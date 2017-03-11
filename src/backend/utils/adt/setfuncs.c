@@ -14,6 +14,7 @@
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
 #include "pipeline/miscutils.h"
+#include "pipeline/scheduler.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
@@ -27,6 +28,8 @@ typedef struct SetAggState
 	TypeCacheEntry *typ;
 	bool has_null;
 } SetAggState;
+
+#define MAGIC_HEADER 0x5AFE
 
 /*
  * set_agg_startup
@@ -176,6 +179,8 @@ typedef struct NamedSet
 {
 	char *name;
 	HTAB *htab;
+	uint32 *hashes;
+	int num_hashes;
 } NamedSet;
 
 typedef struct ExclusiveSetAggState
@@ -184,6 +189,9 @@ typedef struct ExclusiveSetAggState
 	List *named_sets;
 } ExclusiveSetAggState;
 
+/*
+ * create_set
+ */
 static NamedSet *
 create_set(ExclusiveSetAggState *state, char *name)
 {
@@ -216,6 +224,9 @@ exclusive_set_cardinality_agg_state_send(PG_FUNCTION_ARGS)
 
 	pq_begintypsend(&buf);
 
+	/* Magic header */
+	pq_sendint(&buf, MAGIC_HEADER, 4);
+
 	/* Number of sets in this agg state */
 	pq_sendint(&buf, list_length(state->named_sets), sizeof(int));
 
@@ -224,28 +235,37 @@ exclusive_set_cardinality_agg_state_send(PG_FUNCTION_ARGS)
 		HASH_SEQ_STATUS iter;
 		NamedSet *set = (NamedSet *) lfirst(lc);
 		int num_hashes = hash_get_num_entries(set->htab);
-		int bytes = sizeof(uint32) * num_hashes;
+		int bytes;
 		uint32 *hash;
-		uint32 *values = palloc0(bytes);
-		int count;
+
+		if (set->hashes)
+		{
+			bytes = sizeof(uint32) * set->num_hashes;
+		}
+		else
+		{
+			int i = 0;
+
+			bytes = sizeof(uint32) * num_hashes;
+			set->hashes = palloc0(bytes);
+			set->num_hashes = num_hashes;
+
+			hash_seq_init(&iter, set->htab);
+			while ((hash = (uint32 *) hash_seq_search(&iter)) != NULL)
+				set->hashes[i++] = *hash;
+		}
 
 		/* Name of this set */
 		pq_sendstring(&buf, set->name);
 
+		Assert(set->hashes);
+
 		/* Length of the array of hashes */
-		pq_sendint(&buf, num_hashes, sizeof(int));
-
-		count = 0;
-
-		hash_seq_init(&iter, set->htab);
-		while ((hash = (uint32 *) hash_seq_search(&iter)) != NULL)
-			values[count++] = *hash;
+		pq_sendint(&buf, set->num_hashes, sizeof(int));
 
 		/* Array of unique hashes */
-		pq_sendbytes(&buf, (char *) values, bytes);
+		pq_sendbytes(&buf, (char *) set->hashes, bytes);
 	}
-
-	// add magic header so we can't run any functions that take 17 as input on it?
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
@@ -268,15 +288,16 @@ exclusive_set_cardinality_agg_state_recv(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;
 
-	// fix
-	old = MemoryContextSwitchTo(CacheMemoryContext);
-
+	old = MemoryContextSwitchTo(context);
 	bytes = PG_GETARG_BYTEA_P(0);
 	result = palloc0(sizeof(ExclusiveSetAggState));
 	nbytes = VARSIZE(bytes);
 
 	initStringInfo(&buf);
 	appendBinaryStringInfo(&buf, VARDATA(bytes), nbytes);
+
+	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
+		elog(ERROR, "malformed exclusive_set_agg transition state received");
 
 	nsets = pq_getmsgint(&buf, sizeof(int));
 
@@ -285,19 +306,17 @@ exclusive_set_cardinality_agg_state_recv(PG_FUNCTION_ARGS)
 		char *set_name = (char *) pq_getmsgstring(&buf);
 		int num_hashes = pq_getmsgint(&buf, sizeof(int));
 		int size = num_hashes * sizeof(uint32);
-		uint32 *hashes = palloc0(size);
 		NamedSet *set;
-		int j;
 
-		memcpy(hashes, pq_getmsgbytes(&buf, size), size);
 		set = create_set(result, set_name);
 
-		for (j = 0; j < num_hashes; j++)
-		{
-			bool found;
-			hash_search_with_hash_value(set->htab, &hashes[j], hashes[j], HASH_ENTER, &found);
-			Assert(!found);
-		}
+		/*
+		 * We're just going to combine all of these hashes with the existing state, so there's
+		 * no need to load them into a hashtable
+		 */
+		set->hashes = palloc0(size);
+		set->num_hashes = num_hashes;
+		memcpy(set->hashes, pq_getmsgbytes(&buf, size), size);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -330,6 +349,9 @@ lookup_set_element_type(FunctionCallInfo fcinfo)
 	fcinfo->flinfo->fn_extra = (void *) state;
 }
 
+/*
+ * get_named_set
+ */
 static NamedSet *
 get_named_set(ExclusiveSetAggState *state, char *set_name)
 {
@@ -347,11 +369,15 @@ get_named_set(ExclusiveSetAggState *state, char *set_name)
 	return NULL;
 }
 
+/*
+ * add_exclusive_set_hash
+ */
 static void
 add_exclusive_set_hash(ExclusiveSetAggState *state, char *set_name, uint32 hash, MemoryContext set_context)
 {
 	bool found;
 	NamedSet *set;
+	ListCell *lc;
 
 	set = get_named_set(state, set_name);
 	if (!set)
@@ -365,16 +391,26 @@ add_exclusive_set_hash(ExclusiveSetAggState *state, char *set_name, uint32 hash,
 
 	Assert(set);
 
-	// remove from other sets first
-	// just keep trying remove until we've removed one, or we've tried all
-	// wrap in function
+	/*
+	 * Attempt to remove this hash from existing sets until we either get a removal or determine
+	 * that it never previously existed in any set
+	 */
+	foreach(lc, state->named_sets)
+	{
+		NamedSet *other_set = (NamedSet *) lfirst(lc);
+
+		if (pg_strcasecmp(set_name, other_set->name) == 0)
+			continue;
+
+		hash_search_with_hash_value(other_set->htab, &hash, hash, HASH_REMOVE, &found);
+		if (found)
+			break;
+	}
 
 	/*
 	 * The entire entry is just the Datum's 32-bit hash, so this is all we need to do to properly create the entry
 	 */
 	hash_search_with_hash_value(set->htab, &hash, hash, HASH_ENTER, &found);
-
-//	elog(LOG, "added %u to %s, found=%d", hash, set->name, found);
 }
 
 /*
@@ -463,13 +499,13 @@ exclusive_set_cardinality_agg_combine(PG_FUNCTION_ARGS)
 		foreach(lc, incoming->named_sets)
 		{
 			NamedSet *set = (NamedSet *) lfirst(lc);
-			HASH_SEQ_STATUS iter;
-			uint32 *hash;
+			int i;
 
-			// we should just iterate over the array received, no need to recv trans states as hashtables
-			hash_seq_init(&iter, set->htab);
-			while ((hash = (uint32 *) hash_seq_search(&iter)) != NULL)
-				add_exclusive_set_hash(state, set->name, *hash, fcinfo->flinfo->fn_mcxt);
+			Assert(set->hashes);
+			Assert(set->num_hashes);
+
+			for (i = 0; i < set->num_hashes; i++)
+				add_exclusive_set_hash(state, set->name, set->hashes[i], fcinfo->flinfo->fn_mcxt);
 		}
 	}
 
@@ -507,12 +543,13 @@ exclusive_set_cardinality(PG_FUNCTION_ARGS)
 	set_name = TextDatumGetCString(PG_GETARG_VARLENA_P(1));
 	bytes = PG_GETARG_BYTEA_P(0);
 
-	// verify magic header?
-
 	nbytes = VARSIZE(bytes);
 
 	initStringInfo(&buf);
 	appendBinaryStringInfo(&buf, VARDATA(bytes), nbytes);
+
+	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
+		elog(ERROR, "malformed exclusive_set_agg transition state received");
 
 	nsets = pq_getmsgint(&buf, sizeof(int));
 
