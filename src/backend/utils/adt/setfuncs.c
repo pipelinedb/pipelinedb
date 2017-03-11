@@ -204,7 +204,7 @@ create_set(ExclusiveSetAggState *state, char *name)
 	hctl.keysize = sizeof(uint32);
 	hctl.entrysize = sizeof(uint32);
 
-	set->htab = hash_create(name, 1024, &hctl, HASH_CONTEXT | HASH_ELEM);
+	set->htab = hash_create(name, 10000, &hctl, HASH_CONTEXT | HASH_ELEM);
 	state->named_sets = lappend(state->named_sets, set);
 
 	return set;
@@ -219,8 +219,18 @@ exclusive_set_cardinality_agg_state_send(PG_FUNCTION_ARGS)
 	ExclusiveSetAggState *state = (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
 	ListCell *lc;
 	StringInfoData buf;
+	List *nonempty_sets = NIL;
 
 	Assert(state);
+
+	foreach(lc, state->named_sets)
+	{
+		NamedSet *set = (NamedSet *) lfirst(lc);
+		int num_hashes = set->hashes ? set->num_hashes : hash_get_num_entries(set->htab);
+		if (!num_hashes)
+			continue;
+		nonempty_sets = lappend(nonempty_sets, set);
+	}
 
 	pq_begintypsend(&buf);
 
@@ -228,9 +238,9 @@ exclusive_set_cardinality_agg_state_send(PG_FUNCTION_ARGS)
 	pq_sendint(&buf, MAGIC_HEADER, 4);
 
 	/* Number of sets in this agg state */
-	pq_sendint(&buf, list_length(state->named_sets), sizeof(int));
+	pq_sendint(&buf, list_length(nonempty_sets), sizeof(int));
 
-	foreach(lc, state->named_sets)
+	foreach(lc, nonempty_sets)
 	{
 		HASH_SEQ_STATUS iter;
 		NamedSet *set = (NamedSet *) lfirst(lc);
@@ -247,6 +257,7 @@ exclusive_set_cardinality_agg_state_send(PG_FUNCTION_ARGS)
 			int i = 0;
 
 			bytes = sizeof(uint32) * num_hashes;
+			Assert(bytes);
 			set->hashes = palloc0(bytes);
 			set->num_hashes = num_hashes;
 
@@ -259,6 +270,7 @@ exclusive_set_cardinality_agg_state_send(PG_FUNCTION_ARGS)
 		pq_sendstring(&buf, set->name);
 
 		Assert(set->hashes);
+		Assert(set->num_hashes);
 
 		/* Length of the array of hashes */
 		pq_sendint(&buf, set->num_hashes, sizeof(int));
