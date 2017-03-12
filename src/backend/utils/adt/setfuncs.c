@@ -232,7 +232,7 @@ exclusive_set_agg_startup(void)
  * exclusive_set_agg_state_send
  */
 Datum
-exclusive_set_cardinality_agg_state_send(PG_FUNCTION_ARGS)
+bucket_agg_state_send(PG_FUNCTION_ARGS)
 {
 	ExclusiveSetAggState *state = (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
@@ -265,7 +265,7 @@ exclusive_set_cardinality_agg_state_send(PG_FUNCTION_ARGS)
  * exclusive_set_agg_state_recv
  */
 Datum
-exclusive_set_cardinality_agg_state_recv(PG_FUNCTION_ARGS)
+bucket_agg_state_recv(PG_FUNCTION_ARGS)
 {
 	bytea *bytes;
 	StringInfoData buf;
@@ -363,7 +363,7 @@ add_exclusive_set_hash(ExclusiveSetAggState *state, uint16 set_id, uint32 hash, 
  * exclusive_set_agg_trans
  */
 Datum
-exclusive_set_cardinality_agg_trans(PG_FUNCTION_ARGS)
+bucket_agg_trans(PG_FUNCTION_ARGS)
 {
 	SetAggState *sas;
 	MemoryContext old;
@@ -373,7 +373,7 @@ exclusive_set_cardinality_agg_trans(PG_FUNCTION_ARGS)
 	uint16 set_id;
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		elog(ERROR, "exclusive_set_cardinality_agg_trans called in non-aggregate context");
+		elog(ERROR, "bucket_agg_trans called in non-aggregate context");
 
 	if (PG_ARGISNULL(2))
 		elog(ERROR, "set ID cannot be NULL");
@@ -410,7 +410,7 @@ exclusive_set_cardinality_agg_trans(PG_FUNCTION_ARGS)
  * exclusive_set_agg_combine
  */
 Datum
-exclusive_set_cardinality_agg_combine(PG_FUNCTION_ARGS)
+bucket_agg_combine(PG_FUNCTION_ARGS)
 {
 	ExclusiveSetAggState *state;
 	ExclusiveSetAggState *incoming;
@@ -418,7 +418,7 @@ exclusive_set_cardinality_agg_combine(PG_FUNCTION_ARGS)
 	MemoryContext old;
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		elog(ERROR, "exclusive_set_cardinality_agg_combine called in non-aggregate context");
+		elog(ERROR, "bucket_agg_combine called in non-aggregate context");
 
 	old = MemoryContextSwitchTo(context);
 
@@ -444,20 +444,20 @@ exclusive_set_cardinality_agg_combine(PG_FUNCTION_ARGS)
 }
 
 Datum
-exclusive_set_cardinality_agg_final(PG_FUNCTION_ARGS)
+bucket_agg_final(PG_FUNCTION_ARGS)
 {
 	ExclusiveSetAggState *state = (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
 
-	bytea *bytes = (bytea *) DirectFunctionCall1(exclusive_set_cardinality_agg_state_send, (Datum) state);
+	bytea *bytes = (bytea *) DirectFunctionCall1(bucket_agg_state_send, (Datum) state);
 
 	PG_RETURN_BYTEA_P(bytes);
 }
 
 /*
- * exclusive_set_cardinality
+ * bucket_cardinality
  */
 Datum
-exclusive_set_cardinality(PG_FUNCTION_ARGS)
+bucket_cardinality(PG_FUNCTION_ARGS)
 {
 	bytea *bytes;
 	uint16 set_id;
