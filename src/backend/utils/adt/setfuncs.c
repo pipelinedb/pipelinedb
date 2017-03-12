@@ -186,28 +186,46 @@ typedef struct NamedSet
 typedef struct ExclusiveSetAggState
 {
 	TypeCacheEntry *type;
-	List *named_sets;
+	HTAB *htab;
+	List *set_names;
+	uint32 *hashes;
+	uint16 *sets;
+	int capacity;
+	int count;
 } ExclusiveSetAggState;
 
-/*
- * create_set
- */
-static NamedSet *
-create_set(ExclusiveSetAggState *state, char *name)
+typedef struct SetElement
 {
-	HASHCTL hctl;
-	NamedSet *set = palloc0(sizeof(NamedSet));
-	set->name = pstrdup(name);
+	uint32 hash;
+	int index;
+} SetElement;
 
+/*
+ * exclusive_set_agg_startup
+ */
+static ExclusiveSetAggState *
+exclusive_set_agg_startup(void)
+{
+	ExclusiveSetAggState *result;
+	HASHCTL hctl;
+
+	result = palloc0(sizeof(ExclusiveSetAggState));
 	MemSet(&hctl, 0, sizeof(hctl));
 	hctl.hcxt = CurrentMemoryContext;
 	hctl.keysize = sizeof(uint32);
-	hctl.entrysize = sizeof(uint32);
+	hctl.entrysize = sizeof(SetElement);
 
-	set->htab = hash_create(name, 10000, &hctl, HASH_CONTEXT | HASH_ELEM);
-	state->named_sets = lappend(state->named_sets, set);
+	/*
+	 * We'll grow this as necessary
+	 */
+	result->capacity = 1024;
+	result->hashes = palloc0(sizeof(uint32) * result->capacity);
+	result->sets = palloc0(sizeof(uint16) * result->capacity);
+	result->count = 0;
 
-	return set;
+	result->htab = hash_create("SetHash", 10000, &hctl, HASH_CONTEXT | HASH_ELEM);
+
+	return result;
 }
 
 /*
@@ -217,67 +235,28 @@ Datum
 exclusive_set_cardinality_agg_state_send(PG_FUNCTION_ARGS)
 {
 	ExclusiveSetAggState *state = (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
-	ListCell *lc;
 	StringInfoData buf;
-	List *nonempty_sets = NIL;
 
 	Assert(state);
-
-	foreach(lc, state->named_sets)
-	{
-		NamedSet *set = (NamedSet *) lfirst(lc);
-		int num_hashes = set->hashes ? set->num_hashes : hash_get_num_entries(set->htab);
-		if (!num_hashes)
-			continue;
-		nonempty_sets = lappend(nonempty_sets, set);
-	}
 
 	pq_begintypsend(&buf);
 
 	/* Magic header */
 	pq_sendint(&buf, MAGIC_HEADER, 4);
 
-	/* Number of sets in this agg state */
-	pq_sendint(&buf, list_length(nonempty_sets), sizeof(int));
+	/* Number of elements in all sets */
+	pq_sendint(&buf, state->count, sizeof(state->count));
 
-	foreach(lc, nonempty_sets)
-	{
-		HASH_SEQ_STATUS iter;
-		NamedSet *set = (NamedSet *) lfirst(lc);
-		int num_hashes = hash_get_num_entries(set->htab);
-		int bytes;
-		uint32 *hash;
+	Assert(state->hashes);
+	Assert(state->count);
 
-		if (set->hashes)
-		{
-			bytes = sizeof(uint32) * set->num_hashes;
-		}
-		else
-		{
-			int i = 0;
+	/* We serialize the set ids first so set cardinality lookups need not even look at the array of hashes */
+	pq_sendbytes(&buf, (char *) state->sets, state->count * sizeof(uint16));
 
-			bytes = sizeof(uint32) * num_hashes;
-			Assert(bytes);
-			set->hashes = palloc0(bytes);
-			set->num_hashes = num_hashes;
+	/* Array of unique hashes */
+	pq_sendbytes(&buf, (char *) state->hashes, state->count * sizeof(uint32));
 
-			hash_seq_init(&iter, set->htab);
-			while ((hash = (uint32 *) hash_seq_search(&iter)) != NULL)
-				set->hashes[i++] = *hash;
-		}
 
-		/* Name of this set */
-		pq_sendstring(&buf, set->name);
-
-		Assert(set->hashes);
-		Assert(set->num_hashes);
-
-		/* Length of the array of hashes */
-		pq_sendint(&buf, set->num_hashes, sizeof(int));
-
-		/* Array of unique hashes */
-		pq_sendbytes(&buf, (char *) set->hashes, bytes);
-	}
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
@@ -294,8 +273,7 @@ exclusive_set_cardinality_agg_state_recv(PG_FUNCTION_ARGS)
 	MemoryContext context;
 	MemoryContext old;
 	int nbytes;
-	int nsets;
-	int i;
+	int size;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;
@@ -311,25 +289,16 @@ exclusive_set_cardinality_agg_state_recv(PG_FUNCTION_ARGS)
 	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
 		elog(ERROR, "malformed exclusive_set_agg transition state received");
 
-	nsets = pq_getmsgint(&buf, sizeof(int));
+	result->count = pq_getmsgint(&buf, sizeof(int));
+	result->capacity = result->count;
 
-	for (i = 0; i < nsets; i++)
-	{
-		char *set_name = (char *) pq_getmsgstring(&buf);
-		int num_hashes = pq_getmsgint(&buf, sizeof(int));
-		int size = num_hashes * sizeof(uint32);
-		NamedSet *set;
+	size = sizeof(uint16) * result->count;
+	result->sets = palloc0(size);
+	memcpy(result->sets, pq_getmsgbytes(&buf, size), size);
 
-		set = create_set(result, set_name);
-
-		/*
-		 * We're just going to combine all of these hashes with the existing state, so there's
-		 * no need to load them into a hashtable
-		 */
-		set->hashes = palloc0(size);
-		set->num_hashes = num_hashes;
-		memcpy(set->hashes, pq_getmsgbytes(&buf, size), size);
-	}
+	size = sizeof(uint32) * result->count;
+	result->hashes = palloc0(size);
+	memcpy(result->hashes, pq_getmsgbytes(&buf, size), size);
 
 	MemoryContextSwitchTo(old);
 
@@ -362,67 +331,32 @@ lookup_set_element_type(FunctionCallInfo fcinfo)
 }
 
 /*
- * get_named_set
- */
-static NamedSet *
-get_named_set(ExclusiveSetAggState *state, char *set_name)
-{
-	ListCell *lc;
-	NamedSet *result;
-
-	foreach(lc, state->named_sets)
-	{
-		result = (NamedSet *) lfirst(lc);
-		Assert(result->name);
-		if (pg_strcasecmp(result->name, set_name) == 0)
-			return result;
-	}
-
-	return NULL;
-}
-
-/*
  * add_exclusive_set_hash
  */
 static void
-add_exclusive_set_hash(ExclusiveSetAggState *state, char *set_name, uint32 hash, MemoryContext set_context)
+add_exclusive_set_hash(ExclusiveSetAggState *state, uint16 set_id, uint32 hash, MemoryContext set_context)
 {
 	bool found;
-	NamedSet *set;
-	ListCell *lc;
+	SetElement *elem;
 
-	set = get_named_set(state, set_name);
-	if (!set)
+	elem = (SetElement *) hash_search_with_hash_value(state->htab, &hash, hash, HASH_ENTER, &found);
+	if (!found)
 	{
-		MemoryContext old;
-
-		old = MemoryContextSwitchTo(set_context);
-		set = create_set(state, set_name);
-		MemoryContextSwitchTo(old);
+		/*
+		 * New element, add the hash to the array of hashes that's used for fast serialization
+		 */
+		if (state->count == state->capacity)
+		{
+			state->capacity = 2 * state->capacity;
+			state->hashes = repalloc(state->hashes, sizeof(uint32) * state->capacity);
+			state->sets = repalloc(state->sets, sizeof(uint16) * state->capacity);
+		}
+		elem->index = state->count;
+		state->hashes[elem->index] = hash;
+		state->sets[elem->index] = set_id;
+		state->count++;
 	}
-
-	Assert(set);
-
-	/*
-	 * Attempt to remove this hash from existing sets until we either get a removal or determine
-	 * that it never previously existed in any set
-	 */
-	foreach(lc, state->named_sets)
-	{
-		NamedSet *other_set = (NamedSet *) lfirst(lc);
-
-		if (pg_strcasecmp(set_name, other_set->name) == 0)
-			continue;
-
-		hash_search_with_hash_value(other_set->htab, &hash, hash, HASH_REMOVE, &found);
-		if (found)
-			break;
-	}
-
-	/*
-	 * The entire entry is just the Datum's 32-bit hash, so this is all we need to do to properly create the entry
-	 */
-	hash_search_with_hash_value(set->htab, &hash, hash, HASH_ENTER, &found);
+	state->sets[elem->index] = set_id;
 }
 
 /*
@@ -436,13 +370,13 @@ exclusive_set_cardinality_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext context;
 	ExclusiveSetAggState *state = PG_ARGISNULL(0) ? NULL : (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
 	Datum elem;
-	char *set_name;
+	uint16 set_id;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "exclusive_set_cardinality_agg_trans called in non-aggregate context");
 
 	if (PG_ARGISNULL(2))
-		elog(ERROR, "set name cannot be NULL");
+		elog(ERROR, "set ID cannot be NULL");
 
 	old = MemoryContextSwitchTo(context);
 
@@ -453,11 +387,7 @@ exclusive_set_cardinality_agg_trans(PG_FUNCTION_ARGS)
 	sas = (SetAggState *) fcinfo->flinfo->fn_extra;
 
 	if (state == NULL)
-	{
-		state = palloc0(sizeof(ExclusiveSetAggState));
-		state->type = sas->typ;
-		state->named_sets = NIL;
-	}
+		state = exclusive_set_agg_startup();
 
 	/* NULLs are currently just a noop */
 	if (!PG_ARGISNULL(1))
@@ -465,10 +395,10 @@ exclusive_set_cardinality_agg_trans(PG_FUNCTION_ARGS)
 		uint32 hash;
 
 		elem = PG_GETARG_DATUM(1);
-		set_name = TextDatumGetCString((text *) PG_GETARG_VARLENA_P(2));
+		set_id = PG_GETARG_UINT16(2);
 
 		hash = DatumGetUInt32(FunctionCall1(&sas->typ->hash_proc_finfo, elem));
-		add_exclusive_set_hash(state, set_name, hash, fcinfo->flinfo->fn_mcxt);
+		add_exclusive_set_hash(state, set_id, hash, fcinfo->flinfo->fn_mcxt);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -493,32 +423,19 @@ exclusive_set_cardinality_agg_combine(PG_FUNCTION_ARGS)
 	old = MemoryContextSwitchTo(context);
 
 	if (!PG_ARGISNULL(0))
-	{
 		state = (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
-	}
 	else
-	{
-		state = palloc0(sizeof(ExclusiveSetAggState));
-		state->named_sets = NIL;
-	}
+		state = exclusive_set_agg_startup();
 
 	if (!PG_ARGISNULL(1))
 	{
-		ListCell *lc;
-
+		int i;
 		incoming = (ExclusiveSetAggState *) PG_GETARG_POINTER(1);
 
-		foreach(lc, incoming->named_sets)
-		{
-			NamedSet *set = (NamedSet *) lfirst(lc);
-			int i;
+		Assert(incoming);
 
-			Assert(set->hashes);
-			Assert(set->num_hashes);
-
-			for (i = 0; i < set->num_hashes; i++)
-				add_exclusive_set_hash(state, set->name, set->hashes[i], fcinfo->flinfo->fn_mcxt);
-		}
+		for (i = 0; i < incoming->count; i++)
+			add_exclusive_set_hash(state, incoming->sets[i], incoming->hashes[i], fcinfo->flinfo->fn_mcxt);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -543,16 +460,18 @@ Datum
 exclusive_set_cardinality(PG_FUNCTION_ARGS)
 {
 	bytea *bytes;
-	char *set_name;
+	uint16 set_id;
 	StringInfoData buf;
 	int nbytes;
-	int nsets;
 	int i;
+	int num_hashes;
+	uint16 *sets;
+	int result;
 
 	if (PG_ARGISNULL(1))
-		elog(ERROR, "set name cannot be NULL");
+		elog(ERROR, "set ID cannot be NULL");
 
-	set_name = TextDatumGetCString(PG_GETARG_VARLENA_P(1));
+	set_id = PG_GETARG_UINT16(1);
 	bytes = PG_GETARG_BYTEA_P(0);
 
 	nbytes = VARSIZE(bytes);
@@ -563,20 +482,15 @@ exclusive_set_cardinality(PG_FUNCTION_ARGS)
 	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
 		elog(ERROR, "malformed exclusive_set_agg transition state received");
 
-	nsets = pq_getmsgint(&buf, sizeof(int));
+	num_hashes = pq_getmsgint(&buf, sizeof(int));
+	sets = (uint16 *) pq_getmsgbytes(&buf, sizeof(uint16) * num_hashes);
 
-	for (i = 0; i < nsets; i++)
+	result = 0;
+	for (i = 0; i < num_hashes; i++)
 	{
-		char *sname = (char *) pq_getmsgstring(&buf);
-		int num_hashes = pq_getmsgint(&buf, sizeof(int));
-		int size = num_hashes * sizeof(uint32);
-
-		if (pg_strcasecmp(set_name, sname) == 0)
-			PG_RETURN_INT64(num_hashes);
-
-		/* consume */
-		pq_getmsgbytes(&buf, size);
+		if (sets[i] == set_id)
+			result++;
 	}
 
-	PG_RETURN_NULL();
+	PG_RETURN_INT32(result);
 }

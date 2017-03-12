@@ -5967,13 +5967,13 @@ DESCR("hyperloglog union");
 DATA(insert OID = 4507 ( set_ttl	PGNSP PGUID 12 1 1 0 0 f f f f f t s 3 0 2249 "25 1186 25" _null_ _null_ _null_ _null_ _null_ set_ttl _null_ _null_ _null_ ));
 DESCR("set ttl info for a continuous view");
 
-DATA(insert OID = 4508 ( exclusive_set_cardinality_agg	PGNSP PGUID 12 1 0 0 0 t f f f t f i 2 0 17 "2283 25" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4508 ( exclusive_set_cardinality_agg	PGNSP PGUID 12 1 0 0 0 t f f f t f i 2 0 17 "2283 21" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("exclusive set aggregate function");
-DATA(insert OID = 4509 ( exclusive_set_cardinality_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 2281 "2281 2283 25" _null_ _null_ _null_ _null_ _null_ exclusive_set_cardinality_agg_trans _null_ _null_ _null_ ));
+DATA(insert OID = 4509 ( exclusive_set_cardinality_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 2281 "2281 2283 21" _null_ _null_ _null_ _null_ _null_ exclusive_set_cardinality_agg_trans _null_ _null_ _null_ ));
 DESCR("exclusive set add function");
 DATA(insert OID = 4510 ( exclusive_set_cardinality_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ exclusive_set_cardinality_agg_combine _null_ _null_ _null_ ));
 DESCR("exclusive set aggregate combine function");
-DATA(insert OID = 4512 ( exclusive_set_cardinality PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 20 "17 25" _null_ _null_ _null_ _null_ _null_ exclusive_set_cardinality _null_ _null_ _null_ ));
+DATA(insert OID = 4512 ( exclusive_set_cardinality PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 20 "17 21" _null_ _null_ _null_ _null_ _null_ exclusive_set_cardinality _null_ _null_ _null_ ));
 DESCR("exclusive set print function");
 
 DATA(insert OID = 4513 (exclusive_set_cardinality_agg_state_send PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ exclusive_set_cardinality_agg_state_send _null_ _null_ _null_ ));
