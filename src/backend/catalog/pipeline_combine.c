@@ -106,7 +106,7 @@ GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *transoutfn, Oid *combineinfn, 
 	*combineinfn = combform->combineinfn;
 
 	/* we only have a state type if we're actually storing state in tables */
-	if (aggform->aggfinalfn)
+	if (combform->aggfinalfn)
 		*statetype = combform->transouttype;
 
 	ReleaseSysCache(combtup);
