@@ -5984,6 +5984,11 @@ DESCR("deserializer for bucket aggregation states");
 DATA(insert OID = 4515 ( bucket_agg_final PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ bucket_agg_final _null_ _null_ _null_ ));
 DESCR("bucket final function");
 
+DATA(insert OID = 4516 ( bucket_cardinalities PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 1016 "17" _null_ _null_ _null_ _null_ _null_ bucket_cardinalities _null_ _null_ _null_ ));
+DESCR("bucket cardinalities retrieval function");
+DATA(insert OID = 4517 ( bucket_ids PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 1005 "17" _null_ _null_ _null_ _null_ _null_ bucket_ids _null_ _null_ _null_ ));
+DESCR("bucket ids retrieval function");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

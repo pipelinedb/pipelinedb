@@ -256,8 +256,6 @@ bucket_agg_state_send(PG_FUNCTION_ARGS)
 	/* Array of unique hashes */
 	pq_sendbytes(&buf, (char *) state->hashes, state->count * sizeof(uint32));
 
-
-
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
 
@@ -493,4 +491,104 @@ bucket_cardinality(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_INT32(result);
+}
+
+/*
+ * bucket_cardinalities
+ */
+Datum
+bucket_cardinalities(PG_FUNCTION_ARGS)
+{
+	bytea *bytes = PG_GETARG_BYTEA_P(0);
+	StringInfoData buf;
+	int num_hashes;
+	int nbytes;
+	uint16 *sets;
+	ArrayType *arr;
+	int i;
+	Datum *values;
+	List *ids = NIL;
+	ListCell *lc;
+
+	static uint16 seen_ids[1 << 16];
+	static int cards[1 << 16];
+
+	MemSet(&seen_ids, 0, sizeof(seen_ids));
+	MemSet(&cards, 0, sizeof(cards));
+
+	nbytes = VARSIZE(bytes);
+	initStringInfo(&buf);
+	appendBinaryStringInfo(&buf, VARDATA(bytes), nbytes);
+
+	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
+		elog(ERROR, "malformed exclusive_set_agg transition state received");
+
+	num_hashes = pq_getmsgint(&buf, sizeof(int));
+	sets = (uint16 *) pq_getmsgbytes(&buf, sizeof(uint16) * num_hashes);
+
+	for (i = 0; i < num_hashes; i++)
+	{
+		if (!cards[sets[i]])
+			ids = lappend_int(ids, sets[i]);
+		cards[sets[i]]++;
+	}
+
+	values = palloc0(sizeof(Datum) * list_length(ids));
+	i = 0;
+	foreach(lc, ids)
+		values[i++] = Int32GetDatum(cards[lfirst_int(lc)]);
+
+	arr = construct_array(values, list_length(ids), INT4OID, 4, true, 'i');
+	PG_RETURN_ARRAYTYPE_P(arr);
+
+	PG_RETURN_NULL();
+}
+
+/*
+ * bucket_ids
+ */
+Datum
+bucket_ids(PG_FUNCTION_ARGS)
+{
+	bytea *bytes = PG_GETARG_BYTEA_P(0);
+	StringInfoData buf;
+	int num_hashes;
+	int nbytes;
+	uint16 *sets;
+	ArrayType *arr;
+	int i;
+	Datum *values;
+	List *ids = NIL;
+	ListCell *lc;
+
+	static uint16 seen_ids[1 << 16];
+
+	MemSet(&seen_ids, 0, sizeof(seen_ids));
+
+	nbytes = VARSIZE(bytes);
+	initStringInfo(&buf);
+	appendBinaryStringInfo(&buf, VARDATA(bytes), nbytes);
+
+	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
+		elog(ERROR, "malformed exclusive_set_agg transition state received");
+
+	num_hashes = pq_getmsgint(&buf, sizeof(int));
+	sets = (uint16 *) pq_getmsgbytes(&buf, sizeof(uint16) * num_hashes);
+
+	for (i = 0; i < num_hashes; i++)
+	{
+		if (!seen_ids[sets[i]])
+		{
+			seen_ids[sets[i]] = 1;
+			ids = lappend_int(ids, sets[i]);
+		}
+	}
+
+	values = palloc0(sizeof(Datum) * list_length(ids));
+	i = 0;
+	foreach(lc, ids)
+		values[i++] = UInt16GetDatum(lfirst_int(lc));
+
+	arr = construct_array(values, list_length(ids), INT2OID, 2, true, 's');
+	PG_RETURN_ARRAYTYPE_P(arr);
 }
