@@ -369,6 +369,7 @@ bucket_agg_trans(PG_FUNCTION_ARGS)
 	ExclusiveSetAggState *state = PG_ARGISNULL(0) ? NULL : (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
 	Datum elem;
 	uint16 set_id;
+	uint32 hash;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "bucket_agg_trans called in non-aggregate context");
@@ -376,6 +377,7 @@ bucket_agg_trans(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(2))
 		elog(ERROR, "set ID cannot be NULL");
 
+	set_id = PG_GETARG_UINT16(2);
 	old = MemoryContextSwitchTo(context);
 
 	if (fcinfo->flinfo->fn_extra == NULL)
@@ -387,17 +389,18 @@ bucket_agg_trans(PG_FUNCTION_ARGS)
 	if (state == NULL)
 		state = exclusive_set_agg_startup();
 
-	/* NULLs are currently just a noop */
-	if (!PG_ARGISNULL(1))
+	/* We just hash NULLs to 0 */
+	if (PG_ARGISNULL(1))
 	{
-		uint32 hash;
-
-		elem = PG_GETARG_DATUM(1);
-		set_id = PG_GETARG_UINT16(2);
-
-		hash = DatumGetUInt32(FunctionCall1(&sas->typ->hash_proc_finfo, elem));
-		add_exclusive_set_hash(state, set_id, hash, fcinfo->flinfo->fn_mcxt);
+		hash = 0;
 	}
+	else
+	{
+		elem = PG_GETARG_DATUM(1);
+		hash = DatumGetUInt32(FunctionCall1(&sas->typ->hash_proc_finfo, elem));
+	}
+
+	add_exclusive_set_hash(state, set_id, hash, fcinfo->flinfo->fn_mcxt);
 
 	MemoryContextSwitchTo(old);
 
@@ -510,8 +513,8 @@ bucket_cardinalities(PG_FUNCTION_ARGS)
 	List *ids = NIL;
 	ListCell *lc;
 
-	static uint16 seen_ids[1 << 16];
-	static int cards[1 << 16];
+	static uint16 seen_ids[USHRT_MAX];
+	static int cards[USHRT_MAX];
 
 	MemSet(&seen_ids, 0, sizeof(seen_ids));
 	MemSet(&cards, 0, sizeof(cards));
