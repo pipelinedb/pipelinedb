@@ -295,7 +295,8 @@ WHERE p1.prorettype = 'internal'::regtype AND NOT
  4482 | arrayaggarraystaterecv
  4491 | numpolyaggstaterecv
  4495 | jsonbaggstaterecv
-(10 rows)
+ 4514 | bucket_agg_state_recv
+(11 rows)
 
 -- Look for functions that return a polymorphic type and do not have any
 -- polymorphic argument.  Calls of such functions would be unresolvable

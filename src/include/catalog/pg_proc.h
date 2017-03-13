@@ -5967,6 +5967,28 @@ DESCR("hyperloglog union");
 DATA(insert OID = 4507 ( set_ttl	PGNSP PGUID 12 1 1 0 0 f f f f f t s 3 0 2249 "25 1186 25" _null_ _null_ _null_ _null_ _null_ set_ttl _null_ _null_ _null_ ));
 DESCR("set ttl info for a continuous view");
 
+DATA(insert OID = 4508 ( bucket_agg	PGNSP PGUID 12 1 0 0 0 t f f f t f i 2 0 17 "2283 21" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("bucket aggregate function");
+DATA(insert OID = 4509 ( bucket_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 2281 "2281 2283 21" _null_ _null_ _null_ _null_ _null_ bucket_agg_trans _null_ _null_ _null_ ));
+DESCR("bucket add function");
+DATA(insert OID = 4510 ( bucket_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ bucket_agg_combine _null_ _null_ _null_ ));
+DESCR("bucket aggregate combine function");
+DATA(insert OID = 4512 ( bucket_cardinality PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 20 "17 21" _null_ _null_ _null_ _null_ _null_ bucket_cardinality _null_ _null_ _null_ ));
+DESCR("bucket print function");
+
+DATA(insert OID = 4513 (bucket_agg_state_send PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ bucket_agg_state_send _null_ _null_ _null_ ));
+DESCR("serializer for bucket aggregation states");
+DATA(insert OID = 4514 (bucket_agg_state_recv PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ bucket_agg_state_recv _null_ _null_ _null_ ));
+DESCR("deserializer for bucket aggregation states");
+
+DATA(insert OID = 4515 ( bucket_agg_final PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ bucket_agg_final _null_ _null_ _null_ ));
+DESCR("bucket final function");
+
+DATA(insert OID = 4516 ( bucket_cardinalities PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 1016 "17" _null_ _null_ _null_ _null_ _null_ bucket_cardinalities _null_ _null_ _null_ ));
+DESCR("bucket cardinalities retrieval function");
+DATA(insert OID = 4517 ( bucket_ids PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 1005 "17" _null_ _null_ _null_ _null_ _null_ bucket_ids _null_ _null_ _null_ ));
+DESCR("bucket ids retrieval function");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

@@ -220,4 +220,7 @@ DATA(insert (first_values_final first_values_trans first_values_send first_value
 /* json_object_int_sum */
 DATA(insert (json_object_int_sum_transout json_object_int_sum_transfn json_object_int_sum_transout 0 json_object_int_sum_transfn 114));
 
+/* bucket_agg */
+DATA(insert (bucket_agg_final bucket_agg_trans  bucket_agg_state_send bucket_agg_state_recv bucket_agg_combine 17));
+
 #endif
