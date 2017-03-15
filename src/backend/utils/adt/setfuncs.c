@@ -13,6 +13,7 @@
 #include "catalog/pg_type.h"
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
+#include "pipeline/ipc/microbatch.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/scheduler.h"
 #include "utils/array.h"
@@ -183,37 +184,37 @@ typedef struct NamedSet
 	int num_hashes;
 } NamedSet;
 
-typedef struct ExclusiveSetAggState
+typedef struct BucketAggTransState
 {
 	TypeCacheEntry *type;
-	HTAB *htab;
 	List *set_names;
 	uint32 *hashes;
 	uint16 *sets;
 	int capacity;
 	int count;
-} ExclusiveSetAggState;
+	uint32 bucket_id;
+} BucketAggTransState;
 
 typedef struct SetElement
 {
-	uint32 hash;
+	uint64 key;
 	int index;
 } SetElement;
 
-/*
- * exclusive_set_agg_startup
- */
-static ExclusiveSetAggState *
-exclusive_set_agg_startup(void)
+typedef struct BucketAggState
 {
-	ExclusiveSetAggState *result;
-	HASHCTL hctl;
+	TypeCacheEntry *typ;
+	HTAB *htab;
+	uint32 num_buckets;
+} BucketAggState;
 
-	result = palloc0(sizeof(ExclusiveSetAggState));
-	MemSet(&hctl, 0, sizeof(hctl));
-	hctl.hcxt = CurrentMemoryContext;
-	hctl.keysize = sizeof(uint32);
-	hctl.entrysize = sizeof(SetElement);
+/*
+ * bucket_agg_trans_startup
+ */
+static BucketAggTransState *
+bucket_agg_trans_startup(BucketAggState *bas)
+{
+	BucketAggTransState *result = palloc0(sizeof(BucketAggTransState));
 
 	/*
 	 * We'll grow this as necessary
@@ -222,19 +223,18 @@ exclusive_set_agg_startup(void)
 	result->hashes = palloc0(sizeof(uint32) * result->capacity);
 	result->sets = palloc0(sizeof(uint16) * result->capacity);
 	result->count = 0;
-
-	result->htab = hash_create("SetHash", 10000, &hctl, HASH_CONTEXT | HASH_ELEM);
+	result->bucket_id = bas->num_buckets++;
 
 	return result;
 }
 
 /*
- * exclusive_set_agg_state_send
+ * bucket_agg_state_send
  */
 Datum
 bucket_agg_state_send(PG_FUNCTION_ARGS)
 {
-	ExclusiveSetAggState *state = (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
+	BucketAggTransState *state = (BucketAggTransState *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
 
 	Assert(state);
@@ -260,14 +260,14 @@ bucket_agg_state_send(PG_FUNCTION_ARGS)
 }
 
 /*
- * exclusive_set_agg_state_recv
+ * bucket_agg_state_recv
  */
 Datum
 bucket_agg_state_recv(PG_FUNCTION_ARGS)
 {
 	bytea *bytes;
 	StringInfoData buf;
-	ExclusiveSetAggState *result;
+	BucketAggTransState *result;
 	MemoryContext context;
 	MemoryContext old;
 	int nbytes;
@@ -278,14 +278,14 @@ bucket_agg_state_recv(PG_FUNCTION_ARGS)
 
 	old = MemoryContextSwitchTo(context);
 	bytes = PG_GETARG_BYTEA_P(0);
-	result = palloc0(sizeof(ExclusiveSetAggState));
+	result = palloc0(sizeof(BucketAggTransState));
 	nbytes = VARSIZE(bytes);
 
 	initStringInfo(&buf);
 	appendBinaryStringInfo(&buf, VARDATA(bytes), nbytes);
 
 	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
-		elog(ERROR, "malformed exclusive_set_agg transition state received");
+		elog(ERROR, "malformed bucket_agg transition state received");
 
 	result->count = pq_getmsgint(&buf, sizeof(int));
 	result->capacity = result->count;
@@ -304,40 +304,60 @@ bucket_agg_state_recv(PG_FUNCTION_ARGS)
 }
 
 /*
- * lookup_set_element_type
+ * bucket_agg_startup
  */
 static void
-lookup_set_element_type(FunctionCallInfo fcinfo)
+bucket_agg_startup(FunctionCallInfo fcinfo)
 {
 	MemoryContext old;
-	SetAggState *state;
+	BucketAggState *state;
 	Oid type = AggGetInitialArgType(fcinfo);
+	HASHCTL hctl;
+
+	MemSet(&hctl, 0, sizeof(hctl));
+	hctl.hcxt = CurrentMemoryContext;
+	hctl.keysize = sizeof(uint64);
+	hctl.entrysize = sizeof(SetElement);
 
 	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
-	state = palloc0(sizeof(SetAggState));
+	state = palloc0(sizeof(BucketAggState));
+	state->num_buckets = 0;
 
-	state->has_null = false;
 	state->typ = lookup_type_cache(type,
 			TYPECACHE_HASH_PROC | TYPECACHE_HASH_PROC_FINFO | TYPECACHE_CMP_PROC | TYPECACHE_CMP_PROC_FINFO);
+	state->htab = hash_create("BucketAggHash", continuous_query_batch_size, &hctl, HASH_CONTEXT | HASH_ELEM | HASH_BLOBS);
 
 	if (type == RECORDOID || state->typ->typtype == TYPTYPE_COMPOSITE)
-		elog(ERROR, "composite types are not supported by exclusive_set_agg");
+		elog(ERROR, "composite types are not supported by bucket_agg");
 
 	MemoryContextSwitchTo(old);
 
 	fcinfo->flinfo->fn_extra = (void *) state;
+
+}
+
+static uint64
+bucket_agg_hash(uint32 bucket_id, uint32 hash)
+{
+	uint64 result = bucket_id;
+
+	result <<= 32;
+	result |= hash;
+
+	return result;
 }
 
 /*
- * add_exclusive_set_hash
+ * add_hash_to_bucket
  */
 static void
-add_exclusive_set_hash(ExclusiveSetAggState *state, uint16 set_id, uint32 hash, MemoryContext set_context)
+add_hash_to_bucket(BucketAggState *bas, BucketAggTransState *state, uint16 set_id, uint32 hash, MemoryContext set_context)
 {
 	bool found;
 	SetElement *elem;
+	uint64 bucket_hash = bucket_agg_hash(state->bucket_id, hash);
 
-	elem = (SetElement *) hash_search_with_hash_value(state->htab, &hash, hash, HASH_ENTER, &found);
+	elem = (SetElement *) hash_search_with_hash_value(bas->htab, &bucket_hash, bucket_hash, HASH_ENTER, &found);
 	if (!found)
 	{
 		/*
@@ -354,19 +374,23 @@ add_exclusive_set_hash(ExclusiveSetAggState *state, uint16 set_id, uint32 hash, 
 		state->sets[elem->index] = set_id;
 		state->count++;
 	}
+	else
+	{
+		Assert(state->count);
+	}
 	state->sets[elem->index] = set_id;
 }
 
 /*
- * exclusive_set_agg_trans
+ * bucket_agg_trans
  */
 Datum
 bucket_agg_trans(PG_FUNCTION_ARGS)
 {
-	SetAggState *sas;
+	BucketAggState *bas;
 	MemoryContext old;
 	MemoryContext context;
-	ExclusiveSetAggState *state = PG_ARGISNULL(0) ? NULL : (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
+	BucketAggTransState *state = PG_ARGISNULL(0) ? NULL : (BucketAggTransState *) PG_GETARG_POINTER(0);
 	Datum elem;
 	uint16 set_id;
 	uint32 hash;
@@ -381,13 +405,13 @@ bucket_agg_trans(PG_FUNCTION_ARGS)
 	old = MemoryContextSwitchTo(context);
 
 	if (fcinfo->flinfo->fn_extra == NULL)
-		lookup_set_element_type(fcinfo);
+		bucket_agg_startup(fcinfo);
 
 	Assert(fcinfo->flinfo->fn_extra);
-	sas = (SetAggState *) fcinfo->flinfo->fn_extra;
+	bas = (BucketAggState *) fcinfo->flinfo->fn_extra;
 
 	if (state == NULL)
-		state = exclusive_set_agg_startup();
+		state = bucket_agg_trans_startup(bas);
 
 	/* We just hash NULLs to 0 */
 	if (PG_ARGISNULL(1))
@@ -397,10 +421,10 @@ bucket_agg_trans(PG_FUNCTION_ARGS)
 	else
 	{
 		elem = PG_GETARG_DATUM(1);
-		hash = DatumGetUInt32(FunctionCall1(&sas->typ->hash_proc_finfo, elem));
+		hash = DatumGetUInt32(FunctionCall1(&bas->typ->hash_proc_finfo, elem));
 	}
 
-	add_exclusive_set_hash(state, set_id, hash, fcinfo->flinfo->fn_mcxt);
+	add_hash_to_bucket(bas, state, set_id, hash, fcinfo->flinfo->fn_mcxt);
 
 	MemoryContextSwitchTo(old);
 
@@ -408,13 +432,14 @@ bucket_agg_trans(PG_FUNCTION_ARGS)
 }
 
 /*
- * exclusive_set_agg_combine
+ * bucket_agg_combine
  */
 Datum
 bucket_agg_combine(PG_FUNCTION_ARGS)
 {
-	ExclusiveSetAggState *state;
-	ExclusiveSetAggState *incoming;
+	BucketAggState *bas;
+	BucketAggTransState *state;
+	BucketAggTransState *incoming;
 	MemoryContext context;
 	MemoryContext old;
 
@@ -423,20 +448,26 @@ bucket_agg_combine(PG_FUNCTION_ARGS)
 
 	old = MemoryContextSwitchTo(context);
 
+	if (fcinfo->flinfo->fn_extra == NULL)
+		bucket_agg_startup(fcinfo);
+
+	Assert(fcinfo->flinfo->fn_extra);
+	bas = (BucketAggState *) fcinfo->flinfo->fn_extra;
+
 	if (!PG_ARGISNULL(0))
-		state = (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
+		state = (BucketAggTransState *) PG_GETARG_POINTER(0);
 	else
-		state = exclusive_set_agg_startup();
+		state = bucket_agg_trans_startup(bas);
 
 	if (!PG_ARGISNULL(1))
 	{
 		int i;
-		incoming = (ExclusiveSetAggState *) PG_GETARG_POINTER(1);
+		incoming = (BucketAggTransState *) PG_GETARG_POINTER(1);
 
 		Assert(incoming);
 
 		for (i = 0; i < incoming->count; i++)
-			add_exclusive_set_hash(state, incoming->sets[i], incoming->hashes[i], fcinfo->flinfo->fn_mcxt);
+			add_hash_to_bucket(bas, state, incoming->sets[i], incoming->hashes[i], fcinfo->flinfo->fn_mcxt);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -447,7 +478,7 @@ bucket_agg_combine(PG_FUNCTION_ARGS)
 Datum
 bucket_agg_final(PG_FUNCTION_ARGS)
 {
-	ExclusiveSetAggState *state = (ExclusiveSetAggState *) PG_GETARG_POINTER(0);
+	BucketAggTransState *state = (BucketAggTransState *) PG_GETARG_POINTER(0);
 
 	bytea *bytes = (bytea *) DirectFunctionCall1(bucket_agg_state_send, (Datum) state);
 
@@ -481,7 +512,7 @@ bucket_cardinality(PG_FUNCTION_ARGS)
 	appendBinaryStringInfo(&buf, VARDATA(bytes), nbytes);
 
 	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
-		elog(ERROR, "malformed exclusive_set_agg transition state received");
+		elog(ERROR, "malformed bucket_agg transition state received");
 
 	num_hashes = pq_getmsgint(&buf, sizeof(int));
 	sets = (uint16 *) pq_getmsgbytes(&buf, sizeof(uint16) * num_hashes);
@@ -524,7 +555,7 @@ bucket_cardinalities(PG_FUNCTION_ARGS)
 	appendBinaryStringInfo(&buf, VARDATA(bytes), nbytes);
 
 	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
-		elog(ERROR, "malformed exclusive_set_agg transition state received");
+		elog(ERROR, "malformed bucket_agg transition state received");
 
 	num_hashes = pq_getmsgint(&buf, sizeof(int));
 	sets = (uint16 *) pq_getmsgbytes(&buf, sizeof(uint16) * num_hashes);
@@ -573,7 +604,7 @@ bucket_ids(PG_FUNCTION_ARGS)
 	appendBinaryStringInfo(&buf, VARDATA(bytes), nbytes);
 
 	if (pq_getmsgint(&buf, 4) != MAGIC_HEADER)
-		elog(ERROR, "malformed exclusive_set_agg transition state received");
+		elog(ERROR, "malformed bucket_agg transition state received");
 
 	num_hashes = pq_getmsgint(&buf, sizeof(int));
 	sets = (uint16 *) pq_getmsgbytes(&buf, sizeof(uint16) * num_hashes);
