@@ -261,9 +261,6 @@ hll_cache_cardinality(PG_FUNCTION_ARGS)
 {
 	HyperLogLog *hll;
 
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
-
 	hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 	/* Calling this will cache the cardinality */
 

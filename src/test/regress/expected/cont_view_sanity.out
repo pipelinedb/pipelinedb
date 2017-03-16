@@ -126,3 +126,20 @@ drop cascades to continuous view cv_grp_expr
 drop cascades to continuous view cv_multi_grp
 drop cascades to continuous view cv_agg_expr
 drop cascades to continuous view test_null_group
+-- Verify that transout/combinein functions are strict
+SELECT proname FROM
+  (SELECT DISTINCT transoutfn::text FROM pipeline_combine) c
+JOIN pg_proc p ON c.transoutfn::text = p.proname
+WHERE proisstrict = false;
+ proname 
+---------
+(0 rows)
+
+SELECT proname FROM
+  (SELECT DISTINCT combineinfn::text FROM pipeline_combine) c
+JOIN pg_proc p ON c.combineinfn::text = p.proname
+WHERE proisstrict = false;
+ proname 
+---------
+(0 rows)
+

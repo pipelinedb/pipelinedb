@@ -2179,11 +2179,8 @@ json_object_agg_combine(PG_FUNCTION_ARGS)
 Datum
 jsonaggstatesend(PG_FUNCTION_ARGS)
 {
-	JsonAggState *state = PG_ARGISNULL(0) ? NULL : (JsonAggState *) PG_GETARG_POINTER(0);
+	JsonAggState *state = (JsonAggState *) PG_GETARG_POINTER(0);
 	bytea *result;
-
-	if (!state)
-		PG_RETURN_NULL();
 
 	result = (bytea *) palloc0(state->str->len + VARHDRSZ);
 	SET_VARSIZE(result, state->str->len + VARHDRSZ);
@@ -2199,9 +2196,6 @@ jsonaggstaterecv(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	bytea *bytes;
 	JsonAggState *result;
-
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;

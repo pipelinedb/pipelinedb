@@ -4358,13 +4358,10 @@ string_agg_transfn(PG_FUNCTION_ARGS)
 Datum
 stringaggstatesend(PG_FUNCTION_ARGS)
 {
-	StringAggState *state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
+	StringAggState *state = (StringAggState *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
 	bytea *result;
 	int nbytes;
-
-	if (!state)
-		PG_RETURN_NULL();
 
 	initStringInfo(&buf);
 
@@ -4387,13 +4384,10 @@ stringaggstatesend(PG_FUNCTION_ARGS)
 Datum
 stringaggstaterecv(PG_FUNCTION_ARGS)
 {
-	bytea *bytesin = PG_ARGISNULL(0) ? NULL : (bytea *) PG_GETARG_BYTEA_P(0);
+	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
 	StringAggState *result;
 	StringInfoData buf;
 	int nbytes;
-
-	if (!bytesin)
-		PG_RETURN_NULL();
 
 	nbytes = VARSIZE(bytesin) - VARHDRSZ;
 

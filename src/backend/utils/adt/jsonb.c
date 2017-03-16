@@ -1938,11 +1938,8 @@ Datum
 jsonbaggstatesend(PG_FUNCTION_ARGS)
 {
 	JsonbValue *jsonb;
-	JsonbAggState *state = PG_ARGISNULL(0) ? NULL : (JsonbAggState *) PG_GETARG_POINTER(0);
+	JsonbAggState *state = (JsonbAggState *) PG_GETARG_POINTER(0);
 	Jsonb *result;
-
-	if (!state)
-		PG_RETURN_NULL();
 
 	jsonb = pushJsonbValue(&state->res->parseState,
 			state->res->parseState->contVal.type ==  jbvArray ? WJB_END_ARRAY : WJB_END_OBJECT, NULL);
@@ -1961,9 +1958,6 @@ jsonbaggstaterecv(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	JsonbIteratorToken type;
 	JsonbValue v;
-
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;

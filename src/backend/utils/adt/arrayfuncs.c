@@ -1536,13 +1536,10 @@ ReadArrayBinary(StringInfo buf,
 Datum
 arrayaggstatesend(PG_FUNCTION_ARGS)
 {
-	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	ArrayBuildState *state = (ArrayBuildState *) PG_GETARG_POINTER(0);
 	ArrayType *vals;
 	int	dims[1];
 	int	lbs[1];
-
-	if (state == NULL)
-		PG_RETURN_NULL();
 
 	dims[0] = state->nelems;
 	lbs[0] = 1;
@@ -1570,9 +1567,6 @@ arrayaggstaterecv(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;
 
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
-
 	old = MemoryContextSwitchTo(context);
 	vals = (ArrayType *) PG_GETARG_ARRAYTYPE_P_COPY(0);
 
@@ -1599,13 +1593,10 @@ arrayaggstaterecv(PG_FUNCTION_ARGS)
 Datum
 arrayaggarraystatesend(PG_FUNCTION_ARGS)
 {
-	ArrayBuildStateArr *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildStateArr *) PG_GETARG_POINTER(0);
+	ArrayBuildStateArr *state = (ArrayBuildStateArr *) PG_GETARG_POINTER(0);
 	bytea *result;
 	char *pos;
 	int nbytes;
-
-	if (state == NULL)
-		PG_RETURN_NULL();
 
 	nbytes = sizeof(ArrayBuildStateArr) + state->abytes + ((state->aitems + 7) / 8);
 	result = (bytea *) palloc0(nbytes + VARHDRSZ);
@@ -1632,9 +1623,6 @@ arrayaggarraystaterecv(PG_FUNCTION_ARGS)
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = fcinfo->flinfo->fn_mcxt;
-
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
 
 	old = MemoryContextSwitchTo(context);
 
