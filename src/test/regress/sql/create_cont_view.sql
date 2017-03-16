@@ -185,6 +185,32 @@ CREATE VIEW manosw WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_strea
 WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
 
 DROP STREAM create_cont_stream CASCADE;
+CREATE STREAM create_cont_stream (key integer, url text, value text);
+
+CREATE CONTINUOUS VIEW ccv0 AS SELECT 1, count(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv1 AS SELECT 1 FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv2 AS SELECT 1 AS x, 2 AS y FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv3 AS SELECT 1 AS x, 2 AS y, count(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv4 AS SELECT 1 + 1 AS x, 2 + 2 AS y, count(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv5 AS SELECT 1 + ('1'::integer + 1), count(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv6 AS SELECT 1 + ('1'::integer + 1), count(*) FROM create_cont_stream GROUP BY random();
+CREATE CONTINUOUS VIEW ccv7 AS SELECT 1 + ('1'::integer + 1) AS col, key, count(*) FROM create_cont_stream GROUP BY key;
+CREATE CONTINUOUS VIEW ccv8 AS SELECT 1 + ('1'::integer + 1) AS col, key + 1 AS g, count(*) FROM create_cont_stream GROUP BY g;
+
+INSERT INTO create_cont_stream (key) VALUES (0), (1), (2);
+INSERT INTO create_cont_stream (key) VALUES (0), (1), (2);
+
+SELECT * FROM ccv0;
+SELECT * FROM ccv1;
+SELECT * FROM ccv2;
+SELECT * FROM ccv3;
+SELECT * FROM ccv4;
+SELECT * FROM ccv5;
+SELECT * FROM ccv6;
+SELECT * FROM ccv7 ORDER BY key;
+SELECT * FROM ccv8 ORDER BY g;
+
+DROP STREAM create_cont_stream CASCADE;
 
 -- Custom type
 CREATE TYPE custom_type AS (integerone integer, integertwo integer);

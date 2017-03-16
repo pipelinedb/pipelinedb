@@ -1858,6 +1858,29 @@ apply_combine(ResTarget *rt)
 }
 
 /*
+ * is_constant_expr
+ */
+static bool
+is_constant_expr(Node *node)
+{
+	ContAnalyzeContext context;
+
+	MemSet(&context, 0, sizeof(ContAnalyzeContext));
+
+	context.funcs = NIL;
+	collect_funcs(node, &context);
+	if (context.funcs)
+		return false;
+
+	context.cols = NIL;
+	collect_cols(node, &context);
+	if (context.cols)
+		return false;
+
+	return true;
+}
+
+/*
  * select_from_matrel
  *
  * Adjust the given target list's ResTargets to select from matrel columns
@@ -1873,7 +1896,28 @@ select_from_matrel(List *target_list)
 	{
 		ResTarget *rt = (ResTarget *) lfirst(lc);
 		ContAnalyzeContext context;
-		ResTarget *matrel_res = create_res_target_for_node((Node *) create_colref_for_res_target(rt), rt->name);
+		Node *val;
+		ResTarget *matrel_res;
+
+		/*
+		 * For constant expressions we don't want to reference the corresponding column in the worker query,
+		 * because that could produce an invalid combiner query. For example, consider this CV definition:
+		 *
+		 * CREATE CONTINUOUS VIEW v AS SELECT 1 AS const_ref, count(*) FROM s
+		 *
+		 * If we referenced the worker's constant output as a column, the combiner query would look like this:
+		 *
+		 * SELECT const_ref, count FROM worker
+		 *
+		 * which is invalid because const_ref is ungrouped. So we just evaluate the constant expression in
+		 * the combiner in these cases.
+		 */
+		if (is_constant_expr(rt->val))
+			val = copyObject(rt->val);
+		else
+			val = (Node *) create_colref_for_res_target(rt);
+
+		matrel_res = create_res_target_for_node(val, rt->name);
 
 		if (!IsA(rt->val, FuncCall))
 		{
