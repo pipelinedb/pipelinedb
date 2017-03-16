@@ -253,42 +253,60 @@ ContinuousQueryReaperMain(void)
 		for (;;)
 		{
 			int deleted = 0;
+			bool error = false;
 
 			StartTransactionCommand();
 			SetCurrentStatementStartTimestamp();
 
-			ttl_rels = get_ttl_rels(&min_sleep);
-
-			foreach(lc, ttl_rels)
+			PG_TRY();
 			{
-				List *rels = lfirst(lc);
-				RangeVar *cv;
-				RangeVar *matrel;
-				Oid relid;
+				ttl_rels = get_ttl_rels(&min_sleep);
 
-				Assert(list_length(rels) == 3);
-
-				relid = intVal(linitial(rels));
-				cv = lsecond(rels);
-				matrel = lthird(rels);
-
-				/*
-				 * Skip any relations that aren't likely to have newly expired rows
-				 */
-				if (should_expire(relid))
+				foreach(lc, ttl_rels)
 				{
-					deleted = DeleteTTLExpiredRows(cv, matrel);
-					total_deleted += deleted;
-					set_last_expiration(relid, deleted);
+					List *rels = lfirst(lc);
+					RangeVar *cv;
+					RangeVar *matrel;
+					Oid relid;
+
+					Assert(list_length(rels) == 3);
+
+					relid = intVal(linitial(rels));
+					cv = lsecond(rels);
+					matrel = lthird(rels);
+
+					/*
+					 * Skip any relations that aren't likely to have newly expired rows
+					 */
+					if (should_expire(relid))
+					{
+						deleted = DeleteTTLExpiredRows(cv, matrel);
+						total_deleted += deleted;
+						set_last_expiration(relid, deleted);
+					}
 				}
 			}
+			PG_CATCH();
+			{
+				EmitErrorReport();
+				FlushErrorState();
+
+				error = true;
+
+				if (ActiveSnapshotSet())
+					PopActiveSnapshot();
+
+				AbortCurrentTransaction();
+				StartTransactionCommand();
+			}
+			PG_END_TRY();
 
 			CommitTransactionCommand();
 
 			/*
 			 * If nothing was deleted on this run, we're done for now
 			 */
-			if (!deleted)
+			if (error || !deleted)
 				break;
 		}
 
