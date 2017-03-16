@@ -61,5 +61,3 @@ GROUP BY g ORDER BY g;
 
 DROP CONTINUOUS VIEW bucket2;
 DROP STREAM bucket_stream;
-
-DELETE FROM v2_mrel WHERE "$pk" IN (SELECT "$pk" FROM public.v2_mrel WHERE ts < now() - interval '1 seconds' FOR UPDATE SKIP LOCKED);
