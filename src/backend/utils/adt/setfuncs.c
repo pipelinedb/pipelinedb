@@ -314,12 +314,13 @@ bucket_agg_startup(FunctionCallInfo fcinfo)
 	Oid type = AggGetInitialArgType(fcinfo);
 	HASHCTL hctl;
 
+	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+
 	MemSet(&hctl, 0, sizeof(hctl));
 	hctl.hcxt = CurrentMemoryContext;
 	hctl.keysize = sizeof(uint64);
 	hctl.entrysize = sizeof(SetElement);
 
-	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
 	state = palloc0(sizeof(BucketAggState));
 	state->num_buckets = 0;
 
