@@ -109,6 +109,7 @@ DeleteTTLExpiredRows(RangeVar *cvname, RangeVar *matrel)
 	if (SPI_finish() != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed");
 
+	PopActiveSnapshot();
 	continuous_query_materialization_table_updatable = save_continuous_query_materialization_table_updatable;
 
 	heap_close(rel, AccessShareLock);
