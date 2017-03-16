@@ -2821,6 +2821,36 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
+		{"continuous_query_num_reapers", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+		 gettext_noop("Sets the number of parallel continuous query reaper processes."),
+		 NULL,
+		},
+		&continuous_query_num_reapers,
+		1, 1, MAX_BACKENDS,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_ttl_expiration_batch_size", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+		 gettext_noop("Sets the maximum number of TTL-expired rows to delete at a time."),
+		 NULL,
+		},
+		&continuous_query_ttl_expiration_batch_size,
+		10000, 0, INT_MAX,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_ttl_expiration_threshold", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+		 gettext_noop("Sets percentage of a relation's TTL that must have elapsed before attempting to expire rows again."),
+		 NULL,
+		},
+		&continuous_query_ttl_expiration_threshold,
+		5, 0, 100,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"continuous_query_queue_mem", PGC_BACKEND, RESOURCES_MEM,
 		 gettext_noop("Sets the maximum amount of memory each queue process will use."),
 		 NULL,

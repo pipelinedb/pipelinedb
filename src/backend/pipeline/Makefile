@@ -15,9 +15,9 @@ top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
 OBJS = combiner_receiver.o planner.o update.o stream.o \
-			 matrel.o ttl_vacuum.o tdigest.o miscutils.o bloom.o hll.o cmsketch.o \
+			 matrel.o tdigest.o miscutils.o bloom.o hll.o cmsketch.o \
 			 analyzer.o scheduler.o worker.o combiner.o fss.o stream_fdw.o executor.o transform_receiver.o \
-			 queue.o
+			 queue.o reaper.o
 
 SUBDIRS = ipc
 

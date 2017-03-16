@@ -35,7 +35,6 @@
 #include "catalog/pg_namespace.h"
 #include "commands/cluster.h"
 #include "commands/vacuum.h"
-#include "pipeline/ttl_vacuum.h"
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "postmaster/autovacuum.h"
@@ -1179,9 +1178,6 @@ vacuum_rel(Oid relid, RangeVar *relation, int options, VacuumParams *params)
 	int			save_nestlevel;
 
 	Assert(params != NULL);
-
-	/* If this is a matrel for a continuous view with a TTL, delete all expired tuples */
-	DeleteTTLExpiredTuples(relid);
 
 	/* Begin a transaction for vacuuming this relation */
 	StartTransactionCommand();

@@ -58,4 +58,6 @@ extern Datum pipeline_flush(PG_FUNCTION_ARGS);
 
 extern Datum set_ttl(PG_FUNCTION_ARGS);
 
+extern Datum ttl_expire(PG_FUNCTION_ARGS);
+
 #endif

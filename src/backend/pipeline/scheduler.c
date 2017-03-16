@@ -28,6 +28,7 @@
 #include "pipeline/scheduler.h"
 #include "pipeline/ipc/pzmq.h"
 #include "pipeline/miscutils.h"
+#include "pipeline/reaper.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
 #include "storage/ipc.h"
@@ -48,7 +49,7 @@
 
 #define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
-#define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners + continuous_query_num_queues)
+#define NUM_BG_WORKERS_PER_DB (continuous_query_num_workers + continuous_query_num_combiners + continuous_query_num_queues + continuous_query_num_reapers)
 #define NUM_LOCKS_PER_DB NUM_BG_WORKERS_PER_DB
 
 #define BG_PROC_STATUS_TIMEOUT 10000
@@ -69,6 +70,8 @@ ContQueryProc *MyContQueryProc = NULL;
 static bool am_cont_scheduler = false;
 static bool am_cont_worker = false;
 static bool am_cont_queue = false;
+static bool am_cont_reaper = false;
+
 bool am_cont_combiner = false;
 
 /* guc parameters */
@@ -76,6 +79,7 @@ bool continuous_queries_enabled;
 int  continuous_query_num_combiners;
 int  continuous_query_num_workers;
 int  continuous_query_num_queues;
+int  continuous_query_num_reapers;
 int continuous_query_queue_mem;
 int  continuous_query_max_wait;
 int  continuous_query_combiner_work_mem;
@@ -157,6 +161,9 @@ GetContQueryProcName(ContQueryProc *proc)
 			break;
 		case Queue:
 			snprintf(buf, NAMEDATALEN, "queue%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
+			break;
+		case Reaper:
+			snprintf(buf, NAMEDATALEN, "reaper%d [%s]", proc->group_id, NameStr(proc->db_meta->db_name));
 			break;
 		case Scheduler:
 			return pstrdup("scheduler");
@@ -372,6 +379,10 @@ cont_bgworker_main(Datum arg)
 			am_cont_worker = true;
 			run = &ContinuousQueryWorkerMain;
 			break;
+		case Reaper:
+			am_cont_reaper = true;
+			run = &ContinuousQueryReaperMain;
+			break;
 		default:
 			elog(ERROR, "unknown continuous process type: %d", proc->type);
 	}
@@ -548,6 +559,20 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 		proc->pzmq_id = rand() ^ MyProcPid;
 
 		proc->type = Queue;
+		proc->group_id = i;
+
+		success &= run_cont_bgworker(proc);
+	}
+	offset += continuous_query_num_queues;
+
+	for (i = 0; i < continuous_query_num_reapers; i++)
+	{
+		proc = &db_meta->db_procs[i + offset];
+		MemSet(proc, 0, sizeof(ContQueryProc));
+		proc->db_meta = db_meta;
+		proc->pzmq_id = rand() ^ MyProcPid;
+
+		proc->type = Reaper;
 		proc->group_id = i;
 
 		success &= run_cont_bgworker(proc);

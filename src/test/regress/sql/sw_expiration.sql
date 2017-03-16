@@ -17,6 +17,7 @@ SELECT (SELECT COUNT(*) FROM sw_vacuum) < (SELECT COUNT(*) FROM sw_vacuum_mrel);
 SELECT DISTINCT key FROM sw_vacuum_mrel ORDER BY key;
 
 SELECT pg_sleep(3);
+SELECT 0 * ttl_expire('sw_vacuum');
 
 SELECT * FROM sw_vacuum ORDER BY key;
 SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
@@ -28,7 +29,7 @@ SELECT * FROM sw_vacuum ORDER BY key;
 SELECT (SELECT COUNT(*) FROM sw_vacuum) < (SELECT COUNT(*) FROM sw_vacuum_mrel);
 SELECT DISTINCT key FROM sw_vacuum_mrel ORDER BY key;
 
-VACUUM sw_vacuum;
+SELECT 0 * ttl_expire('sw_vacuum');
 SELECT * FROM sw_vacuum ORDER BY key;
 SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
 
@@ -37,7 +38,7 @@ SELECT pg_sleep(3);
 SELECT * FROM sw_vacuum ORDER BY key;
 SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
 
-VACUUM FULL sw_vacuum;
+SELECT 0 * ttl_expire('sw_vacuum');
 SELECT * FROM sw_vacuum ORDER BY key;
 SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
 

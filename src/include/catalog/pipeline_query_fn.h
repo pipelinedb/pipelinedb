@@ -50,7 +50,9 @@ typedef struct ContQuery
 	int sw_step_ms;
 	uint64 sw_interval_ms;
 	bool is_sw;
-	Oid sw_attno;
+	AttrNumber ttl_attno;
+	AttrNumber sw_attno;
+	int ttl;
 
 	/* for transform */
 	Oid tgfn;

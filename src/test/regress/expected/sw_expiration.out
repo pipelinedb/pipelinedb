@@ -40,6 +40,12 @@ SELECT pg_sleep(3);
  
 (1 row)
 
+SELECT 0 * ttl_expire('sw_vacuum');
+ ?column? 
+----------
+        0
+(1 row)
+
 SELECT * FROM sw_vacuum ORDER BY key;
  key | count 
 -----+-------
@@ -48,10 +54,7 @@ SELECT * FROM sw_vacuum ORDER BY key;
 SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
  key | sum 
 -----+-----
- a   |   4
- b   |   4
- c   |   4
-(3 rows)
+(0 rows)
 
 INSERT INTO sw_vacuum_stream (key) VALUES ('a'), ('b'), ('c');
 INSERT INTO sw_vacuum_stream (key) VALUES ('a'), ('b'), ('c');
@@ -66,7 +69,7 @@ SELECT * FROM sw_vacuum ORDER BY key;
 SELECT (SELECT COUNT(*) FROM sw_vacuum) < (SELECT COUNT(*) FROM sw_vacuum_mrel);
  ?column? 
 ----------
- t
+ f
 (1 row)
 
 SELECT DISTINCT key FROM sw_vacuum_mrel ORDER BY key;
@@ -77,7 +80,12 @@ SELECT DISTINCT key FROM sw_vacuum_mrel ORDER BY key;
  c
 (3 rows)
 
-VACUUM sw_vacuum;
+SELECT 0 * ttl_expire('sw_vacuum');
+ ?column? 
+----------
+        0
+(1 row)
+
 SELECT * FROM sw_vacuum ORDER BY key;
  key | count 
 -----+-------
@@ -113,7 +121,12 @@ SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
  c   |   2
 (3 rows)
 
-VACUUM FULL sw_vacuum;
+SELECT 0 * ttl_expire('sw_vacuum');
+ ?column? 
+----------
+        0
+(1 row)
+
 SELECT * FROM sw_vacuum ORDER BY key;
  key | count 
 -----+-------

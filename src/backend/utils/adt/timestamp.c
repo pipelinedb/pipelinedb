@@ -1515,6 +1515,7 @@ EncodeSpecialTimestamp(Timestamp dt, char *str)
 Datum
 now(PG_FUNCTION_ARGS)
 {
+//	elog(LOG, "TS=%ld", GetCurrentTransactionStartTimestamp());
 	PG_RETURN_TIMESTAMPTZ(GetCurrentTransactionStartTimestamp());
 }
 

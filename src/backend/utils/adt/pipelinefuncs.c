@@ -24,6 +24,7 @@
 #include "fmgr.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/ipc/microbatch.h"
+#include "pipeline/reaper.h"
 #include "pipeline/stream.h"
 #include "miscadmin.h"
 #include "utils/array.h"
@@ -1104,3 +1105,34 @@ set_ttl(PG_FUNCTION_ARGS)
 	result = HeapTupleGetDatum(tup);
 	SRF_RETURN_NEXT(funcctx, result);
 }
+
+/*
+ * ttl_expire
+ */
+Datum
+ttl_expire(PG_FUNCTION_ARGS)
+{
+	RangeVar *cv_name;
+	RangeVar *matrel;
+	int result;
+	int save_batch_size = continuous_query_ttl_expiration_batch_size;
+
+	if (PG_ARGISNULL(0))
+		elog(ERROR, "continuous view name cannot be NULL");
+
+	cv_name = makeRangeVarFromNameList(textToQualifiedNameList(PG_GETARG_TEXT_P(0)));
+	matrel = GetMatRelName(cv_name);
+
+	if (!IsTTLContView(cv_name))
+		elog(ERROR, "continuous view \"%s\" does not have a TTL", cv_name->relname);
+
+	/*
+	 * DELETE everything
+	 */
+	continuous_query_ttl_expiration_batch_size = 0;
+	result = DeleteTTLExpiredRows(cv_name, matrel);
+	continuous_query_ttl_expiration_batch_size = save_batch_size;
+
+	PG_RETURN_INT32(result);
+}
+
