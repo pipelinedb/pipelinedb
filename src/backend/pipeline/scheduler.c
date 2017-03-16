@@ -207,7 +207,7 @@ StartContQueryScheduler(void)
 	{
 	case -1:
 		ereport(LOG,
-				(errmsg("could not fork continuous query scheduler process: %m")));
+				(errmsg("could not fork pipelinedb scheduler process: %m")));
 		return 0;
 
 	case 0:
@@ -384,10 +384,10 @@ cont_bgworker_main(Datum arg)
 			run = &ContinuousQueryReaperMain;
 			break;
 		default:
-			elog(ERROR, "unknown continuous process type: %d", proc->type);
+			elog(ERROR, "unknown pipelinedb process type: %d", proc->type);
 	}
 
-	elog(LOG, "continuous query process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);
+	elog(LOG, "pipelinedb process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);
 
 	pgstat_init_cqstat(MyProcStatCQEntry, 0, MyProcPid);
 	pzmq_init();
@@ -404,11 +404,11 @@ cont_bgworker_main(Datum arg)
 	/* If this isn't a clean termination, exit with a non-zero status code */
 	if (!proc->db_meta->terminate)
 	{
-		elog(LOG, "continuous query process \"%s\" was killed", GetContQueryProcName(proc));
+		elog(LOG, "pipelinedb process \"%s\" was killed", GetContQueryProcName(proc));
 		proc_exit(1);
 	}
 
-	elog(LOG, "continuous query process \"%s\" shutting down", GetContQueryProcName(proc));
+	elog(LOG, "pipelinedb process \"%s\" shutting down", GetContQueryProcName(proc));
 }
 
 /*
@@ -474,7 +474,7 @@ wait_for_db_workers(ContQueryDatabaseMetadata *db_meta, BgwHandleStatus state)
 	{
 		cqproc = &db_meta->db_procs[i];
 		if (!wait_for_bg_worker_state(cqproc->bgw_handle, state, BG_PROC_STATUS_TIMEOUT))
-			elog(WARNING, "timed out waiting for continuous query process \"%s\" to reach state %d",
+			elog(WARNING, "timed out waiting for pipelinedb process \"%s\" to reach state %d",
 					GetContQueryProcName(cqproc), state);
 	}
 }
@@ -486,7 +486,7 @@ terminate_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 	Assert(db_meta->running);
 
-	elog(LOG, "terminating continuous query processes for database: \"%s\"", NameStr(db_meta->db_name));
+	elog(LOG, "terminating pipelinedb processes for database: \"%s\"", NameStr(db_meta->db_name));
 
 	db_meta->terminate = true;
 
@@ -516,7 +516,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 
 	Assert(!db_meta->running);
 
-	elog(LOG, "starting continuous query processes for database: \"%s\"", NameStr(db_meta->db_name));
+	elog(LOG, "starting pipelinedb processes for database: \"%s\"", NameStr(db_meta->db_name));
 
 	SpinLockAcquire(&db_meta->mutex);
 
@@ -583,7 +583,7 @@ start_database_workers(ContQueryDatabaseMetadata *db_meta)
 	if (!success)
 	{
 		terminate_database_workers(db_meta);
-		elog(ERROR, "failed to start some continuous query background workers");
+		elog(ERROR, "failed to start some pipelinedb processes");
 	}
 
 	wait_for_db_workers(db_meta, BGWH_STARTED);
@@ -678,9 +678,9 @@ ContQuerySchedulerMain(int argc, char *argv[])
 	MyStartTime = time(NULL);
 
 	/* Identify myself via ps */
-	init_ps_display("continuous query scheduler process", "", "", "");
+	init_ps_display("pipelinedb scheduler process", "", "", "");
 
-	ereport(LOG, (errmsg("continuous query scheduler started")));
+	ereport(LOG, (errmsg("pipelinedb scheduler started")));
 
 	if (PostAuthDelay)
 		pg_usleep(PostAuthDelay * 1000000L);
@@ -832,7 +832,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 	}
 
 	/* Normal exit from the continuous query scheduler is here */
-	ereport(LOG, (errmsg("continuous query scheduler shutting down")));
+	ereport(LOG, (errmsg("pipelinedb scheduler shutting down")));
 
 	ContQuerySchedulerShmem->pid = 0;
 	proc_exit(0); /* done */
@@ -854,7 +854,7 @@ signal_cont_query_scheduler(int signal)
 		{
 			if (ntries >= 20) /* max wait 2.0 sec */
 			{
-				ereport(NOTICE, (errmsg("could not signal continuous query scheduler because it is not running")));
+				ereport(NOTICE, (errmsg("could not signal pipelinedb scheduler because it is not running")));
 				break;
 			}
 		}
@@ -862,7 +862,7 @@ signal_cont_query_scheduler(int signal)
 		{
 			if (ntries >= 20) /* max wait 2.0 sec */
 			{
-				ereport(NOTICE, (errmsg("could not signal continuous query scheduler for: %m")));
+				ereport(NOTICE, (errmsg("could not signal pipelinedb scheduler for: %m")));
 				break;
 			}
 		}
