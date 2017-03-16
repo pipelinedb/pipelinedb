@@ -87,23 +87,34 @@ DeleteTTLExpiredRows(RangeVar *cvname, RangeVar *matrel)
 	continuous_query_materialization_table_updatable = true;
 	Assert(IsTTLContView(cvname));
 
-	/* Now we're certain relid is for a TTL continuous view's matrel */
-	delete_cmd = get_delete_sql(cvname, matrel);
+	PG_TRY();
+	{
+		/* Now we're certain relid is for a TTL continuous view's matrel */
+		delete_cmd = get_delete_sql(cvname, matrel);
 
-	PushActiveSnapshot(GetTransactionSnapshot());
+		PushActiveSnapshot(GetTransactionSnapshot());
 
-	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI manager");
+		if (SPI_connect() != SPI_OK_CONNECT)
+			elog(ERROR, "could not connect to SPI manager");
 
-	if (SPI_execute(delete_cmd, false, 0) != SPI_OK_DELETE)
-		elog(ERROR, "SPI_execute failed: %s", delete_cmd);
+		if (SPI_execute(delete_cmd, false, 0) != SPI_OK_DELETE)
+			elog(ERROR, "SPI_execute failed: %s", delete_cmd);
 
-	num_deleted = SPI_processed;
+		num_deleted = SPI_processed;
 
-	if (SPI_finish() != SPI_OK_FINISH)
-		elog(ERROR, "SPI_finish failed");
+		if (SPI_finish() != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed");
 
-	PopActiveSnapshot();
+		PopActiveSnapshot();
+	}
+	PG_CATCH();
+	{
+		FlushErrorState();
+
+		AbortCurrentTransaction();
+		StartTransactionCommand();
+	}
+	PG_END_TRY();
 
 	continuous_query_materialization_table_updatable = save_continuous_query_materialization_table_updatable;
 
