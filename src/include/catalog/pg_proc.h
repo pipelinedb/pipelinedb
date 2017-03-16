@@ -5989,6 +5989,9 @@ DESCR("bucket cardinalities retrieval function");
 DATA(insert OID = 4517 ( bucket_ids PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 1005 "17" _null_ _null_ _null_ _null_ _null_ bucket_ids _null_ _null_ _null_ ));
 DESCR("bucket ids retrieval function");
 
+DATA(insert OID = 4518 ( ttl_expire	PGNSP PGUID 12 1 1 0 0 f f f f f t i 1 0 20 "25" _null_ _null_ _null_ _null_ _null_ ttl_expire _null_ _null_ _null_ ));
+DESCR("force ttl expiration for a continuous view");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

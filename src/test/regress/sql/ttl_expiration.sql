@@ -44,7 +44,8 @@ INSERT INTO ttl_stream (x) VALUES (2);
 SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
 
 SELECT pg_sleep(3);
-VACUUM ttl0;
+
+SELECT 0 * ttl_expire('ttl0');
 
 SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
 
@@ -55,7 +56,7 @@ INSERT INTO ttl_stream (x) VALUES (2);
 SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
 
 SELECT pg_sleep(3);
-VACUUM FULL ttl0;
+SELECT 0 * ttl_expire('ttl0');
 
 SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
 SELECT x, "$pk" FROM ttl1_mrel ORDER BY ts;
@@ -90,7 +91,7 @@ INSERT INTO ttl_stream (x) VALUES (2);
 SELECT x, count FROM ttl2;
 
 SELECT pg_sleep(6);
-VACUUM FULL ttl2;
+SELECT 0 * ttl_expire('ttl2');
 
 SELECT x, count FROM ttl2;
 
@@ -102,7 +103,7 @@ INSERT INTO ttl_stream (x) VALUES (2);
 SELECT x, count FROM ttl2;
 
 SELECT pg_sleep(2);
-VACUUM FULL ttl2;
+SELECT 0 * ttl_expire('ttl2');
 
 SELECT x, count FROM ttl2;
 
@@ -111,7 +112,7 @@ SELECT set_ttl('ttl2', null, null);
 
 INSERT INTO ttl_stream (x) VALUES (2);
 INSERT INTO ttl_stream (x) VALUES (2);
-VACUUM FULL ttl2;
+SELECT 0 * ttl_expire('ttl2');
 
 SELECT x, count FROM ttl2;
 

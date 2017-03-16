@@ -56,7 +56,12 @@ SELECT pg_sleep(3);
  
 (1 row)
 
-VACUUM ttl0;
+SELECT 0 * ttl_expire('ttl0');
+ ?column? 
+----------
+        0
+(1 row)
+
 SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
  x | $pk 
 ---+-----
@@ -79,7 +84,12 @@ SELECT pg_sleep(3);
  
 (1 row)
 
-VACUUM FULL ttl0;
+SELECT 0 * ttl_expire('ttl0');
+ ?column? 
+----------
+        0
+(1 row)
+
 SELECT x, "$pk" FROM ttl0_mrel ORDER BY ts;
  x | $pk 
 ---+-----
@@ -140,7 +150,12 @@ SELECT pg_sleep(6);
  
 (1 row)
 
-VACUUM FULL ttl2;
+SELECT 0 * ttl_expire('ttl2');
+ ?column? 
+----------
+        0
+(1 row)
+
 SELECT x, count FROM ttl2;
  x | count 
 ---+-------
@@ -166,7 +181,12 @@ SELECT pg_sleep(2);
  
 (1 row)
 
-VACUUM FULL ttl2;
+SELECT 0 * ttl_expire('ttl2');
+ ?column? 
+----------
+        0
+(1 row)
+
 SELECT x, count FROM ttl2;
  x | count 
 ---+-------
@@ -181,7 +201,8 @@ SELECT set_ttl('ttl2', null, null);
 
 INSERT INTO ttl_stream (x) VALUES (2);
 INSERT INTO ttl_stream (x) VALUES (2);
-VACUUM FULL ttl2;
+SELECT 0 * ttl_expire('ttl2');
+ERROR:  continuous view "ttl2" does not have a TTL
 SELECT x, count FROM ttl2;
  x | count 
 ---+-------

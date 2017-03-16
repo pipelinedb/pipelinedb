@@ -604,6 +604,8 @@ GetContQueryForId(Oid id)
 	cq->osrelid = row->osrelid;
 	cq->pkidxid = row->pkidxid;
 	cq->lookupidxid = row->lookupidxid;
+	cq->ttl_attno = row->ttl_attno;
+	cq->ttl = row->ttl;
 
 	if (cq->type == CONT_VIEW)
 	{
