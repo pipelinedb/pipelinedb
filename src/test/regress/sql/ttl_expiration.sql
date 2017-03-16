@@ -34,8 +34,9 @@ CREATE CONTINUOUS VIEW ttl0 WITH (ttl='3 seconds', ttl_column='ts')
 CREATE CONTINUOUS VIEW ttl1 WITH (ttl='1 month', ttl_column='ts')
 	AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
 
-SELECT ttl, ttl_attno FROM pipeline_query pq
-JOIN pg_class c ON c.oid = pq.relid WHERE c.relname IN ('ttl0', 'ttl1');
+SELECT c.relname, ttl, ttl_attno FROM pipeline_query pq
+JOIN pg_class c ON c.oid = pq.relid WHERE c.relname IN ('ttl0', 'ttl1')
+ORDER BY c.relname;
 
 INSERT INTO ttl_stream (x) VALUES (0);
 INSERT INTO ttl_stream (x) VALUES (1);
