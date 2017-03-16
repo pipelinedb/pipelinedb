@@ -23,6 +23,9 @@ SELECT * FROM sw_vacuum ORDER BY key;
 SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
 
 INSERT INTO sw_vacuum_stream (key) VALUES ('a'), ('b'), ('c');
+
+SELECT pg_sleep(1);
+
 INSERT INTO sw_vacuum_stream (key) VALUES ('a'), ('b'), ('c');
 
 SELECT * FROM sw_vacuum ORDER BY key;
@@ -34,11 +37,8 @@ SELECT * FROM sw_vacuum ORDER BY key;
 SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
 
 SELECT pg_sleep(3);
-
-SELECT * FROM sw_vacuum ORDER BY key;
-SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
-
 SELECT 0 * ttl_expire('sw_vacuum');
+
 SELECT * FROM sw_vacuum ORDER BY key;
 SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
 
