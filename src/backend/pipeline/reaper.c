@@ -80,22 +80,11 @@ get_delete_sql(RangeVar *cvname, RangeVar *matrelname)
 int
 DeleteTTLExpiredRows(RangeVar *cvname, RangeVar *matrel)
 {
-	MemoryContext oldcxt;
-	MemoryContext runctx;
 	bool save_continuous_query_materialization_table_updatable = continuous_query_materialization_table_updatable;
 	char *delete_cmd;
 	int num_deleted = 0;
 
 	continuous_query_materialization_table_updatable = true;
-
-	runctx = AllocSetContextCreate(CurrentMemoryContext,
-			"DeleteSWExpiredTuplesContext",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
-	oldcxt = MemoryContextSwitchTo(runctx);
-
 	Assert(IsTTLContView(cvname));
 
 	/* Now we're certain relid is for a TTL continuous view's matrel */
@@ -117,9 +106,6 @@ DeleteTTLExpiredRows(RangeVar *cvname, RangeVar *matrel)
 	PopActiveSnapshot();
 
 	continuous_query_materialization_table_updatable = save_continuous_query_materialization_table_updatable;
-
-	MemoryContextSwitchTo(oldcxt);
-	MemoryContextDelete(runctx);
 
 	return num_deleted;
 }
@@ -143,6 +129,8 @@ should_expire(Oid relid)
 	ReaperEntry *entry = (ReaperEntry *) hash_search(last_expired, &relid, HASH_FIND, NULL);
 	int threshold_ms;
 
+	Assert(entry);
+
 	/*
 	 * If there were any deletions on the last run, we want to keep expiring without waiting
 	 */
@@ -151,8 +139,6 @@ should_expire(Oid relid)
 
 	/* We attempt to expire when a configurable percentage of the overall TTL has elapsed */
 	threshold_ms = entry->ttl * (1000 * continuous_query_ttl_expiration_threshold / 100.0);
-
-	Assert(entry);
 
 	if (TimestampDifferenceExceeds(entry->last_expired, GetCurrentTimestamp(), threshold_ms))
 		return true;
@@ -208,7 +194,8 @@ get_ttl_rels(int *min_ttl)
 		ReaperEntry *entry;
 		bool found;
 
-		Assert(cq);
+		if (!cq)
+			continue;
 		if (!AttributeNumberIsValid(cq->ttl_attno))
 			continue;
 
