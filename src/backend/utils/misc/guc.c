@@ -57,6 +57,7 @@
 #include "pipeline/analyzer.h"
 #include "pipeline/matrel.h"
 #include "pipeline/ipc/microbatch.h"
+#include "pipeline/reaper.h"
 #include "pipeline/stream.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
