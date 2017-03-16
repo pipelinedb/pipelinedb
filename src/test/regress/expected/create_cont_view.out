@@ -954,6 +954,102 @@ NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to continuous view withff
 drop cascades to continuous view ma0
 drop cascades to view ma1
+CREATE STREAM create_cont_stream (key integer, url text, value text);
+CREATE CONTINUOUS VIEW ccv0 AS SELECT 1, count(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv1 AS SELECT 1 FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv2 AS SELECT 1 AS x, 2 AS y FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv3 AS SELECT 1 AS x, 2 AS y, count(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv4 AS SELECT 1 + 1 AS x, 2 + 2 AS y, count(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv5 AS SELECT 1 + ('1'::integer + 1), count(*) FROM create_cont_stream;
+CREATE CONTINUOUS VIEW ccv6 AS SELECT 1 + ('1'::integer + 1), count(*) FROM create_cont_stream GROUP BY random();
+CREATE CONTINUOUS VIEW ccv7 AS SELECT 1 + ('1'::integer + 1) AS col, key, count(*) FROM create_cont_stream GROUP BY key;
+CREATE CONTINUOUS VIEW ccv8 AS SELECT 1 + ('1'::integer + 1) AS col, key + 1 AS g, count(*) FROM create_cont_stream GROUP BY g;
+INSERT INTO create_cont_stream (key) VALUES (0), (1), (2);
+INSERT INTO create_cont_stream (key) VALUES (0), (1), (2);
+SELECT * FROM ccv0;
+ ?column? | count 
+----------+-------
+        1 |     6
+(1 row)
+
+SELECT * FROM ccv1;
+ ?column? 
+----------
+        1
+        1
+        1
+        1
+        1
+        1
+(6 rows)
+
+SELECT * FROM ccv2;
+ x | y 
+---+---
+ 1 | 2
+ 1 | 2
+ 1 | 2
+ 1 | 2
+ 1 | 2
+ 1 | 2
+(6 rows)
+
+SELECT * FROM ccv3;
+ x | y | count 
+---+---+-------
+ 1 | 2 |     6
+(1 row)
+
+SELECT * FROM ccv4;
+ x | y | count 
+---+---+-------
+ 2 | 4 |     6
+(1 row)
+
+SELECT * FROM ccv5;
+ ?column? | count 
+----------+-------
+        3 |     6
+(1 row)
+
+SELECT * FROM ccv6;
+ ?column? | count 
+----------+-------
+        3 |     1
+        3 |     1
+        3 |     1
+        3 |     1
+        3 |     1
+        3 |     1
+(6 rows)
+
+SELECT * FROM ccv7;
+ col | key | count 
+-----+-----+-------
+   3 |   1 |     2
+   3 |   0 |     2
+   3 |   2 |     2
+(3 rows)
+
+SELECT * FROM ccv8;
+ col | g | count 
+-----+---+-------
+   3 | 1 |     2
+   3 | 3 |     2
+   3 | 2 |     2
+(3 rows)
+
+DROP STREAM create_cont_stream CASCADE;
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to continuous view ccv0
+drop cascades to continuous view ccv1
+drop cascades to continuous view ccv2
+drop cascades to continuous view ccv3
+drop cascades to continuous view ccv4
+drop cascades to continuous view ccv5
+drop cascades to continuous view ccv6
+drop cascades to continuous view ccv7
+drop cascades to continuous view ccv8
 -- Custom type
 CREATE TYPE custom_type AS (integerone integer, integertwo integer);
 CREATE STREAM create_cont_stream(val custom_type, x float8);
