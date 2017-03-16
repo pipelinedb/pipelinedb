@@ -207,8 +207,8 @@ SELECT * FROM ccv3;
 SELECT * FROM ccv4;
 SELECT * FROM ccv5;
 SELECT * FROM ccv6;
-SELECT * FROM ccv7;
-SELECT * FROM ccv8;
+SELECT * FROM ccv7 ORDER BY key;
+SELECT * FROM ccv8 ORDER BY g;
 
 DROP STREAM create_cont_stream CASCADE;
 

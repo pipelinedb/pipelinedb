@@ -1023,20 +1023,20 @@ SELECT * FROM ccv6;
         3 |     1
 (6 rows)
 
-SELECT * FROM ccv7;
+SELECT * FROM ccv7 ORDER BY key;
  col | key | count 
 -----+-----+-------
-   3 |   1 |     2
    3 |   0 |     2
+   3 |   1 |     2
    3 |   2 |     2
 (3 rows)
 
-SELECT * FROM ccv8;
+SELECT * FROM ccv8 ORDER BY g;
  col | g | count 
 -----+---+-------
    3 | 1 |     2
-   3 | 3 |     2
    3 | 2 |     2
+   3 | 3 |     2
 (3 rows)
 
 DROP STREAM create_cont_stream CASCADE;
