@@ -84,39 +84,34 @@ DeleteTTLExpiredRows(RangeVar *cvname, RangeVar *matrel)
 	char *delete_cmd;
 	int num_deleted = 0;
 
+	/* We need to lock the relation to prevent it from being dropped before we run the DELETE */
+	Relation rel = heap_openrv_extended(matrel, AccessShareLock, true);
+
+	if (!rel)
+		return 0;
+
 	continuous_query_materialization_table_updatable = true;
 	Assert(IsTTLContView(cvname));
 
-	PG_TRY();
-	{
-		/* Now we're certain relid is for a TTL continuous view's matrel */
-		delete_cmd = get_delete_sql(cvname, matrel);
+	/* Now we're certain relid is for a TTL continuous view's matrel */
+	delete_cmd = get_delete_sql(cvname, matrel);
 
-		PushActiveSnapshot(GetTransactionSnapshot());
+	PushActiveSnapshot(GetTransactionSnapshot());
 
-		if (SPI_connect() != SPI_OK_CONNECT)
-			elog(ERROR, "could not connect to SPI manager");
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI manager");
 
-		if (SPI_execute(delete_cmd, false, 0) != SPI_OK_DELETE)
-			elog(ERROR, "SPI_execute failed: %s", delete_cmd);
+	if (SPI_execute(delete_cmd, false, 0) != SPI_OK_DELETE)
+		elog(ERROR, "SPI_execute failed: %s", delete_cmd);
 
-		num_deleted = SPI_processed;
+	num_deleted = SPI_processed;
 
-		if (SPI_finish() != SPI_OK_FINISH)
-			elog(ERROR, "SPI_finish failed");
-
-		PopActiveSnapshot();
-	}
-	PG_CATCH();
-	{
-		FlushErrorState();
-
-		AbortCurrentTransaction();
-		StartTransactionCommand();
-	}
-	PG_END_TRY();
+	if (SPI_finish() != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed");
 
 	continuous_query_materialization_table_updatable = save_continuous_query_materialization_table_updatable;
+
+	heap_close(rel, AccessShareLock);
 
 	return num_deleted;
 }
