@@ -7726,9 +7726,6 @@ numaggstaterecv(PG_FUNCTION_ARGS)
 	int digitssize;
 	int i;
 
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
-
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;
 
@@ -7780,14 +7777,11 @@ numaggstaterecv(PG_FUNCTION_ARGS)
 Datum
 numaggstatesend(PG_FUNCTION_ARGS)
 {
-	NumericAggState *nagg = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
+	NumericAggState *nagg = (NumericAggState *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
 	bytea *result;
 	int nbytes;
 	int i;
-
-	if (!nagg)
-		PG_RETURN_NULL();
 
 	initStringInfo(&buf);
 
@@ -7828,9 +7822,6 @@ numpolyaggstaterecv(PG_FUNCTION_ARGS)
 	MemoryContext context;
 	Int128AggState *state;
 
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
-
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;
 
@@ -7848,11 +7839,8 @@ Datum
 numpolyaggstatesend(PG_FUNCTION_ARGS)
 {
 #ifdef HAVE_INT128
-	Int128AggState *state = PG_ARGISNULL(0) ? NULL : (Int128AggState *) PG_GETARG_POINTER(0);
+	Int128AggState *state = (Int128AggState *) PG_GETARG_POINTER(0);
 	bytea *result;
-
-	if (state == NULL)
-		PG_RETURN_NULL();
 
 	result = (bytea *) palloc0(sizeof(Int128AggState) + VARHDRSZ);
 	SET_VARSIZE(result, sizeof(Int128AggState) + VARHDRSZ);

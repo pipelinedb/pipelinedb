@@ -479,8 +479,12 @@ Datum
 bucket_agg_final(PG_FUNCTION_ARGS)
 {
 	BucketAggTransState *state = (BucketAggTransState *) PG_GETARG_POINTER(0);
+	bytea *bytes;
 
-	bytea *bytes = (bytea *) DirectFunctionCall1(bucket_agg_state_send, (Datum) state);
+	if (!state)
+		PG_RETURN_NULL();
+
+	bytes = (bytea *) DirectFunctionCall1(bucket_agg_state_send, (Datum) state);
 
 	PG_RETURN_BYTEA_P(bytes);
 }

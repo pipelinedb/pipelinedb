@@ -69,3 +69,14 @@ INSERT INTO sanity_stream (y) VALUES (1);
 SELECT * FROM test_null_group;
 
 DROP STREAM sanity_stream CASCADE;
+
+-- Verify that transout/combinein functions are strict
+SELECT proname FROM
+  (SELECT DISTINCT transoutfn::text FROM pipeline_combine) c
+JOIN pg_proc p ON c.transoutfn::text = p.proname
+WHERE proisstrict = false;
+
+SELECT proname FROM
+  (SELECT DISTINCT combineinfn::text FROM pipeline_combine) c
+JOIN pg_proc p ON c.combineinfn::text = p.proname
+WHERE proisstrict = false;

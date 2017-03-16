@@ -5371,9 +5371,9 @@ DATA(insert OID = 5019 ( hll_count_distinct_final			PGNSP PGUID 12 1 0 0 0 f f f
 DESCR("aggregate final function");
 
 /* PipelineDB streaming ordered-set aggregates */
-DATA(insert OID = 5020 (cqosastatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ cqosastatesend _null_ _null_ _null_ ));
+DATA(insert OID = 5020 (cqosastatesend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ cqosastatesend _null_ _null_ _null_ ));
 DESCR("serializer for streaming ordered-set aggregation transition states");
-DATA(insert OID = 5021 (cqosastaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ cqosastaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 5021 (cqosastaterecv PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ cqosastaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for streaming ordered-set aggregation transition states");
 
 DATA(insert OID = 5022 ( cq_percentile_cont		PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "701 701" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
@@ -5416,23 +5416,23 @@ DATA(insert OID = 4307 ( float8_regr_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f 
 DESCR("REGR_...(double, double) combination function");
 
 /* Transition result serialization/deserialization functions */
-DATA(insert OID = 4308 (numaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ numaggstaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4308 (numaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ numaggstaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for numeric aggregation transition states");
-DATA(insert OID = 4309 (numaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ numaggstatesend _null_ _null_ _null_ ));
+DATA(insert OID = 4309 (numaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ numaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for numeric aggregation transition states");
 
-DATA(insert OID = 4310 (arrayaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ arrayaggstaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4310 (arrayaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ arrayaggstaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for array aggregation transition states");
-DATA(insert OID = 4311 (arrayaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ arrayaggstatesend _null_ _null_ _null_ ));
+DATA(insert OID = 4311 (arrayaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ arrayaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for array aggregation transition states");
 
 DATA(insert OID = 4312 (array_agg_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ array_agg_combine _null_ _null_ _null_ ));
 DESCR("array aggregation combination function");
 
-DATA(insert OID = 4313 (jsonaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ jsonaggstaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4313 (jsonaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ jsonaggstaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for json aggregation transition states");
 
-DATA(insert OID = 4487 (jsonaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ jsonaggstatesend _null_ _null_ _null_ ));
+DATA(insert OID = 4487 (jsonaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ jsonaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for json aggregation transition states");
 
 DATA(insert OID = 4314 (json_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ json_agg_combine _null_ _null_ _null_ ));
@@ -5444,9 +5444,9 @@ DESCR("json object aggregation combination function");
 DATA(insert OID = 4318 (string_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 2281 "2281 2281 25" _null_ _null_ _null_ _null_ _null_ string_agg_combine _null_ _null_ _null_ ));
 DESCR("string aggregation combination function");
 
-DATA(insert OID = 4319 (stringaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ stringaggstatesend _null_ _null_ _null_ ));
+DATA(insert OID = 4319 (stringaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ stringaggstatesend _null_ _null_ _null_ ));
 DESCR("deserializer for string aggregation transition states");
-DATA(insert OID = 4320 (stringaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ stringaggstaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4320 (stringaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ stringaggstaterecv _null_ _null_ _null_ ));
 DESCR("serializer for string aggregation transition states");
 
 /* generic combine function */
@@ -5556,7 +5556,7 @@ DATA(insert OID = 4346 ( tdigest_quantile	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2
 DESCR("t-digest quantile");
 
 /* t-digest compress */
-DATA(insert OID = 4347 (tdigest_compress PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "5034" _null_ _null_ _null_ _null_ _null_ tdigest_compress _null_ _null_ _null_ ));
+DATA(insert OID = 4347 (tdigest_compress PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 5034 "5034" _null_ _null_ _null_ _null_ _null_ tdigest_compress _null_ _null_ _null_ ));
 DESCR("t-digest compress");
 
 /* count-min sketch aggregate */
@@ -5759,7 +5759,7 @@ DESCR("gets query run by continuous query worker");
 DATA(insert OID = 4410 ( pipeline_get_combiner_querydef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ _null_ pipeline_get_combiner_querydef _null_ _null_ _null_ ));
 DESCR("gets query run by continuous query combiner");
 
-DATA(insert OID = 4411 ( hll_cache_cardinality	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "3998" _null_ _null_ _null_ _null_ _null_ hll_cache_cardinality _null_ _null_ _null_ ));
+DATA(insert OID = 4411 ( hll_cache_cardinality	PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3998 "3998" _null_ _null_ _null_ _null_ _null_ hll_cache_cardinality _null_ _null_ _null_ ));
 DESCR("hyperloglog cache cardinality");
 
 DATA(insert OID = 4412 ( fss_agg_weighted	PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 5041 "2283 20 20" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
@@ -5889,9 +5889,9 @@ DATA(insert OID = 4470 ( first_values_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i
 DESCR("first_values transition function");
 DATA(insert OID = 4471 ( first_values_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ first_values_combine _null_ _null_ _null_ ));
 DESCR("first_values combine function");
-DATA(insert OID = 4472 ( first_values_send	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ first_values_send _null_ _null_ _null_ ));
+DATA(insert OID = 4472 ( first_values_send	PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ first_values_send _null_ _null_ _null_ ));
 DESCR("first_values send");
-DATA(insert OID = 4473 ( first_values_recv	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ first_values_recv _null_ _null_ _null_ ));
+DATA(insert OID = 4473 ( first_values_recv	PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ first_values_recv _null_ _null_ _null_ ));
 DESCR("first_values recv");
 DATA(insert OID = 4474 ( first_values_final	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2277 "2281 23" _null_ _null_ _null_ _null_ _null_ first_values_final _null_ _null_ _null_ ));
 DESCR("first_values final");
@@ -5903,7 +5903,7 @@ DATA(insert OID = 4476 (  json_object_int_sum		   PGNSP PGUID 12 1 0 0 0 t f f f
 DESCR("sum all keys of a json object");
 DATA(insert OID = 4477 (  json_object_int_sum_transfn	 PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 2281 "2281 25" _null_ _null_ _null_ _null_ _null_ json_object_int_sum_transfn _null_ _null_ _null_ ));
 DESCR("json_object_sum transition function");
-DATA(insert OID = 4478 (  json_object_int_sum_transout PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 114 "2281" _null_ _null_ _null_ _null_ _null_ json_object_int_sum_transout _null_ _null_ _null_ ));
+DATA(insert OID = 4478 (  json_object_int_sum_transout PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 114 "2281" _null_ _null_ _null_ _null_ _null_ json_object_int_sum_transout _null_ _null_ _null_ ));
 DESCR("json_object_sum transition out function");
 
 /* continuous transforms */
@@ -5915,25 +5915,25 @@ DESCR("trigger to insert into streams");
 
 DATA(insert OID = 4481 (array_agg_array_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ array_agg_array_combine _null_ _null_ _null_ ));
 DESCR("array aggregation combination function");
-DATA(insert OID = 4482 (arrayaggarraystaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ arrayaggarraystaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4482 (arrayaggarraystaterecv PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ arrayaggarraystaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for array aggregation transition states");
-DATA(insert OID = 4483 (arrayaggarraystatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ arrayaggarraystatesend _null_ _null_ _null_ ));
+DATA(insert OID = 4483 (arrayaggarraystatesend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ arrayaggarraystatesend _null_ _null_ _null_ ));
 DESCR("serializer for array aggregation transition states");
 
 DATA(insert OID = 4490 ( numeric_poly_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1231 "1231 1231" _null_ _null_ _null_ _null_ _null_ numeric_poly_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
-DATA(insert OID = 4491 (numpolyaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ numpolyaggstaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4491 (numpolyaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "17" _null_ _null_ _null_ _null_ _null_ numpolyaggstaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for poly numeric aggregation transition states");
-DATA(insert OID = 4492 (numpolyaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ numpolyaggstatesend _null_ _null_ _null_ ));
+DATA(insert OID = 4492 (numpolyaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "2281" _null_ _null_ _null_ _null_ _null_ numpolyaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for poly numeric aggregation transition states");
 
 DATA(insert OID = 4493 ( pipeline_flush	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 16 "" _null_ _null_ _null_ _null_ _null_ pipeline_flush _null_ _null_ _null_ ));
 DESCR("flush all continuous process queues");
 
-DATA(insert OID = 4494 (jsonbaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3802 "2281" _null_ _null_ _null_ _null_ _null_ jsonbaggstatesend _null_ _null_ _null_ ));
+DATA(insert OID = 4494 (jsonbaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3802 "2281" _null_ _null_ _null_ _null_ _null_ jsonbaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for json aggregationb transition states");
 
-DATA(insert OID = 4495 (jsonbaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "3802" _null_ _null_ _null_ _null_ _null_ jsonbaggstaterecv _null_ _null_ _null_ ));
+DATA(insert OID = 4495 (jsonbaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2281 "3802" _null_ _null_ _null_ _null_ _null_ jsonbaggstaterecv _null_ _null_ _null_ ));
 DESCR("deserializer for jsonb aggregation transition states");
 
 DATA(insert OID = 4496 (jsonb_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ jsonb_agg_combine _null_ _null_ _null_ ));
