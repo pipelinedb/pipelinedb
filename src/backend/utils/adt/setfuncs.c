@@ -392,7 +392,10 @@ add_hash_to_bucket(BucketAggState *bas, BucketAggTransState *state,
 			state->hashes = repalloc(state->hashes, sizeof(uint32) * state->capacity);
 			state->sets = repalloc(state->sets, sizeof(uint16) * state->capacity);
 			if (ts)
+			{
 				state->timestamps = repalloc(state->timestamps, sizeof(uint32) * state->capacity);
+				MemSet(state->timestamps + state->count, 0, sizeof(uint32) * (state->capacity - state->count));
+			}
 		}
 		elem->index = state->count;
 		state->hashes[elem->index] = hash;
@@ -410,7 +413,7 @@ add_hash_to_bucket(BucketAggState *bas, BucketAggTransState *state,
 		 * Don't overwrite the set_id for this hash unless it's more recent than the existing value
 		 */
 		Assert(state->timestamps);
-		if (ts > state->timestamps[elem->index])
+		if (ts >= state->timestamps[elem->index])
 		{
 			state->sets[elem->index] = set_id;
 			state->timestamps[elem->index] = ts;
