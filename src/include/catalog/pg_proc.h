@@ -5992,6 +5992,11 @@ DESCR("bucket ids retrieval function");
 DATA(insert OID = 4518 ( ttl_expire	PGNSP PGUID 12 1 1 0 0 f f f f f t i 1 0 20 "25" _null_ _null_ _null_ _null_ _null_ ttl_expire _null_ _null_ _null_ ));
 DESCR("force ttl expiration for a continuous view");
 
+DATA(insert OID = 4519 ( bucket_agg	PGNSP PGUID 12 1 0 0 0 t f f f t f i 3 0 17 "2283 21 1184" _null_ _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("bucket aggregate function");
+DATA(insert OID = 4520 ( bucket_agg_trans_ts	PGNSP PGUID 12 1 0 0 0 f f f f f f i 4 0 2281 "2281 2283 21 1184" _null_ _null_ _null_ _null_ _null_ bucket_agg_trans_ts _null_ _null_ _null_ ));
+DESCR("bucket add function");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

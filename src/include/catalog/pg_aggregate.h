@@ -403,6 +403,7 @@ DATA(insert ( 4469	o 1 first_values_trans	first_values_final				-				-				-				t
 DATA(insert ( 4476	n 0 json_object_int_sum_transfn	json_object_int_sum_transout				-				-				-				t f 0 2281	0	0		0	_null_ _null_ ));
 
 DATA(insert ( 4508	n 0 bucket_agg_trans		bucket_agg_final				-				-				-				f f 0 2281	0	0		0	_null_ _null_ ));
+DATA(insert ( 4519	n 0 bucket_agg_trans_ts		bucket_agg_final				-				-				-				f f 0 2281	0	0		0	_null_ _null_ ));
 
 /*
  * prototypes for functions in pg_aggregate.c

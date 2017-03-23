@@ -222,5 +222,6 @@ DATA(insert (json_object_int_sum_transout json_object_int_sum_transfn json_objec
 
 /* bucket_agg */
 DATA(insert (bucket_agg_final bucket_agg_trans  bucket_agg_state_send bucket_agg_state_recv bucket_agg_combine 17));
+DATA(insert (bucket_agg_final bucket_agg_trans_ts  bucket_agg_state_send bucket_agg_state_recv bucket_agg_combine 17));
 
 #endif

@@ -22,6 +22,7 @@
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "utils/setfuncs.h"
+#include "utils/timestamp.h"
 #include "utils/typcache.h"
 
 typedef struct SetAggState
@@ -190,6 +191,7 @@ typedef struct BucketAggTransState
 	List *set_names;
 	uint32 *hashes;
 	uint16 *sets;
+	uint32 *timestamps;
 	int capacity;
 	int count;
 	uint32 bucket_id;
@@ -212,7 +214,7 @@ typedef struct BucketAggState
  * bucket_agg_trans_startup
  */
 static BucketAggTransState *
-bucket_agg_trans_startup(BucketAggState *bas)
+bucket_agg_trans_startup(BucketAggState *bas, uint32 ts)
 {
 	BucketAggTransState *result = palloc0(sizeof(BucketAggTransState));
 
@@ -224,6 +226,11 @@ bucket_agg_trans_startup(BucketAggState *bas)
 	result->sets = palloc0(sizeof(uint16) * result->capacity);
 	result->count = 0;
 	result->bucket_id = bas->num_buckets++;
+
+	if (ts)
+		result->timestamps = palloc0(sizeof(uint32) * result->capacity);
+	else
+		result->timestamps = NULL;
 
 	return result;
 }
@@ -255,6 +262,10 @@ bucket_agg_state_send(PG_FUNCTION_ARGS)
 
 	/* Array of unique hashes */
 	pq_sendbytes(&buf, (char *) state->hashes, state->count * sizeof(uint32));
+
+	/* Optional array of timestamps */
+	if (state->timestamps)
+		pq_sendbytes(&buf, (char *) state->timestamps, state->count * sizeof(uint32));
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
@@ -297,6 +308,16 @@ bucket_agg_state_recv(PG_FUNCTION_ARGS)
 	size = sizeof(uint32) * result->count;
 	result->hashes = palloc0(size);
 	memcpy(result->hashes, pq_getmsgbytes(&buf, size), size);
+
+	/*
+	 * If there's more data, it's the optional timestamps array
+	 */
+	if (buf.cursor + size < buf.len)
+	{
+		size = sizeof(uint32) * result->count;
+		result->timestamps = palloc0(size);
+		memcpy(result->timestamps, pq_getmsgbytes(&buf, size), size);
+	}
 
 	MemoryContextSwitchTo(old);
 
@@ -352,7 +373,8 @@ bucket_agg_hash(uint32 bucket_id, uint32 hash)
  * add_hash_to_bucket
  */
 static void
-add_hash_to_bucket(BucketAggState *bas, BucketAggTransState *state, uint16 set_id, uint32 hash, MemoryContext set_context)
+add_hash_to_bucket(BucketAggState *bas, BucketAggTransState *state,
+		uint16 set_id, uint32 hash, uint32 ts, MemoryContext set_context)
 {
 	bool found;
 	SetElement *elem;
@@ -369,6 +391,8 @@ add_hash_to_bucket(BucketAggState *bas, BucketAggTransState *state, uint16 set_i
 			state->capacity = 2 * state->capacity;
 			state->hashes = repalloc(state->hashes, sizeof(uint32) * state->capacity);
 			state->sets = repalloc(state->sets, sizeof(uint16) * state->capacity);
+			if (ts)
+				state->timestamps = repalloc(state->timestamps, sizeof(uint32) * state->capacity);
 		}
 		elem->index = state->count;
 		state->hashes[elem->index] = hash;
@@ -379,14 +403,31 @@ add_hash_to_bucket(BucketAggState *bas, BucketAggTransState *state, uint16 set_i
 	{
 		Assert(state->count);
 	}
-	state->sets[elem->index] = set_id;
+
+	if (ts)
+	{
+		/*
+		 * Don't overwrite the set_id for this hash unless it's more recent than the existing value
+		 */
+		Assert(state->timestamps);
+		if (ts > state->timestamps[elem->index])
+		{
+			state->sets[elem->index] = set_id;
+			state->timestamps[elem->index] = ts;
+			return;
+		}
+	}
+	else
+	{
+		state->sets[elem->index] = set_id;
+	}
 }
 
 /*
- * bucket_agg_trans
+ * bucket_agg_trans_internal
  */
-Datum
-bucket_agg_trans(PG_FUNCTION_ARGS)
+static BucketAggTransState *
+bucket_agg_trans_internal(FunctionCallInfo fcinfo, uint32 ts)
 {
 	BucketAggState *bas;
 	MemoryContext old;
@@ -397,7 +438,7 @@ bucket_agg_trans(PG_FUNCTION_ARGS)
 	uint32 hash;
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		elog(ERROR, "bucket_agg_trans called in non-aggregate context");
+		elog(ERROR, "bucket_agg_trans_internal called in non-aggregate context");
 
 	if (PG_ARGISNULL(2))
 		elog(ERROR, "set ID cannot be NULL");
@@ -412,7 +453,7 @@ bucket_agg_trans(PG_FUNCTION_ARGS)
 	bas = (BucketAggState *) fcinfo->flinfo->fn_extra;
 
 	if (state == NULL)
-		state = bucket_agg_trans_startup(bas);
+		state = bucket_agg_trans_startup(bas, ts);
 
 	/* We just hash NULLs to 0 */
 	if (PG_ARGISNULL(1))
@@ -425,9 +466,40 @@ bucket_agg_trans(PG_FUNCTION_ARGS)
 		hash = DatumGetUInt32(FunctionCall1(&bas->typ->hash_proc_finfo, elem));
 	}
 
-	add_hash_to_bucket(bas, state, set_id, hash, fcinfo->flinfo->fn_mcxt);
+	add_hash_to_bucket(bas, state, set_id, hash, ts, fcinfo->flinfo->fn_mcxt);
 
 	MemoryContextSwitchTo(old);
+
+	return state;
+}
+
+/*
+ * bucket_agg_trans
+ */
+Datum
+bucket_agg_trans(PG_FUNCTION_ARGS)
+{
+	BucketAggTransState *state;
+
+	state = bucket_agg_trans_internal(fcinfo, 0);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
+ * bucket_agg_trans_ts
+ */
+Datum
+bucket_agg_trans_ts(PG_FUNCTION_ARGS)
+{
+	BucketAggTransState *state;
+	TimestampTz ts;
+
+	if (PG_ARGISNULL(3))
+		elog(ERROR, "timestamp cannot be NULL");
+
+	ts = PG_GETARG_TIMESTAMPTZ(3);
+	state = bucket_agg_trans_internal(fcinfo, (uint32) timestamptz_to_time_t(ts));
 
 	PG_RETURN_POINTER(state);
 }
@@ -458,7 +530,11 @@ bucket_agg_combine(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(0))
 		state = (BucketAggTransState *) PG_GETARG_POINTER(0);
 	else
-		state = bucket_agg_trans_startup(bas);
+	{
+		Assert(!PG_ARGISNULL(1));
+		incoming = (BucketAggTransState *) PG_GETARG_POINTER(1);
+		state = bucket_agg_trans_startup(bas, incoming->timestamps ? 1 : 0);
+	}
 
 	if (!PG_ARGISNULL(1))
 	{
@@ -468,7 +544,10 @@ bucket_agg_combine(PG_FUNCTION_ARGS)
 		Assert(incoming);
 
 		for (i = 0; i < incoming->count; i++)
-			add_hash_to_bucket(bas, state, incoming->sets[i], incoming->hashes[i], fcinfo->flinfo->fn_mcxt);
+		{
+			uint32 ts = incoming->timestamps ? incoming->timestamps[i] : 0;
+			add_hash_to_bucket(bas, state, incoming->sets[i], incoming->hashes[i], ts, fcinfo->flinfo->fn_mcxt);
+		}
 	}
 
 	MemoryContextSwitchTo(old);
