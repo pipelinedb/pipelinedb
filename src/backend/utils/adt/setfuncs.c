@@ -528,7 +528,9 @@ bucket_agg_combine(PG_FUNCTION_ARGS)
 	bas = (BucketAggState *) fcinfo->flinfo->fn_extra;
 
 	if (!PG_ARGISNULL(0))
+	{
 		state = (BucketAggTransState *) PG_GETARG_POINTER(0);
+	}
 	else
 	{
 		Assert(!PG_ARGISNULL(1));
