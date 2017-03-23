@@ -1563,15 +1563,16 @@ WHERE p1.oid < p2.oid AND p1.proname = p2.proname AND
     p1.proisagg AND p2.proisagg AND
     array_dims(p1.proargtypes) != array_dims(p2.proargtypes)
 ORDER BY 1;
-              oid              |                            oid                             
--------------------------------+------------------------------------------------------------
- count("any")                  | count()
- hll_agg(anyelement)           | hll_agg(anyelement,integer)
- bloom_agg(anyelement)         | bloom_agg(anyelement,double precision,bigint)
- tdigest_agg(double precision) | tdigest_agg(double precision,integer)
- cmsketch_agg(anyelement)      | cmsketch_agg(anyelement,double precision,double precision)
- fss_agg(anyelement,bigint)    | fss_agg(anyelement,bigint,bigint,bigint)
-(6 rows)
+               oid               |                            oid                             
+---------------------------------+------------------------------------------------------------
+ count("any")                    | count()
+ hll_agg(anyelement)             | hll_agg(anyelement,integer)
+ bloom_agg(anyelement)           | bloom_agg(anyelement,double precision,bigint)
+ tdigest_agg(double precision)   | tdigest_agg(double precision,integer)
+ cmsketch_agg(anyelement)        | cmsketch_agg(anyelement,double precision,double precision)
+ fss_agg(anyelement,bigint)      | fss_agg(anyelement,bigint,bigint,bigint)
+ bucket_agg(anyelement,smallint) | bucket_agg(anyelement,smallint,timestamp with time zone)
+(7 rows)
 
 -- For the same reason, built-in aggregates with default arguments are no good.
 SELECT oid, proname
