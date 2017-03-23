@@ -61,3 +61,19 @@ GROUP BY g ORDER BY g;
 
 DROP CONTINUOUS VIEW bucket2;
 DROP STREAM bucket_stream;
+
+CREATE STREAM bucket_stream_ts (x integer, y integer, ts timestamptz);
+CREATE CONTINUOUS VIEW bucket3 AS SELECT bucket_agg(x, y::smallint, ts) FROM bucket_stream_ts;
+
+INSERT INTO bucket_stream_ts (x, y, ts) VALUES (0, 0, '2017-03-22 00:00:01');
+SELECT unnest(bucket_ids(bucket_agg)) AS bucket_id, unnest(bucket_cardinalities(bucket_agg)) AS card FROM bucket3;
+
+-- This comes before the previous bucket entry, so we should still be in bucket 0
+INSERT INTO bucket_stream_ts (x, y, ts) VALUES (0, 1, '2017-03-22 00:00:00');
+SELECT unnest(bucket_ids(bucket_agg)) AS bucket_id, unnest(bucket_cardinalities(bucket_agg)) AS card FROM bucket3;
+
+INSERT INTO bucket_stream_ts (x, y, ts) VALUES (0, 2, '2017-03-22 00:00:02');
+SELECT unnest(bucket_ids(bucket_agg)) AS bucket_id, unnest(bucket_cardinalities(bucket_agg)) AS card FROM bucket3;
+
+DROP CONTINUOUS VIEW bucket3;
+DROP STREAM bucket_stream_ts;

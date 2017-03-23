@@ -17,6 +17,7 @@ extern Datum set_agg_trans(PG_FUNCTION_ARGS);
 extern Datum set_agg_combine(PG_FUNCTION_ARGS);
 extern Datum set_cardinality(PG_FUNCTION_ARGS);
 extern Datum bucket_agg_trans(PG_FUNCTION_ARGS);
+extern Datum bucket_agg_trans_ts(PG_FUNCTION_ARGS);
 extern Datum bucket_agg_combine(PG_FUNCTION_ARGS);
 extern Datum bucket_agg_final(PG_FUNCTION_ARGS);
 extern Datum bucket_cardinality(PG_FUNCTION_ARGS);
