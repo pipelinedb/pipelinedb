@@ -1534,6 +1534,8 @@ sync_all(ContExecutor *cont_exec)
 	long secs;
 	int usecs;
 
+	PushActiveSnapshot(GetTransactionSnapshot());
+
 	while ((id = bms_first_member(tmp)) >= 0)
 	{
 		ContQueryCombinerState *state = states[id];
@@ -1580,6 +1582,9 @@ sync_all(ContExecutor *cont_exec)
 		MemoryContextResetAndDeleteChildren(state->combine_cxt);
 		MemoryContextResetAndDeleteChildren(ErrorContext);
 	}
+
+	if (ActiveSnapshotSet())
+		PopActiveSnapshot();
 }
 
 /*
