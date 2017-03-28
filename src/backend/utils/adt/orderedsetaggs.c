@@ -1959,10 +1959,13 @@ cq_percentile_cont_float8_combine(PG_FUNCTION_ARGS)
 	MemoryContext context;
 	MemoryContext old;
 	CQOSAAggState *state;
-	CQOSAAggState *incoming = (CQOSAAggState *) PG_GETARG_POINTER(1);
+	CQOSAAggState *incoming = PG_ARGISNULL(1) ? NULL : (CQOSAAggState *) PG_GETARG_POINTER(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = fcinfo->flinfo->fn_mcxt;
+
+	if (!incoming)
+		PG_RETURN_NULL();
 
 	old = MemoryContextSwitchTo(context);
 
