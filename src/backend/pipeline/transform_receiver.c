@@ -33,7 +33,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-typedef void (*TransformFlushFunc) (void);
 TransformFlushFunc TransformFlushHook = NULL;
 
 typedef struct TransformState
