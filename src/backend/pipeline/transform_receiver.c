@@ -33,6 +33,9 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
+typedef void (*TransformFlushFunc) (void);
+TransformFlushFunc TransformFlushHook = NULL;
+
 typedef struct TransformState
 {
 	DestReceiver pub;
@@ -275,6 +278,9 @@ TransformDestReceiverFlush(DestReceiver *self)
 	TransformState *t = (TransformState *) self;
 	int save_batch_size = continuous_query_batch_size;
 	int save_batch_mem = continuous_query_batch_mem;
+
+	if (TransformFlushHook)
+		TransformFlushHook();
 
 	continuous_query_batch_size = continuous_query_batch_mem = INT_MAX / 1024;
 
