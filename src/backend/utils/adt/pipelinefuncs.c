@@ -917,12 +917,19 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 		values[2] = CStringGetTextDatum(relname);
 		values[3] = BoolGetDatum(row->active);
 
-		if (!FunctionIsVisible(row->tgfn))
-			fn = quote_qualified_identifier(get_namespace_name(get_func_namespace(row->tgfn)), get_func_name(row->tgfn));
-		else
-			fn = quote_qualified_identifier(NULL, get_func_name(row->tgfn));
+		if (OidIsValid(row->tgfn))
+		{
+			if (!FunctionIsVisible(row->tgfn))
+				fn = quote_qualified_identifier(get_namespace_name(get_func_namespace(row->tgfn)), get_func_name(row->tgfn));
+			else
+				fn = quote_qualified_identifier(NULL, get_func_name(row->tgfn));
 
-		values[4] = CStringGetTextDatum(fn);
+			values[4] = CStringGetTextDatum(fn);
+		}
+		else
+		{
+			nulls[4] = true;
+		}
 
 		if (row->tgnargs > 0)
 		{
