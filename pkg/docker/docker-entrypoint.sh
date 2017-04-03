@@ -79,7 +79,7 @@ EOSQL
 
         gosu pipeline pipeline-ctl -D ${PIPELINEDB_DATA} -m fast -w stop
 
-        sed -i -e "s/^listen_addresses =.*$/listen_addresses = '*'/g" "${PIPELINEDB_DATA}/pipelinedb.conf"
+        sed -i -e "s/^\(#listen_addresses.*\)$/listen_addresses = '*'\n\1/g" "${PIPELINEDB_DATA}/pipelinedb.conf"
 
         chmod 640       "${PIPELINEDB_DATA}/pipelinedb.conf"
         chown pipeline  "${PIPELINEDB_DATA}/pipelinedb.conf"
