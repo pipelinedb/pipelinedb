@@ -31,6 +31,8 @@ static char	   *dolqstart = NULL;	/* current $foo$ quote start string */
 static YY_BUFFER_STATE scanbufhandle;
 static char *scanbuf;
 
+#define yylex base_yylex
+
 /*
  * literalbuf is used to accumulate literal values when multiple rules
  * are needed to parse a single literal.  Call startlit to reset buffer
