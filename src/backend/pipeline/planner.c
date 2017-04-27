@@ -112,13 +112,15 @@ static PlannedStmt *
 get_plan_with_hook(Oid id, Node *node, const char* sql, bool is_combine)
 {
 	PlannedStmt *result;
+	post_parse_analyze_hook_type save_post_parse_analyze_hook = post_parse_analyze_hook;
+
 	join_search_hook = get_combiner_join_rel;
 
 	PG_TRY();
 	{
 		result = get_plan_from_stmt(id, node, sql, is_combine);
 		join_search_hook = NULL;
-		post_parse_analyze_hook = NULL;
+		post_parse_analyze_hook = save_post_parse_analyze_hook;
 	}
 	PG_CATCH();
 	{
@@ -127,7 +129,7 @@ get_plan_with_hook(Oid id, Node *node, const char* sql, bool is_combine)
 		 * sure that they're not set for whatever query is run next in this xact.
 		 */
 		join_search_hook = NULL;
-		post_parse_analyze_hook = NULL;
+		post_parse_analyze_hook = save_post_parse_analyze_hook;
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
