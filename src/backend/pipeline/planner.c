@@ -215,7 +215,7 @@ SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
 			IsA(plan->planTree->lefttree->lefttree, TuplestoreScan))
 		scan = (TuplestoreScan *) plan->planTree->lefttree->lefttree;
 	else
-		elog(ERROR, "couldn't find TuplestoreScan node in combiner's plan");
+		elog(ERROR, "couldn't find TuplestoreScan node in combiner's plan: %d", nodeTag(plan->planTree));
 
 	scan->store = tupstore;
 
