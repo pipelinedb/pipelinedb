@@ -43,7 +43,7 @@ RUN set -x \
 # PipelineDB
 # ---------------------------------------------------------------------------
 
-ENV PIPELINEDB_VERSION 0.9.5
+ARG PIPELINEDB_VERSION=
 RUN mkdir -p /tmp/pipelinedb \
     && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
