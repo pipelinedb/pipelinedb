@@ -551,7 +551,7 @@ try_stream_index_join_path(PlannerInfo *root,
 	NestPath *path;
 
 	/* if there's no index path, we'll use the stream-table hashjoin */
-	if (inner_path->pathtype == T_SeqScan)
+	if (inner_path->pathtype == T_SeqScan || inner_path->pathtype == T_HashJoin || inner_path->pathtype == T_MergeJoin)
 		return;
 
 	path = create_nestloop_path(root, joinrel, jointype, &workspace,
@@ -559,9 +559,10 @@ try_stream_index_join_path(PlannerInfo *root,
 									  restrict_clauses,
 									  pathkeys, required_outer);
 
-	/* we only care about the cost of the table side of a stream-table join */
 	path->path.startup_cost = 0;
+	/* We only care about the cost of the table side of a stream-table join */
 	path->path.total_cost = inner_path->total_cost;
+
 	add_path(joinrel, (Path *) path);
 }
 
