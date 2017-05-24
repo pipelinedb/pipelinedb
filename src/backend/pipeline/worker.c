@@ -364,6 +364,7 @@ ContinuousQueryWorkerMain(void)
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
 				MemoryContextSwitchTo(state->base.state_cxt);
+				ResourceOwnerRelease(WorkerResOwner, RESOURCE_RELEASE_AFTER_LOCKS, false, true);
 			}
 			PG_CATCH();
 			{
