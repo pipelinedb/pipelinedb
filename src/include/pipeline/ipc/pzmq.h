@@ -13,6 +13,8 @@
 
 #define PZMQ_SOCKNAME_STR "ipc://%s/pipeline/zmq/%ld.sock"
 
+extern char *socket_dir;
+
 extern void pzmq_init(void);
 extern void pzmq_destroy(void);
 
