@@ -37,6 +37,8 @@ typedef struct pzmq_state_t
 	HTAB *dests;
 } pzmq_state_t;
 
+char *socket_dir = NULL;
+
 static pzmq_state_t *zmq_state = NULL;
 
 void
@@ -49,6 +51,9 @@ pzmq_init(void)
 
 	if (zmq_state)
 		return;
+
+	if (socket_dir == NULL)
+		socket_dir = DataDir;
 
 	cxt = AllocSetContextCreate(TopMemoryContext, "pzmq MemoryContext",
 				ALLOCSET_DEFAULT_MINSIZE,
@@ -124,7 +129,7 @@ pzmq_bind(uint64 id)
 	zsock = palloc0(sizeof(pzmq_socket_t));
 	zsock->id = id;
 	zsock->type = ZMQ_PULL;
-	sprintf(zsock->addr, PZMQ_SOCKNAME_STR, DataDir, id);
+	sprintf(zsock->addr, PZMQ_SOCKNAME_STR, socket_dir, id);
 	zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PULL);
 
 	optval = continuous_query_ipc_hwm;
@@ -162,7 +167,7 @@ pzmq_connect(uint64 id)
 
 		zsock->id = id;
 		zsock->type = ZMQ_PUSH;
-		sprintf(zsock->addr, PZMQ_SOCKNAME_STR, DataDir, id);
+		sprintf(zsock->addr, PZMQ_SOCKNAME_STR, socket_dir, id);
 		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
 
 		optval = continuous_query_ipc_hwm;
@@ -305,8 +310,12 @@ pzmq_purge_sock_files(void)
 	DIR *dir;
 	struct dirent *file;
 
-	sprintf(dpath, "%s/pipeline/zmq", DataDir);
+	sprintf(dpath, "%s/pipeline/zmq", socket_dir);
 	dir = opendir(dpath);
+
+	/* It may not exist initially */
+	if (dir == NULL)
+		return;
 
 	while ((file = readdir(dir)) != NULL)
 	{

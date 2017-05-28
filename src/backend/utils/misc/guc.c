@@ -59,6 +59,7 @@
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/reaper.h"
 #include "pipeline/stream.h"
+#include "pipeline/ipc/pzmq.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
@@ -3633,6 +3634,18 @@ static struct config_string ConfigureNamesString[] =
 		NULL,
 		NULL, NULL, NULL,
 	},
+
+	{
+		{"continuous_query_ipc_directory", PGC_POSTMASTER, FILE_LOCATIONS,
+			gettext_noop("Sets the directory to contain IPC sockets."),
+			NULL,
+			GUC_SUPERUSER_ONLY
+		},
+		&socket_dir,
+		NULL,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, NULL, NULL, NULL, NULL
