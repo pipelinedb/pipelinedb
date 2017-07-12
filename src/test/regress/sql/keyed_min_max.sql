@@ -54,3 +54,32 @@ SELECT * FROM keyed_min_max1;
 
 DROP CONTINUOUS VIEW keyed_min_max1;
 DROP STREAM keyed_min_max_stream CASCADE;
+
+-- #1797
+CREATE STREAM keyed_min_max_stream (ticketid text, val int, status int);
+
+CREATE CONTINUOUS VIEW keyed_min_max2 AS
+  SELECT
+    ticketid,
+    min(val) as v0,
+   keyed_min(val, status) as v0_status
+  FROM keyed_min_max_stream
+  GROUP BY ticketid;
+
+CREATE CONTINUOUS VIEW keyed_min_max3 AS
+  SELECT
+    (new).ticketid,
+    (old).v0 as oldV0,
+    (new).v0 as newV0
+  FROM output_of('keyed_min_max2');
+
+INSERT INTO keyed_min_max_stream (ticketid, val, status) VALUES ('t1', 124, 1);
+SELECT pg_sleep(0.1);
+INSERT INTO keyed_min_max_stream (ticketid, val, status) VALUES ('t3', 140, 1), ('t1', 80, 0);
+
+SELECT * FROM keyed_min_max2 WHERE ticketid = 't1';
+SELECT * FROM keyed_min_max3 WHERE ticketid = 't1';
+
+DROP CONTINUOUS VIEW keyed_min_max3;
+DROP CONTINUOUS VIEW keyed_min_max2;
+DROP STREAM keyed_min_max_stream;

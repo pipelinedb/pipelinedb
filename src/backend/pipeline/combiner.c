@@ -585,10 +585,11 @@ build_projection(List *tlist, EState *estate, ExprContext *econtext,
  * project_overlay
  */
 static Datum
-project_overlay(ContQueryCombinerState *state, HeapTuple tup, bool *isnull)
+project_overlay(ContQueryCombinerState *state, ExprContext *econtext, HeapTuple tup, bool *isnull)
 {
 	TupleTableSlot *slot;
 	HeapTuple projected;
+	TupleTableSlot *prev = econtext->ecxt_scantuple;
 
 	if (!state->output_stream_proj)
 		return heap_copy_tuple_as_datum(tup, state->desc);
@@ -597,7 +598,9 @@ project_overlay(ContQueryCombinerState *state, HeapTuple tup, bool *isnull)
 
 	/* Should we copy the input tuple so it doesn't get modified? */
 	ExecStoreTuple(tup, state->proj_input_slot, InvalidBuffer, false);
+	econtext->ecxt_scantuple = state->proj_input_slot;
 	slot = ExecProject(state->output_stream_proj, NULL);
+	econtext->ecxt_scantuple = prev;
 
 	if (TupIsNull(slot))
 	{
@@ -1394,7 +1397,6 @@ sync_combine(ContQueryCombinerState *state)
 	ri = CQMatRelOpen(matrel);
 
 	estate->es_per_tuple_exprcontext = CreateStandaloneExprContext();
-	estate->es_per_tuple_exprcontext->ecxt_scantuple = state->proj_input_slot;
 
 	if (state->output_stream_proj)
 		state->output_stream_proj->pi_exprContext = estate->es_per_tuple_exprcontext;
@@ -1407,6 +1409,7 @@ sync_combine(ContQueryCombinerState *state)
 		Datum os_values[3];
 		bool os_nulls[3];
 		int replaces = 0;
+		ExprContext *econtext = estate->es_per_tuple_exprcontext;
 
 		MemSet(os_nulls, false, sizeof(os_nulls));
 
@@ -1433,7 +1436,7 @@ sync_combine(ContQueryCombinerState *state)
 				continue;
 
 			if (os_targets)
-				os_values[OLD_TUPLE] = project_overlay(state, update->tuple, &os_nulls[OLD_TUPLE]);
+				os_values[OLD_TUPLE] = project_overlay(state, econtext, update->tuple, &os_nulls[OLD_TUPLE]);
 
 			/*
 			 * The slot has the updated values, so store them in the updatable physical tuple
@@ -1444,7 +1447,7 @@ sync_combine(ContQueryCombinerState *state)
 			ExecCQMatRelUpdate(ri, slot, estate);
 
 			if (os_targets)
-				os_values[NEW_TUPLE] = project_overlay(state, tup, &os_nulls[NEW_TUPLE]);
+				os_values[NEW_TUPLE] = project_overlay(state, econtext, tup, &os_nulls[NEW_TUPLE]);
 
 			ntups_updated++;
 			nbytes_updated += HEAPTUPLESIZE + slot->tts_tuple->t_len;
@@ -1464,7 +1467,7 @@ sync_combine(ContQueryCombinerState *state)
 				os_nulls[OLD_TUPLE] = true;
 				os_nulls[NEW_TUPLE] = false;
 				os_values[OLD_TUPLE] = (Datum) NULL;
-				os_values[NEW_TUPLE] = project_overlay(state, tup, &os_nulls[NEW_TUPLE]);
+				os_values[NEW_TUPLE] = project_overlay(state, econtext, tup, &os_nulls[NEW_TUPLE]);
 			}
 
 			ntups_inserted++;
