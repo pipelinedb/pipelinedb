@@ -182,6 +182,7 @@ tdigest_merge_agg_trans(PG_FUNCTION_ARGS)
 		state = TDigestMerge(state, incoming);
 	}
 
+	state = TDigestCompress(state);
 	MemoryContextSwitchTo(old);
 
 	PG_RETURN_POINTER(state);
