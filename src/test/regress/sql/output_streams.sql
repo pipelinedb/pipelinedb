@@ -164,3 +164,27 @@ SELECT * FROM os4 ORDER BY x;
 
 DROP STREAM os_stream CASCADE;
 
+CREATE STREAM os_stream (x integer, y numeric);
+
+CREATE CONTINUOUS VIEW os5 AS
+SELECT x,
+  abs(sum(y) - sum(y)) AS abs,
+	count(*),
+  avg(y) AS avg
+FROM os_stream GROUP BY x;
+
+CREATE CONTINUOUS VIEW os6 AS
+SELECT
+  (new).x % 2 AS g,
+  combine((delta).avg) AS avg
+FROM output_of('os5') GROUP BY g;
+
+INSERT INTO os_stream (x, y) SELECT x, x AS y FROM generate_series(1, 100) AS x;
+
+SELECT count(*) FROM os5;
+SELECT combine(avg) FROM os5;
+
+SELECT * FROM os6 ORDER BY g;
+SELECT combine(avg) FROM os6;
+
+DROP STREAM os_stream CASCADE;

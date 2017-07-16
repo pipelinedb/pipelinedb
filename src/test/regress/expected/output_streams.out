@@ -283,3 +283,45 @@ DROP STREAM os_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to continuous transform os_xform
 drop cascades to continuous view os4
+CREATE STREAM os_stream (x integer, y numeric);
+CREATE CONTINUOUS VIEW os5 AS
+SELECT x,
+  abs(sum(y) - sum(y)) AS abs,
+	count(*),
+  avg(y) AS avg
+FROM os_stream GROUP BY x;
+CREATE CONTINUOUS VIEW os6 AS
+SELECT
+  (new).x % 2 AS g,
+  combine((delta).avg) AS avg
+FROM output_of('os5') GROUP BY g;
+INSERT INTO os_stream (x, y) SELECT x, x AS y FROM generate_series(1, 100) AS x;
+SELECT count(*) FROM os5;
+ count 
+-------
+   100
+(1 row)
+
+SELECT combine(avg) FROM os5;
+       combine       
+---------------------
+ 50.5000000000000000
+(1 row)
+
+SELECT * FROM os6 ORDER BY g;
+ g |         avg         
+---+---------------------
+ 0 | 51.0000000000000000
+ 1 | 50.0000000000000000
+(2 rows)
+
+SELECT combine(avg) FROM os6;
+       combine       
+---------------------
+ 50.5000000000000000
+(1 row)
+
+DROP STREAM os_stream CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to continuous view os5
+drop cascades to continuous view os6

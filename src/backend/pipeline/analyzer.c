@@ -2989,11 +2989,16 @@ find_cv_attr(ParseState *pstate, RangeVar *cvrv, RangeTblEntry *joinrte, Var *va
  * combine_target_for_osrel
  */
 static bool
-combine_target_for_osrel(Node *node, List *rtable, FieldSelect **fsp, Oid *cqid)
+combine_target_for_osrel(Node *node, List *rtable, FieldSelect **fsp, Oid *cqid, Expr **expr)
 {
 	Var *v;
 	RangeTblEntry *rte;
 	FieldSelect *fs;
+	TypeCacheEntry *typ;
+	ContQuery *cq;
+	Query *q;
+	ListCell *lc;
+	char *target;
 
 	/*
 	 * The FieldSelect may be wrapped in a final function
@@ -3019,8 +3024,30 @@ combine_target_for_osrel(Node *node, List *rtable, FieldSelect **fsp, Oid *cqid)
 	if (rte->relkind != RELKIND_STREAM)
 		return false;
 
+	if (!RelIdIsForOutputStream(rte->relid, cqid))
+		return false;
+
 	*fsp = fs;
-	return RelIdIsForOutputStream(rte->relid, cqid);
+	cq = GetContQueryForId(*cqid);
+	q = GetContViewQuery(cq->name);
+	typ = lookup_type_cache(v->vartype, 0);
+
+	target = NameStr(typ->tupDesc->attrs[fs->fieldnum - 1]->attname);
+
+	foreach(lc, q->targetList)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+
+		if (te->resname && pg_strcasecmp(te->resname, target) == 0)
+		{
+			*expr = te->expr;
+			return true;
+		}
+	}
+
+	elog(ERROR, "could not find column \"%s\" in continuous view's output stream", target);
+
+	return false;
 }
 
 /*
@@ -3047,6 +3074,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	AttrNumber cvatt = InvalidAttrNumber;
 	Oid cqid;
 	FieldSelect *fs;
+	Expr *expr;
 
 	if (list_length(fargs) != 1)
 		ereport(ERROR,
@@ -3067,22 +3095,14 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	/*
 	 * 1) Is it a combine call on an output stream?
 	 */
-	if (combine_target_for_osrel(arg, pstate->p_rtable, &fs, &cqid))
+	if (combine_target_for_osrel(arg, pstate->p_rtable, &fs, &cqid, &expr))
 	{
-		AttrNumber attno = fs->fieldnum;
-		ContQuery *cq = GetContQueryForId(cqid);
-		Query *q = GetContViewQuery(cq->name);
-		Expr *expr;
-
-		target = (TargetEntry *) list_nth(q->targetList, attno - 1);
-		expr = target->expr;
-
 		/*
 		 * We may need to pull off a final function to get to the aggregate
 		 */
 		if (IsA(expr, FuncExpr))
 		{
-			FuncExpr *f = (FuncExpr *) target->expr;
+			FuncExpr *f = (FuncExpr *) expr;
 			if (list_length(f->args) == 1)
 				expr = linitial(f->args);
 		}
