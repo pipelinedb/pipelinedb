@@ -82,4 +82,11 @@ SELECT * FROM keyed_min_max3 WHERE ticketid = 't1';
 
 DROP CONTINUOUS VIEW keyed_min_max3;
 DROP CONTINUOUS VIEW keyed_min_max2;
+
+CREATE CONTINUOUS VIEW keyed_min_max4 WITH (sw = '1 day') AS
+  SELECT keyed_max(1, val) AS keymax FROM keyed_min_max_stream;
+
+SELECT * FROM keyed_min_max4;
+
+DROP CONTINUOUS VIEW keyed_min_max4;
 DROP STREAM keyed_min_max_stream;

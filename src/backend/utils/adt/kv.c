@@ -346,9 +346,13 @@ keyed_max_trans(PG_FUNCTION_ARGS)
 Datum
 keyed_min_max_finalize(PG_FUNCTION_ARGS)
 {
-	KeyValue *kv = (KeyValue *) PG_GETARG_VARLENA_P(0);
+	KeyValue *kv;
 	KeyedAggState *kas;
 
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	kv = (KeyValue *) PG_GETARG_VARLENA_P(0);
 	if (KV_VALUE_IS_NULL(kv))
 		PG_RETURN_NULL();
 
