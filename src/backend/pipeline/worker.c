@@ -386,13 +386,17 @@ ContinuousQueryWorkerMain(void)
 			PG_END_TRY();
 
 			if (error)
-			{
-				ContExecutorPurgeQuery(cont_exec);
 				pgstat_increment_cq_error(1);
-			}
 
 next:
 			ContExecutorEndQuery(cont_exec);
+
+			/*
+			 * We wait to purge until we're done incrementing all stats, because this will
+			 * free the stats object
+			 */
+			if (error)
+				ContExecutorPurgeQuery(cont_exec);
 		}
 
 		ContExecutorEndBatch(cont_exec, true);
