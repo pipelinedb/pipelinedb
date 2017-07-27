@@ -3030,7 +3030,7 @@ combine_target_for_osrel(Node *node, List *rtable, FieldSelect **fsp, Oid *cqid,
 	*fsp = fs;
 	cq = GetContQueryForId(*cqid);
 	q = GetContViewQuery(cq->name);
-	typ = lookup_type_cache(v->vartype, 0);
+	typ = lookup_type_cache(v->vartype, TYPECACHE_TUPDESC);
 
 	target = NameStr(typ->tupDesc->attrs[fs->fieldnum - 1]->attname);
 
