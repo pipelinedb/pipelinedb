@@ -674,10 +674,6 @@ standard_ProcessUtility(Node *parsetree,
 			ExplainQuery((ExplainStmt *) parsetree, queryString, params, dest);
 			break;
 
-		case T_ExplainContQueryStmt:
-			ExecExplainContQueryStmt((ExplainContQueryStmt *) parsetree, queryString, params, dest);
-			break;
-
 		case T_AlterSystemStmt:
 			PreventTransactionChain(isTopLevel, "ALTER SYSTEM");
 			AlterSystemSetConfigFile((AlterSystemStmt *) parsetree);
@@ -1680,7 +1676,6 @@ UtilityReturnsTuples(Node *parsetree)
 			}
 
 		case T_ExplainStmt:
-		case T_ExplainContQueryStmt:
 			return true;
 
 		case T_VariableShowStmt:
@@ -1730,9 +1725,6 @@ UtilityTupleDescriptor(Node *parsetree)
 
 		case T_ExplainStmt:
 			return ExplainResultDesc((ExplainStmt *) parsetree);
-
-		case T_ExplainContQueryStmt:
-			return ExplainContViewResultDesc((ExplainContQueryStmt *) parsetree);
 
 		case T_VariableShowStmt:
 			{
@@ -2430,20 +2422,6 @@ CreateCommandTag(Node *parsetree)
 
 		case T_ExplainStmt:
 			tag = "EXPLAIN";
-			break;
-
-		case T_ExplainContQueryStmt:
-			switch (((ExplainContQueryStmt *) parsetree)->objType)
-			{
-				case OBJECT_CONTVIEW:
-					tag = "EXPLAIN CONTINUOUS VIEW";
-					break;
-				case OBJECT_CONTTRANSFORM:
-					tag = "EXPLAIN CONTINUOUS TRANSFORM";
-					break;
-				default:
-					tag = "???";
-			}
 			break;
 
 		case T_CreateContViewStmt:
@@ -3236,10 +3214,6 @@ GetCommandLogLevel(Node *parsetree)
 			case T_CreateContTransformStmt:
 			case T_CreateStreamStmt:
 				lev = LOGSTMT_DDL;
-				break;
-
-			case T_ExplainContQueryStmt:
-				lev = LOGSTMT_ALL;
 				break;
 
 		default:

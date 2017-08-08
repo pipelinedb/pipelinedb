@@ -266,7 +266,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
     DropOwnedStmt ReassignOwnedStmt
     AlterTSConfigurationStmt AlterTSDictionaryStmt
     CreateMatViewStmt RefreshMatViewStmt
-    CreateContViewStmt ExplainContQueryStmt CreateStreamStmt
+    CreateContViewStmt CreateStreamStmt
     CreateContTransformStmt
 
 %type <node>  select_no_parens select_with_parens select_clause
@@ -417,7 +417,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <boolean> copy_from opt_program
 
 %type <ival>  opt_column event cursor_options opt_hold opt_set_data
-%type <objtype> drop_type comment_type security_label_type explain_type
+%type <objtype> drop_type comment_type security_label_type
 
 %type <node>  fetch_args limit_clause select_limit_value
         offset_clause select_offset_value
@@ -850,7 +850,6 @@ stmt :
       | DropdbStmt
       | ExecuteStmt
       | ExplainStmt
-      | ExplainContQueryStmt
       | FetchStmt
       | GrantStmt
       | GrantRoleStmt
@@ -2825,40 +2824,6 @@ create_cv_target:
         }
     ;
     
-/*****************************************************************************
- *
- *    QUERY:
- *        EXPLAIN CONTINUOUS [VIEW | TRANSFORM] [VERBOSE] qualified_name
- *        EXPLAIN CONTINUOUS [VIEW | TRANSFORM] ( options ) qualified_name
- *
- *****************************************************************************/
-
-ExplainContQueryStmt:
-    EXPLAIN explain_type opt_verbose qualified_name
-        {
-          ExplainContQueryStmt *n = makeNode(ExplainContQueryStmt);
-          n->view = $4;
-          n->objType = $2;
-          n->options = NIL;
-          if ($3)
-            n->options = lappend(n->options,
-                       makeDefElem("verbose", NULL));
-          $$ = (Node *) n;
-        }
-    | EXPLAIN explain_type '(' explain_option_list ')' qualified_name
-        {
-          ExplainContQueryStmt *n = makeNode(ExplainContQueryStmt);
-          n->view = $6;
-          n->objType = $2;
-          n->options = $4;
-          $$ = (Node *) n;
-        }
-    ;
-
-explain_type:  CONTINUOUS TRANSFORM { $$ = OBJECT_CONTTRANSFORM; }
-      | CONTINUOUS VIEW           { $$ = OBJECT_CONTVIEW; }
-	;
-
 /*****************************************************************************
  *
  *    QUERY :
