@@ -912,51 +912,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	pgstat_report_create_drop_cv(true);
 }
 
-/*
- * ExecTruncateContViewStmt
- */
-void
-ExecTruncateContViewStmt(TruncateContViewStmt *stmt)
-{
-	ListCell *lc;
-	Relation pipeline_query;
-	List *views = NIL;
-	TruncateStmt *trunc = makeNode(TruncateStmt);
-
-	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
-
-	/* Ensure that all *relations* are CQs. */
-	foreach(lc, stmt->relations)
-	{
-		RangeVar *rv = (RangeVar *) lfirst(lc);
-		RangeVar *matrel;
-		HeapTuple tuple = GetPipelineQueryTuple(rv);
-		Form_pipeline_query row;
-
-		if (!HeapTupleIsValid(tuple))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
-					errmsg("continuous view \"%s\" does not exist", rv->relname)));
-
-		row = (Form_pipeline_query) GETSTRUCT(tuple);
-
-		ReleaseSysCache(tuple);
-
-		views = lappend_oid(views, row->id);
-		matrel = GetMatRelName(rv);
-
-		trunc->relations = lappend(trunc->relations, matrel);
-	}
-
-	trunc->restart_seqs = stmt->restart_seqs;
-	trunc->behavior = stmt->behavior;
-
-	/* Call TRUNCATE on the backing view table(s). */
-	ExecuteTruncate(trunc);
-
-	heap_close(pipeline_query, NoLock);
-}
-
 static void
 explain_cont_plan(char *name, PlannedStmt *plan, ExplainState *base_es, TupleDesc desc, DestReceiver *dest)
 {

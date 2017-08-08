@@ -216,7 +216,6 @@ check_xact_readonly(Node *parsetree)
 		case T_SecLabelStmt:
 		case T_CreateContViewStmt:
 		case T_CreateStreamStmt:
-		case T_TruncateContViewStmt:
 			PreventCommandIfReadOnly(CreateCommandTag(parsetree));
 			PreventCommandIfParallelMode(CreateCommandTag(parsetree));
 			break;
@@ -549,10 +548,6 @@ standard_ProcessUtility(Node *parsetree,
 
 		case T_TruncateStmt:
 			ExecuteTruncate((TruncateStmt *) parsetree);
-			break;
-
-		case T_TruncateContViewStmt:
-			ExecTruncateContViewStmt((TruncateContViewStmt *) parsetree);
 			break;
 
 		case T_CopyStmt:
@@ -2254,10 +2249,6 @@ CreateCommandTag(Node *parsetree)
 			tag = "TRUNCATE TABLE";
 			break;
 
-		case T_TruncateContViewStmt:
-			tag = "TRUNCATE CONTINUOUS VIEW";
-			break;
-
 		case T_CommentStmt:
 			tag = "COMMENT";
 			break;
@@ -3245,10 +3236,6 @@ GetCommandLogLevel(Node *parsetree)
 			case T_CreateContTransformStmt:
 			case T_CreateStreamStmt:
 				lev = LOGSTMT_DDL;
-				break;
-
-			case T_TruncateContViewStmt:
-				lev = LOGSTMT_MOD;
 				break;
 
 			case T_ExplainContQueryStmt:

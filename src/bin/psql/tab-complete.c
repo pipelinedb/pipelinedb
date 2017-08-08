@@ -3783,20 +3783,6 @@ psql_completion(const char *text, int start, int end)
 	else if (pg_strcasecmp(prev_wd, "TRUNCATE") == 0)
 		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_tables, NULL);
 
-/* TRUNCATE CONTINUOUS VIEW */
-	else if (pg_strcasecmp(prev2_wd, "TRUNCATE") == 0 &&
-			 pg_strcasecmp(prev_wd, "CONTINUOUS") == 0)
-	{
-		COMPLETE_WITH_CONST("VIEW");
-	}
-
-	else if (pg_strcasecmp(prev3_wd, "TRUNCATE") == 0 &&
-			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
-			 pg_strcasecmp(prev_wd, "VIEW") == 0)
-	{
-		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_views, NULL);
-	}
-
 /* UNLISTEN */
 	else if (pg_strcasecmp(prev_wd, "UNLISTEN") == 0)
 		COMPLETE_WITH_QUERY("SELECT pg_catalog.quote_ident(channel) FROM pg_catalog.pg_listening_channels() AS channel WHERE substring(pg_catalog.quote_ident(channel),1,%d)='%s' UNION SELECT '*'");

@@ -64,4 +64,6 @@ extern Datum activate(PG_FUNCTION_ARGS);
 
 extern Datum deactivate(PG_FUNCTION_ARGS);
 
+extern Datum truncate_continuous_view(PG_FUNCTION_ARGS);
+
 #endif

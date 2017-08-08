@@ -6002,6 +6002,9 @@ DESCR("activate a continuous view/transform");
 DATA(insert OID = 4522 ( deactivate	PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 16 "25" _null_ _null_ _null_ _null_ _null_ deactivate _null_ _null_ _null_ ));
 DESCR("deactivate a continuous view/transform");
 
+DATA(insert OID = 4523 ( truncate_continuous_view PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 16 "25" _null_ _null_ _null_ _null_ _null_ truncate_continuous_view _null_ _null_ _null_ ));
+DESCR("truncate a continuous view");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
