@@ -8,28 +8,28 @@ INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
 SELECT * FROM cont_activate_v0;
 SELECT * FROM cont_activate_v1;
 
-DEACTIVATE cont_activate_v0;
+SELECT deactivate('cont_activate_v0');
 
 INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
 
 SELECT * FROM cont_activate_v0;
 SELECT * FROM cont_activate_v1;
 
-DEACTIVATE cont_activate_v1;
+SELECT deactivate('cont_activate_v1');
 
 INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
 
 SELECT * FROM cont_activate_v0;
 SELECT * FROM cont_activate_v1;
 
-ACTIVATE cont_activate_v0;
+SELECT activate('cont_activate_v0');
 
 INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
 
 SELECT * FROM cont_activate_v0;
 SELECT * FROM cont_activate_v1;
 
-ACTIVATE cont_activate_v1;
+SELECT activate('cont_activate_v1');
 
 INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
 
