@@ -912,14 +912,6 @@ standard_ProcessUtility(Node *parsetree,
 				break;
 			}
 
-		case T_ActivateStmt:
-			ExecActivateStmt((ActivateStmt *) parsetree);
-			break;
-
-		case T_DeactivateStmt:
-			ExecDeactivateStmt((DeactivateStmt *) parsetree);
-			break;
-
 		default:
 			/* All other statement types have event trigger support */
 			ProcessUtilitySlow(parsetree, queryString,
@@ -2649,14 +2641,6 @@ CreateCommandTag(Node *parsetree)
 			}
 			break;
 
-		case T_ActivateStmt:
-			tag = "ACTIVATE";
-			break;
-
-		case T_DeactivateStmt:
-			tag = "DEACTIVATE";
-			break;
-
 		case T_CreateContTransformStmt:
 			tag = "CREATE CONTINUOUS TRANSFORM";
 			break;
@@ -3268,8 +3252,6 @@ GetCommandLogLevel(Node *parsetree)
 				break;
 
 			case T_ExplainContQueryStmt:
-			case T_ActivateStmt:
-			case T_DeactivateStmt:
 				lev = LOGSTMT_ALL;
 				break;
 

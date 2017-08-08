@@ -963,8 +963,8 @@ psql_completion(const char *text, int start, int end)
 #define prev6_wd  (previous_words[5])
 
 	static const char *const sql_commands[] = {
-		"ABORT", "ACTIVATE", "ALTER", "ANALYZE", "BEGIN", "CHECKPOINT", "CLOSE", "CLUSTER",
-		"COMMENT", "COMMIT", "COPY", "CREATE", "DEACTIVATE", "DEALLOCATE", "DECLARE",
+		"ABORT", "ALTER", "ANALYZE", "BEGIN", "CHECKPOINT", "CLOSE", "CLUSTER",
+		"COMMENT", "COMMIT", "COPY", "CREATE", "DEALLOCATE", "DECLARE",
 		"DELETE FROM", "DISCARD", "DO", "DROP", "END", "EXECUTE", "EXPLAIN",
 		"FETCH", "GRANT", "IMPORT", "INSERT", "LISTEN", "LOAD", "LOCK",
 		"MOVE", "NOTIFY", "PREPARE",

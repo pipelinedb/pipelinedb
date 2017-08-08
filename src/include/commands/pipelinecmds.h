@@ -30,9 +30,6 @@ extern TupleDesc ExplainContViewResultDesc(ExplainContQueryStmt *stmt);
 extern void ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
 			 ParamListInfo params, DestReceiver *dest);
 
-extern void ExecActivateStmt(ActivateStmt *stmt);
-extern void ExecDeactivateStmt(DeactivateStmt *stmt);
-
 extern void ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring);
 
 /* Binary upgrade support */

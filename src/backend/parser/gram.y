@@ -231,7 +231,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 }
 
 %type <node>  stmt schema_stmt
-    ActivateStmt AlterEventTrigStmt
+    AlterEventTrigStmt
     AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
     AlterFdwStmt AlterForeignServerStmt AlterGroupStmt
     AlterObjectSchemaStmt AlterOwnerStmt AlterSeqStmt AlterSystemStmt AlterTableStmt
@@ -247,7 +247,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
     CreateFdwStmt CreateForeignServerStmt CreateForeignTableStmt
     CreateAssertStmt CreateTransformStmt CreateTrigStmt CreateEventTrigStmt
     CreateUserStmt CreateUserMappingStmt CreateRoleStmt CreatePolicyStmt
-    CreatedbStmt DeactivateStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
+    CreatedbStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
     DropGroupStmt DropOpClassStmt DropOpFamilyStmt DropPLangStmt DropStmt
     DropAssertStmt DropTrigStmt DropRuleStmt DropCastStmt DropRoleStmt
     DropPolicyStmt DropUserStmt DropdbStmt DropTableSpaceStmt DropFdwStmt
@@ -565,7 +565,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
  */
 
 /* ordinary key words in alphabetical order */
-%token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ACTIVATE ADD_P ADMIN AFTER
+%token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
   AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
   ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
 
@@ -581,7 +581,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
   CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_SCHEMA
   CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR CYCLE
 
-  DATA_P DATABASE DAY_P DEACTIVATE DEALLOCATE DEC DECIMAL_P DECLARE DEFAULT DEFAULTS
+  DATA_P DATABASE DAY_P DEALLOCATE DEC DECIMAL_P DECLARE DEFAULT DEFAULTS
   DEFERRABLE DEFERRED DEFINER DELETE_P DELIMITER DELIMITERS DESC
   DICTIONARY DISABLE_P DISCARD DISTINCT DO DOCUMENT_P DOMAIN_P DOUBLE_P DROP
 
@@ -758,8 +758,7 @@ stmtmulti:  stmtmulti ';' stmt
     ;
 
 stmt :
-      ActivateStmt
-      | AlterEventTrigStmt
+      AlterEventTrigStmt
       | AlterDatabaseStmt
       | AlterDatabaseSetStmt
       | AlterDefaultPrivilegesStmt
@@ -825,7 +824,6 @@ stmt :
       | CreateUserStmt
       | CreateUserMappingStmt
       | CreatedbStmt
-      | DeactivateStmt
       | DeallocateStmt
       | DeclareCursorStmt
       | DefineStmt
@@ -2925,39 +2923,6 @@ create_ct_target:
           $$ = makeNode(IntoClause);
           $$->rel = $1;
           $$->options = $2;
-        }
-    ;
-
-/*****************************************************************************
- *
- *    QUERY :
- *        ACTIVATE | DEACTIVATE [continuous view list]
- *
- *****************************************************************************/
- 
-opt_qualified_name_list: qualified_name_list
- 				{
- 					$$ = (List *) $1;
- 				}
- 			| /* EMPTY */
- 				{
- 					$$ = NIL;
- 				}
- 		;
-
-ActivateStmt: ACTIVATE opt_qualified_name_list where_clause
-        {
-          ActivateStmt *s = makeNode(ActivateStmt);
-          s->queries = (List *) $2;
-          $$ = (Node *) s;
-        }
-    ;
-
-DeactivateStmt: DEACTIVATE opt_qualified_name_list where_clause
-        {
-          DeactivateStmt *s = makeNode(DeactivateStmt);
-          s->queries = (List *) $2;
-          $$ = (Node *)s;
         }
     ;
 
@@ -13786,7 +13751,6 @@ unreserved_keyword:
       | ABSOLUTE_P
       | ACCESS
       | ACTION
-      | ACTIVATE
       | ADD_P
       | ADMIN
       | AFTER
@@ -13834,7 +13798,6 @@ unreserved_keyword:
       | DATA_P
       | DATABASE
       | DAY_P
-      | DEACTIVATE
       | DEALLOCATE
       | DECLARE
       | DEFAULTS
