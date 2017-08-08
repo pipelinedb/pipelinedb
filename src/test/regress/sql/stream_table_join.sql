@@ -270,12 +270,12 @@ SELECT * FROM test_stj_anti ORDER BY x;
 SELECT * FROM test_stj_semi ORDER BY x;
 SELECT * FROM test_stj_cross ORDER BY x;
 
-TRUNCATE CONTINUOUS VIEW test_stj_inner;
-TRUNCATE CONTINUOUS VIEW test_stj_left;
-TRUNCATE CONTINUOUS VIEW test_stj_right;
-TRUNCATE CONTINUOUS VIEW test_stj_anti;
-TRUNCATE CONTINUOUS VIEW test_stj_semi;
-TRUNCATE CONTINUOUS VIEW test_stj_cross;
+SELECT truncate_continuous_view('test_stj_inner');
+SELECT truncate_continuous_view('test_stj_left');
+SELECT truncate_continuous_view('test_stj_right');
+SELECT truncate_continuous_view('test_stj_anti');
+SELECT truncate_continuous_view('test_stj_semi');
+SELECT truncate_continuous_view('test_stj_cross');
 
 CREATE INDEX test_stj_t_idx ON test_stj_t (x);
 ANALYZE test_stj_t;

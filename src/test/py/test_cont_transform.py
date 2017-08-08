@@ -62,7 +62,7 @@ def test_deadlock_regress(pipeline, clean_db):
           'stream_insert_level': 'sync_%s' % sync
           })
 
-        pipeline.execute('TRUNCATE CONTINUOUS VIEW cv')
+        pipeline.execute("SELECT truncate_continuous_view('cv')")
         pipeline.execute('COMMIT')
 
         if copy:

@@ -20,6 +20,7 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "commands/tablecmds.h"
 #include "executor/spi.h"
 #include "fmgr.h"
 #include "pipeline/analyzer.h"
@@ -1192,4 +1193,38 @@ deactivate(PG_FUNCTION_ARGS)
 	bool result = set_cq_enabled(rv, false);
 
 	PG_RETURN_BOOL(result);
+}
+
+/*
+ * truncate_continuous_view
+ *
+ * Truncate all rows from a continuous view's matrel
+ */
+Datum
+truncate_continuous_view(PG_FUNCTION_ARGS)
+{
+	text *relname = PG_GETARG_TEXT_P(0);
+	RangeVar *rv = makeRangeVarFromNameList(textToQualifiedNameList(relname));
+	TruncateStmt *trunc = makeNode(TruncateStmt);
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+
+	RangeVar *matrel;
+	HeapTuple tuple = GetPipelineQueryTuple(rv);
+
+	if (!HeapTupleIsValid(tuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", rv->relname)));
+
+	ReleaseSysCache(tuple);
+
+	matrel = GetMatRelName(rv);
+	trunc->relations = lappend(trunc->relations, matrel);
+
+	heap_close(pipeline_query, NoLock);
+
+	/* Call TRUNCATE on the backing view table(s). */
+	ExecuteTruncate(trunc);
+
+	PG_RETURN_NULL();
 }

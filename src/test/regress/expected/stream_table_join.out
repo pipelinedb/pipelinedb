@@ -600,12 +600,42 @@ SELECT * FROM test_stj_cross ORDER BY x;
  2005 |  1001
 (12 rows)
 
-TRUNCATE CONTINUOUS VIEW test_stj_inner;
-TRUNCATE CONTINUOUS VIEW test_stj_left;
-TRUNCATE CONTINUOUS VIEW test_stj_right;
-TRUNCATE CONTINUOUS VIEW test_stj_anti;
-TRUNCATE CONTINUOUS VIEW test_stj_semi;
-TRUNCATE CONTINUOUS VIEW test_stj_cross;
+SELECT truncate_continuous_view('test_stj_inner');
+ truncate_continuous_view 
+--------------------------
+ 
+(1 row)
+
+SELECT truncate_continuous_view('test_stj_left');
+ truncate_continuous_view 
+--------------------------
+ 
+(1 row)
+
+SELECT truncate_continuous_view('test_stj_right');
+ truncate_continuous_view 
+--------------------------
+ 
+(1 row)
+
+SELECT truncate_continuous_view('test_stj_anti');
+ truncate_continuous_view 
+--------------------------
+ 
+(1 row)
+
+SELECT truncate_continuous_view('test_stj_semi');
+ truncate_continuous_view 
+--------------------------
+ 
+(1 row)
+
+SELECT truncate_continuous_view('test_stj_cross');
+ truncate_continuous_view 
+--------------------------
+ 
+(1 row)
+
 CREATE INDEX test_stj_t_idx ON test_stj_t (x);
 ANALYZE test_stj_t;
 EXPLAIN CONTINUOUS VIEW test_stj_inner;
