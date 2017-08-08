@@ -374,7 +374,6 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
         create_generic_options alter_generic_options
         relation_expr_list dostmt_opt_list
         transform_element_list transform_type_list
-        opt_qualified_name_list
 
 %type <list>  group_by_list
 %type <node>  group_by_item empty_grouping_set rollup_clause cube_clause
