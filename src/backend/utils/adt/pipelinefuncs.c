@@ -1143,3 +1143,53 @@ ttl_expire(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(result);
 }
 
+static bool
+set_cq_enabled(RangeVar *name, bool activate)
+{
+	bool changed = false;
+	Oid query_id;
+	Relation pipeline_query;
+
+	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+	query_id = GetContQueryId(name);
+
+	if (!OidIsValid(query_id))
+		elog(ERROR, "\"%s\" does not exist", name->relname);
+
+	changed = ContQuerySetActive(query_id, activate);
+	if (changed)
+		UpdatePipelineStreamCatalog();
+
+	heap_close(pipeline_query, NoLock);
+
+	return changed;
+}
+/*
+ * activate
+ *
+ * Activate the given continuous view/transform
+ */
+Datum
+activate(PG_FUNCTION_ARGS)
+{
+	text *relname = PG_GETARG_TEXT_P(0);
+	RangeVar *rv = makeRangeVarFromNameList(textToQualifiedNameList(relname));
+	bool result = set_cq_enabled(rv, true);
+
+	PG_RETURN_BOOL(result);
+}
+
+/*
+ * deactivate
+ *
+ * Deactivate the given continuous view/transform
+ */
+Datum
+deactivate(PG_FUNCTION_ARGS)
+{
+	text *relname = PG_GETARG_TEXT_P(0);
+	RangeVar *rv = makeRangeVarFromNameList(textToQualifiedNameList(relname));
+	bool result = set_cq_enabled(rv, false);
+
+	PG_RETURN_BOOL(result);
+}

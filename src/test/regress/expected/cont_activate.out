@@ -14,7 +14,12 @@ SELECT * FROM cont_activate_v1;
    100
 (1 row)
 
-DEACTIVATE cont_activate_v0;
+SELECT deactivate('cont_activate_v0');
+ deactivate 
+------------
+ t
+(1 row)
+
 INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
 SELECT * FROM cont_activate_v0;
  count 
@@ -28,7 +33,12 @@ SELECT * FROM cont_activate_v1;
    200
 (1 row)
 
-DEACTIVATE cont_activate_v1;
+SELECT deactivate('cont_activate_v1');
+ deactivate 
+------------
+ t
+(1 row)
+
 INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
 SELECT * FROM cont_activate_v0;
  count 
@@ -42,7 +52,12 @@ SELECT * FROM cont_activate_v1;
    200
 (1 row)
 
-ACTIVATE cont_activate_v0;
+SELECT activate('cont_activate_v0');
+ activate 
+----------
+ t
+(1 row)
+
 INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
 SELECT * FROM cont_activate_v0;
  count 
@@ -56,7 +71,12 @@ SELECT * FROM cont_activate_v1;
    200
 (1 row)
 
-ACTIVATE cont_activate_v1;
+SELECT activate('cont_activate_v1');
+ activate 
+----------
+ t
+(1 row)
+
 INSERT INTO cont_activate_s (x) SELECT generate_series(1, 100) AS x;
 SELECT * FROM cont_activate_v0;
  count 

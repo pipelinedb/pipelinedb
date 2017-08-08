@@ -1105,66 +1105,6 @@ ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
 	}
 }
 
-static Bitmapset *
-get_query_ids(List *queries)
-{
-	Bitmapset *ids = NULL;
-	ListCell *lc;
-
-	if (queries == NIL)
-		return GetContinuousQueryIds();
-
-	foreach(lc, queries)
-	{
-		RangeVar *rv = lfirst(lc);
-		Oid id = GetContQueryId(rv);
-
-		if (!OidIsValid(id))
-			ereport(ERROR,
-					(errmsg("continuous query \"%s\" does not exist", rv->relname)));
-
-		ids = bms_add_member(ids, id);
-	}
-
-	return ids;
-}
-
-static void
-set_cq_enabled(List *queries, bool activate)
-{
-	bool changed = false;
-	int query_id;
-	Bitmapset *query_ids;
-	Relation pipeline_query;
-
-	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
-
-	query_ids = get_query_ids(queries);
-
-	while ((query_id = bms_first_member(query_ids)) >= 0)
-	{
-		Assert(OidIsValid(query_id));
-		changed |= ContQuerySetActive(query_id, activate);
-	}
-
-	if (changed)
-		UpdatePipelineStreamCatalog();
-
-	heap_close(pipeline_query, NoLock);
-}
-
-void
-ExecActivateStmt(ActivateStmt *stmt)
-{
-	set_cq_enabled(stmt->queries, true);
-}
-
-void
-ExecDeactivateStmt(DeactivateStmt *stmt)
-{
-	set_cq_enabled(stmt->queries, false);
-}
-
 static void
 record_ct_dependencies(Oid pqoid, Oid relid, Oid osrelid, Oid fnoid, SelectStmt *stmt, Query *query, List *args)
 {

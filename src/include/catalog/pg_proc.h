@@ -5997,6 +5997,11 @@ DESCR("bucket aggregate function");
 DATA(insert OID = 4520 ( bucket_agg_trans_ts	PGNSP PGUID 12 1 0 0 0 f f f f f f i 4 0 2281 "2281 2283 21 1184" _null_ _null_ _null_ _null_ _null_ bucket_agg_trans_ts _null_ _null_ _null_ ));
 DESCR("bucket add function");
 
+DATA(insert OID = 4521 ( activate	PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 16 "25" _null_ _null_ _null_ _null_ _null_ activate _null_ _null_ _null_ ));
+DESCR("activate a continuous view/transform");
+DATA(insert OID = 4522 ( deactivate	PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 16 "25" _null_ _null_ _null_ _null_ _null_ deactivate _null_ _null_ _null_ ));
+DESCR("deactivate a continuous view/transform");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

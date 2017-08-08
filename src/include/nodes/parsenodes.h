@@ -3098,16 +3098,4 @@ typedef struct CreateContTransformStmt
 	List	    *args;
 } CreateContTransformStmt;
 
-typedef struct DeactivateStmt
-{
-	NodeTag	type;
-	List *queries;
-} DeactivateStmt;
-
-typedef struct ActivateStmt
-{
-	NodeTag	type;
-	List *queries;
-} ActivateStmt;
-
 #endif   /* PARSENODES_H */
