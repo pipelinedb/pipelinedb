@@ -253,13 +253,6 @@ CREATE CONTINUOUS VIEW test_stj_anti AS SELECT s.x, count(*) FROM test_stj_strea
 CREATE CONTINUOUS VIEW test_stj_semi AS SELECT s.x, count(*) FROM test_stj_stream AS s WHERE EXISTS (SELECT 1 FROM test_stj_t AS t WHERE t.x = s.x) GROUP BY s.x;
 CREATE CONTINUOUS VIEW test_stj_cross AS SELECT s.x, count(*) FROM test_stj_stream AS s, test_stj_t AS t GROUP BY s.x;
 
-EXPLAIN CONTINUOUS VIEW test_stj_inner;
-EXPLAIN CONTINUOUS VIEW test_stj_left;
-EXPLAIN CONTINUOUS VIEW test_stj_right;
-EXPLAIN CONTINUOUS VIEW test_stj_anti;
-EXPLAIN CONTINUOUS VIEW test_stj_semi;
-EXPLAIN CONTINUOUS VIEW test_stj_cross;
-
 INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
 INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;
 
@@ -279,13 +272,6 @@ SELECT truncate_continuous_view('test_stj_cross');
 
 CREATE INDEX test_stj_t_idx ON test_stj_t (x);
 ANALYZE test_stj_t;
-
-EXPLAIN CONTINUOUS VIEW test_stj_inner;
-EXPLAIN CONTINUOUS VIEW test_stj_left;
-EXPLAIN CONTINUOUS VIEW test_stj_right;
-EXPLAIN CONTINUOUS VIEW test_stj_anti;
-EXPLAIN CONTINUOUS VIEW test_stj_semi;
-EXPLAIN CONTINUOUS VIEW test_stj_cross;
 
 INSERT INTO test_stj_stream (x) SELECT generate_series(0, 5) AS x;
 INSERT INTO test_stj_stream (x) SELECT generate_series(2000, 2005) AS x;

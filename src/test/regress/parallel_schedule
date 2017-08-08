@@ -165,7 +165,7 @@ test: stream_exprs prepared_stream_insert cont_view_tablespace typed_streams con
 # ----------
 # Another group of parallel tests
 # ----------
-test: cont_view_namespace cont_complex_types cont_explain cont_multiple_sw keyed_min_max
+test: cont_view_namespace cont_complex_types cont_multiple_sw keyed_min_max
 
 # ----------
 # Another group of parallel tests

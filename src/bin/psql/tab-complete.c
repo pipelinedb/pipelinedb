@@ -3123,29 +3123,6 @@ psql_completion(const char *text, int start, int end)
 		COMPLETE_WITH_LIST(list_EXPLAIN);
 	}
 
-	/* EXPLAIN CONTINUOUS VIEW/TRANSFORM */
-	else if (pg_strcasecmp(prev2_wd, "EXPLAIN") == 0 &&
-			 pg_strcasecmp(prev_wd, "CONTINUOUS") == 0)
-	{
-		static const char *const list_CONTINUOUS[] =
-		{"VIEW", "TRANSFORM", NULL};
-		COMPLETE_WITH_LIST(list_CONTINUOUS);
-	}
-
-	else if (pg_strcasecmp(prev3_wd, "EXPLAIN") == 0 &&
-			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
-			 pg_strcasecmp(prev_wd, "VIEW") == 0)
-	{
-		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_views, NULL);
-	}
-
-	else if (pg_strcasecmp(prev3_wd, "EXPLAIN") == 0 &&
-			 pg_strcasecmp(prev2_wd, "CONTINUOUS") == 0 &&
-			 pg_strcasecmp(prev_wd, "TRANSFORM") == 0)
-	{
-		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_continuous_transforms, NULL);
-	}
-
 /* FETCH && MOVE */
 	/* Complete FETCH with one of FORWARD, BACKWARD, RELATIVE */
 	else if (pg_strcasecmp(prev_wd, "FETCH") == 0 ||
