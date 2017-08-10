@@ -591,8 +591,6 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 			set_customscan_references(root, (CustomScan *) plan, rtoffset);
 			break;
 
-		case T_TuplestoreScan:
-			break;
 		case T_NestLoop:
 		case T_MergeJoin:
 		case T_HashJoin:

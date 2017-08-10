@@ -34,6 +34,7 @@
 #include "parser/parse_relation.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/planner.h"
+#include "pipeline/tuplestore_scan.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
@@ -57,7 +58,7 @@ get_combiner_join_rel(PlannerInfo *root, int levels_needed, List *initial_rels)
 	rel = standard_join_search(root, levels_needed, initial_rels);
 	rel->pathlist = NIL;
 
-	path =  create_tuplestore_scan_path(rel);
+	path = (Path *) CreateTuplestoreScanPath(rel);
 
 	add_path(rel, path);
 	set_cheapest(rel);
@@ -200,31 +201,41 @@ GetContPlan(ContQuery *view, ContQueryProcType type)
 /*
  * SetCombinerPlanTuplestorestate
  */
-TuplestoreScan *
+CustomScan *
 SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
 {
-	TuplestoreScan *scan;
+	CustomScan *scan;
+	char *ptr;
 
-	if (IsA(plan->planTree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree;
+	if (IsA(plan->planTree, CustomScan))
+		scan = (CustomScan *) plan->planTree;
 	else if ((IsA(plan->planTree, Agg)) &&
-			IsA(plan->planTree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree;
+			IsA(plan->planTree->lefttree, CustomScan))
+		scan = (CustomScan *) plan->planTree->lefttree;
 	else if (IsA(plan->planTree, Agg) &&
 			IsA(plan->planTree->lefttree, Sort) &&
-			IsA(plan->planTree->lefttree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree->lefttree;
+			IsA(plan->planTree->lefttree->lefttree, CustomScan))
+		scan = (CustomScan *) plan->planTree->lefttree->lefttree;
 	else if (IsA(plan->planTree, Group) &&
 			IsA(plan->planTree->lefttree, Sort) &&
-			IsA(plan->planTree->lefttree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree->lefttree;
+			IsA(plan->planTree->lefttree->lefttree, CustomScan))
+		scan = (CustomScan *) plan->planTree->lefttree->lefttree;
 	else if (IsA(plan->planTree, Group) &&
-			IsA(plan->planTree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree->lefttree;
+			IsA(plan->planTree->lefttree, CustomScan))
+		scan = (CustomScan *) plan->planTree->lefttree->lefttree;
 	else
 		elog(ERROR, "couldn't find TuplestoreScan node in combiner's plan: %d", nodeTag(plan->planTree));
 
-	scan->store = tupstore;
+	/*
+	 * The CustomScan needs access to the given Tuplestorestate, but the scan has to be
+	 * copyable so we encode a local-memory pointer to the tuplestore as a string. It's kind
+	 * of ugly, but these CustomScans are executed under highly predictable circumstances,
+	 * and in this process so technically it's safe.
+	 */
+	ptr = palloc0(sizeof(Tuplestorestate *));
+	memcpy(ptr, &tupstore, sizeof(Tuplestorestate *));
+
+	scan->custom_private = list_make1(makeString(ptr));
 
 	return scan;
 }

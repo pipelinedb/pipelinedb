@@ -48,8 +48,6 @@
 
 
 static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path);
-static Plan *create_tuplestorescan_plan(PlannerInfo *root, Path *best_path);
-
 static Plan *create_scan_plan(PlannerInfo *root, Path *best_path);
 static List *build_path_tlist(PlannerInfo *root, Path *path);
 static bool use_physical_tlist(PlannerInfo *root, RelOptInfo *rel);
@@ -252,7 +250,6 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_WorkTableScan:
 		case T_ForeignScan:
 		case T_CustomScan:
-		case T_TuplestoreScan:
 			plan = create_scan_plan(root, best_path);
 			break;
 		case T_HashJoin:
@@ -290,37 +287,6 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 	}
 
 	return plan;
-}
-
-/*
- *  create_tuplestorescan_plan
- *  	Create a plan that simply scans a Tuplestore
- */
-static Plan *
-create_tuplestorescan_plan(PlannerInfo *root, Path *best_path)
-{
-	TuplestoreScan *scan = makeNode(TuplestoreScan);
-	List	   *tlist = NIL;
-	Plan	   *plan = &scan->scan.plan;
-	ContQuery *cv = GetContQueryForViewId(root->parse->cqId);
-	Relation matrel = heap_openrv(cv->matrel, NoLock);
-	TupleDesc desc = RelationGetDescr(matrel);
-	AttrNumber attrno;
-
-	for (attrno = 1; attrno <= desc->natts; attrno++)
-	{
-		Form_pg_attribute att_tup = desc->attrs[attrno - 1];
-		Var *var = makeVar(1, attrno, att_tup->atttypid, att_tup->atttypmod, att_tup->attcollation, 0);
-
-		tlist = lappend(tlist,
-						makeTargetEntry((Expr *) var, attrno, NULL, false));
-	}
-
-	heap_close(matrel, NoLock);
-
-	plan->targetlist = tlist;
-
-	return (Plan *) scan;
 }
 
 /*
@@ -394,10 +360,6 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 												   best_path,
 												   tlist,
 												   scan_clauses);
-			break;
-
-		case T_TuplestoreScan:
-			plan = (Plan *) create_tuplestorescan_plan(root, best_path);
 			break;
 
 		case T_IndexScan:
