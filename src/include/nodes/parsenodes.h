@@ -3079,14 +3079,6 @@ typedef struct CreateContViewStmt
 	Node 		*query;
 } CreateContViewStmt;
 
-typedef struct ExplainContQueryStmt
-{
-	NodeTag		type;
-	RangeVar 	*view;
-	ObjectType  objType;
-	List 		*options;
-} ExplainContQueryStmt;
-
 typedef struct CreateForeignTableStmt CreateStreamStmt;
 
 typedef struct CreateContTransformStmt

@@ -458,8 +458,7 @@ typedef enum NodeTag
 	 */
 	T_CreateContViewStmt,
 	T_CreateStreamStmt,
-	T_CreateContTransformStmt,
-	T_ExplainContQueryStmt
+	T_CreateContTransformStmt
 } NodeTag;
 
 /*

@@ -24,11 +24,6 @@
 extern int continuous_view_fillfactor;
 
 extern void ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring);
-
-extern TupleDesc ExplainContViewResultDesc(ExplainContQueryStmt *stmt);
-extern void ExecExplainContQueryStmt(ExplainContQueryStmt *stmt, const char *queryString,
-			 ParamListInfo params, DestReceiver *dest);
-
 extern void ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring);
 
 /* Binary upgrade support */
