@@ -23,17 +23,21 @@
 #include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/relation.h"
+#include "optimizer/cost.h"
 #include "optimizer/paths.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
 #include "parser/analyze.h"
+#include "parser/parsetree.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_relation.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/planner.h"
+#include "pipeline/physical_group_lookup.h"
 #include "pipeline/tuplestore_scan.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
@@ -164,6 +168,211 @@ GetContinuousViewOverlayPlanMod(ContQuery *view, ViewModFunction mod_fn)
 
 	return get_plan_with_hook(view->id, (Node*) selectstmt,
 							  view->sql, false);
+}
+
+static inline bool
+allow_star_schema_join(PlannerInfo *root,
+					   Path *outer_path,
+					   Path *inner_path)
+{
+	Relids		innerparams = PATH_REQ_OUTER(inner_path);
+	Relids		outerrelids = outer_path->parent->relids;
+
+	/*
+	 * It's a star-schema case if the outer rel provides some but not all of
+	 * the inner rel's parameterization.
+	 */
+	return (bms_overlap(innerparams, outerrelids) &&
+			bms_nonempty_difference(innerparams, outerrelids));
+}
+
+static void
+try_nestloop_path(PlannerInfo *root,
+				  RelOptInfo *joinrel,
+				  Path *outer_path,
+				  Path *inner_path,
+				  List *pathkeys,
+				  JoinType jointype,
+				  JoinPathExtraData *extra)
+{
+	Relids		required_outer;
+	JoinCostWorkspace workspace;
+
+	/*
+	 * Check to see if proposed path is still parameterized, and reject if the
+	 * parameterization wouldn't be sensible --- unless allow_star_schema_join
+	 * says to allow it anyway.  Also, we must reject if have_dangerous_phv
+	 * doesn't like the look of it, which could only happen if the nestloop is
+	 * still parameterized.
+	 */
+	required_outer = calc_nestloop_required_outer(outer_path,
+												  inner_path);
+	if (required_outer &&
+		((!bms_overlap(required_outer, extra->param_source_rels) &&
+		  !allow_star_schema_join(root, outer_path, inner_path)) ||
+		 have_dangerous_phv(root,
+							outer_path->parent->relids,
+							PATH_REQ_OUTER(inner_path))))
+	{
+		/* Waste no memory when we reject a path here */
+		bms_free(required_outer);
+		return;
+	}
+
+	/*
+	 * Do a precheck to quickly eliminate obviously-inferior paths.  We
+	 * calculate a cheap lower bound on the path's cost and then use
+	 * add_path_precheck() to see if the path is clearly going to be dominated
+	 * by some existing path for the joinrel.  If not, do the full pushup with
+	 * creating a fully valid path structure and submitting it to add_path().
+	 * The latter two steps are expensive enough to make this two-phase
+	 * methodology worthwhile.
+	 */
+	initial_cost_nestloop(root, &workspace, jointype,
+						  outer_path, inner_path,
+						  extra->sjinfo, &extra->semifactors);
+
+	if (add_path_precheck(joinrel,
+						  workspace.startup_cost, workspace.total_cost,
+						  pathkeys, required_outer))
+	{
+		add_path(joinrel, (Path *)
+				 create_nestloop_path(root,
+									  joinrel,
+									  jointype,
+									  &workspace,
+									  extra->sjinfo,
+									  &extra->semifactors,
+									  outer_path,
+									  inner_path,
+									  extra->restrictlist,
+									  pathkeys,
+									  required_outer));
+	}
+	else
+	{
+		/* Waste no memory when we reject a path here */
+		bms_free(required_outer);
+	}
+}
+
+
+static void
+try_physical_group_lookup_path(PlannerInfo *root,
+				  RelOptInfo *joinrel,
+				  JoinType jointype,
+				  Path *outer_path,
+				  Path *inner_path,
+				  List *pathkeys,
+					JoinPathExtraData *extra)
+{
+	NestPath *nlpath;
+	Path *path;
+
+	try_nestloop_path(root, joinrel, outer_path, inner_path,
+			pathkeys, jointype, extra);
+
+	if (list_length(joinrel->pathlist) != 1)
+		elog(ERROR, "could not create physical group lookup path");
+
+	if (!IsA(linitial(joinrel->pathlist), NestPath))
+		return;
+
+	nlpath = (NestPath *) linitial(joinrel->pathlist);
+	path = (Path *) CreatePhysicalGroupLookupPath(joinrel, nlpath);
+	joinrel->pathlist = list_make1(path);
+}
+
+/*
+ * add_physical_group_lookup_path
+ *
+ * If we're doing a combiner lookup of groups to update, then we need to return
+ * updatable physical tuples. We have a specific plan for this so that we can predictably
+ * control performance and take advantage of certain assumptions we can make about matrels
+ * and their indices.
+ */
+static void
+add_physical_group_lookup_path(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
+		RelOptInfo *innerrel, JoinType jointype, JoinPathExtraData *extra)
+{
+	List *merge_pathkeys;
+	ListCell   *outerlc;
+	RangeTblEntry *inner = planner_rt_fetch(innerrel->relid, root);
+
+	/* only consider plans for which the VALUES scan is the outer */
+	if (inner->rtekind == RTE_VALUES)
+		return;
+
+	/* a physical group lookup is the only path we want to consider */
+	joinrel->pathlist = NIL;
+
+	merge_pathkeys = build_join_pathkeys(root, joinrel, jointype,
+			outerrel->cheapest_total_path->pathkeys);
+
+	foreach (outerlc, outerrel->pathlist)
+	{
+		ListCell *innerlc;
+		Path *outerpath = (Path *) lfirst(outerlc);
+
+		foreach(innerlc, innerrel->pathlist)
+		{
+			Path *innerpath = (Path *) lfirst(innerlc);
+
+			try_physical_group_lookup_path(root,
+								joinrel,
+								jointype,
+								outerpath,
+								innerpath,
+								merge_pathkeys,
+								extra);
+		}
+
+		foreach(innerlc, innerrel->cheapest_parameterized_paths)
+		{
+			Path *innerpath = (Path *) lfirst(innerlc);
+
+			try_physical_group_lookup_path(root,
+								joinrel,
+								jointype,
+								outerpath,
+								innerpath,
+								merge_pathkeys,
+								extra);
+		}
+	}
+}
+
+/*
+ * GetGroupsLookupPlan
+ */
+PlannedStmt *
+GetGroupsLookupPlan(Query *query)
+{
+	PlannedStmt *plan;
+	set_join_pathlist_hook_type save_join_hook;
+
+	/*
+	 * Perform everything from here in a try/catch so we can ensure the join path list hook
+	 * is restored to whatever it was set to before we were called
+	 */
+	PG_TRY();
+	{
+		save_join_hook = set_join_pathlist_hook;
+		set_join_pathlist_hook = add_physical_group_lookup_path;
+
+		PushActiveSnapshot(GetTransactionSnapshot());
+		plan = pg_plan_query(query, 0, NULL);
+		PopActiveSnapshot();
+		set_join_pathlist_hook = save_join_hook;
+	}
+	PG_CATCH();
+	{
+		set_join_pathlist_hook = save_join_hook;
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	return plan;
 }
 
 static PlannedStmt *

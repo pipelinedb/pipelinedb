@@ -147,8 +147,6 @@ typedef struct
 static void
 prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 {
-	CustomScan *scan;
-
 	/*
 	 * Mark combine_plan as not continuous now because we'll be repeatedly
 	 * executing it in a new portal. We also need to set its batch
@@ -161,7 +159,7 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 
 	plan->isContinuous = false;
 
-	scan = SetCombinerPlanTuplestorestate(plan, state->batch);
+	SetCombinerPlanTuplestorestate(plan, state->batch);
 
 	state->combine_plan = plan;
 	state->desc = CreateTupleDescCopy(RelationGetDescr(rel));
@@ -239,19 +237,19 @@ get_values(ContQueryCombinerState *state)
 static void
 set_values(PlannedStmt *plan, List *values)
 {
-	PhysicalGroupLookup *lookup;
+	CustomScan *lookup;
 	NestLoop *nl;
 	ValuesScan *scan;
 
-	if (!IsA(plan->planTree, PhysicalGroupLookup))
+	if (!IsA(plan->planTree, CustomScan))
 		elog(ERROR, "unexpected group retrieval plan: %d", nodeTag(plan->planTree));
 
-	lookup = (PhysicalGroupLookup *) plan->planTree;
+	lookup = (CustomScan *) plan->planTree;
 
-	if (!IsA(lookup->plan.lefttree, NestLoop))
-		elog(ERROR, "unexpected join type found in group retrieval plan: %d", nodeTag(lookup->plan.lefttree));
+	if (!IsA(lookup->scan.plan.lefttree, NestLoop))
+		elog(ERROR, "unexpected join type found in group retrieval plan: %d", nodeTag(lookup->scan.plan.lefttree));
 
-	nl = (NestLoop *) lookup->plan.lefttree;
+	nl = (NestLoop *) lookup->scan.plan.lefttree;
 
 	if (!IsA(nl->join.plan.lefttree, ValuesScan))
 		elog(ERROR, "could not find values scan in group retrieval plan");
@@ -349,9 +347,7 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 		query->hasSubLinks = true;
 	}
 
-	PushActiveSnapshot(GetTransactionSnapshot());
-	plan = pg_plan_query(query, 0, NULL);
-	PopActiveSnapshot();
+	plan = GetGroupsLookupPlan(query);
 
 	old_cxt = MemoryContextSwitchTo(state->plan_cache_cxt);
 	state->groups_plan = copyObject(plan);
@@ -1118,7 +1114,6 @@ static void
 init_sw_state(ContQueryCombinerState *state, Relation matrel)
 {
 	MemoryContext tmp_cxt;
-	CustomScan *scan;
 	MemoryContext old;
 	Oid *group_ops = NULL;
 	AttrNumber *group_idx = NULL;
@@ -1159,7 +1154,7 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	MemoryContextSwitchTo(old);
 
 	state->sw->overlay_plan->isContinuous = false;
-	scan = SetCombinerPlanTuplestorestate(state->sw->overlay_plan, state->sw->overlay_input);
+	SetCombinerPlanTuplestorestate(state->sw->overlay_plan, state->sw->overlay_input);
 
 	state->sw->overlay_dest = CreateDestReceiver(DestTuplestore);
 	SetTuplestoreDestReceiverParams(state->sw->overlay_dest, state->sw->overlay_output, state->sw->context, true);

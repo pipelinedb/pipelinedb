@@ -720,20 +720,6 @@ _copyNestLoop(const NestLoop *from)
 	return newnode;
 }
 
-static PhysicalGroupLookup *
-_copyPhysicalGroupLookup(const PhysicalGroupLookup *from)
-{
-	PhysicalGroupLookup *newnode = makeNode(PhysicalGroupLookup);
-
-	/*
-	 * copy node superclass fields
-	 */
-	CopyPlanFields((const Plan *) from, (Plan *) newnode);
-
-	return newnode;
-}
-
-
 /*
  * _copyMergeJoin
  */
@@ -4303,9 +4289,6 @@ copyObject(const void *from)
 			break;
 		case T_NestLoop:
 			retval = _copyNestLoop(from);
-			break;
-		case T_PhysicalGroupLookup:
-			retval = _copyPhysicalGroupLookup(from);
 			break;
 		case T_MergeJoin:
 			retval = _copyMergeJoin(from);

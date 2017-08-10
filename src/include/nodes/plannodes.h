@@ -675,16 +675,6 @@ typedef struct HashJoin
 	List	   *hashclauses;
 } HashJoin;
 
-/* -----------------------------------------------------------
- * node for extracting physical tuples given a list of groups
- * -----------------------------------------------------------
- */
-
-typedef struct PhysicalGroupLookup
-{
-	Plan plan;
-} PhysicalGroupLookup;
-
 /* ----------------
  *		materialization node
  * ----------------

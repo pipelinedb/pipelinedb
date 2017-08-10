@@ -54,15 +54,6 @@ static inline bool
 clause_sides_match_join(RestrictInfo *rinfo, RelOptInfo *outerrel, RelOptInfo *innerrel);
 
 static void
-try_physical_group_lookup_path(PlannerInfo *root,
-				  RelOptInfo *joinrel,
-				  JoinType jointype,
-				  Path *outer_path,
-				  Path *inner_path,
-				  List *pathkeys,
-				  JoinPathExtraData *extra);
-
-static void
 try_stream_index_join_path(PlannerInfo *root,
 						RelOptInfo *joinrel,
 						JoinType jointype,
@@ -71,58 +62,6 @@ try_stream_index_join_path(PlannerInfo *root,
 						Path *inner_path,
 						List *restrict_clauses,
 						JoinPathExtraData *extra);
-
-static void
-physical_group_lookup(PlannerInfo *root,
-					RelOptInfo *joinrel,
-					RelOptInfo *outerrel,
-					RelOptInfo *innerrel,
-					JoinType jointype,
-					JoinPathExtraData *extra)
-{
-	List *merge_pathkeys;
-	ListCell   *outerlc;
-	RangeTblEntry *inner = planner_rt_fetch(innerrel->relid, root);
-
-	/* only consider plans for which the VALUES scan is the outer */
-	if (inner->rtekind == RTE_VALUES)
-		return;
-
-	merge_pathkeys = build_join_pathkeys(root, joinrel, jointype,
-			outerrel->cheapest_total_path->pathkeys);
-
-	foreach (outerlc, outerrel->pathlist)
-	{
-		ListCell *innerlc;
-		Path *outerpath = (Path *) lfirst(outerlc);
-
-		foreach(innerlc, innerrel->pathlist)
-		{
-			Path *innerpath = (Path *) lfirst(innerlc);
-
-			try_physical_group_lookup_path(root,
-								joinrel,
-								jointype,
-								outerpath,
-								innerpath,
-								merge_pathkeys,
-								extra);
-		}
-
-		foreach(innerlc, innerrel->cheapest_parameterized_paths)
-		{
-			Path *innerpath = (Path *) lfirst(innerlc);
-
-			try_physical_group_lookup_path(root,
-								joinrel,
-								jointype,
-								outerpath,
-								innerpath,
-								merge_pathkeys,
-								extra);
-		}
-	}
-}
 
 /*
  * add_paths_to_joinrel
@@ -322,20 +261,6 @@ add_paths_to_joinrel(PlannerInfo *root,
 											  joinrel->lateral_relids);
 
 	/*
-	 * If 1) we're a combiner, 2) the outer is a matrel, and 3) we're joining on
-	 * a VALUES list, then we're doing a combiner lookup of groups to update and
-	 * we need to return updatable physical tuples. We have a specific plan for
-	 * this so that we can predictably control performance and take advantage of
-	 * certain assumptions we can make about matrels and their indices.
-	 */
-	if (root->parse->isCombineLookup)
-	{
-		physical_group_lookup(root, joinrel, outerrel, innerrel, jointype, &extra);
-
-		return;
-	}
-
-	/*
 	 * 1. Consider mergejoin paths where both relations must be explicitly
 	 * sorted.  Skip this if we can't mergejoin.
 	 */
@@ -503,32 +428,6 @@ try_nestloop_path(PlannerInfo *root,
 		/* Waste no memory when we reject a path here */
 		bms_free(required_outer);
 	}
-}
-
-/*
- * try_physical_group_lookup_path
- *	  Consider a nestloop join path that returns physical tuples of the inner plan.
- */
-static void
-try_physical_group_lookup_path(PlannerInfo *root,
-				  RelOptInfo *joinrel,
-				  JoinType jointype,
-				  Path *outer_path,
-				  Path *inner_path,
-				  List *pathkeys,
-					JoinPathExtraData *extra)
-{
-	Path *path;
-
-	try_nestloop_path(root, joinrel, outer_path, inner_path,
-			pathkeys, jointype, extra);
-
-	if (list_length(joinrel->pathlist) != 1)
-		elog(ERROR, "could not create physical group lookup path");
-
-	path = (Path *) linitial(joinrel->pathlist);
-	path->type = T_PhysicalGroupLookupPath;
-	path->pathtype = T_PhysicalGroupLookup;
 }
 
 /*

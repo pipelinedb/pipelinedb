@@ -2208,9 +2208,6 @@ finalize_plan(PlannerInfo *root, Plan *plan, Bitmapset *valid_params,
 	finalize_primnode((Node *) plan->targetlist, &context);
 	finalize_primnode((Node *) plan->qual, &context);
 
-	if (IsA(plan, PhysicalGroupLookup))
-		plan = plan->lefttree;
-
 	/* Check additional node-type-specific fields */
 	switch (nodeTag(plan))
 	{
@@ -2575,7 +2572,6 @@ finalize_plan(PlannerInfo *root, Plan *plan, Bitmapset *valid_params,
 		case T_Unique:
 		case T_SetOp:
 		case T_Group:
-		case T_PhysicalGroupLookup:
 			break;
 
 		default:

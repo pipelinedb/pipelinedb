@@ -93,8 +93,6 @@ static MergeJoin *create_mergejoin_plan(PlannerInfo *root, MergePath *best_path,
 					  Plan *outer_plan, Plan *inner_plan);
 static HashJoin *create_hashjoin_plan(PlannerInfo *root, HashPath *best_path,
 					 Plan *outer_plan, Plan *inner_plan);
-static PhysicalGroupLookup *create_physical_group_lookup_plan(PlannerInfo *root, PhysicalGroupLookupPath *best_path,
-					 Plan *outer_plan, Plan *inner_plan);
 static Node *replace_nestloop_params(PlannerInfo *root, Node *expr);
 static Node *replace_nestloop_params_mutator(Node *node, PlannerInfo *root);
 static void process_subquery_nestloop_params(PlannerInfo *root,
@@ -255,7 +253,6 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_HashJoin:
 		case T_MergeJoin:
 		case T_NestLoop:
-		case T_PhysicalGroupLookup:
 			plan = create_join_plan(root,
 									(JoinPath *) best_path);
 			break;
@@ -639,7 +636,7 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 	outer_plan = create_plan_recurse(root, best_path->outerjoinpath);
 
 	/* For a nestloop, include outer relids in curOuterRels for inner side */
-	if (best_path->path.pathtype == T_NestLoop || best_path->path.pathtype == T_PhysicalGroupLookup)
+	if (best_path->path.pathtype == T_NestLoop)
 		root->curOuterRels = bms_union(root->curOuterRels,
 								   best_path->outerjoinpath->parent->relids);
 
@@ -668,13 +665,6 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 												 (NestPath *) best_path,
 												 outer_plan,
 												 inner_plan);
-			break;
-		case T_PhysicalGroupLookup:
-			plan = (Plan *) create_physical_group_lookup_plan(root,
-					(PhysicalGroupLookupPath *) best_path,
-					outer_plan,
-					inner_plan);
-
 			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
@@ -2760,31 +2750,6 @@ create_hashjoin_plan(PlannerInfo *root,
 	copy_path_costsize(&join_plan->join.plan, &best_path->jpath.path);
 
 	return join_plan;
-}
-
-static PhysicalGroupLookup *
-create_physical_group_lookup_plan(PlannerInfo *root, PhysicalGroupLookupPath *best_path,
-					 Plan *outer_plan, Plan *inner_plan)
-{
-	PhysicalGroupLookup *node = makeNode(PhysicalGroupLookup);
-	NestLoop *nl;
-
-	/* make sure the VALUES scan is the outer */
-	if (!IsA(outer_plan, ValuesScan))
-	{
-		Plan *tmp = inner_plan;
-		inner_plan = outer_plan;
-		outer_plan = tmp;
-	}
-
-	nl = create_nestloop_plan(root,
-			(NestPath *) best_path, outer_plan, inner_plan);
-
-	node->plan.lefttree = (Plan *) nl;
-
-	copy_path_costsize(&node->plan, &best_path->path);
-
-	return node;
 }
 
 /*****************************************************************************

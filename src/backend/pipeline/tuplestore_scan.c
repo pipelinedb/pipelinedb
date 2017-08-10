@@ -17,13 +17,11 @@
 
 static Plan *create_tuplestore_scan_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
 		List *tlist, List *clauses, List *custom_plans);
+static Node *create_tuplestore_scan_state(struct CustomScan *cscan);
 static void begin_tuplestore_scan(CustomScanState *cscan, EState *estate, int eflags);
 static TupleTableSlot *tuplestore_next(struct CustomScanState *node);
 static void end_tuplestore_scan(struct CustomScanState *node);
 static void rescan_tuplestore_scan(struct CustomScanState *node);
-static Plan * create_tuplestore_scan_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
-		List *tlist, List *clauses, List *custom_plans);
-static Node *create_tuplestore_scan_state(struct CustomScan *cscan);
 
 typedef struct CustomTuplestoreScanState
 {
@@ -53,7 +51,7 @@ static CustomExecMethods exec_methods = {
 /*
  * Methods for creating a TuplestoreScan's executor state, attached to a TuplestoreScan plan node
  */
-static CustomScanMethods planner_methods = {
+static CustomScanMethods plan_methods = {
 	.CustomName = "TuplestoreScan",
 	.CreateCustomScanState = create_tuplestore_scan_state,
 };
@@ -89,7 +87,7 @@ create_tuplestore_scan_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPat
 	TupleDesc desc = RelationGetDescr(matrel);
 	AttrNumber attrno;
 
-	scan->methods = &planner_methods;
+	scan->methods = &plan_methods;
 	scan->scan.scanrelid = 1;
 	tlist = NIL;
 
@@ -117,7 +115,7 @@ create_tuplestore_scan_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPat
 static Node *
 create_tuplestore_scan_state(struct CustomScan *cscan)
 {
-	CustomTuplestoreScanState *scanstate = (CustomTuplestoreScanState *) palloc0(sizeof(CustomTuplestoreScanState));
+	CustomTuplestoreScanState *scanstate = palloc0(sizeof(CustomTuplestoreScanState));
 	Value *ptr;
 
 	scanstate->cstate.ss.ps.type = T_CustomScanState;
