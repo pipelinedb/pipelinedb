@@ -30,6 +30,7 @@ extern ProcessUtility_hook_type SaveUtilityHook;
 	((planner_rt_fetch(relid, root))->relkind == RELKIND_STREAM))
 
 extern PlannedStmt *GetContPlan(ContQuery *view, ContQueryProcType type);
+extern PlannedStmt *GetGroupsLookupPlan(Query *query);
 extern CustomScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
 extern FuncExpr *GetGroupHashIndexExpr(ResultRelInfo *ri);
 extern PlannedStmt *GetCombinerLookupPlan(ContQuery *view);
