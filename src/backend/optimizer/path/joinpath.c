@@ -53,16 +53,6 @@ static List *select_mergejoin_clauses(PlannerInfo *root,
 static inline bool
 clause_sides_match_join(RestrictInfo *rinfo, RelOptInfo *outerrel, RelOptInfo *innerrel);
 
-static void
-try_stream_index_join_path(PlannerInfo *root,
-						RelOptInfo *joinrel,
-						JoinType jointype,
-						SpecialJoinInfo *sjinfo,
-						Path *outer_path,
-						Path *inner_path,
-						List *restrict_clauses,
-						JoinPathExtraData *extra);
-
 /*
  * add_paths_to_joinrel
  *	  Given a join relation and two component rels from which it can be made,
@@ -112,90 +102,6 @@ add_paths_to_joinrel(PlannerInfo *root,
 		compute_semi_anti_join_factors(root, outerrel, innerrel,
 									   jointype, sjinfo, restrictlist,
 									   &extra.semifactors);
-
-	/*
-	 * If this is a stream-table join and the stream is the inner relation, then we should only
-	 * consider a hash join with the stream as the inner relation which is hashed.
-	 */
-	if (IS_STREAM_RTE(innerrel->relid, root))
-	{
-		HashPath *path;
-		Path *outerpath = outerrel->cheapest_total_path;
-		Path *innerpath = innerrel->cheapest_total_path;
-		Relids requiredouter = NULL;
-		ListCell *lc;
-		List *hashclauses = NIL;
-
-		if (outerrel->rtekind == RTE_RELATION)
-		 requiredouter = calc_non_nestloop_required_outer(outerpath, innerpath);
-
-		foreach(lc, restrictlist)
-		{
-			RestrictInfo *restrictinfo = (RestrictInfo *) lfirst(lc);
-
-			/*
-			 * If processing an outer join, only use its own join clauses for
-			 * hashing.  For inner joins we need not be so picky.
-			 */
-			if (IS_OUTER_JOIN(jointype) && restrictinfo->is_pushed_down)
-				continue;
-
-			if (!restrictinfo->can_join ||
-				restrictinfo->hashjoinoperator == InvalidOid)
-				continue;			/* not hashjoinable */
-
-			/*
-			 * Check if clause has the form "outer op inner" or "inner op outer".
-			 */
-			if (!clause_sides_match_join(restrictinfo, outerrel, innerrel))
-				continue;			/* no good for these input relations */
-
-			hashclauses = lappend(hashclauses, restrictinfo);
-		}
-
-		path = create_stream_hashjoin_path(root, joinrel, jointype,
-				outerpath, innerpath, requiredouter, hashclauses, &extra);
-
-		add_path(joinrel, (Path *) path);
-		set_cheapest(joinrel);
-
-		return;
-	}
-
-	/*
-	 * If this is a stream-table join and the stream is the outer relation, then we should
-	 * only consider a nested loop join with the stream on the outside.
-	 */
-	if (IS_STREAM_RTE(outerrel->relid, root))
-	{
-		Path *outerpath = outerrel->cheapest_total_path;
-		Path *innerpath;
-
-		/*
-		 * If the inner relation has any index paths for this join, those are
-		 * going to be faster on large tables so we try them.
-		 */
-		foreach(lc, innerrel->pathlist)
-		{
-			innerpath = (Path *) lfirst(lc);
-			try_stream_index_join_path(root, joinrel, jointype, sjinfo,
-					outerpath, innerpath, restrictlist, &extra);
-		}
-
-		foreach(lc, innerrel->cheapest_parameterized_paths)
-		{
-			innerpath = (Path *) lfirst(lc);
-			try_stream_index_join_path(root, joinrel, jointype, sjinfo,
-					outerpath, innerpath, restrictlist, &extra);
-		}
-
-		/* Set the cheapest path, only if we actually added any paths. */
-		if (joinrel->pathlist)
-		{
-			set_cheapest(joinrel);
-			return;
-		}
-	}
 
 	/*
 	 * Find potential mergejoin clauses.  We can skip this if we are not
@@ -428,41 +334,6 @@ try_nestloop_path(PlannerInfo *root,
 		/* Waste no memory when we reject a path here */
 		bms_free(required_outer);
 	}
-}
-
-/*
- * try_stream_index_join_path
- * 		Consider nestloop join of a stream scan and an indexed table
- */
-static void
-try_stream_index_join_path(PlannerInfo *root,
-						RelOptInfo *joinrel,
-						JoinType jointype,
-						SpecialJoinInfo *sjinfo,
-						Path *outer_path,
-						Path *inner_path,
-						List *restrict_clauses,
-						JoinPathExtraData *extra)
-{
-	Relids required_outer = calc_nestloop_required_outer(outer_path, inner_path);
-	JoinCostWorkspace workspace;
-	List *pathkeys = build_join_pathkeys(root, joinrel, jointype, outer_path->pathkeys);
-	NestPath *path;
-
-	/* if there's no index path, we'll use the stream-table hashjoin */
-	if (inner_path->pathtype == T_SeqScan || inner_path->pathtype == T_HashJoin || inner_path->pathtype == T_MergeJoin)
-		return;
-
-	path = create_nestloop_path(root, joinrel, jointype, &workspace,
-									  sjinfo, &extra->semifactors, outer_path, inner_path,
-									  restrict_clauses,
-									  pathkeys, required_outer);
-
-	path->path.startup_cost = 0;
-	/* We only care about the cost of the table side of a stream-table join */
-	path->path.total_cost = inner_path->total_cost;
-
-	add_path(joinrel, (Path *) path);
 }
 
 /*

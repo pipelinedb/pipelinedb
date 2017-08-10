@@ -132,18 +132,6 @@ extern Path *reparameterize_path(PlannerInfo *root, Path *path,
 					Relids required_outer,
 					double loop_count);
 
-extern Path *create_streamscan_path(PlannerInfo *root, RelOptInfo *rel, Relids required_outer);
-extern Path *create_tuplestore_scan_path(RelOptInfo *parent);
-
-extern HashPath *create_stream_hashjoin_path(PlannerInfo *root,
-		 RelOptInfo *joinrel,
-		 JoinType jointype,
-		 Path *outer_path,
-		 Path *inner_path,
-		 Relids required_outer,
-		 List *hashclauses,
-		 JoinPathExtraData *extra);
-
 /*
  * prototypes for relnode.c
  */
