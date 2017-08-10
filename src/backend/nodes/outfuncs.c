@@ -459,14 +459,6 @@ _outSampleScan(StringInfo str, const SampleScan *node)
 }
 
 static void
-_outTuplestoreScan(StringInfo str, const SeqScan *node)
-{
-	WRITE_NODE_TYPE("TUPLESTORESCAN");
-
-	_outScanInfo(str, (const Scan *) node);
-}
-
-static void
 _outIndexScan(StringInfo str, const IndexScan *node)
 {
 	WRITE_NODE_TYPE("INDEXSCAN");
@@ -3030,9 +3022,6 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_SampleScan:
 				_outSampleScan(str, obj);
-				break;
-			case T_TuplestoreScan:
-				_outTuplestoreScan(str, obj);
 				break;
 			case T_IndexScan:
 				_outIndexScan(str, obj);

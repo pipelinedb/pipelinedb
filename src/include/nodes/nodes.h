@@ -456,14 +456,9 @@ typedef enum NodeTag
 	/*
 	 * TAGS FOR PIPELINEDB
 	 */
-	T_TuplestoreScan = 5000,
 	T_PhysicalGroupLookup,
-
-	T_TuplestoreScanState,
 	T_PhysicalGroupLookupState,
-
 	T_PhysicalGroupLookupPath,
-
 	T_CreateContViewStmt,
 	T_CreateStreamStmt,
 	T_CreateContTransformStmt,

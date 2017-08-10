@@ -590,25 +590,6 @@ typedef struct CustomScan
 	const CustomScanMethods *methods;
 } CustomScan;
 
-
-/*
- * ----------------
- * 		TuplestoreScan
- *
- * 	TuplestoreScans simply scan a tuplestore as input. In the context of
- * 	continuous queries, this is useful for merging partial query results
- * 	received on the datanodes from a coordinator. In such cases, we want
- * 	to run the continuous query plan one final time on a tuplestore containing
- * 	the partial results as well as any existing tuples that the partial results
- * 	need to be merged with.
- */
-typedef struct TuplestoreScan
-{
-	Scan		scan;
-	Tuplestorestate *store; /* tuplestore to scan from */
-	TupleDesc	desc; /* tuple descriptor of store to scan */
-} TuplestoreScan;
-
 /*
  * ==========
  * Join nodes

@@ -111,7 +111,6 @@
 #include "executor/nodeSubplan.h"
 #include "executor/nodeSubqueryscan.h"
 #include "executor/nodeTidscan.h"
-#include "executor/nodeTuplestoreScan.h"
 #include "executor/nodeUnique.h"
 #include "executor/nodeValuesscan.h"
 #include "executor/nodeWindowAgg.h"
@@ -204,11 +203,6 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 		case T_SampleScan:
 			result = (PlanState *) ExecInitSampleScan((SampleScan *) node,
 													  estate, eflags);
-			break;
-
-		case T_TuplestoreScan:
-			result = (PlanState *) ExecInitTuplestoreScan((TuplestoreScan *) node,
-														 estate, eflags);
 			break;
 
 		case T_IndexScan:
@@ -432,10 +426,6 @@ ExecProcNode(PlanState *node)
 
 		case T_SampleScanState:
 			result = ExecSampleScan((SampleScanState *) node);
-			break;
-
-		case T_TuplestoreScanState:
-			result = ExecTuplestoreScan((TuplestoreScanState *) node);
 			break;
 
 		case T_IndexScanState:
@@ -730,10 +720,6 @@ ExecEndNode(PlanState *node)
 
 		case T_CustomScanState:
 			ExecEndCustomScan((CustomScanState *) node);
-			break;
-
-		case T_TuplestoreScanState:
-			ExecEndTuplestoreScan((TuplestoreScanState *) node);
 			break;
 
 			/*

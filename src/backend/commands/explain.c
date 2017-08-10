@@ -938,9 +938,6 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		case T_SeqScan:
 			pname = sname = "Seq Scan";
 			break;
-		case T_TuplestoreScan:
-			pname = sname = "Tuplestore Scan";
-			break;
 		case T_SampleScan:
 			pname = sname = "Sample Scan";
 			break;
@@ -1217,23 +1214,6 @@ ExplainNode(PlanState *planstate, List *ancestors,
 					appendStringInfo(es->str, " %s", setopcmd);
 				else
 					ExplainPropertyText("Command", setopcmd, es);
-			}
-			break;
-		default:
-			break;
-	}
-
-	/* dynamic cost evaluation */
-	switch (nodeTag(plan))
-	{
-		case T_TuplestoreScan:
-			{
-				TuplestoreScan *scan = (TuplestoreScan *) plan;
-				int i;
-
-				plan->plan_width = 0;
-				for (i = 0; i < scan->desc->natts; i++)
-					plan->plan_width += scan->desc->attrs[i]->attlen;
 			}
 			break;
 		default:
