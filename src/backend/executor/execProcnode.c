@@ -87,7 +87,6 @@
 #include "executor/nodeBitmapOr.h"
 #include "executor/nodeCtescan.h"
 #include "executor/nodeCustom.h"
-#include "executor/nodePhysicalGroupLookup.h"
 #include "executor/nodeForeignscan.h"
 #include "executor/nodeFunctionscan.h"
 #include "executor/nodeGroup.h"
@@ -184,11 +183,6 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 
 		case T_BitmapOr:
 			result = (PlanState *) ExecInitBitmapOr((BitmapOr *) node,
-													estate, eflags);
-			break;
-
-		case T_PhysicalGroupLookup:
-			result = (PlanState *) ExecInitPhysicalGroupLookup((PhysicalGroupLookup *) node,
 													estate, eflags);
 			break;
 
@@ -407,10 +401,6 @@ ExecProcNode(PlanState *node)
 
 		case T_RecursiveUnionState:
 			result = ExecRecursiveUnion((RecursiveUnionState *) node);
-			break;
-
-		case T_PhysicalGroupLookupState:
-			result = ExecPhysicalGroupLookup((PhysicalGroupLookupState *) node);
 			break;
 
 			/* BitmapAndState does not yield tuples */
@@ -657,10 +647,6 @@ ExecEndNode(PlanState *node)
 
 		case T_BitmapOrState:
 			ExecEndBitmapOr((BitmapOrState *) node);
-			break;
-
-		case T_PhysicalGroupLookupState:
-			ExecEndPhysicalGroupLookup((PhysicalGroupLookupState *) node);
 			break;
 
 			/*

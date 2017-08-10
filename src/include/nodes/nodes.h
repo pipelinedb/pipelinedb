@@ -456,9 +456,6 @@ typedef enum NodeTag
 	/*
 	 * TAGS FOR PIPELINEDB
 	 */
-	T_PhysicalGroupLookup,
-	T_PhysicalGroupLookupState,
-	T_PhysicalGroupLookupPath,
 	T_CreateContViewStmt,
 	T_CreateStreamStmt,
 	T_CreateContTransformStmt,

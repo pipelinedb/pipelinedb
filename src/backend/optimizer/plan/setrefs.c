@@ -596,8 +596,6 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 		case T_HashJoin:
 			set_join_references(root, (Join *) plan, rtoffset);
 			break;
-		case T_PhysicalGroupLookup:
-			break;
 
 		case T_Hash:
 		case T_Material:

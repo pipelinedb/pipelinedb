@@ -1120,8 +1120,6 @@ typedef struct HashPath
 	int			num_batches;	/* number of batches expected */
 } HashPath;
 
-typedef NestPath PhysicalGroupLookupPath;
-
 /*
  * Restriction clause info.
  *
