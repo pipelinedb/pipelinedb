@@ -15,9 +15,47 @@
 #include "pipeline/tuplestore_scan.h"
 #include "utils/rel.h"
 
+static Plan *create_tuplestore_scan_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
+		List *tlist, List *clauses, List *custom_plans);
+static void begin_tuplestore_scan(CustomScanState *cscan, EState *estate, int eflags);
+static TupleTableSlot *tuplestore_next(struct CustomScanState *node);
+static void end_tuplestore_scan(struct CustomScanState *node);
+static void rescan_tuplestore_scan(struct CustomScanState *node);
+static Plan * create_tuplestore_scan_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
+		List *tlist, List *clauses, List *custom_plans);
+static Node *create_tuplestore_scan_state(struct CustomScan *cscan);
+
+typedef struct CustomTuplestoreScanState
+{
+	CustomScanState cstate;
+	Tuplestorestate *store;
+} CustomTuplestoreScanState;
+
+/*
+ * Methods for creating a TuplestoreScan plan, attached to a CustomPath
+ */
 static CustomPathMethods path_methods = {
 	.CustomName = "TuplestoreScan",
-	.PlanCustomPath = CreateTuplestoreScanPlan
+	.PlanCustomPath = create_tuplestore_scan_plan
+};
+
+/*
+ * Methods for executing a TuplestoreScan plan, attached to a CustomTuplestoreScanState
+ */
+static CustomExecMethods exec_methods = {
+	.CustomName = "TuplestoreScan",
+	.BeginCustomScan = begin_tuplestore_scan,
+	.ExecCustomScan = tuplestore_next,
+	.EndCustomScan = end_tuplestore_scan,
+	.ReScanCustomScan = rescan_tuplestore_scan
+};
+
+/*
+ * Methods for creating a TuplestoreScan's executor state, attached to a TuplestoreScan plan node
+ */
+static CustomScanMethods planner_methods = {
+	.CustomName = "TuplestoreScan",
+	.CreateCustomScanState = create_tuplestore_scan_state,
 };
 
 /*
@@ -38,99 +76,10 @@ CreateTuplestoreScanPath(RelOptInfo *parent)
 }
 
 /*
- * BeginTuplestoreScan
+ * create_tuplestore_scan_plan
  */
-static void
-BeginTuplestoreScan(CustomScanState *cscan, EState *estate, int eflags)
-{
-
-}
-
-typedef struct CustomTuplestoreScanState
-{
-	CustomScanState cstate;
-	Tuplestorestate *store;
-} CustomTuplestoreScanState;
-
-#include "utils/memutils.h"
-static TupleTableSlot *
-TuplestoreNext(struct CustomScanState *node)
-{
-	CustomTuplestoreScanState *state = (CustomTuplestoreScanState *) node;
-	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
-
-//	elog(LOG, "context=%s", CurrentMemoryContext->name);
-	if (!tuplestore_gettupleslot(state->store, true, false, slot))
-		return NULL;
-
-//	print_slot(slot);
-
-	return slot;
-}
-
-static void
-EndTuplestoreScan(struct CustomScanState *node)
-{
-
-}
-
-static void
-ReScanTuplestoreScan(struct CustomScanState *node)
-{
-
-}
-
-static void
-MarkPosTuplestoreScan(struct CustomScanState *node)
-{
-
-}
-
-static void
-RestrPosTuplestoreScan(struct CustomScanState *node)
-{
-
-}
-
-static CustomExecMethods exec_methods = {
-	.CustomName = "TuplestoreScan",
-	.BeginCustomScan = BeginTuplestoreScan,
-	.ExecCustomScan = TuplestoreNext,
-	.EndCustomScan = EndTuplestoreScan,
-	.ReScanCustomScan = ReScanTuplestoreScan,
-	.MarkPosCustomScan = MarkPosTuplestoreScan,
-	.RestrPosCustomScan = RestrPosTuplestoreScan
-};
-
-/*
- * CreateTuplestoreScanState
- */
-Node *
-CreateTuplestoreScanState(struct CustomScan *cscan)
-{
-	CustomTuplestoreScanState *scanstate = (CustomTuplestoreScanState *) palloc0(sizeof(CustomTuplestoreScanState));
-
-	scanstate->cstate.ss.ps.type = T_CustomScanState;
-	scanstate->cstate.methods = &exec_methods;
-
-	// this thing still needs to be copyable, this is ghetto
-	// but it's kind of a weird usage anyways because we want to scan a specific tuplestore in local memory
-
-	scanstate->store = linitial(cscan->custom_private);
-
-	return (Node *) scanstate;
-}
-
-static CustomScanMethods planner_methods = {
-	.CustomName = "TuplestoreScan",
-	.CreateCustomScanState = CreateTuplestoreScanState,
-};
-
-/*
- * CreateTuplestoreScanPlan
- */
-Plan *
-CreateTuplestoreScanPlan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
+static Plan *
+create_tuplestore_scan_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
 		List *tlist, List *clauses, List *custom_plans)
 {
 	CustomScan *scan = makeNode(CustomScan);
@@ -143,8 +92,6 @@ CreateTuplestoreScanPlan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *
 	scan->methods = &planner_methods;
 	scan->scan.scanrelid = 1;
 	tlist = NIL;
-
-	// should be a function to create a TL from a TupleDesc...
 
 	for (attrno = 1; attrno <= desc->natts; attrno++)
 	{
@@ -162,4 +109,65 @@ CreateTuplestoreScanPlan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *
 	plan->targetlist = tlist;
 
 	return (Plan *) scan;
+}
+
+/*
+ * create_tuplestore_scan_state
+ */
+static Node *
+create_tuplestore_scan_state(struct CustomScan *cscan)
+{
+	CustomTuplestoreScanState *scanstate = (CustomTuplestoreScanState *) palloc0(sizeof(CustomTuplestoreScanState));
+	Value *ptr;
+
+	scanstate->cstate.ss.ps.type = T_CustomScanState;
+	scanstate->cstate.methods = &exec_methods;
+
+	/* A local-memory pointer to the tuplestore is encoded as a copyable string :/ */
+	ptr = linitial(cscan->custom_private);
+	memcpy(&scanstate->store, ptr->val.str, sizeof(Tuplestorestate *));
+
+	return (Node *) scanstate;
+}
+
+/*
+ * begin_tuplestore_scan
+ */
+static void
+begin_tuplestore_scan(CustomScanState *cscan, EState *estate, int eflags)
+{
+	/* Called at the end of a CustomScan's initialization */
+}
+
+/*
+ * tuplestore_next
+ */
+static TupleTableSlot *
+tuplestore_next(struct CustomScanState *node)
+{
+	CustomTuplestoreScanState *state = (CustomTuplestoreScanState *) node;
+	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
+
+	if (!tuplestore_gettupleslot(state->store, true, false, slot))
+		return NULL;
+
+	return slot;
+}
+
+/*
+ * end_tuplestore_scan
+ */
+static void
+end_tuplestore_scan(struct CustomScanState *node)
+{
+
+}
+
+/*
+ * rescan_tuplestore_scan
+ */
+static void
+rescan_tuplestore_scan(struct CustomScanState *node)
+{
+
 }

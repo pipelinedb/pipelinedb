@@ -31,7 +31,6 @@ extern ProcessUtility_hook_type SaveUtilityHook;
 
 extern PlannedStmt *GetContPlan(ContQuery *view, ContQueryProcType type);
 extern CustomScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
-//extern TuplestoreScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
 extern FuncExpr *GetGroupHashIndexExpr(ResultRelInfo *ri);
 extern PlannedStmt *GetCombinerLookupPlan(ContQuery *view);
 extern PlannedStmt *GetContinuousViewOverlayPlan(ContQuery *view);

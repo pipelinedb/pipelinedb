@@ -58,15 +58,9 @@ get_combiner_join_rel(PlannerInfo *root, int levels_needed, List *initial_rels)
 	rel = standard_join_search(root, levels_needed, initial_rels);
 	rel->pathlist = NIL;
 
-	// how do we get our custom scan plan creation to be invoked from here?
-	// nice, we just need to create a CustomPath which has our methods attached to it!
+	path = (Path *) CreateTuplestoreScanPath(rel);
 
-//	path =  create_tuplestore_scan_path(rel);
-
-	Path *tpath = (Path *) CreateTuplestoreScanPath(rel);
-
-	add_path(rel, tpath);
-//	add_path(rel, path);
+	add_path(rel, path);
 	set_cheapest(rel);
 
 	return rel;
@@ -211,8 +205,7 @@ CustomScan *
 SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
 {
 	CustomScan *scan;
-
-	// handle specifically a TuplestoreScan!
+	char *ptr;
 
 	if (IsA(plan->planTree, CustomScan))
 		scan = (CustomScan *) plan->planTree;
@@ -233,17 +226,16 @@ SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
 	else
 		elog(ERROR, "couldn't find TuplestoreScan node in combiner's plan: %d", nodeTag(plan->planTree));
 
-	// we need a cleaner way to do this
-	// how are pointers normally passed as nodes?
-	// it's kind of the point that they're not used as nodes :D
+	/*
+	 * The CustomScan needs access to the given Tuplestorestate, but the scan has to be
+	 * copyable so we encode a local-memory pointer to the tuplestore as a string. It's kind
+	 * of ugly, but these CustomScans are executed under highly predictable circumstances,
+	 * and in this process so technically it's safe.
+	 */
+	ptr = palloc0(sizeof(Tuplestorestate *));
+	memcpy(ptr, &tupstore, sizeof(Tuplestorestate *));
 
-	// argh, we could just copy sizeof(Tuplestorestate *) bytes as a string :(
-	// unfortunately that's probably the safest approach :(
-	// is it worth rethinking this entirely? are we using the wrong abstraction?
-	// it doesn't seem like it, this is a pretty straightforward scan of a tuplestore...
-
-	// another approach may be to hijack an existing node type that can encapsulate a pointer value?
-	scan->custom_private = list_make1(tupstore);
+	scan->custom_private = list_make1(makeString(ptr));
 
 	return scan;
 }

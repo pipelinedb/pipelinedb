@@ -16,8 +16,5 @@
 #include "optimizer/planner.h"
 
 extern Node *CreateTuplestoreScanPath(RelOptInfo *parent);
-extern Node *CreateTuplestoreScanState(struct CustomScan *cscan);
-extern Plan *CreateTuplestoreScanPlan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
-		List *tlist, List *clauses, List *custom_plans);
 
 #endif

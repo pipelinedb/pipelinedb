@@ -162,14 +162,9 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	plan->isContinuous = false;
 
 	scan = SetCombinerPlanTuplestorestate(plan, state->batch);
-//	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
-
-	// clean up how we pass this stuff around!
-
-	TupleDesc desc = CreateTupleDescCopy(RelationGetDescr(rel));
 
 	state->combine_plan = plan;
-	state->desc = desc;
+	state->desc = CreateTupleDescCopy(RelationGetDescr(rel));
 
 	heap_close(rel, AccessShareLock);
 }
@@ -1165,7 +1160,6 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 
 	state->sw->overlay_plan->isContinuous = false;
 	scan = SetCombinerPlanTuplestorestate(state->sw->overlay_plan, state->sw->overlay_input);
-//	scan->desc = state->desc;
 
 	state->sw->overlay_dest = CreateDestReceiver(DestTuplestore);
 	SetTuplestoreDestReceiverParams(state->sw->overlay_dest, state->sw->overlay_output, state->sw->context, true);
