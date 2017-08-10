@@ -237,19 +237,19 @@ get_values(ContQueryCombinerState *state)
 static void
 set_values(PlannedStmt *plan, List *values)
 {
-	PhysicalGroupLookup *lookup;
+	CustomScan *lookup;
 	NestLoop *nl;
 	ValuesScan *scan;
 
-	if (!IsA(plan->planTree, PhysicalGroupLookup))
+	if (!IsA(plan->planTree, CustomScan))
 		elog(ERROR, "unexpected group retrieval plan: %d", nodeTag(plan->planTree));
 
-	lookup = (PhysicalGroupLookup *) plan->planTree;
+	lookup = (CustomScan *) plan->planTree;
 
-	if (!IsA(lookup->plan.lefttree, NestLoop))
-		elog(ERROR, "unexpected join type found in group retrieval plan: %d", nodeTag(lookup->plan.lefttree));
+	if (!IsA(lookup->scan.plan.lefttree, NestLoop))
+		elog(ERROR, "unexpected join type found in group retrieval plan: %d", nodeTag(lookup->scan.plan.lefttree));
 
-	nl = (NestLoop *) lookup->plan.lefttree;
+	nl = (NestLoop *) lookup->scan.plan.lefttree;
 
 	if (!IsA(nl->join.plan.lefttree, ValuesScan))
 		elog(ERROR, "could not find values scan in group retrieval plan");

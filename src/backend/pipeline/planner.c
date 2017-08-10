@@ -37,6 +37,7 @@
 #include "parser/parse_relation.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/planner.h"
+#include "pipeline/physical_group_lookup.h"
 #include "pipeline/tuplestore_scan.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
@@ -265,6 +266,7 @@ try_physical_group_lookup_path(PlannerInfo *root,
 				  List *pathkeys,
 					JoinPathExtraData *extra)
 {
+	NestPath *nlpath;
 	Path *path;
 
 	try_nestloop_path(root, joinrel, outer_path, inner_path,
@@ -273,9 +275,12 @@ try_physical_group_lookup_path(PlannerInfo *root,
 	if (list_length(joinrel->pathlist) != 1)
 		elog(ERROR, "could not create physical group lookup path");
 
-	path = (Path *) linitial(joinrel->pathlist);
-	path->type = T_PhysicalGroupLookupPath;
-	path->pathtype = T_PhysicalGroupLookup;
+	if (!IsA(linitial(joinrel->pathlist), NestPath))
+		return;
+
+	nlpath = (NestPath *) linitial(joinrel->pathlist);
+	path = (Path *) CreatePhysicalGroupLookupPath(joinrel, nlpath);
+	joinrel->pathlist = list_make1(path);
 }
 
 /*
@@ -358,6 +363,7 @@ GetGroupsLookupPlan(Query *query)
 		PushActiveSnapshot(GetTransactionSnapshot());
 		plan = pg_plan_query(query, 0, NULL);
 		PopActiveSnapshot();
+		set_join_pathlist_hook = save_join_hook;
 	}
 	PG_CATCH();
 	{
@@ -365,8 +371,6 @@ GetGroupsLookupPlan(Query *query)
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
-
-	set_join_pathlist_hook = save_join_hook;
 
 	return plan;
 }
