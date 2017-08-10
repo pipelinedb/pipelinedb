@@ -147,7 +147,7 @@ typedef struct
 static void
 prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 {
-	TuplestoreScan *scan;
+	CustomScan *scan;
 
 	/*
 	 * Mark combine_plan as not continuous now because we'll be repeatedly
@@ -162,10 +162,14 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	plan->isContinuous = false;
 
 	scan = SetCombinerPlanTuplestorestate(plan, state->batch);
-	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
+//	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
+
+	// clean up how we pass this stuff around!
+
+	TupleDesc desc = CreateTupleDescCopy(RelationGetDescr(rel));
 
 	state->combine_plan = plan;
-	state->desc = scan->desc;
+	state->desc = desc;
 
 	heap_close(rel, AccessShareLock);
 }
@@ -1119,7 +1123,7 @@ static void
 init_sw_state(ContQueryCombinerState *state, Relation matrel)
 {
 	MemoryContext tmp_cxt;
-	TuplestoreScan *scan;
+	CustomScan *scan;
 	MemoryContext old;
 	Oid *group_ops = NULL;
 	AttrNumber *group_idx = NULL;
@@ -1161,7 +1165,7 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 
 	state->sw->overlay_plan->isContinuous = false;
 	scan = SetCombinerPlanTuplestorestate(state->sw->overlay_plan, state->sw->overlay_input);
-	scan->desc = state->desc;
+//	scan->desc = state->desc;
 
 	state->sw->overlay_dest = CreateDestReceiver(DestTuplestore);
 	SetTuplestoreDestReceiverParams(state->sw->overlay_dest, state->sw->overlay_output, state->sw->context, true);
@@ -1266,7 +1270,7 @@ combine(ContQueryCombinerState *state, bool lookup)
 					  NULL);
 
 	dest = CreateDestReceiver(DestTuplestore);
-	SetTuplestoreDestReceiverParams(dest, state->combined, state->combine_cxt, true);
+	SetTuplestoreDestReceiverParams(dest, state->combined, state->combine_cxt, false);
 
 	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, NULL);
 

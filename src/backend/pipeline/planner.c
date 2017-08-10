@@ -34,6 +34,7 @@
 #include "parser/parse_relation.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/planner.h"
+#include "pipeline/tuplestore_scan.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
@@ -57,9 +58,15 @@ get_combiner_join_rel(PlannerInfo *root, int levels_needed, List *initial_rels)
 	rel = standard_join_search(root, levels_needed, initial_rels);
 	rel->pathlist = NIL;
 
-	path =  create_tuplestore_scan_path(rel);
+	// how do we get our custom scan plan creation to be invoked from here?
+	// nice, we just need to create a CustomPath which has our methods attached to it!
 
-	add_path(rel, path);
+//	path =  create_tuplestore_scan_path(rel);
+
+	Path *tpath = (Path *) CreateTuplestoreScanPath(rel);
+
+	add_path(rel, tpath);
+//	add_path(rel, path);
 	set_cheapest(rel);
 
 	return rel;
@@ -200,31 +207,43 @@ GetContPlan(ContQuery *view, ContQueryProcType type)
 /*
  * SetCombinerPlanTuplestorestate
  */
-TuplestoreScan *
+CustomScan *
 SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
 {
-	TuplestoreScan *scan;
+	CustomScan *scan;
 
-	if (IsA(plan->planTree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree;
+	// handle specifically a TuplestoreScan!
+
+	if (IsA(plan->planTree, CustomScan))
+		scan = (CustomScan *) plan->planTree;
 	else if ((IsA(plan->planTree, Agg)) &&
-			IsA(plan->planTree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree;
+			IsA(plan->planTree->lefttree, CustomScan))
+		scan = (CustomScan *) plan->planTree->lefttree;
 	else if (IsA(plan->planTree, Agg) &&
 			IsA(plan->planTree->lefttree, Sort) &&
-			IsA(plan->planTree->lefttree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree->lefttree;
+			IsA(plan->planTree->lefttree->lefttree, CustomScan))
+		scan = (CustomScan *) plan->planTree->lefttree->lefttree;
 	else if (IsA(plan->planTree, Group) &&
 			IsA(plan->planTree->lefttree, Sort) &&
-			IsA(plan->planTree->lefttree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree->lefttree;
+			IsA(plan->planTree->lefttree->lefttree, CustomScan))
+		scan = (CustomScan *) plan->planTree->lefttree->lefttree;
 	else if (IsA(plan->planTree, Group) &&
-			IsA(plan->planTree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree->lefttree;
+			IsA(plan->planTree->lefttree, CustomScan))
+		scan = (CustomScan *) plan->planTree->lefttree->lefttree;
 	else
 		elog(ERROR, "couldn't find TuplestoreScan node in combiner's plan: %d", nodeTag(plan->planTree));
 
-	scan->store = tupstore;
+	// we need a cleaner way to do this
+	// how are pointers normally passed as nodes?
+	// it's kind of the point that they're not used as nodes :D
+
+	// argh, we could just copy sizeof(Tuplestorestate *) bytes as a string :(
+	// unfortunately that's probably the safest approach :(
+	// is it worth rethinking this entirely? are we using the wrong abstraction?
+	// it doesn't seem like it, this is a pretty straightforward scan of a tuplestore...
+
+	// another approach may be to hijack an existing node type that can encapsulate a pointer value?
+	scan->custom_private = list_make1(tupstore);
 
 	return scan;
 }
