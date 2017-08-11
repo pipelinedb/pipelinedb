@@ -140,9 +140,6 @@ CreateDestReceiver(CommandDest dest)
 
 		case DestCombiner:
 			return CreateCombinerDestReceiver();
-
-		case DestTransform:
-			return CreateTransformDestReceiver();
 	}
 
 	/* should never get here */
@@ -178,7 +175,6 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestTransientRel:
 		case DestTupleTable:
 		case DestCombiner:
-		case DestTransform:
 			break;
 	}
 }
@@ -223,7 +219,6 @@ NullCommand(CommandDest dest)
 		case DestTupleTable:
 		case DestTransientRel:
 		case DestCombiner:
-		case DestTransform:
 			break;
 	}
 }
@@ -270,7 +265,6 @@ ReadyForQuery(CommandDest dest)
 		case DestTransientRel:
 		case DestTupleTable:
 		case DestCombiner:
-		case DestTransform:
 			break;
 	}
 }

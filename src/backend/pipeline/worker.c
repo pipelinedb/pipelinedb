@@ -18,6 +18,7 @@
 #include "catalog/pipeline_query_fn.h"
 #include "executor/execdesc.h"
 #include "executor/executor.h"
+#include "executor/tstoreReceiver.h"
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "pipeline/combiner_receiver.h"
@@ -40,9 +41,12 @@ static ResourceOwner WorkerResOwner = NULL;
 typedef struct {
 	ContQueryState base;
 	DestReceiver *dest;
+	TransformReceiver *receiver;
 	QueryDesc *query_desc;
 	AttrNumber *groupatts;
 	FuncExpr *hashfunc;
+	Tuplestorestate *plan_output;
+	TupleTableSlot *result_slot;
 } ContQueryWorkerState;
 
 static void
@@ -94,8 +98,10 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 	}
 	else
 	{
-		state->dest = CreateDestReceiver(DestTransform);
-		SetTransformDestReceiverParams(state->dest, exec, base->query);
+		state->dest = CreateDestReceiver(DestTuplestore);
+		state->plan_output = tuplestore_begin_heap(false, false, continuous_query_batch_mem);
+		state->receiver = CreateTransformReceiver(exec, base->query);
+		SetTuplestoreDestReceiverParams(state->dest, state->plan_output, CurrentMemoryContext, false);
 	}
 
 	pstmt = GetContPlan(base->query, Worker);
@@ -172,8 +178,8 @@ flush_tuples(ContQueryWorkerState *state)
 		CombinerDestReceiverFlush(state->dest);
 	else
 	{
-		Assert(state->dest->mydest == DestTransform);
-		TransformDestReceiverFlush(state->dest);
+		Assert(state->dest->mydest == DestTuplestore);
+		TransformDestReceiverFlush(state->receiver, state->result_slot, state->plan_output);
 	}
 }
 
@@ -181,8 +187,9 @@ flush_tuples(ContQueryWorkerState *state)
  * init_plan
  */
 static void
-init_plan(QueryDesc *query_desc)
+init_plan(ContQueryWorkerState *state)
 {
+	QueryDesc *query_desc = state->query_desc;
 	Plan *plan = query_desc->plannedstmt->planTree;
 	ListCell *lc;
 
@@ -196,6 +203,19 @@ init_plan(QueryDesc *query_desc)
 	}
 
 	query_desc->planstate = ExecInitNode(plan, query_desc->estate, EXEC_NO_STREAM_LOCKING);
+	query_desc->tupDesc = ExecGetResultType(query_desc->planstate);
+
+	state->result_slot = MakeSingleTupleTableSlot(query_desc->tupDesc);
+
+	if (state->base.query->type == CONT_VIEW)
+	{
+
+	}
+	else
+	{
+		tuplestore_clear(state->plan_output);
+	}
+
 }
 
 /*
@@ -250,7 +270,7 @@ cleanup_worker_state(ContQueryWorkerState *state)
 			InstrStopNode(query_desc->totaltime, estate->es_processed);
 
 		if (query_desc->planstate == NULL)
-			init_plan(query_desc);
+			init_plan(state);
 
 		/* Clean up. */
 		ExecutorFinish(query_desc);
@@ -341,7 +361,7 @@ ContinuousQueryWorkerMain(void)
 					int usecs;
 
 					/* initialize the plan for execution within this xact */
-					init_plan(state->query_desc);
+					init_plan(state);
 					set_cont_executor(state->query_desc->planstate, cont_exec);
 
 					ExecutePlan((EState *) estate, state->query_desc->planstate, state->query_desc->operation,

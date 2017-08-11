@@ -14,11 +14,24 @@
 #include "tcop/dest.h"
 #include "pipeline/executor.h"
 
+typedef struct TransformReceiver
+{
+	ContQuery *cont_query;
+	ContExecutor *cont_exec;
+	Relation tg_rel;
+	bool os_has_readers;
+	FunctionCallInfo trig_fcinfo;
+
+	/* only used by the optimized code path for pipeline_stream_insert */
+	HeapTuple *tups;
+	int nmaxtups;
+	int ntups;
+} TransformReceiver;
+
 typedef void (*TransformFlushFunc) (void);
 extern TransformFlushFunc TransformFlushHook;
 
-extern DestReceiver *CreateTransformDestReceiver(void);
-extern void SetTransformDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery *query);
-extern void TransformDestReceiverFlush(DestReceiver *self);
+extern TransformReceiver *CreateTransformReceiver(ContExecutor *exec, ContQuery *query);
+extern void TransformDestReceiverFlush(TransformReceiver *self, TupleTableSlot *slot, Tuplestorestate *store);
 
 #endif

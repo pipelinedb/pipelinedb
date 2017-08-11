@@ -35,38 +35,9 @@
 
 TransformFlushFunc TransformFlushHook = NULL;
 
-typedef struct TransformState
-{
-	DestReceiver pub;
-	ContQuery *cont_query;
-	ContExecutor *cont_exec;
-	Relation tg_rel;
-	bool os_has_readers;
-	FunctionCallInfo trig_fcinfo;
-
-	/* only used by the optimized code path for pipeline_stream_insert */
-	HeapTuple *tups;
-	int nmaxtups;
-	int ntups;
-} TransformState;
-
 static void
-transform_shutdown(DestReceiver *self)
+transform_receive(TransformReceiver *t, TupleTableSlot *slot)
 {
-
-}
-
-static void
-transform_startup(DestReceiver *self, int operation,
-		TupleDesc typeinfo)
-{
-
-}
-
-static void
-transform_receive(TupleTableSlot *slot, DestReceiver *self)
-{
-	TransformState *t = (TransformState *) self;
 	MemoryContext old = MemoryContextSwitchTo(ContQueryBatchContext);
 
 	if (t->tg_rel == NULL)
@@ -124,36 +95,10 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 	MemoryContextSwitchTo(old);
 }
 
-static void
-transform_destroy(DestReceiver *self)
+TransformReceiver *
+CreateTransformReceiver(ContExecutor *exec, ContQuery *query)
 {
-	TransformState *t = (TransformState *) self;
-	pfree(t);
-}
-
-DestReceiver *
-CreateTransformDestReceiver(void)
-{
-	TransformState *self = (TransformState *) palloc0(sizeof(TransformState));
-
-	self->pub.receiveSlot = transform_receive;
-	self->pub.rStartup = transform_startup;
-	self->pub.rShutdown = transform_shutdown;
-	self->pub.rDestroy = transform_destroy;
-	self->pub.mydest = DestTransform;
-
-	return (DestReceiver *) self;
-}
-
-/*
- * SetTransformDestReceiverParams
- *
- * Set parameters for a TransformDestReceiver
- */
-void
-SetTransformDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery *query)
-{
-	TransformState *t = (TransformState *) self;
+	TransformReceiver *t = (TransformReceiver *) palloc0(sizeof(TransformReceiver));
 
 	t->cont_exec = exec;
 
@@ -191,10 +136,12 @@ SetTransformDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery
 
 		t->trig_fcinfo = fcinfo;
 	}
+
+	return t;
 }
 
 static void
-insert_into_rel(TransformState *t, Relation rel)
+insert_into_rel(TransformReceiver *t, Relation rel)
 {
 	ResultRelInfo *rinfo = CQOSRelOpen(rel);
 	StreamInsertState *sis;
@@ -226,7 +173,7 @@ insert_into_rel(TransformState *t, Relation rel)
 }
 
 static void
-pipeline_stream_insert_batch(TransformState *t)
+pipeline_stream_insert_batch(TransformReceiver *t)
 {
 	int i;
 
@@ -272,11 +219,15 @@ pipeline_stream_insert_batch(TransformState *t)
 }
 
 void
-TransformDestReceiverFlush(DestReceiver *self)
+TransformDestReceiverFlush(TransformReceiver *t, TupleTableSlot *slot, Tuplestorestate *store)
 {
-	TransformState *t = (TransformState *) self;
 	int save_batch_size = continuous_query_batch_size;
 	int save_batch_mem = continuous_query_batch_mem;
+
+	foreach_tuple(slot, store)
+	{
+		transform_receive(t, slot);
+	}
 
 	if (TransformFlushHook)
 		TransformFlushHook();
