@@ -37,7 +37,6 @@
 #include "commands/matview.h"
 #include "executor/functions.h"
 #include "executor/tstoreReceiver.h"
-#include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "pipeline/combiner_receiver.h"
@@ -134,9 +133,6 @@ CreateDestReceiver(CommandDest dest)
 
 		case DestTransientRel:
 			return CreateTransientRelDestReceiver(InvalidOid);
-
-		case DestTupleTable:
-			return CreateTupleTableDestReceiver();
 	}
 
 	/* should never get here */
@@ -170,7 +166,6 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestCopyOut:
 		case DestSQLFunction:
 		case DestTransientRel:
-		case DestTupleTable:
 			break;
 	}
 }
@@ -212,7 +207,6 @@ NullCommand(CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
-		case DestTupleTable:
 		case DestTransientRel:
 			break;
 	}
@@ -258,7 +252,6 @@ ReadyForQuery(CommandDest dest)
 		case DestCopyOut:
 		case DestSQLFunction:
 		case DestTransientRel:
-		case DestTupleTable:
 			break;
 	}
 }

@@ -71,13 +71,6 @@ static CustomExecMethods seqscan_exec_methods = {
 };
 
 static TupleHashTable lookup_result = NULL;
-typedef struct HeapTupleEntryData *HeapTupleEntry;
-typedef struct HeapTupleEntryData
-{
-	TupleHashEntryData shared;	/* common header for hash table entries */
-	HeapTuple tuple;	/* physical tuple belonging to this entry */
-	char flags;
-}	HeapTupleEntryData;
 
 /*
  * create_lookup_plan

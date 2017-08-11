@@ -22,7 +22,6 @@
 #include "executor/execdesc.h"
 #include "executor/executor.h"
 #include "executor/tstoreReceiver.h"
-#include "executor/tupletableReceiver.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "optimizer/paths.h"
