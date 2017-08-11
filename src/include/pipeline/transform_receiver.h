@@ -16,6 +16,7 @@
 
 typedef struct TransformReceiver
 {
+	BatchReceiver base;
 	ContQuery *cont_query;
 	ContExecutor *cont_exec;
 	Relation tg_rel;
@@ -31,7 +32,6 @@ typedef struct TransformReceiver
 typedef void (*TransformFlushFunc) (void);
 extern TransformFlushFunc TransformFlushHook;
 
-extern TransformReceiver *CreateTransformReceiver(ContExecutor *exec, ContQuery *query);
-extern void TransformDestReceiverFlush(TransformReceiver *self, TupleTableSlot *slot, Tuplestorestate *store);
+extern BatchReceiver *CreateTransformReceiver(ContExecutor *exec, ContQuery *query, Tuplestorestate *buffer);
 
 #endif

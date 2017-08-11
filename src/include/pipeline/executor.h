@@ -35,6 +35,13 @@ typedef struct ContQueryState
 	PgStat_StatCQEntryLocal stats;
 } ContQueryState;
 
+
+typedef struct BatchReceiver
+{
+	Tuplestorestate *buffer;
+	void (*flush) (struct BatchReceiver *self, TupleTableSlot *slot);
+} BatchReceiver;
+
 typedef struct ContExecutor ContExecutor;
 typedef ContQueryState *(*ContQueryStateInit) (ContExecutor *exec, ContQueryState *state);
 

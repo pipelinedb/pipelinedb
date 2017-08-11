@@ -95,51 +95,6 @@ transform_receive(TransformReceiver *t, TupleTableSlot *slot)
 	MemoryContextSwitchTo(old);
 }
 
-TransformReceiver *
-CreateTransformReceiver(ContExecutor *exec, ContQuery *query)
-{
-	TransformReceiver *t = (TransformReceiver *) palloc0(sizeof(TransformReceiver));
-
-	t->cont_exec = exec;
-
-	Assert(query->type == CONT_TRANSFORM);
-	t->cont_query = query;
-
-	if (OidIsValid(query->tgfn) && query->tgfn != PIPELINE_STREAM_INSERT_OID)
-	{
-		FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
-		FmgrInfo *finfo = palloc0(sizeof(FmgrInfo));
-		TriggerData *cxt = palloc0(sizeof(TriggerData));
-		Trigger *trig = palloc0(sizeof(Trigger));
-
-		finfo->fn_mcxt = ContQueryBatchContext;
-		fmgr_info(query->tgfn, finfo);
-
-		/* Create mock TriggerData and Trigger */
-		trig->tgname = query->name->relname;
-		trig->tgenabled = TRIGGER_FIRES_ALWAYS;
-		trig->tgfoid = query->tgfn;
-		trig->tgnargs = query->tgnargs;
-		trig->tgargs = query->tgargs;
-		TRIGGER_SETT_ROW(trig->tgtype);
-		TRIGGER_SETT_AFTER(trig->tgtype);
-		TRIGGER_SETT_INSERT(trig->tgtype);
-
-		cxt->type = T_TriggerData;
-		cxt->tg_event = TRIGGER_EVENT_ROW;
-		cxt->tg_newtuplebuf = InvalidBuffer;
-		cxt->tg_trigtuplebuf = InvalidBuffer;
-		cxt->tg_trigger = trig;
-
-		fcinfo->flinfo = finfo;
-		fcinfo->context = (fmNodePtr) cxt;
-
-		t->trig_fcinfo = fcinfo;
-	}
-
-	return t;
-}
-
 static void
 insert_into_rel(TransformReceiver *t, Relation rel)
 {
@@ -218,13 +173,14 @@ pipeline_stream_insert_batch(TransformReceiver *t)
 	}
 }
 
-void
-TransformDestReceiverFlush(TransformReceiver *t, TupleTableSlot *slot, Tuplestorestate *store)
+static void
+receiver_flush(struct BatchReceiver *receiver, TupleTableSlot *slot)
 {
+	TransformReceiver *t = (TransformReceiver *) receiver;
 	int save_batch_size = continuous_query_batch_size;
 	int save_batch_mem = continuous_query_batch_mem;
 
-	foreach_tuple(slot, store)
+	foreach_tuple(slot, t->base.buffer)
 	{
 		transform_receive(t, slot);
 	}
@@ -252,5 +208,52 @@ TransformDestReceiverFlush(TransformReceiver *t, TupleTableSlot *slot, Tuplestor
 
 	continuous_query_batch_size = save_batch_size;
 	continuous_query_batch_mem = save_batch_mem;
+}
 
+BatchReceiver *
+CreateTransformReceiver(ContExecutor *exec, ContQuery *query, Tuplestorestate *buffer)
+{
+	TransformReceiver *t = (TransformReceiver *) palloc0(sizeof(TransformReceiver));
+
+	t->cont_exec = exec;
+
+	Assert(query->type == CONT_TRANSFORM);
+
+	t->cont_query = query;
+	t->base.buffer = buffer;
+	t->base.flush = &receiver_flush;
+
+	if (OidIsValid(query->tgfn) && query->tgfn != PIPELINE_STREAM_INSERT_OID)
+	{
+		FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
+		FmgrInfo *finfo = palloc0(sizeof(FmgrInfo));
+		TriggerData *cxt = palloc0(sizeof(TriggerData));
+		Trigger *trig = palloc0(sizeof(Trigger));
+
+		finfo->fn_mcxt = ContQueryBatchContext;
+		fmgr_info(query->tgfn, finfo);
+
+		/* Create mock TriggerData and Trigger */
+		trig->tgname = query->name->relname;
+		trig->tgenabled = TRIGGER_FIRES_ALWAYS;
+		trig->tgfoid = query->tgfn;
+		trig->tgnargs = query->tgnargs;
+		trig->tgargs = query->tgargs;
+		TRIGGER_SETT_ROW(trig->tgtype);
+		TRIGGER_SETT_AFTER(trig->tgtype);
+		TRIGGER_SETT_INSERT(trig->tgtype);
+
+		cxt->type = T_TriggerData;
+		cxt->tg_event = TRIGGER_EVENT_ROW;
+		cxt->tg_newtuplebuf = InvalidBuffer;
+		cxt->tg_trigtuplebuf = InvalidBuffer;
+		cxt->tg_trigger = trig;
+
+		fcinfo->flinfo = finfo;
+		fcinfo->context = (fmNodePtr) cxt;
+
+		t->trig_fcinfo = fcinfo;
+	}
+
+	return (BatchReceiver *) t;
 }

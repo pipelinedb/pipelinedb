@@ -41,7 +41,7 @@ static ResourceOwner WorkerResOwner = NULL;
 typedef struct {
 	ContQueryState base;
 	DestReceiver *dest;
-	TransformReceiver *receiver;
+	BatchReceiver *receiver;
 	QueryDesc *query_desc;
 	AttrNumber *groupatts;
 	FuncExpr *hashfunc;
@@ -100,7 +100,7 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 	{
 		state->dest = CreateDestReceiver(DestTuplestore);
 		state->plan_output = tuplestore_begin_heap(false, false, continuous_query_batch_mem);
-		state->receiver = CreateTransformReceiver(exec, base->query);
+		state->receiver = CreateTransformReceiver(exec, base->query, state->plan_output);
 		SetTuplestoreDestReceiverParams(state->dest, state->plan_output, CurrentMemoryContext, false);
 	}
 
@@ -179,7 +179,7 @@ flush_tuples(ContQueryWorkerState *state)
 	else
 	{
 		Assert(state->dest->mydest == DestTuplestore);
-		TransformDestReceiverFlush(state->receiver, state->result_slot, state->plan_output);
+		state->receiver->flush(state->receiver, state->result_slot);
 	}
 }
 
