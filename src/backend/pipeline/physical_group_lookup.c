@@ -179,7 +179,6 @@ output_physical_tuple(TupleTableSlot *slot)
 	HeapTupleEntry entry;
 	MemoryContext old;
 
-	Assert(IsContQueryCombinerProcess());
 	Assert(lookup_result);
 
 	old = MemoryContextSwitchTo(lookup_result->tablecxt);
