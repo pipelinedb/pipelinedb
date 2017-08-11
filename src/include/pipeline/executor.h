@@ -17,6 +17,7 @@
 #include "access/htup.h"
 #include "access/tupdesc.h"
 #include "catalog/pipeline_query_fn.h"
+#include "executor/tuptable.h"
 #include "nodes/bitmapset.h"
 #include "nodes/pg_list.h"
 #include "pgstat.h"
@@ -25,6 +26,7 @@
 #include "port/atomics.h"
 #include "storage/spin.h"
 #include "utils/timestamp.h"
+#include "utils/tuplestore.h"
 
 typedef struct ContQueryState
 {
@@ -34,6 +36,13 @@ typedef struct ContQueryState
 	MemoryContext tmp_cxt;
 	PgStat_StatCQEntryLocal stats;
 } ContQueryState;
+
+
+typedef struct BatchReceiver
+{
+	Tuplestorestate *buffer;
+	void (*flush) (struct BatchReceiver *self, TupleTableSlot *slot);
+} BatchReceiver;
 
 typedef struct ContExecutor ContExecutor;
 typedef ContQueryState *(*ContQueryStateInit) (ContExecutor *exec, ContQueryState *state);

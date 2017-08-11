@@ -14,6 +14,17 @@
 
 #include "optimizer/planner.h"
 
-extern Node *CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, NestPath *path);
+typedef struct HeapTupleEntryData
+{
+	TupleHashEntryData shared;	/* common header for hash table entries */
+	HeapTuple tuple;	/* physical tuple belonging to this entry */
+	char flags;
+}	HeapTupleEntryData;
+
+typedef struct HeapTupleEntryData *HeapTupleEntry;
+
+extern void SetPhysicalGroupLookupOutput(TupleHashTable output);
+extern Node *CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, Path *path);
+extern Plan *CreatePhysicalGroupLookupPlan(Plan *outer);
 
 #endif

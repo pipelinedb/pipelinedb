@@ -35,38 +35,9 @@
 
 TransformFlushFunc TransformFlushHook = NULL;
 
-typedef struct TransformState
-{
-	DestReceiver pub;
-	ContQuery *cont_query;
-	ContExecutor *cont_exec;
-	Relation tg_rel;
-	bool os_has_readers;
-	FunctionCallInfo trig_fcinfo;
-
-	/* only used by the optimized code path for pipeline_stream_insert */
-	HeapTuple *tups;
-	int nmaxtups;
-	int ntups;
-} TransformState;
-
 static void
-transform_shutdown(DestReceiver *self)
+transform_receive(TransformReceiver *t, TupleTableSlot *slot)
 {
-
-}
-
-static void
-transform_startup(DestReceiver *self, int operation,
-		TupleDesc typeinfo)
-{
-
-}
-
-static void
-transform_receive(TupleTableSlot *slot, DestReceiver *self)
-{
-	TransformState *t = (TransformState *) self;
 	MemoryContext old = MemoryContextSwitchTo(ContQueryBatchContext);
 
 	if (t->tg_rel == NULL)
@@ -125,76 +96,7 @@ transform_receive(TupleTableSlot *slot, DestReceiver *self)
 }
 
 static void
-transform_destroy(DestReceiver *self)
-{
-	TransformState *t = (TransformState *) self;
-	pfree(t);
-}
-
-DestReceiver *
-CreateTransformDestReceiver(void)
-{
-	TransformState *self = (TransformState *) palloc0(sizeof(TransformState));
-
-	self->pub.receiveSlot = transform_receive;
-	self->pub.rStartup = transform_startup;
-	self->pub.rShutdown = transform_shutdown;
-	self->pub.rDestroy = transform_destroy;
-	self->pub.mydest = DestTransform;
-
-	return (DestReceiver *) self;
-}
-
-/*
- * SetTransformDestReceiverParams
- *
- * Set parameters for a TransformDestReceiver
- */
-void
-SetTransformDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery *query)
-{
-	TransformState *t = (TransformState *) self;
-
-	t->cont_exec = exec;
-
-	Assert(query->type == CONT_TRANSFORM);
-	t->cont_query = query;
-
-	if (OidIsValid(query->tgfn) && query->tgfn != PIPELINE_STREAM_INSERT_OID)
-	{
-		FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
-		FmgrInfo *finfo = palloc0(sizeof(FmgrInfo));
-		TriggerData *cxt = palloc0(sizeof(TriggerData));
-		Trigger *trig = palloc0(sizeof(Trigger));
-
-		finfo->fn_mcxt = ContQueryBatchContext;
-		fmgr_info(query->tgfn, finfo);
-
-		/* Create mock TriggerData and Trigger */
-		trig->tgname = query->name->relname;
-		trig->tgenabled = TRIGGER_FIRES_ALWAYS;
-		trig->tgfoid = query->tgfn;
-		trig->tgnargs = query->tgnargs;
-		trig->tgargs = query->tgargs;
-		TRIGGER_SETT_ROW(trig->tgtype);
-		TRIGGER_SETT_AFTER(trig->tgtype);
-		TRIGGER_SETT_INSERT(trig->tgtype);
-
-		cxt->type = T_TriggerData;
-		cxt->tg_event = TRIGGER_EVENT_ROW;
-		cxt->tg_newtuplebuf = InvalidBuffer;
-		cxt->tg_trigtuplebuf = InvalidBuffer;
-		cxt->tg_trigger = trig;
-
-		fcinfo->flinfo = finfo;
-		fcinfo->context = (fmNodePtr) cxt;
-
-		t->trig_fcinfo = fcinfo;
-	}
-}
-
-static void
-insert_into_rel(TransformState *t, Relation rel)
+insert_into_rel(TransformReceiver *t, Relation rel)
 {
 	ResultRelInfo *rinfo = CQOSRelOpen(rel);
 	StreamInsertState *sis;
@@ -226,7 +128,7 @@ insert_into_rel(TransformState *t, Relation rel)
 }
 
 static void
-pipeline_stream_insert_batch(TransformState *t)
+pipeline_stream_insert_batch(TransformReceiver *t)
 {
 	int i;
 
@@ -271,12 +173,17 @@ pipeline_stream_insert_batch(TransformState *t)
 	}
 }
 
-void
-TransformDestReceiverFlush(DestReceiver *self)
+static void
+flush_to_transform(struct BatchReceiver *receiver, TupleTableSlot *slot)
 {
-	TransformState *t = (TransformState *) self;
+	TransformReceiver *t = (TransformReceiver *) receiver;
 	int save_batch_size = continuous_query_batch_size;
 	int save_batch_mem = continuous_query_batch_mem;
+
+	foreach_tuple(slot, t->base.buffer)
+	{
+		transform_receive(t, slot);
+	}
 
 	if (TransformFlushHook)
 		TransformFlushHook();
@@ -301,5 +208,52 @@ TransformDestReceiverFlush(DestReceiver *self)
 
 	continuous_query_batch_size = save_batch_size;
 	continuous_query_batch_mem = save_batch_mem;
+}
 
+BatchReceiver *
+CreateTransformReceiver(ContExecutor *exec, ContQuery *query, Tuplestorestate *buffer)
+{
+	TransformReceiver *t = (TransformReceiver *) palloc0(sizeof(TransformReceiver));
+
+	t->cont_exec = exec;
+
+	Assert(query->type == CONT_TRANSFORM);
+
+	t->cont_query = query;
+	t->base.buffer = buffer;
+	t->base.flush = &flush_to_transform;
+
+	if (OidIsValid(query->tgfn) && query->tgfn != PIPELINE_STREAM_INSERT_OID)
+	{
+		FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
+		FmgrInfo *finfo = palloc0(sizeof(FmgrInfo));
+		TriggerData *cxt = palloc0(sizeof(TriggerData));
+		Trigger *trig = palloc0(sizeof(Trigger));
+
+		finfo->fn_mcxt = ContQueryBatchContext;
+		fmgr_info(query->tgfn, finfo);
+
+		/* Create mock TriggerData and Trigger */
+		trig->tgname = query->name->relname;
+		trig->tgenabled = TRIGGER_FIRES_ALWAYS;
+		trig->tgfoid = query->tgfn;
+		trig->tgnargs = query->tgnargs;
+		trig->tgargs = query->tgargs;
+		TRIGGER_SETT_ROW(trig->tgtype);
+		TRIGGER_SETT_AFTER(trig->tgtype);
+		TRIGGER_SETT_INSERT(trig->tgtype);
+
+		cxt->type = T_TriggerData;
+		cxt->tg_event = TRIGGER_EVENT_ROW;
+		cxt->tg_newtuplebuf = InvalidBuffer;
+		cxt->tg_trigtuplebuf = InvalidBuffer;
+		cxt->tg_trigger = trig;
+
+		fcinfo->flinfo = finfo;
+		fcinfo->context = (fmNodePtr) cxt;
+
+		t->trig_fcinfo = fcinfo;
+	}
+
+	return (BatchReceiver *) t;
 }

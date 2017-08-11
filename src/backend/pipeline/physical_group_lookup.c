@@ -15,6 +15,7 @@
 #include "nodes/makefuncs.h"
 #include "optimizer/planmain.h"
 #include "pipeline/physical_group_lookup.h"
+#include "pipeline/scheduler.h"
 #include "storage/bufmgr.h"
 #include "utils/rel.h"
 
@@ -27,7 +28,8 @@ static Plan *create_lookup_plan(PlannerInfo *root, RelOptInfo *rel, struct Custo
 		List *tlist, List *clauses, List *custom_plans);
 static Node *create_lookup_scan_state(struct CustomScan *cscan);
 static void begin_lookup_scan(CustomScanState *cscan, EState *estate, int eflags);
-static TupleTableSlot *lookup_next(struct CustomScanState *node);
+static TupleTableSlot *nestloop_lookup_next(struct CustomScanState *node);
+static TupleTableSlot *seqscan_lookup_next(struct CustomScanState *node);
 static void end_lookup_scan(struct CustomScanState *node);
 static void rescan_lookup_scan(struct CustomScanState *node);
 
@@ -48,15 +50,28 @@ static CustomScanMethods plan_methods = {
 };
 
 /*
- * Methods for executing a lookup plan, attached to the plan state
+ * Methods for executing a lookup plan on top of a NestLoop JOIN, attached to the plan state
  */
-static CustomExecMethods exec_methods = {
+static CustomExecMethods nestloop_exec_methods = {
 	.CustomName = "PhysicalGroupLookup",
 	.BeginCustomScan = begin_lookup_scan,
-	.ExecCustomScan = lookup_next,
+	.ExecCustomScan = nestloop_lookup_next,
 	.EndCustomScan = end_lookup_scan,
 	.ReScanCustomScan = rescan_lookup_scan
 };
+
+/*
+ * Methods for executing a lookup plan on top of a SeqScan, attached to the plan state
+ */
+static CustomExecMethods seqscan_exec_methods = {
+	.CustomName = "PhysicalGroupLookup",
+	.BeginCustomScan = begin_lookup_scan,
+	.ExecCustomScan = seqscan_lookup_next,
+	.EndCustomScan = end_lookup_scan,
+	.ReScanCustomScan = rescan_lookup_scan
+};
+
+static TupleHashTable lookup_result = NULL;
 
 /*
  * create_lookup_plan
@@ -83,15 +98,52 @@ create_lookup_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_p
 }
 
 /*
+ * SetPhysicalGroupLookupOutput
+ *
+ * Sets the tuplestore that the next physical group lookup will output to.
+ */
+void
+SetPhysicalGroupLookupOutput(TupleHashTable output)
+{
+	Assert(lookup_result == NULL);
+	lookup_result = output;
+}
+
+/*
+ * CreatePhysicalGroupLookupPlan
+ */
+Plan *
+CreatePhysicalGroupLookupPlan(Plan *outer)
+{
+	CustomScan *scan = makeNode(CustomScan);
+
+	scan->scan.plan.targetlist = copyObject(outer->targetlist);
+	scan->scan.scanrelid = 1;
+	scan->methods = &plan_methods;
+
+	return (Plan *) scan;
+}
+
+/*
  * create_lookup_scan_state
  */
 static Node *
 create_lookup_scan_state(struct CustomScan *cscan)
 {
 	LookupScanState *state = palloc0(sizeof(LookupScanState));
+	Plan *outer = outerPlan(cscan);
 
 	state->cstate.ss.ps.type = T_CustomScanState;
-	state->cstate.methods = &exec_methods;
+
+	/*
+	 * Outer plan can either be a NestLoop, or a SeqScan for the special case of single-row-CVs
+	 */
+	if (IsA(outer, NestLoop))
+		state->cstate.methods = &nestloop_exec_methods;
+	else if (IsA(outer, SeqScan))
+		state->cstate.methods = &seqscan_exec_methods;
+	else
+		elog(ERROR, "unexpected outer plan type: %d", nodeTag(outer));
 
 	return (Node *) state;
 }
@@ -105,20 +157,60 @@ begin_lookup_scan(CustomScanState *cscan, EState *estate, int eflags)
 	Plan *outer = outerPlan(cscan->ss.ps.plan);
 	NestLoop *nl;
 
-	if (!IsA(outer, NestLoop))
-		elog(ERROR, "unexpected join node found in physical group lookup: %d", nodeTag(outer));
-
-	nl = (NestLoop *) outer;
-	nl->join.jointype = JOIN_INNER;
+	if (IsA(outer, NestLoop))
+	{
+		nl = (NestLoop *) outer;
+		nl->join.jointype = JOIN_INNER;
+	} else if (!IsA(outer, SeqScan))
+	{
+		elog(ERROR, "unexpected outer plan type: %d", nodeTag(outer));
+	}
 
 	outerPlanState(cscan) = ExecInitNode(outer, estate, eflags);
 }
 
 /*
- * lookup_next
+ * output_physical_tuple
+ */
+static void
+output_physical_tuple(TupleTableSlot *slot)
+{
+	bool isnew;
+	HeapTupleEntry entry;
+	MemoryContext old;
+
+	Assert(IsContQueryCombinerProcess());
+	Assert(lookup_result);
+
+	old = MemoryContextSwitchTo(lookup_result->tablecxt);
+
+	entry = (HeapTupleEntry) LookupTupleHashEntry(lookup_result, slot, &isnew);
+	entry->tuple = ExecCopySlotTuple(slot);
+
+	MemoryContextSwitchTo(old);
+}
+
+/*
+ * seqscan_lookup_next
  */
 static TupleTableSlot *
-lookup_next(struct CustomScanState *node)
+seqscan_lookup_next(struct CustomScanState *node)
+{
+	TupleTableSlot *result = ExecProcNode((PlanState *) outerPlanState(node));
+
+	if (TupIsNull(result))
+		return NULL;
+
+	output_physical_tuple(result);
+
+	return result;
+}
+
+/*
+ * nestloop_lookup_next
+ */
+static TupleTableSlot *
+nestloop_lookup_next(struct CustomScanState *node)
 {
 	NestLoopState *outer = (NestLoopState *) outerPlanState(node);
 	TupleTableSlot *result;
@@ -189,6 +281,8 @@ lnext:
 			elog(ERROR, "unrecognized heap_lock_tuple status: %u", res);
 	}
 
+	output_physical_tuple(slot);
+
 	return slot;
 }
 
@@ -198,6 +292,7 @@ lnext:
 static void
 end_lookup_scan(struct CustomScanState *node)
 {
+	lookup_result = NULL;
 	ExecEndNode(outerPlanState(node));
 }
 
@@ -214,14 +309,14 @@ rescan_lookup_scan(struct CustomScanState *node)
  * CreatePhysicalGroupLookupPath
  */
 Node *
-CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, NestPath *nlpath)
+CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, Path *child)
 {
 	CustomPath *path = makeNode(CustomPath);
 
 	path->path.pathtype = T_CustomScan;
 	path->methods = &path_methods;
 	path->path.parent = joinrel;
-	path->custom_paths = list_make1(nlpath);
+	path->custom_paths = list_make1(child);
 
 	return (Node *) path;
 }

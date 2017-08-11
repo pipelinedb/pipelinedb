@@ -52,7 +52,6 @@
 #include "commands/pipelinecmds.h"
 #include "commands/prepare.h"
 #include "executor/tstoreReceiver.h"
-#include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "libpq/pqsignal.h"

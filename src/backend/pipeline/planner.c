@@ -567,12 +567,54 @@ try_physical_group_lookup_path(PlannerInfo *root,
 		return;
 
 	nlpath = (NestPath *) linitial(joinrel->pathlist);
-	path = (Path *) CreatePhysicalGroupLookupPath(joinrel, nlpath);
+	path = (Path *) CreatePhysicalGroupLookupPath(joinrel, (Path *) nlpath);
 	joinrel->pathlist = list_make1(path);
 }
 
 /*
  * add_physical_group_lookup_path
+ */
+static void
+add_physical_group_lookup_path(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+{
+	Path *scanpath = (Path *) linitial(rel->pathlist);
+	Path *path = (Path *) CreatePhysicalGroupLookupPath(rel, scanpath);
+
+	/* If we end up going with a JOIN plan, this will be reverted by remove_custom_paths */
+	rel->pathlist = list_make1(path);
+}
+
+/*
+ * remove_custom_paths
+ *
+ * Remove any previously added CustomPaths from the given rel
+ */
+static void
+remove_custom_paths(RelOptInfo *rel)
+{
+	ListCell *lc;
+	List *pathlist = NIL;
+	foreach(lc, rel->pathlist)
+	{
+		Path *p = (Path *) lfirst(lc);
+		if (IsA(p, CustomPath))
+		{
+			/*
+			 * Pull off any CustomPaths by replace them with their child Path
+			 */
+			CustomPath *c = (CustomPath *) p;
+			pathlist = lappend(pathlist, linitial(c->custom_paths));
+		}
+		else
+		{
+			pathlist = lappend(pathlist, p);
+		}
+	}
+	rel->pathlist = pathlist;
+}
+
+/*
+ * add_physical_group_lookup_join_path
  *
  * If we're doing a combiner lookup of groups to update, then we need to return
  * updatable physical tuples. We have a specific plan for this so that we can predictably
@@ -580,7 +622,7 @@ try_physical_group_lookup_path(PlannerInfo *root,
  * and their indices.
  */
 static void
-add_physical_group_lookup_path(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
+add_physical_group_lookup_join_path(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
 		RelOptInfo *innerrel, JoinType jointype, JoinPathExtraData *extra)
 {
 	List *merge_pathkeys;
@@ -590,6 +632,9 @@ add_physical_group_lookup_path(PlannerInfo *root, RelOptInfo *joinrel, RelOptInf
 	/* only consider plans for which the VALUES scan is the outer */
 	if (inner->rtekind == RTE_VALUES)
 		return;
+
+	remove_custom_paths(innerrel);
+	remove_custom_paths(outerrel);
 
 	/* a physical group lookup is the only path we want to consider */
 	joinrel->pathlist = NIL;
@@ -638,6 +683,7 @@ GetGroupsLookupPlan(Query *query)
 {
 	PlannedStmt *plan;
 	set_join_pathlist_hook_type save_join_hook;
+	set_rel_pathlist_hook_type save_rel_hook;
 
 	/*
 	 * Perform everything from here in a try/catch so we can ensure the join path list hook
@@ -645,17 +691,24 @@ GetGroupsLookupPlan(Query *query)
 	 */
 	PG_TRY();
 	{
+		save_rel_hook = set_rel_pathlist_hook;
+		set_rel_pathlist_hook = add_physical_group_lookup_path;
+
 		save_join_hook = set_join_pathlist_hook;
-		set_join_pathlist_hook = add_physical_group_lookup_path;
+		set_join_pathlist_hook = add_physical_group_lookup_join_path;
 
 		PushActiveSnapshot(GetTransactionSnapshot());
 		plan = pg_plan_query(query, 0, NULL);
+
 		PopActiveSnapshot();
 		set_join_pathlist_hook = save_join_hook;
+		set_rel_pathlist_hook = save_rel_hook;
+
 	}
 	PG_CATCH();
 	{
 		set_join_pathlist_hook = save_join_hook;
+		set_rel_pathlist_hook = save_rel_hook;
 		PG_RE_THROW();
 	}
 	PG_END_TRY();

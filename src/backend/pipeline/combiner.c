@@ -22,7 +22,6 @@
 #include "executor/execdesc.h"
 #include "executor/executor.h"
 #include "executor/tstoreReceiver.h"
-#include "executor/tupletableReceiver.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "optimizer/paths.h"
@@ -36,6 +35,7 @@
 #include "pipeline/combiner_receiver.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/planner.h"
+#include "pipeline/physical_group_lookup.h"
 #include "pipeline/scheduler.h"
 #include "pipeline/matrel.h"
 #include "pipeline/miscutils.h"
@@ -442,6 +442,12 @@ select_existing_groups(ContQueryCombinerState *state)
 	plan = get_cached_groups_plan(state, values);
 
 	/*
+	 * Group lookups should always be underneath a physical group lookup CustomScan
+	 */
+	Assert(IsA(plan->planTree, CustomScan));
+	SetPhysicalGroupLookupOutput(existing);
+
+	/*
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
 	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
 	 */
@@ -455,8 +461,12 @@ select_existing_groups(ContQueryCombinerState *state)
 			list_make1(plan),
 			NULL);
 
-	dest = CreateDestReceiver(DestTupleTable);
-	SetTupleTableDestReceiverParams(dest, existing, existing->tablecxt, true);
+	/*
+	 * The plan we're about to run returns physical tuples that can be updated in place,
+	 * making the combiner sync as efficient as possible. Because of this, these plans
+	 * return tuples at a lower level than a DestReceiever, so we don't even need one.
+	 */
+	dest = CreateDestReceiver(DestNone);
 
 	PortalStart(portal, NULL, EXEC_NO_MATREL_LOCKING, NULL);
 
@@ -466,9 +476,11 @@ select_existing_groups(ContQueryCombinerState *state)
 					 dest,
 					 dest,
 					 NULL);
+
 	PortalDrop(portal, false);
 
 	heap_close(matrel, NoLock);
+
 
 finish:
 	batchgroups = hash_groups(state);
