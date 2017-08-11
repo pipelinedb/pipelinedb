@@ -700,8 +700,6 @@ GetGroupsLookupPlan(Query *query)
 		PushActiveSnapshot(GetTransactionSnapshot());
 		plan = pg_plan_query(query, 0, NULL);
 
-		// now just slap on a physical lookup!
-//		pprint(plan->planTree);
 		PopActiveSnapshot();
 		set_join_pathlist_hook = save_join_hook;
 		set_rel_pathlist_hook = save_rel_hook;
