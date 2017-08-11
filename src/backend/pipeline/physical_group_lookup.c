@@ -15,6 +15,7 @@
 #include "nodes/makefuncs.h"
 #include "optimizer/planmain.h"
 #include "pipeline/physical_group_lookup.h"
+#include "pipeline/scheduler.h"
 #include "storage/bufmgr.h"
 #include "utils/rel.h"
 
@@ -176,9 +177,13 @@ output_physical_tuple(TupleTableSlot *slot)
 {
 	bool isnew;
 	HeapTupleEntry entry;
-	MemoryContext old = MemoryContextSwitchTo(lookup_result->tablecxt);
+	MemoryContext old;
 
+	Assert(IsContQueryCombinerProcess());
 	Assert(lookup_result);
+
+	old = MemoryContextSwitchTo(lookup_result->tablecxt);
+
 	entry = (HeapTupleEntry) LookupTupleHashEntry(lookup_result, slot, &isnew);
 	entry->tuple = ExecCopySlotTuple(slot);
 
