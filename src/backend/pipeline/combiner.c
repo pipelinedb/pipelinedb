@@ -36,6 +36,7 @@
 #include "pipeline/combiner_receiver.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/planner.h"
+#include "pipeline/physical_group_lookup.h"
 #include "pipeline/scheduler.h"
 #include "pipeline/matrel.h"
 #include "pipeline/miscutils.h"
@@ -105,7 +106,6 @@ typedef struct
 	MemoryContext combine_cxt;
 	Tuplestorestate *batch;
 	Tuplestorestate *combined;
-	Tuplestorestate *existing_groups;
 	TupleTableSlot *slot;
 	TupleTableSlot *delta_slot;
 	TupleTableSlot *prev_slot;
@@ -399,7 +399,6 @@ hash_groups(ContQueryCombinerState *state)
  *
  * Adds all existing groups in the matrel to the combine input set
  */
-#include "pipeline/physical_group_lookup.h"
 static void
 select_existing_groups(ContQueryCombinerState *state)
 {
@@ -442,7 +441,12 @@ select_existing_groups(ContQueryCombinerState *state)
 	matrel = heap_openrv(state->base.query->matrel, RowShareLock);
 
 	plan = get_cached_groups_plan(state, values);
-//	pprint(plan);
+
+	/*
+	 * Group lookups should always be underneath a physical group lookup CustomScan
+	 */
+	Assert(IsA(plan->planTree, CustomScan));
+	SetPhysicalGroupLookupOutput(existing);
 
 	/*
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
@@ -458,11 +462,12 @@ select_existing_groups(ContQueryCombinerState *state)
 			list_make1(plan),
 			NULL);
 
-	tuplestore_clear(state->existing_groups);
-
-	// comment
+	/*
+	 * The plan we're about to run returns physical tuples that can be updated in place,
+	 * making the combiner sync as efficient as possible. Because of this, these plans
+	 * return tuples at a lower level than a DestReceiever, so we don't even need one.
+	 */
 	dest = CreateDestReceiver(DestNone);
-//	SetTuplestoreDestReceiverParams(dest, state->existing_groups, existing->tablecxt, true);
 
 	PortalStart(portal, NULL, EXEC_NO_MATREL_LOCKING, NULL);
 
@@ -472,28 +477,6 @@ select_existing_groups(ContQueryCombinerState *state)
 					 dest,
 					 dest,
 					 NULL);
-
-	MemoryContext old = MemoryContextSwitchTo(existing->tablecxt);
-
-	// the problem is that the tuples written into the tstore are not physical, they're minimal
-	// some of the header is missing so we can't use it for an update...
-	// where do we store these then?
-	// do we need to do something ghetto like save them from the actual plan node?
-
-	/* Read the groups we just finished looking up into a hashtable */
-	foreach(lc, PHYSICAL_TUPLES)
-	{
-		bool isnew;
-		HeapTuple tup = (HeapTuple) lfirst(lc);
-		ExecStoreTuple(tup, slot, InvalidBuffer, false);
-		HeapTupleEntry entry = (HeapTupleEntry) LookupTupleHashEntry(existing, slot, &isnew);
-		entry->tuple = tup;
-
-//		elog(LOG, "existing, %d:", entry->tuple->t_self.ip_posid);
-//		print_slot(slot);
-		// can we combine this with the iteration over the htable?
-	}
-	MemoryContextSwitchTo(old);
 
 	PortalDrop(portal, false);
 
@@ -1700,7 +1683,6 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	state->combined = tuplestore_begin_heap(false, false, continuous_query_combiner_work_mem);
-	state->existing_groups = tuplestore_begin_heap(false, false, continuous_query_combiner_work_mem);
 
 	/* this also sets the state's desc field */
 	prepare_combine_plan(state, pstmt);

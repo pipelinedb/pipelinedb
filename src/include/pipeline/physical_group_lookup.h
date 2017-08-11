@@ -14,8 +14,7 @@
 
 #include "optimizer/planner.h"
 
-extern List *PHYSICAL_TUPLES;
-
+extern void SetPhysicalGroupLookupOutput(TupleHashTable output);
 extern Node *CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, Path *path);
 extern Plan *CreatePhysicalGroupLookupPlan(Plan *outer);
 

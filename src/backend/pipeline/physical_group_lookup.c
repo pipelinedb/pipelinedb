@@ -70,6 +70,15 @@ static CustomExecMethods seqscan_exec_methods = {
 	.ReScanCustomScan = rescan_lookup_scan
 };
 
+static TupleHashTable lookup_result = NULL;
+typedef struct HeapTupleEntryData *HeapTupleEntry;
+typedef struct HeapTupleEntryData
+{
+	TupleHashEntryData shared;	/* common header for hash table entries */
+	HeapTuple tuple;	/* physical tuple belonging to this entry */
+	char flags;
+}	HeapTupleEntryData;
+
 /*
  * create_lookup_plan
  */
@@ -92,6 +101,18 @@ create_lookup_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_p
 	scan->methods = &plan_methods;
 
 	return (Plan *) scan;
+}
+
+/*
+ * SetPhysicalGroupLookupOutput
+ *
+ * Sets the tuplestore that the next physical group lookup will output to.
+ */
+void
+SetPhysicalGroupLookupOutput(TupleHashTable output)
+{
+	Assert(lookup_result == NULL);
+	lookup_result = output;
 }
 
 /*
@@ -136,9 +157,6 @@ create_lookup_scan_state(struct CustomScan *cscan)
 /*
  * begin_lookup_scan
  */
-List *PHYSICAL_TUPLES = NIL;
-
-#include "utils/memutils.h"
 static void
 begin_lookup_scan(CustomScanState *cscan, EState *estate, int eflags)
 {
@@ -149,10 +167,29 @@ begin_lookup_scan(CustomScanState *cscan, EState *estate, int eflags)
 	{
 		nl = (NestLoop *) outer;
 		nl->join.jointype = JOIN_INNER;
+	} else if (!IsA(outer, SeqScan))
+	{
+		elog(ERROR, "unexpected outer plan type: %d", nodeTag(outer));
 	}
 
-	PHYSICAL_TUPLES = NIL;
 	outerPlanState(cscan) = ExecInitNode(outer, estate, eflags);
+}
+
+/*
+ * output_physical_tuple
+ */
+static void
+output_physical_tuple(TupleTableSlot *slot)
+{
+	bool isnew;
+	HeapTupleEntry entry;
+	MemoryContext old = MemoryContextSwitchTo(lookup_result->tablecxt);
+
+	Assert(lookup_result);
+	entry = (HeapTupleEntry) LookupTupleHashEntry(lookup_result, slot, &isnew);
+	entry->tuple = ExecCopySlotTuple(slot);
+
+	MemoryContextSwitchTo(old);
 }
 
 /*
@@ -166,12 +203,7 @@ seqscan_lookup_next(struct CustomScanState *node)
 	if (TupIsNull(result))
 		return NULL;
 
-	// what's the cleanest way to put these somewhere for retrieval?
-	// we probably want to pass the plan a ref to a tuplestore like we do with TuplestoreScan
-	// should we just have a tuplestore pointer to write them into right here? Might as well!
-	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
-	PHYSICAL_TUPLES = lappend(PHYSICAL_TUPLES, ExecCopySlotTuple(result));
-	MemoryContextSwitchTo(old);
+	output_physical_tuple(result);
 
 	return result;
 }
@@ -251,12 +283,7 @@ lnext:
 			elog(ERROR, "unrecognized heap_lock_tuple status: %u", res);
 	}
 
-	// what's the cleanest way to put these somewhere for retrieval?
-	// we probably want to pass the plan a ref to a tuplestore like we do with TuplestoreScan
-	// should we just have a tuplestore pointer to write them into right here? Might as well!
-	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
-	PHYSICAL_TUPLES = lappend(PHYSICAL_TUPLES, ExecCopySlotTuple(slot));
-	MemoryContextSwitchTo(old);
+	output_physical_tuple(slot);
 
 	return slot;
 }
@@ -267,6 +294,7 @@ lnext:
 static void
 end_lookup_scan(struct CustomScanState *node)
 {
+	lookup_result = NULL;
 	ExecEndNode(outerPlanState(node));
 }
 
