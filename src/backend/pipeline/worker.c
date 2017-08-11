@@ -206,15 +206,6 @@ init_plan(ContQueryWorkerState *state)
 
 	state->result_slot = MakeSingleTupleTableSlot(query_desc->tupDesc);
 	tuplestore_clear(state->plan_output);
-//	if (state->base.query->type == CONT_VIEW)
-//	{
-
-//	}
-//	else
-//	{
-//		tuplestore_clear(state->plan_output);
-//	}
-
 }
 
 /*
