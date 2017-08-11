@@ -442,6 +442,7 @@ select_existing_groups(ContQueryCombinerState *state)
 	matrel = heap_openrv(state->base.query->matrel, RowShareLock);
 
 	plan = get_cached_groups_plan(state, values);
+//	pprint(plan);
 
 	/*
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
@@ -458,6 +459,8 @@ select_existing_groups(ContQueryCombinerState *state)
 			NULL);
 
 	tuplestore_clear(state->existing_groups);
+
+	// comment
 	dest = CreateDestReceiver(DestNone);
 //	SetTuplestoreDestReceiverParams(dest, state->existing_groups, existing->tablecxt, true);
 
@@ -473,7 +476,7 @@ select_existing_groups(ContQueryCombinerState *state)
 	MemoryContext old = MemoryContextSwitchTo(existing->tablecxt);
 
 	// the problem is that the tuples written into the tstore are not physical, they're minimal
-	// some of the heaader is missing so we can't use it for an update...
+	// some of the header is missing so we can't use it for an update...
 	// where do we store these then?
 	// do we need to do something ghetto like save them from the actual plan node?
 
@@ -486,8 +489,8 @@ select_existing_groups(ContQueryCombinerState *state)
 		HeapTupleEntry entry = (HeapTupleEntry) LookupTupleHashEntry(existing, slot, &isnew);
 		entry->tuple = tup;
 
-		elog(LOG, "existing, %d:", entry->tuple->t_self.ip_posid);
-		print_slot(slot);
+//		elog(LOG, "existing, %d:", entry->tuple->t_self.ip_posid);
+//		print_slot(slot);
 		// can we combine this with the iteration over the htable?
 	}
 	MemoryContextSwitchTo(old);

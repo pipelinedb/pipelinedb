@@ -16,6 +16,7 @@
 
 extern List *PHYSICAL_TUPLES;
 
-extern Node *CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, NestPath *path);
+extern Node *CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, Path *path);
+extern Plan *CreatePhysicalGroupLookupPlan(Plan *outer);
 
 #endif

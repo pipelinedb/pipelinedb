@@ -27,7 +27,8 @@ static Plan *create_lookup_plan(PlannerInfo *root, RelOptInfo *rel, struct Custo
 		List *tlist, List *clauses, List *custom_plans);
 static Node *create_lookup_scan_state(struct CustomScan *cscan);
 static void begin_lookup_scan(CustomScanState *cscan, EState *estate, int eflags);
-static TupleTableSlot *lookup_next(struct CustomScanState *node);
+static TupleTableSlot *nestloop_lookup_next(struct CustomScanState *node);
+static TupleTableSlot *seqscan_lookup_next(struct CustomScanState *node);
 static void end_lookup_scan(struct CustomScanState *node);
 static void rescan_lookup_scan(struct CustomScanState *node);
 
@@ -48,12 +49,23 @@ static CustomScanMethods plan_methods = {
 };
 
 /*
- * Methods for executing a lookup plan, attached to the plan state
+ * Methods for executing a lookup plan on top of a NestLoop JOIN, attached to the plan state
  */
-static CustomExecMethods exec_methods = {
+static CustomExecMethods nestloop_exec_methods = {
 	.CustomName = "PhysicalGroupLookup",
 	.BeginCustomScan = begin_lookup_scan,
-	.ExecCustomScan = lookup_next,
+	.ExecCustomScan = nestloop_lookup_next,
+	.EndCustomScan = end_lookup_scan,
+	.ReScanCustomScan = rescan_lookup_scan
+};
+
+/*
+ * Methods for executing a lookup plan on top of a SeqScan, attached to the plan state
+ */
+static CustomExecMethods seqscan_exec_methods = {
+	.CustomName = "PhysicalGroupLookup",
+	.BeginCustomScan = begin_lookup_scan,
+	.ExecCustomScan = seqscan_lookup_next,
 	.EndCustomScan = end_lookup_scan,
 	.ReScanCustomScan = rescan_lookup_scan
 };
@@ -83,15 +95,40 @@ create_lookup_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_p
 }
 
 /*
+ * CreatePhysicalGroupLookupPlan
+ */
+Plan *
+CreatePhysicalGroupLookupPlan(Plan *outer)
+{
+	CustomScan *scan = makeNode(CustomScan);
+
+	scan->scan.plan.targetlist = copyObject(outer->targetlist);
+	scan->scan.scanrelid = 1;
+	scan->methods = &plan_methods;
+
+	return (Plan *) scan;
+}
+
+/*
  * create_lookup_scan_state
  */
 static Node *
 create_lookup_scan_state(struct CustomScan *cscan)
 {
 	LookupScanState *state = palloc0(sizeof(LookupScanState));
+	Plan *outer = outerPlan(cscan);
 
 	state->cstate.ss.ps.type = T_CustomScanState;
-	state->cstate.methods = &exec_methods;
+
+	/*
+	 * Outer plan can either be a NestLoop, or a SeqScan for the special case of single-row-CVs
+	 */
+	if (IsA(outer, NestLoop))
+		state->cstate.methods = &nestloop_exec_methods;
+	else if (IsA(outer, SeqScan))
+		state->cstate.methods = &seqscan_exec_methods;
+	else
+		elog(ERROR, "unexpected outer plan type: %d", nodeTag(outer));
 
 	return (Node *) state;
 }
@@ -108,20 +145,42 @@ begin_lookup_scan(CustomScanState *cscan, EState *estate, int eflags)
 	Plan *outer = outerPlan(cscan->ss.ps.plan);
 	NestLoop *nl;
 
-	if (!IsA(outer, NestLoop))
-		elog(ERROR, "unexpected join node found in physical group lookup: %d", nodeTag(outer));
+	if (IsA(outer, NestLoop))
+	{
+		nl = (NestLoop *) outer;
+		nl->join.jointype = JOIN_INNER;
+	}
 
-	nl = (NestLoop *) outer;
-	nl->join.jointype = JOIN_INNER;
-
+	PHYSICAL_TUPLES = NIL;
 	outerPlanState(cscan) = ExecInitNode(outer, estate, eflags);
 }
 
 /*
- * lookup_next
+ * seqscan_lookup_next
  */
 static TupleTableSlot *
-lookup_next(struct CustomScanState *node)
+seqscan_lookup_next(struct CustomScanState *node)
+{
+	TupleTableSlot *result = ExecProcNode((PlanState *) outerPlanState(node));
+
+	if (TupIsNull(result))
+		return NULL;
+
+	// what's the cleanest way to put these somewhere for retrieval?
+	// we probably want to pass the plan a ref to a tuplestore like we do with TuplestoreScan
+	// should we just have a tuplestore pointer to write them into right here? Might as well!
+	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+	PHYSICAL_TUPLES = lappend(PHYSICAL_TUPLES, ExecCopySlotTuple(result));
+	MemoryContextSwitchTo(old);
+
+	return result;
+}
+
+/*
+ * nestloop_lookup_next
+ */
+static TupleTableSlot *
+nestloop_lookup_next(struct CustomScanState *node)
 {
 	NestLoopState *outer = (NestLoopState *) outerPlanState(node);
 	TupleTableSlot *result;
@@ -224,14 +283,14 @@ rescan_lookup_scan(struct CustomScanState *node)
  * CreatePhysicalGroupLookupPath
  */
 Node *
-CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, NestPath *nlpath)
+CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, Path *child)
 {
 	CustomPath *path = makeNode(CustomPath);
 
 	path->path.pathtype = T_CustomScan;
 	path->methods = &path_methods;
 	path->path.parent = joinrel;
-	path->custom_paths = list_make1(nlpath);
+	path->custom_paths = list_make1(child);
 
 	return (Node *) path;
 }
