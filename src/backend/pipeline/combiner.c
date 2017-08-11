@@ -105,6 +105,7 @@ typedef struct
 	MemoryContext combine_cxt;
 	Tuplestorestate *batch;
 	Tuplestorestate *combined;
+	Tuplestorestate *existing_groups;
 	TupleTableSlot *slot;
 	TupleTableSlot *delta_slot;
 	TupleTableSlot *prev_slot;
@@ -398,6 +399,7 @@ hash_groups(ContQueryCombinerState *state)
  *
  * Adds all existing groups in the matrel to the combine input set
  */
+#include "pipeline/physical_group_lookup.h"
 static void
 select_existing_groups(ContQueryCombinerState *state)
 {
@@ -455,8 +457,9 @@ select_existing_groups(ContQueryCombinerState *state)
 			list_make1(plan),
 			NULL);
 
-	dest = CreateDestReceiver(DestTupleTable);
-	SetTupleTableDestReceiverParams(dest, existing, existing->tablecxt, true);
+	tuplestore_clear(state->existing_groups);
+	dest = CreateDestReceiver(DestNone);
+//	SetTuplestoreDestReceiverParams(dest, state->existing_groups, existing->tablecxt, true);
 
 	PortalStart(portal, NULL, EXEC_NO_MATREL_LOCKING, NULL);
 
@@ -466,9 +469,33 @@ select_existing_groups(ContQueryCombinerState *state)
 					 dest,
 					 dest,
 					 NULL);
+
+	MemoryContext old = MemoryContextSwitchTo(existing->tablecxt);
+
+	// the problem is that the tuples written into the tstore are not physical, they're minimal
+	// some of the heaader is missing so we can't use it for an update...
+	// where do we store these then?
+	// do we need to do something ghetto like save them from the actual plan node?
+
+	/* Read the groups we just finished looking up into a hashtable */
+	foreach(lc, PHYSICAL_TUPLES)
+	{
+		bool isnew;
+		HeapTuple tup = (HeapTuple) lfirst(lc);
+		ExecStoreTuple(tup, slot, InvalidBuffer, false);
+		HeapTupleEntry entry = (HeapTupleEntry) LookupTupleHashEntry(existing, slot, &isnew);
+		entry->tuple = tup;
+
+		elog(LOG, "existing, %d:", entry->tuple->t_self.ip_posid);
+		print_slot(slot);
+		// can we combine this with the iteration over the htable?
+	}
+	MemoryContextSwitchTo(old);
+
 	PortalDrop(portal, false);
 
 	heap_close(matrel, NoLock);
+
 
 finish:
 	batchgroups = hash_groups(state);
@@ -1670,6 +1697,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	state->combined = tuplestore_begin_heap(false, false, continuous_query_combiner_work_mem);
+	state->existing_groups = tuplestore_begin_heap(false, false, continuous_query_combiner_work_mem);
 
 	/* this also sets the state's desc field */
 	prepare_combine_plan(state, pstmt);

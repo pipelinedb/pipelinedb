@@ -83,6 +83,7 @@ tupletable_startup_receiver(DestReceiver *self, int operation, TupleDesc typeinf
 	}
 }
 
+#include "utils/memutils.h"
 static void
 put_heap_tuple(TupleTableSlot *slot, TupleTableReceiverState *self)
 {

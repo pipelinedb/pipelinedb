@@ -99,6 +99,9 @@ create_lookup_scan_state(struct CustomScan *cscan)
 /*
  * begin_lookup_scan
  */
+List *PHYSICAL_TUPLES = NIL;
+
+#include "utils/memutils.h"
 static void
 begin_lookup_scan(CustomScanState *cscan, EState *estate, int eflags)
 {
@@ -188,6 +191,13 @@ lnext:
 		default:
 			elog(ERROR, "unrecognized heap_lock_tuple status: %u", res);
 	}
+
+	// what's the cleanest way to put these somewhere for retrieval?
+	// we probably want to pass the plan a ref to a tuplestore like we do with TuplestoreScan
+	// should we just have a tuplestore pointer to write them into right here? Might as well!
+	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+	PHYSICAL_TUPLES = lappend(PHYSICAL_TUPLES, ExecCopySlotTuple(slot));
+	MemoryContextSwitchTo(old);
 
 	return slot;
 }

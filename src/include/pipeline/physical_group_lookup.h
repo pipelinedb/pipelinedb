@@ -14,6 +14,8 @@
 
 #include "optimizer/planner.h"
 
+extern List *PHYSICAL_TUPLES;
+
 extern Node *CreatePhysicalGroupLookupPath(RelOptInfo *joinrel, NestPath *path);
 
 #endif
