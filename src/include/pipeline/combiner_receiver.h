@@ -16,14 +16,25 @@
 #include "tcop/dest.h"
 #include "pipeline/executor.h"
 
+typedef struct CombinerReceiver
+{
+	BatchReceiver base;
+	DestReceiver pub;
+	ContQuery *cont_query;
+	ContExecutor *cont_exec;
+	FunctionCallInfo hash_fcinfo;
+	FuncExpr *hashfn;
+
+	uint64 name_hash;
+	List **tups_per_combiner;
+} CombinerReceiver;
+
 typedef bool (*CombinerReceiveFunc) (ContQuery *query, uint32 shard_hash, uint64 group_hash, HeapTuple tup);
 extern CombinerReceiveFunc CombinerReceiveHook;
 typedef void (*CombinerFlushFunc) (void);
 extern CombinerFlushFunc CombinerFlushHook;
 
-extern DestReceiver *CreateCombinerDestReceiver(void);
-extern void SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *cont_exec, ContQuery *query);
-extern void SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash);
-extern void CombinerDestReceiverFlush(DestReceiver *self);
+extern BatchReceiver *CreateCombinerReceiver(ContExecutor *cont_exec, ContQuery *query, Tuplestorestate *buffer);
+extern void SetCombinerDestReceiverHashFunc(BatchReceiver *self, FuncExpr *hash);
 
 #endif

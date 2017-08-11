@@ -137,9 +137,6 @@ CreateDestReceiver(CommandDest dest)
 
 		case DestTupleTable:
 			return CreateTupleTableDestReceiver();
-
-		case DestCombiner:
-			return CreateCombinerDestReceiver();
 	}
 
 	/* should never get here */
@@ -174,7 +171,6 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestSQLFunction:
 		case DestTransientRel:
 		case DestTupleTable:
-		case DestCombiner:
 			break;
 	}
 }
@@ -218,7 +214,6 @@ NullCommand(CommandDest dest)
 		case DestSQLFunction:
 		case DestTupleTable:
 		case DestTransientRel:
-		case DestCombiner:
 			break;
 	}
 }
@@ -264,7 +259,6 @@ ReadyForQuery(CommandDest dest)
 		case DestSQLFunction:
 		case DestTransientRel:
 		case DestTupleTable:
-		case DestCombiner:
 			break;
 	}
 }

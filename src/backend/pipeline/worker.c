@@ -91,17 +91,21 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 	pfree(base);
 	base = (ContQueryState *) state;
 
+	/* Each plan execution's output on a microbatch is buffered in a tuplestore */
+	state->dest = CreateDestReceiver(DestTuplestore);
+	state->plan_output = tuplestore_begin_heap(false, false, continuous_query_batch_mem);
+	SetTuplestoreDestReceiverParams(state->dest, state->plan_output, CurrentMemoryContext, false);
+
+	/*
+	 * Now create the receivers, which send the buffered plan output down the processing pipeline
+	 */
 	if (base->query->type == CONT_VIEW)
 	{
-		state->dest = CreateDestReceiver(DestCombiner);
-		SetCombinerDestReceiverParams(state->dest, exec, base->query);
+		state->receiver = CreateCombinerReceiver(exec, base->query, state->plan_output);
 	}
 	else
 	{
-		state->dest = CreateDestReceiver(DestTuplestore);
-		state->plan_output = tuplestore_begin_heap(false, false, continuous_query_batch_mem);
 		state->receiver = CreateTransformReceiver(exec, base->query, state->plan_output);
-		SetTuplestoreDestReceiverParams(state->dest, state->plan_output, CurrentMemoryContext, false);
 	}
 
 	pstmt = GetContPlan(base->query, Worker);
@@ -148,7 +152,8 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 				return base;
 			}
 
-			SetCombinerDestReceiverHashFunc(state->dest, hash);
+			Assert(base->query->type == CONT_VIEW);
+			SetCombinerDestReceiverHashFunc(state->receiver, hash);
 		}
 
 		CQMatRelClose(ri);
@@ -174,13 +179,7 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 static void
 flush_tuples(ContQueryWorkerState *state)
 {
-	if (state->dest->mydest == DestCombiner)
-		CombinerDestReceiverFlush(state->dest);
-	else
-	{
-		Assert(state->dest->mydest == DestTuplestore);
-		state->receiver->flush(state->receiver, state->result_slot);
-	}
+	state->receiver->flush(state->receiver, state->result_slot);
 }
 
 /*
@@ -206,15 +205,15 @@ init_plan(ContQueryWorkerState *state)
 	query_desc->tupDesc = ExecGetResultType(query_desc->planstate);
 
 	state->result_slot = MakeSingleTupleTableSlot(query_desc->tupDesc);
+	tuplestore_clear(state->plan_output);
+//	if (state->base.query->type == CONT_VIEW)
+//	{
 
-	if (state->base.query->type == CONT_VIEW)
-	{
-
-	}
-	else
-	{
-		tuplestore_clear(state->plan_output);
-	}
+//	}
+//	else
+//	{
+//		tuplestore_clear(state->plan_output);
+//	}
 
 }
 

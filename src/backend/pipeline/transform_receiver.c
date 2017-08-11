@@ -174,7 +174,7 @@ pipeline_stream_insert_batch(TransformReceiver *t)
 }
 
 static void
-receiver_flush(struct BatchReceiver *receiver, TupleTableSlot *slot)
+flush_to_transform(struct BatchReceiver *receiver, TupleTableSlot *slot)
 {
 	TransformReceiver *t = (TransformReceiver *) receiver;
 	int save_batch_size = continuous_query_batch_size;
@@ -221,7 +221,7 @@ CreateTransformReceiver(ContExecutor *exec, ContQuery *query, Tuplestorestate *b
 
 	t->cont_query = query;
 	t->base.buffer = buffer;
-	t->base.flush = &receiver_flush;
+	t->base.flush = &flush_to_transform;
 
 	if (OidIsValid(query->tgfn) && query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{

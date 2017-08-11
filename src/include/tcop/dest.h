@@ -96,8 +96,7 @@ typedef enum
 	DestCopyOut,				/* results sent to COPY TO code */
 	DestSQLFunction,			/* results sent to SQL-language func mgr */
 	DestTupleTable,				/* results sent to a TupleHashTable */
-	DestTransientRel,			/* results sent to transient relation */
-	DestCombiner				/* results are sent to combiner processes */
+	DestTransientRel			/* results sent to transient relation */
 } CommandDest;
 
 /* ----------------

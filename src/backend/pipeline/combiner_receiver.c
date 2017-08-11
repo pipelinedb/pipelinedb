@@ -35,35 +35,9 @@
 CombinerReceiveFunc CombinerReceiveHook = NULL;
 CombinerFlushFunc CombinerFlushHook = NULL;
 
-typedef struct
-{
-	DestReceiver pub;
-	ContQuery *cont_query;
-	ContExecutor *cont_exec;
-	FunctionCallInfo hash_fcinfo;
-	FuncExpr *hashfn;
-
-	uint64 name_hash;
-	List **tups_per_combiner;
-} CombinerState;
-
 static void
-combiner_shutdown(DestReceiver *self)
+combiner_receive(CombinerReceiver *c, TupleTableSlot *slot)
 {
-
-}
-
-static void
-combiner_startup(DestReceiver *self, int operation,
-		TupleDesc typeinfo)
-{
-
-}
-
-static void
-combiner_receive(TupleTableSlot *slot, DestReceiver *self)
-{
-	CombinerState *c = (CombinerState *) self;
 	MemoryContext old = MemoryContextSwitchTo(ContQueryBatchContext);
 	tagged_ref_t *ref;
 	uint32 shard_hash;
@@ -102,81 +76,18 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 }
 
 static void
-combiner_destroy(DestReceiver *self)
+flush_to_combiner(BatchReceiver *receiver, TupleTableSlot *slot)
 {
-	CombinerState *c = (CombinerState *) self;
-	if (c->hash_fcinfo)
-		pfree(c->hash_fcinfo);
-	pfree(c->tups_per_combiner);
-	pfree(c);
-}
-
-DestReceiver *
-CreateCombinerDestReceiver(void)
-{
-	CombinerState *self = (CombinerState *) palloc0(sizeof(CombinerState));
-
-	self->pub.receiveSlot = combiner_receive;
-	self->pub.rStartup = combiner_startup;
-	self->pub.rShutdown = combiner_shutdown;
-	self->pub.rDestroy = combiner_destroy;
-	self->pub.mydest = DestCombiner;
-
-	self->tups_per_combiner = palloc0(sizeof(List *) * continuous_query_num_combiners);
-
-	return (DestReceiver *) self;
-}
-
-/*
- * SetCombinerDestReceiverParams
- *
- * Set parameters for a CombinerDestReceiver
- */
-void
-SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *exec, ContQuery *query)
-{
-	CombinerState *c = (CombinerState *) self;
-	char *relname = get_rel_name(query->relid);
-
-	c->cont_exec = exec;
-	c->cont_query = query;
-	c->name_hash = MurmurHash3_64(relname, strlen(relname), MURMUR_SEED);
-
-	pfree(relname);
-}
-
-/*
- * SetCombinerDestReceiverHashFunc
- *
- * Initializes the hash function to use to determine which combiner should read a given tuple
- */
-void
-SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash)
-{
-	CombinerState *c = (CombinerState *) self;
-	FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
-
-	fcinfo->flinfo = palloc0(sizeof(FmgrInfo));
-	fcinfo->flinfo->fn_mcxt = ContQueryBatchContext;
-
-	fmgr_info(hash->funcid, fcinfo->flinfo);
-	fmgr_info_set_expr((Node *) hash, fcinfo->flinfo);
-
-	fcinfo->fncollation = hash->funccollid;
-	fcinfo->nargs = list_length(hash->args);
-
-	c->hash_fcinfo = fcinfo;
-	c->hashfn = hash;
-}
-
-void
-CombinerDestReceiverFlush(DestReceiver *self)
-{
-	CombinerState *c = (CombinerState *) self;
 	int i;
 	int ntups = 0;
 	Size size = 0;
 	microbatch_t *mb;
+	CombinerReceiver *c = (CombinerReceiver *) receiver;
+
+	foreach_tuple(slot, c->base.buffer)
+	{
+		combiner_receive(c, slot);
+	}
 
 	if (CombinerFlushHook)
 		CombinerFlushHook();
@@ -223,4 +134,47 @@ CombinerDestReceiverFlush(DestReceiver *self)
 	microbatch_destroy(mb);
 
 	pgstat_increment_cq_write(ntups, size);
+}
+
+BatchReceiver *
+CreateCombinerReceiver(ContExecutor *cont_exec, ContQuery *query, Tuplestorestate *buffer)
+{
+	CombinerReceiver *self = (CombinerReceiver *) palloc0(sizeof(CombinerReceiver));
+	char *relname = get_rel_name(query->relid);
+
+	self->tups_per_combiner = palloc0(sizeof(List *) * continuous_query_num_combiners);
+	self->cont_exec = cont_exec;
+	self->cont_query = query;
+	self->name_hash = MurmurHash3_64(relname, strlen(relname), MURMUR_SEED);
+
+	pfree(relname);
+
+	self->base.flush = &flush_to_combiner;
+	self->base.buffer = buffer;
+
+	return (BatchReceiver *) self;
+}
+
+/*
+ * SetCombinerDestReceiverHashFunc
+ *
+ * Initializes the hash function to use to determine which combiner should read a given tuple
+ */
+void
+SetCombinerDestReceiverHashFunc(BatchReceiver *receiver, FuncExpr *hash)
+{
+	CombinerReceiver *c = (CombinerReceiver *) receiver;
+	FunctionCallInfo fcinfo = palloc0(sizeof(FunctionCallInfoData));
+
+	fcinfo->flinfo = palloc0(sizeof(FmgrInfo));
+	fcinfo->flinfo->fn_mcxt = ContQueryBatchContext;
+
+	fmgr_info(hash->funcid, fcinfo->flinfo);
+	fmgr_info_set_expr((Node *) hash, fcinfo->flinfo);
+
+	fcinfo->fncollation = hash->funccollid;
+	fcinfo->nargs = list_length(hash->args);
+
+	c->hash_fcinfo = fcinfo;
+	c->hashfn = hash;
 }
