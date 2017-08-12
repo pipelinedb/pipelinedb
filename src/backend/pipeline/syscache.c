@@ -122,8 +122,8 @@ static const struct cachedesc cacheinfo[] = {
  * We extend the PostgreSQL syscache by appending our cache entries after them.
  * We need to make sure we don't clobber any of the PostgreSQL syscache IDs,
  * which are 0-based entries in an array, one element for each catalog table.
- * Currently there are about ~70 catalogs, so we need to make sure we need to
- * make sure our own IDs start safely beyond that.
+ * Currently there are about ~70 catalogs, so we need to make sure our own
+ * IDs start safely beyond that.
  *
  * The other constraint here is that the cacheId must be < 128, so we don't
  * want too large of an offset! This is obviously a tight squeeze, but catalogs
