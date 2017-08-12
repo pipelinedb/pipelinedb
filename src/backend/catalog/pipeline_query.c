@@ -27,8 +27,9 @@
 #include "nodes/makefuncs.h"
 #include "parser/analyze.h"
 #include "pipeline/analyzer.h"
-#include "pipeline/scheduler.h"
 #include "pipeline/miscutils.h"
+#include "pipeline/scheduler.h"
+#include "pipeline/syscache.h"
 #include "postmaster/bgworker.h"
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
@@ -201,7 +202,7 @@ GetPipelineQueryTuple(RangeVar *name)
 
 	Assert(OidIsValid(namespace));
 
-	tuple = SearchSysCache1(PIPELINEQUERYRELID, ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
+	tuple = SearchPipelineSysCache1(PIPELINEQUERYRELID, ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
 
 	return tuple;
 }
@@ -276,7 +277,7 @@ void
 UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid)
 {
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
-	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
+	HeapTuple tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
 	bool replace[Natts_pipeline_query];
 	bool nulls[Natts_pipeline_query];
 	Datum values[Natts_pipeline_query];
@@ -308,7 +309,7 @@ void
 UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
 {
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
-	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
+	HeapTuple tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
 	bool replace[Natts_pipeline_query];
 	bool nulls[Natts_pipeline_query];
 	Datum values[Natts_pipeline_query];
@@ -380,7 +381,7 @@ GetCVNameFromMatRelName(RangeVar *name)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
+	tup = SearchPipelineSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
 
 	if (!HeapTupleIsValid(tup))
 		return NULL;
@@ -406,7 +407,7 @@ OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache1(PIPELINEQUERYMATRELID, RelationGetRelid(matrel));
+	tup = SearchPipelineSysCache1(PIPELINEQUERYMATRELID, RelationGetRelid(matrel));
 
 	if (!HeapTupleIsValid(tup))
 		return NULL;
@@ -487,7 +488,7 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
 
 	Assert(OidIsValid(namespace));
 
-	tup = SearchSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
+	tup = SearchPipelineSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(get_relname_relid(name->relname, namespace)));
 
 	if (!HeapTupleIsValid(tup))
 	{
@@ -516,7 +517,7 @@ RelIdIsForMatRel(Oid relid, Oid *id)
 {
 	HeapTuple tup;
 
-	tup = SearchSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(relid));
+	tup = SearchPipelineSysCache1(PIPELINEQUERYMATRELID, ObjectIdGetDatum(relid));
 
 	if (!HeapTupleIsValid(tup))
 	{
@@ -577,7 +578,7 @@ IsTTLContView(RangeVar *name)
 ContQuery *
 GetContQueryForId(Oid id)
 {
-	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
+	HeapTuple tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
 	ContQuery *cq;
 	Form_pipeline_query row;
 	Datum tmp;
@@ -616,7 +617,7 @@ GetContQueryForId(Oid id)
 	else
 		cq->matrel = NULL;
 
-	tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
+	tmp = PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 	cq->sql = deparse_query_def(query);
 	cq->cvdef = query;
@@ -644,7 +645,7 @@ GetContQueryForId(Oid id)
 		char *p;
 		int i;
 
-		val = DatumGetByteaP(SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_tgargs, &isnull));
+		val = DatumGetByteaP(PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_tgargs, &isnull));
 		Assert(!isnull);
 
 		p = (char *) VARDATA(val);
@@ -774,7 +775,7 @@ RemovePipelineQueryById(Oid oid)
 
 	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
-	tuple = SearchSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
+	tuple = SearchPipelineSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "cache lookup failed for continuous view with OID %u", oid);
 
@@ -916,7 +917,7 @@ bool
 ContQuerySetActive(Oid id, bool active)
 {
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
-	HeapTuple tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
+	HeapTuple tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
 	Form_pipeline_query row;
 	bool changed = false;
 

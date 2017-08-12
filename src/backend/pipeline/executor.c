@@ -27,6 +27,7 @@
 #include "pipeline/ipc/reader.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
+#include "pipeline/syscache.h"
 #include "tcop/tcopprot.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
@@ -205,7 +206,7 @@ get_query_state(ContExecutor *exec)
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	tup = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(exec->curr_query_id));
+	tup = SearchPipelineSysCache1(PIPELINEQUERYID, Int32GetDatum(exec->curr_query_id));
 
 	/* Was the continuous view removed? */
 	if (!HeapTupleIsValid(tup))

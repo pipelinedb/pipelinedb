@@ -72,6 +72,7 @@
 #include "parser/parse_func.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_type.h"
+#include "pipeline/syscache.h"
 #include "rewrite/rewriteSupport.h"
 #include "storage/lmgr.h"
 #include "storage/sinval.h"
@@ -3159,7 +3160,7 @@ getObjectDescription(const ObjectAddress *object)
 			{
 				HeapTuple	tup;
 
-				tup = SearchSysCache1(PIPELINEQUERYOID,
+				tup = SearchPipelineSysCache1(PIPELINEQUERYOID,
 									  ObjectIdGetDatum(object->objectId));
 				if (!HeapTupleIsValid(tup))
 					elog(ERROR, "cache lookup failed for pipeline_query %u",
@@ -3174,7 +3175,7 @@ getObjectDescription(const ObjectAddress *object)
 			{
 				HeapTuple	tup;
 
-				tup = SearchSysCache1(PIPELINESTREAMOID,
+				tup = SearchPipelineSysCache1(PIPELINESTREAMOID,
 									  ObjectIdGetDatum(object->objectId));
 				if (!HeapTupleIsValid(tup))
 					elog(ERROR, "cache lookup failed for pipeline_stream %u",

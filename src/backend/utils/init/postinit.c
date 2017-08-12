@@ -38,6 +38,7 @@
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "pipeline/scheduler.h"
+#include "pipeline/syscache.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/postmaster.h"
 #include "replication/walsender.h"

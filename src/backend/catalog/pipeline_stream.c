@@ -34,6 +34,7 @@
 #include "parser/analyze.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/stream.h"
+#include "pipeline/syscache.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
 #include "utils/fmgroids.h"
@@ -99,7 +100,7 @@ streams_to_meta(Relation pipeline_query)
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
 		ContAnalyzeContext *context;
 
-		tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
+		tmp = PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 		querystring = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 		parsetree_list = pg_parse_query(querystring);
@@ -272,7 +273,7 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 
 		replaces[Anum_pipeline_stream_queries - 1] = true;
 
-		tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(entry->relid));
+		tup = SearchPipelineSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(entry->relid));
 		if (!HeapTupleIsValid(tup))
 			continue;
 
@@ -327,7 +328,7 @@ mark_nonexistent_streams(Relation pipeline_stream, List *keys)
 			HeapTuple newtup;
 			bool isnull;
 
-			SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
+			PipelineSysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
 
 			/* If queries is already NULL, this is a noop */
 			if (isnull)
@@ -399,10 +400,11 @@ UpdatePipelineStreamCatalog(void)
  * Gets a bitmap indexed by continuous query id that represents which
  * queries are reading from the given stream.
  */
+#include "pipeline/syscache.h"
 Bitmapset *
 GetAllStreamReaders(Oid relid)
 {
-	HeapTuple tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(relid));
+	HeapTuple tup = SearchPipelineSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(relid));
 	bool isnull;
 	Datum raw;
 	bytea *bytes;
@@ -413,7 +415,7 @@ GetAllStreamReaders(Oid relid)
 	if (!HeapTupleIsValid(tup))
 		return NULL;
 
-	raw = SysCacheGetAttr(PIPELINESTREAMRELID, tup,
+	raw = PipelineSysCacheGetAttr(PIPELINESTREAMRELID, tup,
 						  Anum_pipeline_stream_queries, &isnull);
 
 	if (isnull)
@@ -588,7 +590,7 @@ RemovePipelineStreamById(Oid oid)
 
 	pipeline_stream = heap_open(PipelineStreamRelationId, RowExclusiveLock);
 
-	tuple = SearchSysCache1(PIPELINESTREAMOID, ObjectIdGetDatum(oid));
+	tuple = SearchPipelineSysCache1(PIPELINESTREAMOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "cache lookup failed for stream with OID %u", oid);
 

@@ -146,6 +146,7 @@
 #include "optimizer/tlist.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_coerce.h"
+#include "pipeline/syscache.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
@@ -2377,7 +2378,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		 */
 		if (AGGKIND_IS_COMBINE(aggref->aggkind))
 		{
-			combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+			combTuple = SearchPipelineSysCache2(PIPELINECOMBINETRANSFNOID,
 					ObjectIdGetDatum(finalfn_oid),
 					ObjectIdGetDatum(transfn_oid));
 

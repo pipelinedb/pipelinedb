@@ -15,9 +15,10 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
+#include "pipeline/ipc/microbatch.h"
 #include "pipeline/planner.h"
 #include "pipeline/scheduler.h"
-#include "pipeline/ipc/microbatch.h"
+#include "pipeline/syscache.h"
 #include "tcop/utility.h"
 
 /*
@@ -39,6 +40,7 @@ PipelineShmemInit()
 void
 PipelineInstallHooks()
 {
+	InitPipelineSysCache();
 	SaveUtilityHook = ProcessUtility_hook;
 	ProcessUtility_hook = ProcessUtilityOnContView;
 }
