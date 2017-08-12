@@ -105,6 +105,7 @@ create_tuplestore_scan_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPat
 	heap_close(matrel, NoLock);
 
 	plan->targetlist = tlist;
+	scan->custom_scan_tlist = tlist;
 
 	return (Plan *) scan;
 }
