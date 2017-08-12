@@ -27,6 +27,7 @@
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/reaper.h"
 #include "pipeline/stream.h"
+#include "pipeline/syscache.h"
 #include "miscadmin.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
@@ -513,7 +514,7 @@ pipeline_views(PG_FUNCTION_ARGS)
 		values[2] = CStringGetTextDatum(relname);
 		values[3] = BoolGetDatum(row->active);
 
-		tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
+		tmp = PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 
 		Assert(!isnull);
 
@@ -610,7 +611,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		values[0] = CStringGetTextDatum(namespace);
 		values[1] = CStringGetTextDatum(relname);
 
-		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
+		tmp = PipelineSysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
 
 		if (isnull)
 			nulls[2] = true;
@@ -939,7 +940,7 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 			char *p;
 			int i;
 
-			val = DatumGetByteaP(SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_tgargs, &isnull));
+			val = DatumGetByteaP(PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_tgargs, &isnull));
 			Assert(!isnull);
 
 			p = (char *) VARDATA(val);
@@ -955,7 +956,7 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 		else
 			nulls[5] = true;
 
-		tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
+		tmp = PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 		Assert(!isnull);
 		values[6] = CStringGetTextDatum(deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp))));
 

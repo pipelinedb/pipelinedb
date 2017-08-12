@@ -25,6 +25,7 @@
 #include "catalog/pipeline_combine_fn.h"
 #include "commands/defrem.h"
 #include "miscadmin.h"
+#include "pipeline/syscache.h"
 #include "utils/acl.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
@@ -93,7 +94,7 @@ GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *transoutfn, Oid *combineinfn, 
 	aggform = (Form_pg_aggregate) GETSTRUCT(aggtup);
 	ReleaseSysCache(aggtup);
 
-	combtup = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+	combtup = SearchPipelineSysCache2(PIPELINECOMBINETRANSFNOID,
 			ObjectIdGetDatum(aggform->aggfinalfn), ObjectIdGetDatum(aggform->aggtransfn));
 
 	if (!HeapTupleIsValid(combtup))
@@ -231,7 +232,7 @@ DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *paramete
 
 	Assert(transouttype != INTERNALOID);
 
-	combinetup = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+	combinetup = SearchPipelineSysCache2(PIPELINECOMBINETRANSFNOID,
 			ObjectIdGetDatum(agg->aggfinalfn), ObjectIdGetDatum(agg->aggtransfn));
 
 	if (HeapTupleIsValid(combinetup))
@@ -318,7 +319,7 @@ RemovePipelineCombineById(Oid oid)
 
 	pipeline_combine = heap_open(PipelineCombineRelationId, RowExclusiveLock);
 
-	tuple = SearchSysCache1(PIPELINECOMBINEOID, ObjectIdGetDatum(oid));
+	tuple = SearchPipelineSysCache1(PIPELINECOMBINEOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "cache lookup failed for pipeline_combine tuple with OID %u", oid);
 

@@ -47,6 +47,7 @@
 #include "parser/parse_agg.h"
 #include "parser/parse_coerce.h"
 #include "pipeline/scheduler.h"
+#include "pipeline/syscache.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
@@ -2199,7 +2200,7 @@ initialize_peragg(WindowAggState *winstate, WindowFunc *wfunc,
 
 	if (AGGKIND_IS_COMBINE(wfunc->winaggkind))
 	{
-		HeapTuple combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+		HeapTuple combTuple = SearchPipelineSysCache2(PIPELINECOMBINETRANSFNOID,
 				ObjectIdGetDatum(finalfn_oid),
 				ObjectIdGetDatum(transfn_oid));
 

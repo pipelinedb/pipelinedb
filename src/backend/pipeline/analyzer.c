@@ -50,9 +50,10 @@
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/analyzer.h"
-#include "pipeline/scheduler.h"
 #include "pipeline/matrel.h"
+#include "pipeline/scheduler.h"
 #include "pipeline/stream.h"
+#include "pipeline/syscache.h"
 #include "rewrite/rewriteHandler.h"
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
@@ -1249,7 +1250,7 @@ validate_agg(Node *node)
 	aggform = (Form_pg_aggregate) GETSTRUCT(aggtup);
 	ReleaseSysCache(aggtup);
 
-	combtup = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+	combtup = SearchPipelineSysCache2(PIPELINECOMBINETRANSFNOID,
 			ObjectIdGetDatum(aggform->aggfinalfn), ObjectIdGetDatum(aggform->aggtransfn));
 
 	if (!HeapTupleIsValid(combtup))
@@ -2518,7 +2519,7 @@ get_cont_query_select_stmt(RangeVar *rv)
 				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
 				errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
-	tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
+	tmp = PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 
 	sql = deparse_query_def(query);
@@ -2682,14 +2683,14 @@ get_worker_query_for_id(Oid id)
 	RangeVar *matrel;
 	Form_pipeline_query row;
 
-	tup = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
+	tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
 
 	if (!HeapTupleIsValid(tup))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
 				errmsg("continuous view with id \"%d\" does not exist", id)));
 
-	tmp = SysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
+	tmp = PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 
 	sql = deparse_query_def(query);
