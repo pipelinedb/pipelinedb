@@ -378,7 +378,7 @@ record_cv_dependencies(Oid cvoid, Oid matreloid, Oid osreloid, Oid seqreloid, Oi
 	 * Record a dependency between the view its pipeline_query entry so that when
 	 * the view is dropped the pipeline_query metadata cleanup hook is invoked.
 	 */
-	dependent.classId = PipelineQueryRelationId;
+	dependent.classId = PipelineQueryRelationOid;
 	dependent.objectId = cvoid;
 	dependent.objectSubId = 0;
 
@@ -664,7 +664,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
 
 	RewriteFromClause((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
@@ -943,7 +943,7 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid osrelid, Oid fnoid, SelectStmt 
 	referenced.objectId = relid;
 	referenced.objectSubId = 0;
 
-	dependent.classId = PipelineQueryRelationId;
+	dependent.classId = PipelineQueryRelationOid;
 	dependent.objectId = pqoid;
 	dependent.objectSubId = 0;
 
@@ -1068,7 +1068,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 					NameListToString(stmt->funcname))));
 	}
 
-	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
 
 	RewriteFromClause((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);

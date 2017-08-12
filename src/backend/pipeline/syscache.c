@@ -230,6 +230,17 @@ InitPipelineSysCache(void)
 	SysCacheSupportingRelOidSize = j + 1;
 
 	CacheInitialized = true;
+
+	/*
+	 * Now assign OIDs to our catalog tables for when we explicitly open them
+	 *
+	 * TODO(derekjn): this needs to be moved into the extension load path once we're
+	 * an extension. OIDs will obviously change between extension DROP/CREATE,
+	 * so executing this only at system startup won't be enough.
+	 */
+	PipelineCombineRelationOid = get_relname_relid("pipeline_combine", PG_CATALOG_NAMESPACE);
+	PipelineQueryRelationOid = get_relname_relid("pipeline_query", PG_CATALOG_NAMESPACE);
+	PipelineStreamRelationOid = get_relname_relid("pipeline_stream", PG_CATALOG_NAMESPACE);
 }
 
 /*

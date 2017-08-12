@@ -46,6 +46,8 @@
 
 #define MURMUR_SEED 0xadc83b19ULL
 
+Oid PipelineQueryRelationOid = InvalidOid;
+
 #define is_sw(row) ((row)->step_factor > 0)
 
 /*
@@ -231,7 +233,7 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int tt
 
 	query_str = nodeToString(query);
 
-	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
 
 	id = get_next_id(pipeline_query);
 
@@ -276,7 +278,7 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int tt
 void
 UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid)
 {
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
 	HeapTuple tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
 	bool replace[Natts_pipeline_query];
 	bool nulls[Natts_pipeline_query];
@@ -308,7 +310,7 @@ UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid)
 void
 UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
 {
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
 	HeapTuple tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
 	bool replace[Natts_pipeline_query];
 	bool nulls[Natts_pipeline_query];
@@ -719,7 +721,7 @@ GetContQueryForView(RangeVar *cv_name)
 static Bitmapset *
 get_cont_query_ids(char type)
 {
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationOid, AccessShareLock);
 	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
 	HeapTuple tup;
 	Bitmapset *result = NULL;
@@ -773,7 +775,7 @@ RemovePipelineQueryById(Oid oid)
 	Relation pipeline_query;
 	HeapTuple tuple;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
 
 	tuple = SearchPipelineSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))
@@ -826,7 +828,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid 
 
 	query_str = nodeToString(query);
 
-	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
 
 	id = get_next_id(pipeline_query);
 
@@ -916,7 +918,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid 
 bool
 ContQuerySetActive(Oid id, bool active)
 {
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
 	HeapTuple tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
 	Form_pipeline_query row;
 	bool changed = false;

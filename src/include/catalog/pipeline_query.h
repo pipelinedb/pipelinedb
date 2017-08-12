@@ -27,6 +27,8 @@
  */
 #define PipelineQueryRelationId  4242
 
+extern Oid PipelineQueryRelationOid;
+
 CATALOG(pipeline_query,4242)
 {
 	int32		id;

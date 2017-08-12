@@ -31,6 +31,8 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
+Oid PipelineCombineRelationOid = InvalidOid;
+
 /*
  * lookup_single_func
  *
@@ -242,7 +244,7 @@ DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *paramete
 	}
 
 	/* we now have the information we need to create an entry in pipeline_combine */
-	pipeline_combine = heap_open(PipelineCombineRelationId, RowExclusiveLock);
+	pipeline_combine = heap_open(PipelineCombineRelationOid, RowExclusiveLock);
 
 	MemSet(nulls, false, sizeof(nulls));
 
@@ -299,7 +301,7 @@ DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *paramete
 	/*
 	 * Record a dependency between pipeline_combine entry and the aggregate
 	 */
-	referenced.classId = PipelineCombineRelationId;
+	referenced.classId = PipelineCombineRelationOid;
 	referenced.objectId = combinetup_oid;
 	referenced.objectSubId = 0;
 
@@ -317,7 +319,7 @@ RemovePipelineCombineById(Oid oid)
 	Relation pipeline_combine;
 	HeapTuple tuple;
 
-	pipeline_combine = heap_open(PipelineCombineRelationId, RowExclusiveLock);
+	pipeline_combine = heap_open(PipelineCombineRelationOid, RowExclusiveLock);
 
 	tuple = SearchPipelineSysCache1(PIPELINECOMBINEOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))
