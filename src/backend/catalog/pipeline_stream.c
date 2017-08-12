@@ -48,6 +48,8 @@
 
 #define NUMERIC_OID 1700
 
+Oid PipelineStreamRelationOid = InvalidOid;
+
 typedef struct StreamColumnsEntry
 {
 	char name[NAMEDATALEN];
@@ -371,8 +373,8 @@ UpdatePipelineStreamCatalog(void)
 					ALLOCSET_DEFAULT_INITSIZE,
 					ALLOCSET_DEFAULT_MAXSIZE);
 
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
-	pipeline_stream = heap_open(PipelineStreamRelationId, RowExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationOid, AccessShareLock);
+	pipeline_stream = heap_open(PipelineStreamRelationOid, RowExclusiveLock);
 
 	/*
 	 * The following series of function calls can consume quite a bit
@@ -543,7 +545,7 @@ IsStream(Oid relid)
 void
 CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 {
-	Relation pipeline_stream = heap_open(PipelineStreamRelationId, RowExclusiveLock);
+	Relation pipeline_stream = heap_open(PipelineStreamRelationOid, RowExclusiveLock);
 	Datum values[Natts_pipeline_stream];
 	bool nulls[Natts_pipeline_stream];
 	HeapTuple tup;
@@ -565,7 +567,7 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	CommandCounterIncrement();
 
 	/* Record dependency between tuple in pipeline_stream and the relation */
-	dependent.classId = PipelineStreamRelationId;
+	dependent.classId = PipelineStreamRelationOid;
 	dependent.objectId = entry_oid;
 	dependent.objectSubId = 0;
 
@@ -588,7 +590,7 @@ RemovePipelineStreamById(Oid oid)
 	Relation pipeline_stream;
 	HeapTuple tuple;
 
-	pipeline_stream = heap_open(PipelineStreamRelationId, RowExclusiveLock);
+	pipeline_stream = heap_open(PipelineStreamRelationOid, RowExclusiveLock);
 
 	tuple = SearchPipelineSysCache1(PIPELINESTREAMOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))
@@ -612,7 +614,7 @@ RelIdIsForOutputStream(Oid id, Oid *cqid)
 	HeapScanDesc scan;
 	HeapTuple tup;
 	ScanKeyData skey[1];
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationOid, AccessShareLock);
 	bool result = false;
 
 	ScanKeyInit(&skey[0], Anum_pipeline_query_osrelid,

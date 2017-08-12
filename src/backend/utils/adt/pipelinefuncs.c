@@ -477,7 +477,7 @@ pipeline_views(PG_FUNCTION_ARGS)
 		old = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		data = palloc(sizeof(RelationScanData));
-		data->rel = heap_open(PipelineQueryRelationId, AccessShareLock);
+		data->rel = heap_open(PipelineQueryRelationOid, AccessShareLock);
 		data->scan = heap_beginscan_catalog(data->rel, 0, NULL);
 		funcctx->user_fctx = data;
 
@@ -578,7 +578,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		old = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		data = palloc(sizeof(RelationScanData));
-		data->rel = heap_open(PipelineStreamRelationId, AccessShareLock);
+		data->rel = heap_open(PipelineStreamRelationOid, AccessShareLock);
 		data->scan = heap_beginscan_catalog(data->rel, 0, NULL);
 		funcctx->user_fctx = data;
 
@@ -881,7 +881,7 @@ pipeline_transforms(PG_FUNCTION_ARGS)
 		old = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		data = palloc(sizeof(RelationScanData));
-		data->rel = heap_open(PipelineQueryRelationId, AccessShareLock);
+		data->rel = heap_open(PipelineQueryRelationOid, AccessShareLock);
 		data->scan = heap_beginscan_catalog(data->rel, 0, NULL);
 		funcctx->user_fctx = data;
 
@@ -1152,7 +1152,7 @@ set_cq_enabled(RangeVar *name, bool activate)
 	Oid query_id;
 	Relation pipeline_query;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
 	query_id = GetContQueryId(name);
 
 	if (!OidIsValid(query_id))
@@ -1207,7 +1207,7 @@ truncate_continuous_view(PG_FUNCTION_ARGS)
 	text *relname = PG_GETARG_TEXT_P(0);
 	RangeVar *rv = makeRangeVarFromNameList(textToQualifiedNameList(relname));
 	TruncateStmt *trunc = makeNode(TruncateStmt);
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
 
 	RangeVar *matrel;
 	HeapTuple tuple = GetPipelineQueryTuple(rv);

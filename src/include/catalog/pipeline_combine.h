@@ -21,6 +21,8 @@
 
 #define PipelineCombineRelationId  4247
 
+extern Oid PipelineCombineRelationOid;
+
 /* ----------------------------------------------------------------
  *
  * The pipeline_combine catalog table specifies functions that are chained
