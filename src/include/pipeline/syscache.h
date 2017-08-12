@@ -17,7 +17,6 @@ enum PipelineSysCacheIdentifier
 };
 
 extern void InitPipelineSysCache(void);
-extern void InitPipelineSysCachePhase2(void);
 
 extern HeapTuple SearchPipelineSysCache(int cacheId,
 			   Datum key1, Datum key2, Datum key3, Datum key4);
@@ -28,9 +27,5 @@ extern Datum PipelineSysCacheGetAttr(int cacheId, HeapTuple tup,
 	SearchPipelineSysCache(cacheId, key1, 0, 0, 0)
 #define SearchPipelineSysCache2(cacheId, key1, key2) \
 	SearchPipelineSysCache(cacheId, key1, key2, 0, 0)
-#define SearchPipelineSysCache3(cacheId, key1, key2, key3) \
-	SearchPipelineSysCache(cacheId, key1, key2, key3, 0)
-#define SearchPipelineSysCache4(cacheId, key1, key2, key3, key4) \
-	SearchPipelineSysCache(cacheId, key1, key2, key3, key4)
 
 #endif
