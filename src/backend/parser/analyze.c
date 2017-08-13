@@ -451,9 +451,6 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	bool		isOnConflictUpdate;
 	AclMode		targetPerms;
 
-	/* Allow inserting into streams */
-	pstate->p_ins_cols = stmt->cols;
-
 	/* There can't be any outer WITH to worry about */
 	Assert(pstate->p_ctenamespace == NIL);
 

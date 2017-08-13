@@ -168,9 +168,7 @@ struct ParseState
 	void	   *p_ref_hook_state;		/* common passthrough link for above */
 
 	/* Pipeline DB */
-	struct ContAnalyzeContext *p_cont_view_context; /* context if this is a continuous view */
 	bool 		p_no_locking; /* don't hold on to locks till EOT? */
-	List 	    *p_ins_cols;
 };
 
 /*
