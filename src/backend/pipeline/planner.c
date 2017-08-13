@@ -845,7 +845,7 @@ CreateEState(QueryDesc *query_desc)
 	estate->es_range_table = query_desc->plannedstmt->rtable;
 	estate->es_continuous = query_desc->plannedstmt->isContinuous;
 	estate->es_lastoid = InvalidOid;
-	estate->es_processed = estate->es_filtered = 0;
+	estate->es_processed = 0;
 
 	if (query_desc->plannedstmt->nParamExec > 0)
 		estate->es_param_exec_vals = (ParamExecData *)
