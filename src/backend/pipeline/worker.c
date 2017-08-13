@@ -100,13 +100,9 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 	 * Now create the receivers, which send the buffered plan output down the processing pipeline
 	 */
 	if (base->query->type == CONT_VIEW)
-	{
 		state->receiver = CreateCombinerReceiver(exec, base->query, state->plan_output);
-	}
 	else
-	{
 		state->receiver = CreateTransformReceiver(exec, base->query, state->plan_output);
-	}
 
 	pstmt = GetContPlan(base->query, Worker);
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot, InvalidSnapshot, state->dest, NULL, 0);
@@ -115,7 +111,7 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 
 	RegisterSnapshotOnOwner(state->query_desc->snapshot, WorkerResOwner);
 
-	ExecutorStart(state->query_desc, EXEC_NO_STREAM_LOCKING);
+	ExecutorStart(state->query_desc, EXEC_NO_STREAM_LOCKING | PIPELINE_EXEC_CONTINUOUS);
 
 	state->query_desc->snapshot->active_count++;
 	UnregisterSnapshotFromOwner(state->query_desc->snapshot, WorkerResOwner);
@@ -197,11 +193,11 @@ init_plan(ContQueryWorkerState *state)
 		Plan *subplan = (Plan *) lfirst(lc);
 		PlanState  *subplanstate;
 
-		subplanstate = ExecInitNode(subplan, query_desc->estate, EXEC_NO_STREAM_LOCKING);
+		subplanstate = ExecInitNode(subplan, query_desc->estate, EXEC_NO_STREAM_LOCKING | PIPELINE_EXEC_CONTINUOUS);
 		query_desc->estate->es_subplanstates = lappend(query_desc->estate->es_subplanstates, subplanstate);
 	}
 
-	query_desc->planstate = ExecInitNode(plan, query_desc->estate, EXEC_NO_STREAM_LOCKING);
+	query_desc->planstate = ExecInitNode(plan, query_desc->estate, EXEC_NO_STREAM_LOCKING | PIPELINE_EXEC_CONTINUOUS);
 	query_desc->tupDesc = ExecGetResultType(query_desc->planstate);
 
 	state->result_slot = MakeSingleTupleTableSlot(query_desc->tupDesc);

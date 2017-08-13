@@ -156,9 +156,6 @@ planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	else
 		result = standard_planner(parse, cursorOptions, boundParams);
 
-	if (parse->isContinuous)
-		result->isContinuous = true;
-
 	return result;
 }
 
@@ -278,7 +275,6 @@ standard_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	result->invalItems = glob->invalItems;
 	result->nParamExec = glob->nParamExec;
 	result->hasRowSecurity = glob->hasRowSecurity;
-	result->isContinuous = parse->isContinuous;
 
 	return result;
 }

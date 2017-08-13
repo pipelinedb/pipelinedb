@@ -147,6 +147,7 @@
 #include "parser/parse_agg.h"
 #include "parser/parse_coerce.h"
 #include "pipeline/syscache.h"
+#include "pipeline/scheduler.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
@@ -1724,9 +1725,6 @@ agg_retrieve_direct(AggState *aggstate)
 					}
 					else
 					{
-						if (IsContinuous(outerPlanState(aggstate)))
-							return NULL;
-
 						aggstate->agg_done = true;
 						/* If we are grouping, we should produce no tuples too */
 						if (node->aggstrategy != AGG_PLAIN)
@@ -2370,7 +2368,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 		peraggstate->transfn_oid = transfn_oid = aggform->aggtransfn;
 		peraggstate->finalfn_oid = finalfn_oid = aggform->aggfinalfn;
-		peraggstate->finalize = !(AGGKIND_IS_COMBINE(aggref->aggkind) || estate->es_continuous);
+		peraggstate->finalize = !(AGGKIND_IS_COMBINE(aggref->aggkind) || (eflags & PIPELINE_EXEC_CONTINUOUS));
 
 		/*
 		 * If it's a combine, we dynamically load the transition function

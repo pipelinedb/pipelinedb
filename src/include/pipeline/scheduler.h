@@ -22,6 +22,8 @@
 #define MAX_CQS 1024
 #define BGWORKER_IS_CONT_QUERY_PROC 0x1000
 
+#define PIPELINE_EXEC_CONTINUOUS 0x100000
+
 typedef enum
 {
 	Combiner = 0,
