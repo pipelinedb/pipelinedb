@@ -84,8 +84,6 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 
 	plan = pg_plan_query(query, 0, NULL);
 
-	plan->isContinuous = true;
-
 	return plan;
 }
 
@@ -843,7 +841,6 @@ CreateEState(QueryDesc *query_desc)
 		RegisterSnapshot(query_desc->crosscheck_snapshot);
 	estate->es_instrument = query_desc->instrument_options;
 	estate->es_range_table = query_desc->plannedstmt->rtable;
-	estate->es_continuous = query_desc->plannedstmt->isContinuous;
 	estate->es_lastoid = InvalidOid;
 	estate->es_processed = 0;
 

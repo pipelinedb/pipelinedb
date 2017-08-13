@@ -153,11 +153,8 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	 * size to 0 so that TuplestoreScans don't return early. Since
 	 * they're not being executed continuously, they'd never
 	 * see anything after the first batch was consumed.
-	 *
 	 */
 	Relation rel = heap_openrv(state->base.query->matrel, AccessShareLock);
-
-	plan->isContinuous = false;
 
 	SetCombinerPlanTuplestorestate(plan, state->batch);
 
@@ -1165,7 +1162,6 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	state->sw->overlay_output = tuplestore_begin_heap(true, true, work_mem);
 	MemoryContextSwitchTo(old);
 
-	state->sw->overlay_plan->isContinuous = false;
 	SetCombinerPlanTuplestorestate(state->sw->overlay_plan, state->sw->overlay_input);
 
 	state->sw->overlay_dest = CreateDestReceiver(DestTuplestore);

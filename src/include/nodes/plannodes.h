@@ -75,10 +75,6 @@ typedef struct PlannedStmt
 
 	bool		hasRowSecurity; /* row security applied? */
 
-	/*
-	 * Continuous query fields
-	 */
-	bool isContinuous; /* should this be executed continuously? */
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */
