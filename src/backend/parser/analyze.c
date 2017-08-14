@@ -118,7 +118,6 @@ parse_analyze(Node *parseTree, const char *sourceText,
 	{
 		SelectStmt *stmt = (SelectStmt *) parseTree;
 		query->isContinuous = stmt->forContinuousView;
-		query->isCombineLookup = stmt->forCombineLookup;
 		query->swStepFactor = stmt->swStepFactor;
 	}
 

@@ -166,8 +166,6 @@ typedef struct Query
 	 */
 	bool isContinuous; /* should this be executed continuously? */
 	Oid  cqId; /* continuous query id, valid only if is_continuous is true */
-	bool isCombine; /* is this query being run as a merge query? */
-	bool isCombineLookup; /* is this query a combiner looking up groups to combine with? */
 	double swStepFactor;
 } Query;
 
