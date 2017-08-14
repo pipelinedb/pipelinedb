@@ -998,7 +998,6 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 	}
 
 	/* Transform the fromClause because we do a little bit of expression type inference below */
-	context->pstate->p_no_locking = true;
 	transformFromClause(context->pstate, copyObject(select->fromClause));
 
 	/* Validate aggregate functions */
