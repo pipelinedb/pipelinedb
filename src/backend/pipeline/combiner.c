@@ -331,7 +331,6 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 
 	/* populate the ParseState's p_varnamespace member */
 	ps = make_parsestate(NULL);
-	ps->p_no_locking = true;
 	transformFromClause(ps, sel->fromClause);
 
 	qlist = pg_analyze_and_rewrite((Node *) sel, state->base.query->matrel->relname, NULL, 0);

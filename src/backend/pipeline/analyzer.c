@@ -252,9 +252,6 @@ MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType
 
 	context->pstate = pstate;
 
-	if (context->pstate)
-		context->pstate->p_cont_view_context = context;
-
 	/*
 	 * Collect any column names being used, so we don't clobber them when generating
 	 * internal column names for the materialization table.
@@ -1001,7 +998,6 @@ ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 	}
 
 	/* Transform the fromClause because we do a little bit of expression type inference below */
-	context->pstate->p_no_locking = true;
 	transformFromClause(context->pstate, copyObject(select->fromClause));
 
 	/* Validate aggregate functions */
@@ -1165,8 +1161,6 @@ transformContSelectStmt(ParseState *pstate, SelectStmt *select)
 
 	collect_rels_and_streams((Node *) select->fromClause, context);
 	collect_cols((Node *) select, context);
-
-	pstate->p_cont_view_context = context;
 }
 
 /*
@@ -1347,8 +1341,6 @@ transformContSelectTargetList(ParseState *pstate, List *tlist)
 {
 	ListCell *lc;
 	List *nodes = pull_var_and_aggs((Node *) tlist);
-
-	Assert(pstate->p_cont_view_context);
 
 	foreach(lc, nodes)
 	{

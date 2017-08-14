@@ -107,12 +107,6 @@ parse_analyze(Node *parseTree, const char *sourceText,
 
 	Assert(sourceText != NULL); /* required as of 8.4 */
 
-	if (IsA(parseTree, SelectStmt))
-	{
-		SelectStmt *stmt = (SelectStmt *) parseTree;
-		pstate->p_no_locking = IsContQueryProcess() || stmt->forContinuousView;
-	}
-
 	pstate->p_sourcetext = sourceText;
 
 	if (numParams > 0)
@@ -450,9 +444,6 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	ListCell   *lc;
 	bool		isOnConflictUpdate;
 	AclMode		targetPerms;
-
-	/* Allow inserting into streams */
-	pstate->p_ins_cols = stmt->cols;
 
 	/* There can't be any outer WITH to worry about */
 	Assert(pstate->p_ctenamespace == NIL);
