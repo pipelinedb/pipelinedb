@@ -2396,7 +2396,6 @@ _outQuery(StringInfo str, const Query *node)
 	WRITE_NODE_FIELD(rowMarks);
 	WRITE_NODE_FIELD(setOperations);
 	WRITE_NODE_FIELD(constraintDeps);
-	WRITE_BOOL_FIELD(isContinuous);
 	WRITE_FLOAT_FIELD(swStepFactor, "%.2f");
 }
 

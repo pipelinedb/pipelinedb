@@ -876,6 +876,82 @@ validate_target_list(SelectStmt *stmt)
 	}
 }
 
+static post_parse_analyze_hook_type save_analyze_hook = NULL;
+
+/*
+ * pipeline_post_parse_analyze_hook
+ */
+static void
+pipeline_post_parse_analyze_hook(ParseState *pstate, Query *query)
+{
+	if (save_analyze_hook)
+		(*save_analyze_hook)(pstate, query);
+}
+
+/*
+ * QueryIsContinuous
+ */
+bool
+QueryIsContinuous(Query *query)
+{
+	return query->isContinuous;
+}
+
+/*
+ * GetSWStepFactor
+ */
+double
+QueryGetSWStepFactor(Query *query)
+{
+	return 0;
+}
+
+/*
+ * SetSWStepFactor
+ */
+void
+QuerySetSWStepFactor(Query *query, double sf)
+{
+
+}
+
+/*
+ * QuerySetIsContinuous
+ */
+void
+QuerySetIsContinuous(Query *query, bool continuous)
+{
+	query->isContinuous = continuous;
+}
+
+/*
+ * GetQueryId
+ */
+Oid
+QueryGetContQueryId(Query *query)
+{
+	return InvalidOid;
+}
+
+/*
+ * SetContQueryId
+ */
+void
+QuerySetContQueryId(Query *query, Oid id)
+{
+
+}
+
+/*
+ * SetPostParseAnalyzeHook
+ */
+void
+SetPostParseAnalyzeHook(void)
+{
+	save_analyze_hook = post_parse_analyze_hook;
+	post_parse_analyze_hook = pipeline_post_parse_analyze_hook;
+}
+
 /*
  * ValidateParsedContQuery
  */

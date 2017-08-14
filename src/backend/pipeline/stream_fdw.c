@@ -30,6 +30,7 @@
 #include "parser/parse_expr.h"
 #include "parser/parsetree.h"
 #include "pgstat.h"
+#include "pipeline/analyzer.h"
 #include "pipeline/executor.h"
 #include "pipeline/scheduler.h"
 #include "pipeline/ipc/pzmq.h"
@@ -137,7 +138,7 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid relid)
 		while (parent->parent_root != NULL)
 			parent = parent->parent_root;
 
-		if (!parent->parse->isContinuous)
+		if (!QueryIsContinuous(parent->parse))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
