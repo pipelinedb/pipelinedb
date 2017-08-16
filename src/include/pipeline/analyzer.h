@@ -57,8 +57,6 @@ typedef struct ContAnalyzeContext
 #define IsMatRelCombine(proname) (pg_strcasecmp(NameStr(proname), MATREL_COMBINE) == 0)
 #define IsMatRelFinalize(proname) (pg_strcasecmp(NameStr(proname), MATREL_FINALIZE) == 0)
 
-extern void SetPostParseAnalyzeHook(void);
-
 extern bool QueryIsContinuous(Query *query);
 extern void InitializeQueryCache(void);
 extern void QuerySetIsContinuous(Query *query, bool continuous);
