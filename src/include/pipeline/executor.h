@@ -25,7 +25,6 @@
 #include "pipeline/ipc/reader.h"
 #include "port/atomics.h"
 #include "storage/spin.h"
-#include "utils/resowner.h"
 #include "utils/timestamp.h"
 #include "utils/tuplestore.h"
 
@@ -68,7 +67,6 @@ struct ContExecutor
 	ContExecutionLock lock;
 };
 
-extern ResourceOwner WorkerResOwner;
 extern Oid PipelineExecLockRelationOid;
 
 extern ContExecutor *ContExecutorNew(ContQueryStateInit initfn);

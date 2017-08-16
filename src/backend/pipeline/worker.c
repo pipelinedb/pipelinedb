@@ -36,7 +36,7 @@
 #include "utils/resowner.h"
 #include "utils/snapmgr.h"
 
-ResourceOwner WorkerResOwner = NULL;
+static ResourceOwner WorkerResOwner = NULL;
 
 typedef struct {
 	ContQueryState base;
