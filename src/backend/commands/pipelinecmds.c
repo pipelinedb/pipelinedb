@@ -797,8 +797,15 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		 */
 		if (AttributeNumberIsValid(ttl_attno))
 		{
+			double sf;
+
 			has_sw = true;
-			cont_query->swStepFactor = cont_query->swStepFactor ? cont_query->swStepFactor : sliding_window_step_factor;
+			sf = QueryGetSWStepFactor(cont_query);
+
+			if (!sf)
+				sf = sliding_window_step_factor;
+
+			QuerySetSWStepFactor(cont_query, sf);
 		}
 	}
 

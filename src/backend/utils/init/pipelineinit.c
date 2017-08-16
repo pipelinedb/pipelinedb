@@ -46,4 +46,7 @@ PipelineInstallHooks()
 
 	SaveUtilityHook = ProcessUtility_hook;
 	ProcessUtility_hook = ProcessUtilityOnContView;
+
+	InitializeQueryCache();
+	// add end of xact callback for query hashtable destroy?
 }

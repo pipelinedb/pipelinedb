@@ -251,7 +251,7 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int tt
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(seqrelid);
 	values[Anum_pipeline_query_ttl - 1] = Int32GetDatum(ttl);
 	values[Anum_pipeline_query_ttl_attno - 1] = Int16GetDatum(ttl_attno);
-	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(query->swStepFactor);
+	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum(QueryGetSWStepFactor(query));
 
 	/* unused */
 	values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(InvalidOid);
@@ -630,7 +630,7 @@ GetContQueryForId(Oid id)
 
 		cq->is_sw = true;
 		cq->sw_attno = row->ttl_attno;
-		cq->sw_step_factor = query->swStepFactor;
+		cq->sw_step_factor = row->step_factor;
 		i = GetSWInterval(cq->name);
 		cq->sw_interval_ms = 1000 * (int) DatumGetFloat8(
 				DirectFunctionCall2(interval_part, CStringGetTextDatum("epoch"), (Datum) i));

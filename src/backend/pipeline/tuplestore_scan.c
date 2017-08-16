@@ -82,7 +82,7 @@ create_tuplestore_scan_plan(PlannerInfo *root, RelOptInfo *rel, struct CustomPat
 {
 	CustomScan *scan = makeNode(CustomScan);
 	Plan *plan = &scan->scan.plan;
-	ContQuery *cv = GetContQueryForViewId(root->parse->cqId);
+	ContQuery *cv = GetContQueryForViewId(QueryGetContQueryId(root->parse));
 	Relation matrel = heap_openrv(cv->matrel, NoLock);
 	TupleDesc desc = RelationGetDescr(matrel);
 	AttrNumber attrno;

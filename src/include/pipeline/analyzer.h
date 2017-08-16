@@ -60,6 +60,7 @@ typedef struct ContAnalyzeContext
 extern void SetPostParseAnalyzeHook(void);
 
 extern bool QueryIsContinuous(Query *query);
+extern void InitializeQueryCache(void);
 extern void QuerySetIsContinuous(Query *query, bool continuous);
 double QueryGetSWStepFactor(Query *query);
 extern void QuerySetSWStepFactor(Query *query, double sf);

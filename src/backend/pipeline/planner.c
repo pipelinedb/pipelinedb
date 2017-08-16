@@ -81,7 +81,7 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 	query = linitial(pg_analyze_and_rewrite(node, sql, NULL, 0));
 
 	QuerySetIsContinuous(query, true);
-	query->cqId = id;
+	QuerySetContQueryId(query, id);
 
 	plan = pg_plan_query(query, 0, NULL);
 

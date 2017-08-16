@@ -119,7 +119,7 @@ parse_analyze(Node *parseTree, const char *sourceText,
 		SelectStmt *stmt = (SelectStmt *) parseTree;
 
 		QuerySetIsContinuous(query, stmt->forContinuousView);
-		query->swStepFactor = stmt->swStepFactor;
+		QuerySetSWStepFactor(query, stmt->swStepFactor);
 	}
 
 	if (post_parse_analyze_hook)
