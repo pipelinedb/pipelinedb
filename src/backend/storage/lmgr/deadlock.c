@@ -948,8 +948,6 @@ DeadLockReport(void)
 
 	pgstat_report_deadlock();
 
-	elog(LOG, "[%d] %s", getpid(), logbuf.data);
-	sleep(100000);
 	ereport(ERROR,
 			(errcode(ERRCODE_T_R_DEADLOCK_DETECTED),
 			 errmsg("deadlock detected"),
