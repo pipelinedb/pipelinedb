@@ -57,7 +57,7 @@ ExceptionalCondition(const char *conditionName,
 	/* Usually this shouldn't be needed, but make sure the msg went out */
 	fflush(stderr);
 
-#ifndef SLEEP_ON_ASSERT
+#ifdef SLEEP_ON_ASSERT
 
 	/*
 	 * It would be nice to use pg_usleep() here, but only does 2000 sec or 33
