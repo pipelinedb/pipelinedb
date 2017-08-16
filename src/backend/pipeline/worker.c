@@ -301,6 +301,7 @@ should_exec_query(ContQuery *query)
 	return true;
 }
 
+#include "nodes/makefuncs.h"
 void
 ContinuousQueryWorkerMain(void)
 {
@@ -319,6 +320,7 @@ ContinuousQueryWorkerMain(void)
 		if (get_sigterm_flag())
 			break;
 
+		CurrentResourceOwner = WorkerResOwner;
 		ContExecutorStartBatch(cont_exec, 0);
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, 0)) != InvalidOid)
@@ -337,8 +339,6 @@ ContinuousQueryWorkerMain(void)
 				estate = CreateEState(state->query_desc);
 				state->query_desc->estate = (EState *) estate;
 				SetEStateSnapshot((EState *) estate);
-
-				CurrentResourceOwner = WorkerResOwner;
 
 				if (should_exec_query(state->base.query))
 				{
@@ -380,9 +380,6 @@ ContinuousQueryWorkerMain(void)
 				if (estate && ActiveSnapshotSet())
 					UnsetEStateSnapshot((EState *) estate);
 
-				AbortCurrentTransaction();
-				StartTransactionCommand();
-
 				/*
 				 * Modifying anything within a PG_CATCH block can have unpredictable behavior
 				 * when optimization is enabled, so we do the remaining error handling later.
@@ -392,7 +389,10 @@ ContinuousQueryWorkerMain(void)
 			PG_END_TRY();
 
 			if (error)
+			{
+				ContExecutorAbortQuery(cont_exec);
 				pgstat_increment_cq_error(1);
+			}
 
 next:
 			ContExecutorEndQuery(cont_exec);

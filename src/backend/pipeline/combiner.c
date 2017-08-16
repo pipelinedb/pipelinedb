@@ -19,6 +19,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "commands/sequence.h"
+#include "commands/lockcmds.h"
 #include "executor/execdesc.h"
 #include "executor/executor.h"
 #include "executor/tstoreReceiver.h"
@@ -1541,6 +1542,7 @@ sync_all(ContExecutor *cont_exec)
 
 	while ((id = bms_first_member(tmp)) >= 0)
 	{
+		bool error = false;
 		ContQueryCombinerState *state = states[id];
 
 		if (!state)
@@ -1560,10 +1562,12 @@ sync_all(ContExecutor *cont_exec)
 			EmitErrorReport();
 			FlushErrorState();
 
-			AbortCurrentTransaction();
-			StartTransactionCommand();
+			error = true;
 		}
 		PG_END_TRY();
+
+		if (error)
+			ContExecutorAbortQuery(cont_exec);
 
 		TimestampDifference(start_time, GetCurrentTimestamp(), &secs, &usecs);
 		pgstat_increment_cq_exec_time(secs * 1000 + (usecs / 1000));
