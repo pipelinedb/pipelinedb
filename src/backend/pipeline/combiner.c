@@ -1960,7 +1960,6 @@ next:
 			do_commit = false;
 
 		ContExecutorEndBatch(cont_exec, do_commit);
-
 	}
 
 	for (query_id = 0; query_id < MAX_CQS; query_id++)
