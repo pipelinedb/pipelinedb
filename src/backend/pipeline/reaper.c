@@ -105,7 +105,6 @@ DeleteTTLExpiredRows(RangeVar *cvname, RangeVar *matrel)
 		elog(ERROR, "SPI_execute failed: %s", delete_cmd);
 
 	num_deleted = SPI_processed;
-//	elog(LOG, "deleted %d rows with %s", num_deleted, delete_cmd);
 
 	if (SPI_finish() != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed");
