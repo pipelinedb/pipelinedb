@@ -2273,6 +2273,7 @@ load_pipelinedb(void)
 
 	PG_CMD_OPEN;
 
+	PG_CMD_PUTS("CREATE TABLE _pipeline_exec_lock ();\n");
 	PG_CMD_PUTS("CREATE FOREIGN DATA WRAPPER stream_fdw HANDLER stream_fdw_handler;\n");
 	PG_CMD_PUTS("CREATE SERVER pipeline_streams FOREIGN DATA WRAPPER stream_fdw;\n");
 

@@ -11,6 +11,7 @@
 
 #include "postgres.h"
 
+#include "access/heapam.h"
 #include "access/htup.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
@@ -36,6 +37,38 @@
 
 #define MAX_IN_XACT_TIMEOUT 5 /* 5ms */
 #define MAX_NOT_IN_XACT_TIMEOUT 3000 /* 3s */
+
+/*
+ * We use this relation as the basis for mutual exclusion between worker/combiner
+ * execution and DROP CONTINUOUS execution.
+ */
+Oid PipelineExecLockRelationOid = InvalidOid;
+
+/*
+ * exec_begin
+ */
+static void
+exec_begin(ContExecutor *exec)
+{
+	StartTransactionCommand();
+	exec->lock = AcquireContExecutionLock(AccessShareLock);
+}
+
+/*
+ * exec_commit
+ */
+static void
+exec_commit(ContExecutor *exec)
+{
+	/*
+	 * We can end up here without having acquired the lock when it's the first execution of
+	 * the executor's CQs, and no CQ's state has been retrieved yet.
+	 */
+	if (exec->lock)
+		ReleaseContExecutionLock(exec->lock);
+
+	CommitTransactionCommand();
+}
 
 ContExecutor *
 ContExecutorNew(ContQueryStateInit initfn)
@@ -111,7 +144,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 	success = ipc_tuple_reader_poll(timeout);
 
 	if (!IsTransactionState())
-		StartTransactionCommand();
+		exec_begin(exec);
 
 	if (success)
 	{
@@ -199,8 +232,8 @@ get_query_state(ContExecutor *exec)
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
 	{
-		CommitTransactionCommand();
-		StartTransactionCommand();
+		exec_commit(exec);
+		exec_begin(exec);
 		commit = true;
 	}
 
@@ -261,8 +294,8 @@ get_query_state(ContExecutor *exec)
 
 	if (commit)
 	{
-		CommitTransactionCommand();
-		StartTransactionCommand();
+		exec_commit(exec);
+		exec_begin(exec);
 	}
 
 	Assert(exec->states[exec->curr_query_id] == state);
@@ -341,7 +374,15 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 		exec->states[exec->curr_query_id] = NULL;
 	}
 
+	/*
+	 * We can end up here if we're purging a query whose state was never loaded,
+	 * e.g. if it was deleted before ever being executed.
+	 */
+	if (exec->lock)
+		ReleaseContExecutionLock(exec->lock);
+
 	exec->curr_query = NULL;
+	exec->lock = NULL;
 }
 
 void
@@ -368,15 +409,26 @@ ContExecutorEndQuery(ContExecutor *exec)
 }
 
 void
+ContExecutorAbortQuery(ContExecutor *exec)
+{
+	if (exec->lock)
+		ReleaseContExecutionLock(exec->lock);
+	AbortCurrentTransaction();
+	StartTransactionCommand();
+	exec->lock = AcquireContExecutionLock(AccessShareLock);
+}
+
+void
 ContExecutorEndBatch(ContExecutor *exec, bool commit)
 {
 	Assert(IsTransactionState());
 
 	if (commit)
 	{
-		CommitTransactionCommand();
+		exec_commit(exec);
 		MemoryContextReset(ContQueryTransactionContext);
 		pgstat_report_stat(false);
+		exec->lock = NULL;
 	}
 
 	if (exec->batch)
@@ -421,4 +473,24 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	debug_query_string = NULL;
 	MyStatCQEntry = NULL;
+}
+
+/*
+ * AcquireContExecutionLock
+ */
+ContExecutionLock
+AcquireContExecutionLock(LOCKMODE mode)
+{
+	Assert(OidIsValid(PipelineExecLockRelationOid));
+
+	return heap_open(PipelineExecLockRelationOid, mode);
+}
+
+/*
+ * ReleaseContExecutionLock
+ */
+void
+ReleaseContExecutionLock(ContExecutionLock lock)
+{
+	heap_close(lock, NoLock);
 }

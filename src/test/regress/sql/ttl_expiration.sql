@@ -65,7 +65,7 @@ SELECT x, "$pk" FROM ttl1_mrel ORDER BY ts;
 DROP CONTINUOUS VIEW ttl0;
 DROP CONTINUOUS VIEW ttl1;
 
-CREATE CONTINUOUS VIEW ttl2 AS SELECT day(clock_timestamp()) AS ts, x, COUNT(*) FROM ttl_stream GROUP BY ts, x;
+CREATE CONTINUOUS VIEW ttl2 AS SELECT arrival_timestamp AS ts, x FROM ttl_stream;
 CREATE CONTINUOUS VIEW ttl3 WITH (sw = '1 second') AS SELECT count(*) FROM ttl_stream;
 
 -- Can't change the TTL of a SW CV
@@ -89,24 +89,24 @@ SELECT set_ttl('ttl2', '5 seconds', 'ts');
 INSERT INTO ttl_stream (x) VALUES (2);
 INSERT INTO ttl_stream (x) VALUES (2);
 
-SELECT x, count FROM ttl2;
+SELECT x FROM ttl2 ORDER BY ts;
 
 SELECT pg_sleep(6);
 SELECT 0 * ttl_expire('ttl2');
 
-SELECT x, count FROM ttl2;
+SELECT x FROM ttl2 ORDER BY ts;
 
 SELECT set_ttl('ttl2', '1 second', 'ts');
 
 INSERT INTO ttl_stream (x) VALUES (2);
 INSERT INTO ttl_stream (x) VALUES (2);
 
-SELECT x, count FROM ttl2;
+SELECT x FROM ttl2 ORDER BY ts;
 
 SELECT pg_sleep(2);
 SELECT 0 * ttl_expire('ttl2');
 
-SELECT x, count FROM ttl2;
+SELECT x FROM ttl2 ORDER BY ts;
 
 -- No verify we can remove a TTL
 SELECT set_ttl('ttl2', null, null);
@@ -115,7 +115,7 @@ INSERT INTO ttl_stream (x) VALUES (2);
 INSERT INTO ttl_stream (x) VALUES (2);
 SELECT 0 * ttl_expire('ttl2');
 
-SELECT x, count FROM ttl2;
+SELECT x FROM ttl2 ORDER BY ts;
 
 DROP CONTINUOUS VIEW ttl2;
 DROP STREAM ttl_stream;
