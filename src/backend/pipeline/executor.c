@@ -11,6 +11,7 @@
 
 #include "postgres.h"
 
+#include "access/heapam.h"
 #include "access/htup.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
@@ -36,6 +37,12 @@
 
 #define MAX_IN_XACT_TIMEOUT 5 /* 5ms */
 #define MAX_NOT_IN_XACT_TIMEOUT 3000 /* 3s */
+
+/*
+ * We use this relation as the basis for mutual exclusion between worker/combiner
+ * execution and DROP CONTINUOUS execution.
+ */
+Oid PipelineExecLockRelationOid = InvalidOid;
 
 ContExecutor *
 ContExecutorNew(ContQueryStateInit initfn)
@@ -111,7 +118,15 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 	success = ipc_tuple_reader_poll(timeout);
 
 	if (!IsTransactionState())
+	{
 		StartTransactionCommand();
+
+		// clean this up
+		if (IsContQueryWorkerProcess())
+			CurrentResourceOwner = WorkerResOwner;
+
+		exec->lock = heap_openrv(makeRangeVar(NULL, "_pipeline_exec_lock", -1), AccessShareLock);
+	}
 
 	if (success)
 	{
@@ -199,8 +214,22 @@ get_query_state(ContExecutor *exec)
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
 	{
+//		if (IsContQueryCombinerProcess())
+		// shouldn't this ALWAYS be non-NULL in this scenario though?
+		if (exec->lock)
+		{
+//			elog(LOG, "[%d] releasing lock in %ld", getpid(), GetCurrentTransactionId());
+			heap_close(exec->lock, NoLock);
+		}
 		CommitTransactionCommand();
+		// just obtain the lock again here?
+		// worker needs this stuff too!
 		StartTransactionCommand();
+		if (IsContQueryWorkerProcess())
+			CurrentResourceOwner = WorkerResOwner;
+//		if (IsContQueryCombinerProcess())
+//		elog(LOG, "[%d] acquiring lock in %ld", getpid(), GetCurrentTransactionId());
+		exec->lock = heap_openrv(makeRangeVar(NULL, "_pipeline_exec_lock", -1), AccessShareLock);
 		commit = true;
 	}
 
@@ -261,8 +290,20 @@ get_query_state(ContExecutor *exec)
 
 	if (commit)
 	{
+//		if (IsContQueryCombinerProcess())
+		// shouldn't this ALWAYS be non-NULL though?
+		if (exec->lock)
+		{
+//			elog(LOG, "[%d] releasing lock in %ld", getpid(), GetCurrentTransactionId());
+			heap_close(exec->lock, NoLock);
+		}
 		CommitTransactionCommand();
 		StartTransactionCommand();
+		if (IsContQueryWorkerProcess())
+			CurrentResourceOwner = WorkerResOwner;
+//		if (IsContQueryCombinerProcess())
+//		elog(LOG, "[%d] acquiring lock in %ld", getpid(), GetCurrentTransactionId());
+		exec->lock = heap_openrv(makeRangeVar(NULL, "_pipeline_exec_lock", -1), AccessShareLock);
 	}
 
 	Assert(exec->states[exec->curr_query_id] == state);
@@ -342,6 +383,7 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 	}
 
 	exec->curr_query = NULL;
+	exec->lock = NULL;
 }
 
 void
@@ -372,11 +414,18 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 {
 	Assert(IsTransactionState());
 
+	// release lock
+//	if (IsContQueryCombinerProcess())
+
 	if (commit)
 	{
+		if (exec->lock)
+			heap_close(exec->lock, NoLock);
+
 		CommitTransactionCommand();
 		MemoryContextReset(ContQueryTransactionContext);
 		pgstat_report_stat(false);
+		exec->lock = NULL;
 	}
 
 	if (exec->batch)
@@ -421,4 +470,24 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	debug_query_string = NULL;
 	MyStatCQEntry = NULL;
+}
+
+/*
+ * AcquireExecutorLock
+ */
+ContExecutorLock
+AcquireExecutorLock(LOCKMODE mode)
+{
+	Assert(OidIsValid(PipelineExecLockRelationOid));
+
+	return heap_open(PipelineExecLockRelationOid, mode);
+}
+
+/*
+ * ReleaseExecutorLock
+ */
+void
+ReleaseExecutorLock(ContExecutorLock lock)
+{
+	heap_close(lock, NoLock);
 }

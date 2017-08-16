@@ -19,6 +19,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "commands/sequence.h"
+#include "commands/lockcmds.h"
 #include "executor/execdesc.h"
 #include "executor/executor.h"
 #include "executor/tstoreReceiver.h"
@@ -1560,8 +1561,11 @@ sync_all(ContExecutor *cont_exec)
 			EmitErrorReport();
 			FlushErrorState();
 
+			// handle meta locking
+			heap_close(cont_exec->lock_rel, NoLock);
 			AbortCurrentTransaction();
 			StartTransactionCommand();
+			cont_exec->lock_rel = heap_openrv(makeRangeVar(NULL, "pipeline_lock", -1), AccessShareLock);
 		}
 		PG_END_TRY();
 
@@ -1871,6 +1875,8 @@ ContinuousQueryCombinerMain(void)
 
 		ContExecutorStartBatch(cont_exec, min_tick_ms);
 
+		// the other complication here is that ContExecutorStartNextQuery can commit
+
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, min_tick_ms)) != InvalidOid)
 		{
 			int count = 0;
@@ -1956,6 +1962,7 @@ next:
 			do_commit = false;
 
 		ContExecutorEndBatch(cont_exec, do_commit);
+
 	}
 
 	for (query_id = 0; query_id < MAX_CQS; query_id++)

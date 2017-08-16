@@ -238,6 +238,10 @@ errstart(int elevel, const char *filename, int lineno,
 	 * Check some cases in which we want to promote an error into a more
 	 * severe error.  None of this logic applies for non-error messages.
 	 */
+	if (elevel >= WARNING)
+	{
+		int x = 0;
+	}
 	if (elevel >= ERROR)
 	{
 		/*

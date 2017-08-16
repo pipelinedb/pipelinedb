@@ -36,7 +36,7 @@
 #include "utils/resowner.h"
 #include "utils/snapmgr.h"
 
-static ResourceOwner WorkerResOwner = NULL;
+ResourceOwner WorkerResOwner = NULL;
 
 typedef struct {
 	ContQueryState base;
@@ -301,6 +301,7 @@ should_exec_query(ContQuery *query)
 	return true;
 }
 
+#include "nodes/makefuncs.h"
 void
 ContinuousQueryWorkerMain(void)
 {
@@ -380,8 +381,11 @@ ContinuousQueryWorkerMain(void)
 				if (estate && ActiveSnapshotSet())
 					UnsetEStateSnapshot((EState *) estate);
 
+				// handle meta locking
+				heap_close(cont_exec->lock_rel, NoLock);
 				AbortCurrentTransaction();
 				StartTransactionCommand();
+				cont_exec->lock_rel = heap_openrv(makeRangeVar(NULL, "pipeline_lock", -1), AccessShareLock);
 
 				/*
 				 * Modifying anything within a PG_CATCH block can have unpredictable behavior

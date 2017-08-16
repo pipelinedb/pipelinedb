@@ -25,6 +25,7 @@
 #include "pipeline/ipc/reader.h"
 #include "port/atomics.h"
 #include "storage/spin.h"
+#include "utils/resowner.h"
 #include "utils/timestamp.h"
 #include "utils/tuplestore.h"
 
@@ -46,6 +47,7 @@ typedef struct BatchReceiver
 
 typedef struct ContExecutor ContExecutor;
 typedef ContQueryState *(*ContQueryStateInit) (ContExecutor *exec, ContQueryState *state);
+typedef Relation ContExecutorLock;
 
 struct ContExecutor
 {
@@ -63,7 +65,11 @@ struct ContExecutor
 	ContQueryState *curr_query;
 	ContQueryState *states[MAX_CQS];
 	ContQueryStateInit initfn;
+	ContExecutorLock lock;
 };
+
+extern ResourceOwner WorkerResOwner;
+extern Oid PipelineExecLockRelationOid;
 
 extern ContExecutor *ContExecutorNew(ContQueryStateInit initfn);
 extern void ContExecutorDestroy(ContExecutor *exec);
@@ -73,5 +79,7 @@ extern void ContExecutorPurgeQuery(ContExecutor *exec);
 extern void *ContExecutorIterate(ContExecutor *exec, int *len);
 extern void ContExecutorEndQuery(ContExecutor *exec);
 extern void ContExecutorEndBatch(ContExecutor *exec, bool commit);
+extern ContExecutorLock AcquireExecutorLock(LOCKMODE mode);
+extern void ReleaseExecutorLock(ContExecutorLock rel);
 
 #endif

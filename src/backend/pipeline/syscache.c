@@ -18,6 +18,7 @@
 #include "catalog/pipeline_combine.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
+#include "pipeline/executor.h"
 #include "pipeline/syscache.h"
 #include "utils/catcache.h"
 #include "utils/lsyscache.h"
@@ -241,6 +242,7 @@ InitPipelineSysCache(void)
 	PipelineCombineRelationOid = get_relname_relid("pipeline_combine", PG_CATALOG_NAMESPACE);
 	PipelineQueryRelationOid = get_relname_relid("pipeline_query", PG_CATALOG_NAMESPACE);
 	PipelineStreamRelationOid = get_relname_relid("pipeline_stream", PG_CATALOG_NAMESPACE);
+	PipelineExecLockRelationOid = get_relname_relid("_pipeline_exec_lock", PG_CATALOG_NAMESPACE);
 }
 
 /*
