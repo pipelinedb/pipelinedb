@@ -877,8 +877,6 @@ validate_target_list(SelectStmt *stmt)
 	}
 }
 
-static post_parse_analyze_hook_type save_analyze_hook = NULL;
-
 HTAB *query_cache;
 TransactionId query_cache_xid = InvalidTransactionId;
 int current_query_id = 0;
@@ -898,6 +896,13 @@ get_query_state(Query *query)
 	QueryState *entry;
 	bool found;
 
+	/*
+	 * We lazily create and destroy the Query hashtable such that it's only valid for
+	 * a single transaction. This does mean that a garbage reference to the cache will
+	 * persist after a transaction finishes, but we detect this condition by associating
+	 * a transaction id with the hashtable. If the hashtable's transaction id is different
+	 * from the current transaction's, we immediately destroy and recreate it.
+	 */
 	if (TransactionIdIsValid(query_cache_xid))
 	{
 		if (query_cache_xid != GetCurrentTransactionId())
@@ -923,8 +928,6 @@ get_query_state(Query *query)
 		query_cache_xid = GetCurrentTransactionId();
 	}
 
-//	if (query->queryId > 0)
-//		return;
 	if (query->queryId <= 0)
 		query->queryId = ++current_query_id;
 
@@ -941,26 +944,6 @@ get_query_state(Query *query)
 	Assert(entry);
 
 	return entry;
-}
-
-/*
- * InitializeQueryCache
- */
-void
-InitializeQueryCache(void)
-{
-	// create hashtable
-}
-
-/*
- * pipeline_post_parse_analyze_hook
- */
-static void
-pipeline_post_parse_analyze_hook(ParseState *pstate, Query *query)
-{
-	// assign an ID
-	if (save_analyze_hook)
-		(*save_analyze_hook)(pstate, query);
 }
 
 /*
@@ -991,7 +974,6 @@ QuerySetSWStepFactor(Query *query, double sf)
 {
 	QueryState *state = get_query_state(query);
 	state->swStepFactor = sf;
-	query->swStepFactor = sf;
 }
 
 /*
@@ -1002,7 +984,6 @@ QuerySetIsContinuous(Query *query, bool continuous)
 {
 	QueryState *state = get_query_state(query);
 	state->isContinuous = continuous;
-	query->isContinuous = continuous;
 }
 
 /*
@@ -1023,23 +1004,6 @@ QuerySetContQueryId(Query *query, Oid id)
 {
 	QueryState *state = get_query_state(query);
 	state->cqId = id;
-	query->cqId = id;
-}
-
-/*
- * SetPostParseAnalyzeHook
- */
-void
-SetPostParseAnalyzeHook(void)
-{
-	// initialize hashtable
-	// we need to be able to destroy and set this to NULL, so we need an executor/planner hook too
-	//
-	// we can probably just detect which XID the hashtable was created against actually...
-
-	// we may not need this yet if we're setting the id lazily
-	save_analyze_hook = post_parse_analyze_hook;
-	post_parse_analyze_hook = pipeline_post_parse_analyze_hook;
 }
 
 /*

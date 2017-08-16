@@ -161,12 +161,6 @@ typedef struct Query
 	List	   *withCheckOptions;	/* a list of WithCheckOption's, which are
 									 * only added during rewrite and therefore
 									 * are not written out as part of Query. */
-	/*
-	 * Continuous query fields
-	 */
-	bool isContinuous; /* should this be executed continuously? */
-	Oid  cqId; /* continuous query id, valid only if is_continuous is true */
-	double swStepFactor;
 } Query;
 
 
