@@ -1875,8 +1875,6 @@ ContinuousQueryCombinerMain(void)
 
 		ContExecutorStartBatch(cont_exec, min_tick_ms);
 
-		// the other complication here is that ContExecutorStartNextQuery can commit
-
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, min_tick_ms)) != InvalidOid)
 		{
 			int count = 0;
