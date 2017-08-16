@@ -16,6 +16,7 @@
 
 #include "miscadmin.h"
 #include "pipeline/ipc/microbatch.h"
+#include "pipeline/analyzer.h"
 #include "pipeline/planner.h"
 #include "pipeline/scheduler.h"
 #include "pipeline/syscache.h"

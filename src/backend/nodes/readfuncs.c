@@ -229,10 +229,6 @@ _readQuery(void)
 	READ_NODE_FIELD(rowMarks);
 	READ_NODE_FIELD(setOperations);
 	READ_NODE_FIELD(constraintDeps);
-	READ_BOOL_FIELD(isContinuous);
-	READ_BOOL_FIELD(isCombine);
-	READ_BOOL_FIELD(isCombineLookup);
-	READ_INT_FIELD(swStepFactor);
 
 	READ_DONE();
 }

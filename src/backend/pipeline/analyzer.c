@@ -15,6 +15,7 @@
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/sysattr.h"
+#include "access/xact.h"
 #include "access/xlog.h"
 #include "catalog/binary_upgrade.h"
 #include "catalog/namespace.h"
@@ -874,6 +875,135 @@ validate_target_list(SelectStmt *stmt)
 		}
 
 	}
+}
+
+HTAB *query_cache;
+TransactionId query_cache_xid = InvalidTransactionId;
+int current_query_id = 0;
+
+typedef struct QueryState
+{
+	int queryId;
+	Oid cqId;
+	double swStepFactor;
+	bool isContinuous;
+} QueryState;
+
+static QueryState *
+get_query_state(Query *query)
+{
+	MemoryContext old;
+	QueryState *entry;
+	bool found;
+
+	/*
+	 * We lazily create and destroy the Query hashtable such that it's only valid for
+	 * a single transaction. This does mean that a garbage reference to the cache will
+	 * persist after a transaction finishes, but we detect this condition by associating
+	 * a transaction id with the hashtable. If the hashtable's transaction id is different
+	 * from the current transaction's, we immediately destroy and recreate it.
+	 */
+	if (TransactionIdIsValid(query_cache_xid))
+	{
+		if (query_cache_xid != GetCurrentTransactionId())
+		{
+			if (query_cache)
+				hash_destroy(query_cache);
+			query_cache = NULL;
+			current_query_id = 0;
+		}
+	}
+
+	if (query_cache == NULL)
+	{
+		HASHCTL		ctl;
+
+		Assert(TopMemoryContext);
+
+		MemSet(&ctl, 0, sizeof(ctl));
+		ctl.keysize = sizeof(int);
+		ctl.entrysize = sizeof(QueryState);
+		ctl.hcxt = TopMemoryContext;
+		query_cache = hash_create("query_cache", 16, &ctl, HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+		query_cache_xid = GetCurrentTransactionId();
+	}
+
+	if (query->queryId <= 0)
+		query->queryId = ++current_query_id;
+
+	old = MemoryContextSwitchTo(TopTransactionContext);
+	entry = (QueryState *) hash_search(query_cache, &query->queryId, HASH_ENTER, &found);
+	if (!found)
+	{
+		entry->isContinuous = false;
+		entry->cqId = InvalidOid;
+		entry->swStepFactor = 0;
+	}
+	MemoryContextSwitchTo(old);
+
+	Assert(entry);
+
+	return entry;
+}
+
+/*
+ * QueryIsContinuous
+ */
+bool
+QueryIsContinuous(Query *query)
+{
+	QueryState *state = get_query_state(query);
+	return state->isContinuous;
+}
+
+/*
+ * GetSWStepFactor
+ */
+double
+QueryGetSWStepFactor(Query *query)
+{
+	QueryState *state = get_query_state(query);
+	return state->swStepFactor;
+}
+
+/*
+ * SetSWStepFactor
+ */
+void
+QuerySetSWStepFactor(Query *query, double sf)
+{
+	QueryState *state = get_query_state(query);
+	state->swStepFactor = sf;
+}
+
+/*
+ * QuerySetIsContinuous
+ */
+void
+QuerySetIsContinuous(Query *query, bool continuous)
+{
+	QueryState *state = get_query_state(query);
+	state->isContinuous = continuous;
+}
+
+/*
+ * GetQueryId
+ */
+Oid
+QueryGetContQueryId(Query *query)
+{
+	QueryState *state = get_query_state(query);
+	return state->cqId;
+}
+
+/*
+ * SetContQueryId
+ */
+void
+QuerySetContQueryId(Query *query, Oid id)
+{
+	QueryState *state = get_query_state(query);
+	state->cqId = id;
 }
 
 /*
@@ -2503,6 +2633,7 @@ get_cont_query_select_stmt(RangeVar *rv)
 	char *sql;
 	Query *query;
 	SelectStmt *select;
+	Form_pipeline_query row;
 
 	tup = GetPipelineQueryTuple(rv);
 
@@ -2511,12 +2642,13 @@ get_cont_query_select_stmt(RangeVar *rv)
 				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
 				errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
+	row = (Form_pipeline_query) GETSTRUCT(tup);
 	tmp = PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 
 	sql = deparse_query_def(query);
 	select = (SelectStmt *) linitial(pg_parse_query(sql));
-	select->swStepFactor = query->swStepFactor;
+	select->swStepFactor = row->step_factor;
 
 	ReleaseSysCache(tup);
 
@@ -2682,14 +2814,14 @@ get_worker_query_for_id(Oid id)
 				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
 				errmsg("continuous view with id \"%d\" does not exist", id)));
 
+	row = (Form_pipeline_query) GETSTRUCT(tup);
 	tmp = PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
 	query = (Query *) stringToNode(TextDatumGetCString(tmp));
 
 	sql = deparse_query_def(query);
 	sel = (SelectStmt *) linitial(pg_parse_query(sql));
-	sel->swStepFactor = query->swStepFactor;
+	sel->swStepFactor = row->step_factor;
 
-	row = (Form_pipeline_query) GETSTRUCT(tup);
 	matrel = makeRangeVar(get_namespace_name(get_rel_namespace(row->matrelid)), get_rel_name(row->matrelid), -1);
 
 	ReleaseSysCache(tup);
@@ -3904,7 +4036,7 @@ ApplySlidingWindow(SelectStmt *stmt, DefElem *sw, int *ttl)
 	if (sw_cv)
 	{
 		Interval *sw_interval = GetSWInterval(sw_cv);
-		int step_factor = GetContWorkerQuery(sw_cv)->swStepFactor;
+		int step_factor = QueryGetSWStepFactor(GetContWorkerQuery(sw_cv));
 		Interval *view_interval = parse_node_to_interval((Node *) interval);
 		Interval *step_interval;
 		Interval *min_interval;

@@ -57,6 +57,13 @@ typedef struct ContAnalyzeContext
 #define IsMatRelCombine(proname) (pg_strcasecmp(NameStr(proname), MATREL_COMBINE) == 0)
 #define IsMatRelFinalize(proname) (pg_strcasecmp(NameStr(proname), MATREL_FINALIZE) == 0)
 
+extern bool QueryIsContinuous(Query *query);
+extern void QuerySetIsContinuous(Query *query, bool continuous);
+double QueryGetSWStepFactor(Query *query);
+extern void QuerySetSWStepFactor(Query *query, double sf);
+extern Oid QueryGetContQueryId(Query *query);
+extern void QuerySetContQueryId(Query *query, Oid id);
+
 extern bool collect_rels_and_streams(Node *node, ContAnalyzeContext *context);
 extern bool collect_cols(Node *node, ContAnalyzeContext *context);
 

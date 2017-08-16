@@ -2201,8 +2201,6 @@ _outSelectStmt(StringInfo str, const SelectStmt *node)
 	WRITE_NODE_FIELD(withClause);
 	WRITE_ENUM_FIELD(op, SetOperation);
 	WRITE_BOOL_FIELD(all);
-	WRITE_BOOL_FIELD(forContinuousView);
-	WRITE_FLOAT_FIELD(swStepFactor, "%.2f");
 	WRITE_NODE_FIELD(larg);
 	WRITE_NODE_FIELD(rarg);
 }
@@ -2396,10 +2394,6 @@ _outQuery(StringInfo str, const Query *node)
 	WRITE_NODE_FIELD(rowMarks);
 	WRITE_NODE_FIELD(setOperations);
 	WRITE_NODE_FIELD(constraintDeps);
-	WRITE_BOOL_FIELD(isContinuous);
-	WRITE_BOOL_FIELD(isCombine);
-	WRITE_BOOL_FIELD(isCombineLookup);
-	WRITE_FLOAT_FIELD(swStepFactor, "%.2f");
 }
 
 static void

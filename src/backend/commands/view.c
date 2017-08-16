@@ -26,6 +26,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "parser/parse_relation.h"
+#include "pipeline/analyzer.h"
 #include "rewrite/rewriteDefine.h"
 #include "rewrite/rewriteManip.h"
 #include "rewrite/rewriteHandler.h"
@@ -610,7 +611,7 @@ DefineView(ViewStmt *stmt, const char *queryString)
 	 * NOTE: if it already exists and replace is false, the xact will be
 	 * aborted.
 	 */
-	if (viewParse->isContinuous)
+	if (QueryIsContinuous(viewParse))
 		address = DefineContVirtualRelation(view, viewParse->targetList);
 	else
 		address = DefineVirtualRelation(view, viewParse->targetList,
