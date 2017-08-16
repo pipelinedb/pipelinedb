@@ -42,7 +42,6 @@ void
 PipelineInstallHooks()
 {
 	InitPipelineSysCache();
-
 	SaveUtilityHook = ProcessUtility_hook;
 	ProcessUtility_hook = ProcessUtilityOnContView;
 }
