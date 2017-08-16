@@ -125,7 +125,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 		if (IsContQueryWorkerProcess())
 			CurrentResourceOwner = WorkerResOwner;
 
-		exec->lock = heap_openrv(makeRangeVar(NULL, "_pipeline_exec_lock", -1), AccessShareLock);
+		exec->lock = AcquireExecutorLock(AccessShareLock);
 	}
 
 	if (success)
@@ -214,22 +214,17 @@ get_query_state(ContExecutor *exec)
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
 	{
-//		if (IsContQueryCombinerProcess())
-		// shouldn't this ALWAYS be non-NULL in this scenario though?
 		if (exec->lock)
-		{
-//			elog(LOG, "[%d] releasing lock in %ld", getpid(), GetCurrentTransactionId());
-			heap_close(exec->lock, NoLock);
-		}
+			ReleaseExecutorLock(exec->lock);
+
 		CommitTransactionCommand();
-		// just obtain the lock again here?
-		// worker needs this stuff too!
 		StartTransactionCommand();
+
+		// clean this up
 		if (IsContQueryWorkerProcess())
 			CurrentResourceOwner = WorkerResOwner;
-//		if (IsContQueryCombinerProcess())
-//		elog(LOG, "[%d] acquiring lock in %ld", getpid(), GetCurrentTransactionId());
-		exec->lock = heap_openrv(makeRangeVar(NULL, "_pipeline_exec_lock", -1), AccessShareLock);
+
+		exec->lock = AcquireExecutorLock(AccessShareLock);
 		commit = true;
 	}
 
@@ -290,20 +285,18 @@ get_query_state(ContExecutor *exec)
 
 	if (commit)
 	{
-//		if (IsContQueryCombinerProcess())
 		// shouldn't this ALWAYS be non-NULL though?
 		if (exec->lock)
-		{
-//			elog(LOG, "[%d] releasing lock in %ld", getpid(), GetCurrentTransactionId());
-			heap_close(exec->lock, NoLock);
-		}
+			ReleaseExecutorLock(exec->lock);
+
+
 		CommitTransactionCommand();
 		StartTransactionCommand();
+
 		if (IsContQueryWorkerProcess())
 			CurrentResourceOwner = WorkerResOwner;
-//		if (IsContQueryCombinerProcess())
-//		elog(LOG, "[%d] acquiring lock in %ld", getpid(), GetCurrentTransactionId());
-		exec->lock = heap_openrv(makeRangeVar(NULL, "_pipeline_exec_lock", -1), AccessShareLock);
+
+		exec->lock = AcquireExecutorLock(AccessShareLock);
 	}
 
 	Assert(exec->states[exec->curr_query_id] == state);
@@ -382,6 +375,11 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 		exec->states[exec->curr_query_id] = NULL;
 	}
 
+	// we can be called to refresh metadata, in which case we can still hold the lock
+	// should this be called somewhere else? probably!
+	if (exec->lock)
+		ReleaseExecutorLock(exec->lock);
+
 	exec->curr_query = NULL;
 	exec->lock = NULL;
 }
@@ -410,12 +408,20 @@ ContExecutorEndQuery(ContExecutor *exec)
 }
 
 void
+ContExecutorAbortQuery(ContExecutor *exec)
+{
+	// how can this happen?
+	if (exec->lock)
+		ReleaseExecutorLock(exec->lock);
+	AbortCurrentTransaction();
+	StartTransactionCommand();
+	exec->lock = AcquireExecutorLock(AccessShareLock);
+}
+
+void
 ContExecutorEndBatch(ContExecutor *exec, bool commit)
 {
 	Assert(IsTransactionState());
-
-	// release lock
-//	if (IsContQueryCombinerProcess())
 
 	if (commit)
 	{
@@ -423,6 +429,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 			heap_close(exec->lock, NoLock);
 
 		CommitTransactionCommand();
+
 		MemoryContextReset(ContQueryTransactionContext);
 		pgstat_report_stat(false);
 		exec->lock = NULL;

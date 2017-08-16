@@ -381,12 +381,6 @@ ContinuousQueryWorkerMain(void)
 				if (estate && ActiveSnapshotSet())
 					UnsetEStateSnapshot((EState *) estate);
 
-				// handle meta locking
-				heap_close(cont_exec->lock_rel, NoLock);
-				AbortCurrentTransaction();
-				StartTransactionCommand();
-				cont_exec->lock_rel = heap_openrv(makeRangeVar(NULL, "pipeline_lock", -1), AccessShareLock);
-
 				/*
 				 * Modifying anything within a PG_CATCH block can have unpredictable behavior
 				 * when optimization is enabled, so we do the remaining error handling later.
@@ -396,7 +390,10 @@ ContinuousQueryWorkerMain(void)
 			PG_END_TRY();
 
 			if (error)
+			{
+				ContExecutorAbortQuery(cont_exec);
 				pgstat_increment_cq_error(1);
+			}
 
 next:
 			ContExecutorEndQuery(cont_exec);

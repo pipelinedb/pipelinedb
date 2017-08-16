@@ -1542,6 +1542,7 @@ sync_all(ContExecutor *cont_exec)
 
 	while ((id = bms_first_member(tmp)) >= 0)
 	{
+		bool error = false;
 		ContQueryCombinerState *state = states[id];
 
 		if (!state)
@@ -1561,13 +1562,12 @@ sync_all(ContExecutor *cont_exec)
 			EmitErrorReport();
 			FlushErrorState();
 
-			// handle meta locking
-			heap_close(cont_exec->lock_rel, NoLock);
-			AbortCurrentTransaction();
-			StartTransactionCommand();
-			cont_exec->lock_rel = heap_openrv(makeRangeVar(NULL, "pipeline_lock", -1), AccessShareLock);
+			error = true;
 		}
 		PG_END_TRY();
+
+		if (error)
+			ContExecutorAbortQuery(cont_exec);
 
 		TimestampDifference(start_time, GetCurrentTimestamp(), &secs, &usecs);
 		pgstat_increment_cq_exec_time(secs * 1000 + (usecs / 1000));

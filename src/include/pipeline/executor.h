@@ -79,6 +79,7 @@ extern void ContExecutorPurgeQuery(ContExecutor *exec);
 extern void *ContExecutorIterate(ContExecutor *exec, int *len);
 extern void ContExecutorEndQuery(ContExecutor *exec);
 extern void ContExecutorEndBatch(ContExecutor *exec, bool commit);
+extern void ContExecutorAbortQuery(ContExecutor *exec);
 extern ContExecutorLock AcquireExecutorLock(LOCKMODE mode);
 extern void ReleaseExecutorLock(ContExecutorLock rel);
 
