@@ -320,6 +320,7 @@ ContinuousQueryWorkerMain(void)
 		if (get_sigterm_flag())
 			break;
 
+		CurrentResourceOwner = WorkerResOwner;
 		ContExecutorStartBatch(cont_exec, 0);
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, 0)) != InvalidOid)
@@ -338,8 +339,6 @@ ContinuousQueryWorkerMain(void)
 				estate = CreateEState(state->query_desc);
 				state->query_desc->estate = (EState *) estate;
 				SetEStateSnapshot((EState *) estate);
-
-				CurrentResourceOwner = WorkerResOwner;
 
 				if (should_exec_query(state->base.query))
 				{

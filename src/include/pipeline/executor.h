@@ -47,7 +47,7 @@ typedef struct BatchReceiver
 
 typedef struct ContExecutor ContExecutor;
 typedef ContQueryState *(*ContQueryStateInit) (ContExecutor *exec, ContQueryState *state);
-typedef Relation ContExecutorLock;
+typedef Relation ContExecutionLock;
 
 struct ContExecutor
 {
@@ -65,7 +65,7 @@ struct ContExecutor
 	ContQueryState *curr_query;
 	ContQueryState *states[MAX_CQS];
 	ContQueryStateInit initfn;
-	ContExecutorLock lock;
+	ContExecutionLock lock;
 };
 
 extern ResourceOwner WorkerResOwner;
@@ -80,7 +80,7 @@ extern void *ContExecutorIterate(ContExecutor *exec, int *len);
 extern void ContExecutorEndQuery(ContExecutor *exec);
 extern void ContExecutorEndBatch(ContExecutor *exec, bool commit);
 extern void ContExecutorAbortQuery(ContExecutor *exec);
-extern ContExecutorLock AcquireExecutorLock(LOCKMODE mode);
-extern void ReleaseExecutorLock(ContExecutorLock rel);
+extern ContExecutionLock AcquireContExecutionLock(LOCKMODE mode);
+extern void ReleaseContExecutionLock(ContExecutionLock rel);
 
 #endif

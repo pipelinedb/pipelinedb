@@ -44,6 +44,32 @@
  */
 Oid PipelineExecLockRelationOid = InvalidOid;
 
+/*
+ * exec_begin
+ */
+static void
+exec_begin(ContExecutor *exec)
+{
+	StartTransactionCommand();
+	exec->lock = AcquireContExecutionLock(AccessShareLock);
+}
+
+/*
+ * exec_commit
+ */
+static void
+exec_commit(ContExecutor *exec)
+{
+	/*
+	 * We can end up here without having acquired the lock when it's the first execution of
+	 * the executor's CQs, and no CQ's state has been retrieved yet.
+	 */
+	if (exec->lock)
+		ReleaseContExecutionLock(exec->lock);
+
+	CommitTransactionCommand();
+}
+
 ContExecutor *
 ContExecutorNew(ContQueryStateInit initfn)
 {
@@ -118,15 +144,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 	success = ipc_tuple_reader_poll(timeout);
 
 	if (!IsTransactionState())
-	{
-		StartTransactionCommand();
-
-		// clean this up
-		if (IsContQueryWorkerProcess())
-			CurrentResourceOwner = WorkerResOwner;
-
-		exec->lock = AcquireExecutorLock(AccessShareLock);
-	}
+		exec_begin(exec);
 
 	if (success)
 	{
@@ -214,17 +232,8 @@ get_query_state(ContExecutor *exec)
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
 	{
-		if (exec->lock)
-			ReleaseExecutorLock(exec->lock);
-
-		CommitTransactionCommand();
-		StartTransactionCommand();
-
-		// clean this up
-		if (IsContQueryWorkerProcess())
-			CurrentResourceOwner = WorkerResOwner;
-
-		exec->lock = AcquireExecutorLock(AccessShareLock);
+		exec_commit(exec);
+		exec_begin(exec);
 		commit = true;
 	}
 
@@ -285,18 +294,8 @@ get_query_state(ContExecutor *exec)
 
 	if (commit)
 	{
-		// shouldn't this ALWAYS be non-NULL though?
-		if (exec->lock)
-			ReleaseExecutorLock(exec->lock);
-
-
-		CommitTransactionCommand();
-		StartTransactionCommand();
-
-		if (IsContQueryWorkerProcess())
-			CurrentResourceOwner = WorkerResOwner;
-
-		exec->lock = AcquireExecutorLock(AccessShareLock);
+		exec_commit(exec);
+		exec_begin(exec);
 	}
 
 	Assert(exec->states[exec->curr_query_id] == state);
@@ -375,10 +374,12 @@ ContExecutorPurgeQuery(ContExecutor *exec)
 		exec->states[exec->curr_query_id] = NULL;
 	}
 
-	// we can be called to refresh metadata, in which case we can still hold the lock
-	// should this be called somewhere else? probably!
+	/*
+	 * We can end up here if we're purging a query whose state was never loaded,
+	 * e.g. if it was deleted before ever being executed.
+	 */
 	if (exec->lock)
-		ReleaseExecutorLock(exec->lock);
+		ReleaseContExecutionLock(exec->lock);
 
 	exec->curr_query = NULL;
 	exec->lock = NULL;
@@ -410,12 +411,11 @@ ContExecutorEndQuery(ContExecutor *exec)
 void
 ContExecutorAbortQuery(ContExecutor *exec)
 {
-	// how can this happen?
 	if (exec->lock)
-		ReleaseExecutorLock(exec->lock);
+		ReleaseContExecutionLock(exec->lock);
 	AbortCurrentTransaction();
 	StartTransactionCommand();
-	exec->lock = AcquireExecutorLock(AccessShareLock);
+	exec->lock = AcquireContExecutionLock(AccessShareLock);
 }
 
 void
@@ -425,11 +425,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	if (commit)
 	{
-		if (exec->lock)
-			heap_close(exec->lock, NoLock);
-
-		CommitTransactionCommand();
-
+		exec_commit(exec);
 		MemoryContextReset(ContQueryTransactionContext);
 		pgstat_report_stat(false);
 		exec->lock = NULL;
@@ -480,10 +476,10 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 }
 
 /*
- * AcquireExecutorLock
+ * AcquireContExecutionLock
  */
-ContExecutorLock
-AcquireExecutorLock(LOCKMODE mode)
+ContExecutionLock
+AcquireContExecutionLock(LOCKMODE mode)
 {
 	Assert(OidIsValid(PipelineExecLockRelationOid));
 
@@ -491,10 +487,10 @@ AcquireExecutorLock(LOCKMODE mode)
 }
 
 /*
- * ReleaseExecutorLock
+ * ReleaseContExecutionLock
  */
 void
-ReleaseExecutorLock(ContExecutorLock lock)
+ReleaseContExecutionLock(ContExecutionLock lock)
 {
 	heap_close(lock, NoLock);
 }

@@ -949,7 +949,7 @@ void
 ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext context,
 													  ParamListInfo params, DestReceiver *dest, char *tag)
 {
-	ContExecutorLock exec_lock = NULL;
+	ContExecutionLock exec_lock = NULL;
 
 	if (IsA(parsetree, IndexStmt))
 	{
@@ -971,12 +971,20 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 	else if (IsA(parsetree, DropStmt))
 	{
 		DropStmt *stmt = (DropStmt *) parsetree;
-		// comments
+		/*
+		 * If we're dropping a CQ, we must acquire the continuous execution lock,
+		 * which when held exclusively prevents all CQs (they acquire it as a shared lock)
+		 * from being executed by workers/combiners. This prevents deadlocks between
+		 * this process and workers/combiners, which can all acquire contended locks in
+		 * basically any order they want.
+		 *
+		 * So we simply ensure mutual exclusion between droppers and workers/combiners execution.
+		 */
 		if (list_length(stmt->objects) == 1 && IsA(linitial(stmt->objects), List))
 		{
 			RangeVar *rv = makeRangeVarFromNameList(linitial(stmt->objects));
 			if (IsAContinuousView(rv))
-				exec_lock = AcquireExecutorLock(AccessExclusiveLock);
+				exec_lock = AcquireContExecutionLock(AccessExclusiveLock);
 		}
 	}
 
@@ -986,5 +994,5 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 		standard_ProcessUtility(parsetree, sql, context, params, dest, tag);
 
 	if (exec_lock)
-		ReleaseExecutorLock(exec_lock);
+		ReleaseContExecutionLock(exec_lock);
 }
