@@ -365,6 +365,7 @@ ContinuousQueryWorkerMain(void)
 				}
 
 				UnsetEStateSnapshot((EState *) estate);
+				FreeExecutorState((EState *) estate);
 				state->query_desc->estate = NULL;
 				estate = NULL;
 
