@@ -1484,13 +1484,20 @@ sync_combine(ContQueryCombinerState *state)
 		{
 			HeapTupleEntry e = (HeapTupleEntry) LookupTupleHashEntry(state->deltas, slot, NULL);
 
-			os_values[DELTA_TUPLE] = heap_copy_tuple_as_datum(e->tuple, state->desc);
-			os_nulls[DELTA_TUPLE] = false;
+			if (e != NULL)
+			{
+				os_values[DELTA_TUPLE] = heap_copy_tuple_as_datum(e->tuple, state->desc);
+				os_nulls[DELTA_TUPLE] = false;
 
-			os_nulls[state->output_stream_arrival_ts] = true;
-			os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, os_values, os_nulls);
-			ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
-			ExecStreamInsert(NULL, osri, state->os_slot, NULL);
+				os_nulls[state->output_stream_arrival_ts] = true;
+				os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, os_values, os_nulls);
+				ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
+				ExecStreamInsert(NULL, osri, state->os_slot, NULL);
+			}
+			else
+			{
+				elog(WARNING, "tuple not found in delta store");
+			}
 		}
 
 		ResetPerTupleExprContext(estate);
