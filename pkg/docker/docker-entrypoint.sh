@@ -65,6 +65,10 @@ EOSQL
         if [ -f /docker-entrypoint-init.d/pipelinedb.conf ]; then
             echo "$0: installing pipelinedb.conf"
             cp /docker-entrypoint-init.d/pipelinedb.conf "${PIPELINEDB_DATA}"
+            gosu pipeline pipeline-ctl \
+                -D "${PIPELINEDB_DATA}" \
+                -o "-c listen_addresses='localhost'" \
+                -w restart
         fi
 
         for f in /docker-entrypoint-init.d/*; do
