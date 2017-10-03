@@ -118,6 +118,8 @@ align_tuple(TransformReceiver *t, HeapTuple tup, TupleTableSlot *slot, TupleDesc
 		 * We only need to determine whether or not alignment is needed a single time,
 		 * since each query state has its own TransformReceiver.
 		 */
+		MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+
 		t->needs_alignment = false;
 		t->osrel_attrs = (AttrNumber *) palloc0(sizeof(AttrNumber) * osrel->natts);
 
@@ -135,6 +137,8 @@ align_tuple(TransformReceiver *t, HeapTuple tup, TupleTableSlot *slot, TupleDesc
 				}
 			}
 		}
+
+		MemoryContextSwitchTo(old);
 	}
 
 	/*
@@ -285,6 +289,7 @@ CreateTransformReceiver(ContExecutor *exec, ContQuery *query, Tuplestorestate *b
 	t->base.buffer = buffer;
 	t->base.flush = &flush_to_transform;
 	t->needs_alignment = true;
+	t->osrel_attrs = NULL;
 
 	if (OidIsValid(query->tgfn) && query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{
