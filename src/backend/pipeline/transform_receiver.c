@@ -169,16 +169,11 @@ insert_into_rel(TransformReceiver *t, Relation rel, TupleTableSlot *event_slot)
 	if (sis->queries)
 	{
 		TupleDesc osreldesc = RelationGetDescr(rel);
-
-		// we shouldn't need to repeatedly make this slot
 		TupleTableSlot *slot = MakeSingleTupleTableSlot(osreldesc);
 		int j;
 
-		// create alignment map if not exists
-
 		for (j = 0; j < t->ntups; j++)
 		{
-			// cache the alignment map
 			HeapTuple tup = align_tuple(t, t->tups[j], event_slot, osreldesc);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecStreamInsert(NULL, rinfo, slot, NULL);
