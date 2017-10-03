@@ -95,8 +95,68 @@ transform_receive(TransformReceiver *t, TupleTableSlot *slot)
 	MemoryContextSwitchTo(old);
 }
 
+static HeapTuple
+align_tuple(TransformReceiver *t, HeapTuple tup, TupleTableSlot *slot, TupleDesc osrel)
+{
+	int i;
+	int j;
+	TupleDesc event = slot->tts_tupleDescriptor;
+	Datum values[osrel->natts];
+	bool nulls[osrel->natts];
+
+	/*
+	 * We need to write out rows using the correct ordering of attributes, which is just
+	 * the output stream's descriptor.
+	 *
+	 * In most cases they'll already be in the correct order, but in some cases we'll need
+	 * to realign them, such as when a column is referenced in a transform's WHERE clause
+	 * but not its target list.
+	 */
+	if (t->needs_alignment && t->osrel_attrs == NULL)
+	{
+		/*
+		 * We only need to determine whether or not alignment is needed a single time,
+		 * since each query state has its own TransformReceiver.
+		 */
+		t->needs_alignment = false;
+		t->osrel_attrs = (AttrNumber *) palloc0(sizeof(AttrNumber) * osrel->natts);
+
+		for (i = 0; i < osrel->natts; i++)
+		{
+			Form_pg_attribute osrel_attr = osrel->attrs[i];
+			for (j = 0; j < event->natts; j++)
+			{
+				Form_pg_attribute event_attr = event->attrs[j];
+				if (pg_strcasecmp(NameStr(osrel_attr->attname), NameStr(event_attr->attname)) == 0)
+				{
+					t->osrel_attrs[osrel_attr->attnum - 1] = event_attr->attnum;
+					if (i != j)
+						t->needs_alignment = true;
+				}
+			}
+		}
+	}
+
+	/*
+	 * The below realignment will be a noop in this case, so just bail
+	 */
+	if (!t->needs_alignment)
+		return tup;
+
+	MemSet(nulls, false, sizeof(nulls));
+	ExecStoreTuple(tup, slot, InvalidBuffer, false);
+
+	for (i = 0; i < osrel->natts; i++)
+	{
+		values[i] = slot_getattr(slot, t->osrel_attrs[i], &nulls[i]);
+	}
+
+
+	return heap_form_tuple(osrel, values, nulls);
+}
+
 static void
-insert_into_rel(TransformReceiver *t, Relation rel)
+insert_into_rel(TransformReceiver *t, Relation rel, TupleTableSlot *event_slot)
 {
 	ResultRelInfo *rinfo = CQOSRelOpen(rel);
 	StreamInsertState *sis;
@@ -108,12 +168,19 @@ insert_into_rel(TransformReceiver *t, Relation rel)
 
 	if (sis->queries)
 	{
-		TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
+		TupleDesc osreldesc = RelationGetDescr(rel);
+
+		// we shouldn't need to repeatedly make this slot
+		TupleTableSlot *slot = MakeSingleTupleTableSlot(osreldesc);
 		int j;
+
+		// create alignment map if not exists
 
 		for (j = 0; j < t->ntups; j++)
 		{
-			ExecStoreTuple(t->tups[j], slot, InvalidBuffer, false);
+			// cache the alignment map
+			HeapTuple tup = align_tuple(t, t->tups[j], event_slot, osreldesc);
+			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecStreamInsert(NULL, rinfo, slot, NULL);
 			ExecClearTuple(slot);
 		}
@@ -128,7 +195,7 @@ insert_into_rel(TransformReceiver *t, Relation rel)
 }
 
 static void
-pipeline_stream_insert_batch(TransformReceiver *t)
+pipeline_stream_insert_batch(TransformReceiver *t, TupleTableSlot *slot)
 {
 	int i;
 
@@ -142,7 +209,7 @@ pipeline_stream_insert_batch(TransformReceiver *t)
 		RangeVar *rv = makeRangeVarFromNameList(stringToQualifiedNameList(t->cont_query->tgargs[i]));
 		Relation rel = heap_openrv(rv, AccessShareLock);
 
-		insert_into_rel(t, rel);
+		insert_into_rel(t, rel, slot);
 
 		heap_close(rel, NoLock);
 	}
@@ -151,7 +218,7 @@ pipeline_stream_insert_batch(TransformReceiver *t)
 	{
 		Relation rel = heap_open(t->cont_query->osrelid, AccessShareLock);
 
-		insert_into_rel(t, rel);
+		insert_into_rel(t, rel, slot);
 
 		heap_close(rel, NoLock);
 	}
@@ -192,7 +259,7 @@ flush_to_transform(struct BatchReceiver *receiver, TupleTableSlot *slot)
 
 	/* Optimized path for stream insertions */
 	if (t->cont_query->tgfn == PIPELINE_STREAM_INSERT_OID || t->os_has_readers)
-		pipeline_stream_insert_batch(t);
+		pipeline_stream_insert_batch(t, slot);
 
 	if (OidIsValid(t->cont_query->tgfn) && t->cont_query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{
@@ -222,6 +289,7 @@ CreateTransformReceiver(ContExecutor *exec, ContQuery *query, Tuplestorestate *b
 	t->cont_query = query;
 	t->base.buffer = buffer;
 	t->base.flush = &flush_to_transform;
+	t->needs_alignment = true;
 
 	if (OidIsValid(query->tgfn) && query->tgfn != PIPELINE_STREAM_INSERT_OID)
 	{

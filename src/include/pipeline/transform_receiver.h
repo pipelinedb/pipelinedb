@@ -27,6 +27,9 @@ typedef struct TransformReceiver
 	HeapTuple *tups;
 	int nmaxtups;
 	int ntups;
+
+	AttrNumber *osrel_attrs;
+	bool needs_alignment;
 } TransformReceiver;
 
 typedef void (*TransformFlushFunc) (void);
