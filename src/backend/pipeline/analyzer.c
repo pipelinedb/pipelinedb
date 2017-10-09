@@ -925,7 +925,10 @@ get_query_state(Query *query)
 		ctl.entrysize = sizeof(QueryState);
 		ctl.hcxt = TopMemoryContext;
 		query_cache = hash_create("query_cache", 16, &ctl, HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
-		query_cache_xid = GetCurrentTransactionId();
+		query_cache_xid = InvalidTransactionId;
+
+		if (!RecoveryInProgress())
+			query_cache_xid = GetCurrentTransactionId();
 	}
 
 	if (query->queryId <= 0)
