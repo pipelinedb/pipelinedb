@@ -240,3 +240,4 @@ DROP STREAM cqobjectagg_stream CASCADE;
 DROP FUNCTION array_sort(anyarray);
 DROP FUNCTION json_to_array(json);
 DROP FUNCTION json_keys_array(json);
+

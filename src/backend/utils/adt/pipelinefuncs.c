@@ -38,8 +38,11 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
+#define JSON_OBJECT_INT_SUM_HEADER 0xFFA0
+
 typedef struct JsonObjectIntSumState
 {
+	uint16 header;
 	char *current_key;
 	HTAB *kv;
 } JsonObjectIntSumState;
@@ -748,6 +751,7 @@ json_object_int_sum_startup(FunctionCallInfo fcinfo)
 
 	oldcontext = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
 	state = palloc0(sizeof(JsonObjectIntSumState));
+	state->header = JSON_OBJECT_INT_SUM_HEADER;
 
 	MemSet(&ctl, 0, sizeof(HASHCTL));
 	ctl.keysize = NAMEDATALEN;
@@ -815,8 +819,20 @@ json_object_int_sum_transout(PG_FUNCTION_ARGS)
 	JsonObjectIntSumEntry *entry;
 	StringInfoData buf;
 	bool first = true;
+	uint16 header;
 
-	if (!IsContQueryProcess() && !AggCheckCallContext(fcinfo, NULL))
+	/*
+	 * We can be receiving either a transition state from json_object_int_sum_transfn
+	 * or a previously returned JSON result of this function. We detect which it is by
+	 * peeking at the transition state's header.
+	 *
+	 * TODO(derekjn) Clean up the entire signature of the json_object_int_sum aggregate
+	 * to work more cleanly.
+	 */
+	char *p = (char *) PG_GETARG_POINTER(0);
+	memcpy(&header, p, sizeof(header));
+
+	if (header != JSON_OBJECT_INT_SUM_HEADER && !AggCheckCallContext(fcinfo, NULL))
 		PG_RETURN_TEXT_P(PG_GETARG_TEXT_P(0));
 
 	state = (JsonObjectIntSumState *) PG_GETARG_POINTER(0);
