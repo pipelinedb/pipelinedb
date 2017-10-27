@@ -248,7 +248,7 @@ CREATE CONTINUOUS TRANSFORM elapsed_json_transform_ts AS
 SELECT '{ "' || ((elapsed_time / 10) * 10)::text || '": ' || 1 || ' }' elapsed_time_bucket, country, app_id, ts  FROM  elapsed_json_stream_ts;
 
 CREATE CONTINUOUS VIEW elapsed_json_cv_ts_hour WITH (ttl = '2 hour', ttl_column = 'hour') AS
-  SELECT date_round(ts, '1 hour') as hour,
+  SELECT date_round(ts, '1 hour')::timestamp as hour,
     json_object_int_sum(elapsed_time_bucket) as elapsed_time_bucket,
     app_id,
     country
@@ -263,7 +263,7 @@ SELECT * from elapsed_json_cv_ts_hour ORDER BY hour;
 SELECT combine(elapsed_time_bucket) FROM elapsed_json_cv_ts_hour;
 
 CREATE CONTINUOUS VIEW elapsed_json_cv_ts_day WITH (ttl = '10 days', ttl_column = 'day') AS
-  SELECT date_round((new).hour, '24 hours') as day,
+  SELECT date_round((new).hour, '24 hours')::timestamp as day,
     combine((delta).elapsed_time_bucket) AS elapsed_time_bucket,
     (new).app_id,
     (new).country
