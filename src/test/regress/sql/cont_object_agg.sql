@@ -256,11 +256,7 @@ CREATE CONTINUOUS VIEW elapsed_json_cv_ts_hour WITH (ttl = '2 hour', ttl_column 
 GROUP BY hour, app_id, country;
 SELECT pg_sleep(0.5);
 
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:00:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:00:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:01:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:01:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:01:00', 'a', 'us', 100);
+INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:00:00', 'a', 'us', 100), ('2017-10-27 00:00:00', 'a', 'us', 100), ('2017-10-27 00:01:00', 'a', 'us', 100), ('2017-10-27 00:01:00', 'a', 'us', 100), ('2017-10-27 00:01:00', 'a', 'us', 100);
 SELECT pg_sleep(0.5);
 
 SELECT * from elapsed_json_cv_ts_hour ORDER BY hour;
@@ -275,9 +271,7 @@ CREATE CONTINUOUS VIEW elapsed_json_cv_ts_day WITH (ttl = '10 days', ttl_column 
 GROUP BY day, app_id, country;
 SELECT pg_sleep(0.5);
 
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:02:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:02:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:03:00', 'a', 'us', 100);
+INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:02:00', 'a', 'us', 100), ('2017-10-27 00:02:00', 'a', 'us', 100), ('2017-10-27 00:03:00', 'a', 'us', 100);
 SELECT pg_sleep(0.5);
 
 SELECT * FROM elapsed_json_cv_ts_day ORDER BY day;

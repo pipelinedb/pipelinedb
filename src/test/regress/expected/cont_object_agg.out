@@ -448,11 +448,7 @@ SELECT pg_sleep(0.5);
  
 (1 row)
 
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:00:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:00:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:01:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:01:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:01:00', 'a', 'us', 100);
+INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:00:00', 'a', 'us', 100), ('2017-10-27 00:00:00', 'a', 'us', 100), ('2017-10-27 00:01:00', 'a', 'us', 100), ('2017-10-27 00:01:00', 'a', 'us', 100), ('2017-10-27 00:01:00', 'a', 'us', 100);
 SELECT pg_sleep(0.5);
  pg_sleep 
 ----------
@@ -484,9 +480,7 @@ SELECT pg_sleep(0.5);
  
 (1 row)
 
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:02:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:02:00', 'a', 'us', 100);
-INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:03:00', 'a', 'us', 100);
+INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:02:00', 'a', 'us', 100), ('2017-10-27 00:02:00', 'a', 'us', 100), ('2017-10-27 00:03:00', 'a', 'us', 100);
 SELECT pg_sleep(0.5);
  pg_sleep 
 ----------
