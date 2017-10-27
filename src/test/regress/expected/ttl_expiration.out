@@ -214,4 +214,22 @@ SELECT x FROM ttl2 ORDER BY ts;
 (2 rows)
 
 DROP CONTINUOUS VIEW ttl2;
+-- #1881 regression test
+CREATE CONTINUOUS VIEW "MyTTLCV" WITH (ttl = '1 second', ttl_column = 'second') AS
+  SELECT second(arrival_timestamp), count(*) FROM ttl_stream GROUP BY second;
+INSERT INTO ttl_stream (x) VALUES (2);
+INSERT INTO ttl_stream (x) VALUES (2);
+SELECT pg_sleep(1.1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT 0 * ttl_expire('"MyTTLCV"');
+ ?column? 
+----------
+        0
+(1 row)
+
+DROP CONTINUOUS VIEW "MyTTLCV";
 DROP STREAM ttl_stream;

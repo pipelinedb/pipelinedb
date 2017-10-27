@@ -42,9 +42,9 @@
 
 #define DEFAULT_SLEEP_S 2 /* Sleep for 2s unless there are CVs with TTLs */
 
-#define DELETE_TEMPLATE "DELETE FROM %s.%s WHERE \"$pk\" IN (%s);"
-#define SELECT_PK_WITH_LIMIT "SELECT \"$pk\" FROM %s.%s WHERE %s < now() - interval '%d seconds' LIMIT %d FOR UPDATE SKIP LOCKED"
-#define SELECT_PK_NO_LIMIT "SELECT \"$pk\" FROM %s.%s WHERE %s < now() - interval '%d seconds' FOR UPDATE SKIP LOCKED"
+#define DELETE_TEMPLATE "DELETE FROM \"%s\".\"%s\" WHERE \"$pk\" IN (%s);"
+#define SELECT_PK_WITH_LIMIT "SELECT \"$pk\" FROM \"%s\".\"%s\" WHERE %s < now() - interval '%d seconds' LIMIT %d FOR UPDATE SKIP LOCKED"
+#define SELECT_PK_NO_LIMIT "SELECT \"$pk\" FROM \"%s\".\"%s\" WHERE %s < now() - interval '%d seconds' FOR UPDATE SKIP LOCKED"
 
 int continuous_query_ttl_expiration_batch_size;
 int continuous_query_ttl_expiration_threshold;
