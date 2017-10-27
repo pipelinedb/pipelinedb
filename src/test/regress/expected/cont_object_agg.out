@@ -442,21 +442,33 @@ CREATE CONTINUOUS VIEW elapsed_json_cv_ts_hour WITH (ttl = '2 hour', ttl_column 
     country
   FROM output_of('elapsed_json_transform_ts')
 GROUP BY hour, app_id, country;
+SELECT pg_sleep(0.5);
+ pg_sleep 
+----------
+ 
+(1 row)
+
 INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:00:00', 'a', 'us', 100);
 INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:00:00', 'a', 'us', 100);
 INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:01:00', 'a', 'us', 100);
 INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:01:00', 'a', 'us', 100);
 INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:01:00', 'a', 'us', 100);
+SELECT pg_sleep(0.5);
+ pg_sleep 
+----------
+ 
+(1 row)
+
 SELECT * from elapsed_json_cv_ts_hour ORDER BY hour;
              hour             | elapsed_time_bucket | app_id | country 
 ------------------------------+---------------------+--------+---------
- Fri Oct 27 00:00:00 2017 PDT | { "100": 2 }        | a      | us
+ Fri Oct 27 00:00:00 2017 PDT | { "100": 5 }        | a      | us
 (1 row)
 
 SELECT combine(elapsed_time_bucket) FROM elapsed_json_cv_ts_hour;
    combine    
 --------------
- { "100": 2 }
+ { "100": 5 }
 (1 row)
 
 CREATE CONTINUOUS VIEW elapsed_json_cv_ts_day WITH (ttl = '10 days', ttl_column = 'day') AS
@@ -466,9 +478,21 @@ CREATE CONTINUOUS VIEW elapsed_json_cv_ts_day WITH (ttl = '10 days', ttl_column 
     (new).country
   FROM output_of('elapsed_json_cv_ts_hour')
 GROUP BY day, app_id, country;
+SELECT pg_sleep(0.5);
+ pg_sleep 
+----------
+ 
+(1 row)
+
 INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:02:00', 'a', 'us', 100);
 INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:02:00', 'a', 'us', 100);
 INSERT INTO elapsed_json_stream_ts VALUES ('2017-10-27 00:03:00', 'a', 'us', 100);
+SELECT pg_sleep(0.5);
+ pg_sleep 
+----------
+ 
+(1 row)
+
 SELECT * FROM elapsed_json_cv_ts_day ORDER BY day;
              day              | elapsed_time_bucket | app_id | country 
 ------------------------------+---------------------+--------+---------
