@@ -228,6 +228,10 @@ void
 ContinuousQueryReaperMain(void)
 {
 	HASHCTL hctl;
+	MemoryContext cxt = AllocSetContextCreate(TopMemoryContext, "Reaper Context",
+				ALLOCSET_DEFAULT_MINSIZE,
+				ALLOCSET_DEFAULT_INITSIZE,
+				ALLOCSET_DEFAULT_MAXSIZE);
 
 	MemSet(&hctl, 0, sizeof(hctl));
 	hctl.hcxt = CurrentMemoryContext;
@@ -255,12 +259,17 @@ ContinuousQueryReaperMain(void)
 			int deleted = 0;
 			bool error = false;
 
-			StartTransactionCommand();
-			SetCurrentStatementStartTimestamp();
-
 			PG_TRY();
 			{
+				MemoryContext old;
+				StartTransactionCommand();
+
+				MemoryContextReset(cxt);
+				old = MemoryContextSwitchTo(cxt);
 				ttl_rels = get_ttl_rels(&min_sleep);
+				MemoryContextSwitchTo(old);
+
+				CommitTransactionCommand();
 
 				foreach(lc, ttl_rels)
 				{
@@ -268,6 +277,11 @@ ContinuousQueryReaperMain(void)
 					RangeVar *cv;
 					RangeVar *matrel;
 					Oid relid;
+
+					CHECK_FOR_INTERRUPTS();
+
+					if (get_sigterm_flag())
+						break;
 
 					Assert(list_length(rels) == 3);
 
@@ -280,9 +294,14 @@ ContinuousQueryReaperMain(void)
 					 */
 					if (should_expire(relid))
 					{
+						StartTransactionCommand();
+						SetCurrentStatementStartTimestamp();
+
 						deleted = DeleteTTLExpiredRows(cv, matrel);
 						total_deleted += deleted;
 						set_last_expiration(relid, deleted);
+
+						CommitTransactionCommand();
 					}
 				}
 			}
@@ -300,8 +319,6 @@ ContinuousQueryReaperMain(void)
 				StartTransactionCommand();
 			}
 			PG_END_TRY();
-
-			CommitTransactionCommand();
 
 			/*
 			 * If nothing was deleted on this run, we're done for now
