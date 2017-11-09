@@ -294,12 +294,16 @@ ContinuousQueryReaperMain(void)
 					 */
 					if (should_expire(relid))
 					{
+						TimestampTz start = GetCurrentTimestamp();
 						StartTransactionCommand();
 						SetCurrentStatementStartTimestamp();
 
 						deleted = DeleteTTLExpiredRows(cv, matrel);
 						total_deleted += deleted;
 						set_last_expiration(relid, deleted);
+
+						if (deleted)
+							elog(LOG, "deleted %d rows from %s in %ld ms", deleted, matrel->relname, ((GetCurrentTimestamp() - start) / 1000));
 
 						CommitTransactionCommand();
 					}
