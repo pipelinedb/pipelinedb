@@ -211,7 +211,7 @@ get_ttl_rels(int *min_ttl)
 		tup = lappend(tup, cq->matrel);
 		result = lappend(result, tup);
 
-		*min_ttl = Min(*min_ttl, cq->ttl_attno);
+		*min_ttl = Min(*min_ttl, cq->ttl);
 
 		entry = (ReaperEntry *) hash_search(last_expired, &cq->relid, HASH_ENTER, &found);
 		if (!found)
@@ -302,8 +302,7 @@ ContinuousQueryReaperMain(void)
 						total_deleted += deleted;
 						set_last_expiration(relid, deleted);
 
-						if (deleted)
-							elog(LOG, "deleted %d rows from %s in %ld ms", deleted, matrel->relname, ((GetCurrentTimestamp() - start) / 1000));
+						elog(LOG, "deleted %d rows from %s in %ld ms", deleted, matrel->relname, ((GetCurrentTimestamp() - start) / 1000));
 
 						CommitTransactionCommand();
 					}
@@ -333,6 +332,7 @@ ContinuousQueryReaperMain(void)
 
 		reset_entries();
 		total_deleted = 0;
+		elog(LOG, "sleeping for %d s", min_sleep);
 		pg_usleep(min_sleep * 1000 * 1000);
 	}
 }
