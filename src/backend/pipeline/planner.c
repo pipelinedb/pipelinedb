@@ -950,7 +950,22 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 {
 	ContExecutionLock exec_lock = NULL;
 
-	if (IsA(parsetree, IndexStmt))
+	if (IsA(parsetree, CreateContViewStmt) || IsA(parsetree, CreateContTransformStmt))
+	{
+		Node *node;
+		SelectStmt *stmt;
+
+		if (IsA(parsetree, CreateContViewStmt))
+			node = ((CreateContViewStmt *) parsetree)->query;
+		else
+			node = ((CreateContTransformStmt *) parsetree)->query;
+
+		/* The grammar should enforce this */
+		Assert(IsA(node, SelectStmt));
+		stmt = (SelectStmt *) node;
+		stmt->forContinuousView = true;
+	}
+	else if (IsA(parsetree, IndexStmt))
 	{
 		IndexStmt *stmt = (IndexStmt *) parsetree;
 		if (IsAContinuousView(stmt->relation))

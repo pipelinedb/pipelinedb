@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
+#include "parser/analyze.h"
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/planner.h"
@@ -44,4 +45,7 @@ PipelineInstallHooks()
 	InitPipelineSysCache();
 	SaveUtilityHook = ProcessUtility_hook;
 	ProcessUtility_hook = ProcessUtilityOnContView;
+
+	SavePostParseAnalyzeHook = post_parse_analyze_hook;
+	post_parse_analyze_hook = PostParseAnalyzeHook;
 }

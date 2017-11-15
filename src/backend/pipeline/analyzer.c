@@ -12,6 +12,7 @@
  */
 #include "postgres.h"
 
+
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/sysattr.h"
@@ -1281,19 +1282,6 @@ parserGetStreamDescr(Oid relid, ContAnalyzeContext *context)
 	MemoryContextSwitchTo(old);
 
 	return tupdesc;
-}
-
-/*
- * transformContSelectStmt
- */
-void
-transformContSelectStmt(ParseState *pstate, SelectStmt *select)
-{
-	ContQueryProcType ptype = IsContQueryCombinerProcess() ? Combiner : Worker;
-	ContAnalyzeContext *context = MakeContAnalyzeContext(pstate, select, ptype);
-
-	collect_rels_and_streams((Node *) select->fromClause, context);
-	collect_cols((Node *) select, context);
 }
 
 /*
@@ -3870,99 +3858,6 @@ GetWindowTimeColumn(RangeVar *cv)
 }
 
 /*
- * CreateOuterSWTimeColumnRef
- *
- * If arrival_timestamp isn't found in an RTE, this hook is invoked by the parser.
- * It ultimately allows us to try to push any references to arrival_timestamp down.
- * This makes it easy to create sliding-window views on top of other sliding-window
- * views because we can just push down the arrival_timestamp predicate down to the
- * matrel SELECT.
- */
-Node *
-CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var)
-{
-	Var *result;
-	char *nspname = NULL;
-	char *relname = NULL;
-	char *colname = NULL;
-	RangeTblEntry *rte = NULL;
-	int	levels_up;
-	RangeVar *rv;
-	ColumnRef *sw_cref;
-
-	if (var != NULL)
-		return NULL;
-
-	/* Try to figure out the name of the sliding window timestamp column */
-	switch (list_length(cref->fields))
-	{
-		case 1:
-		{
-			Assert(list_length(pstate->p_rtable) == 1);
-			rte = linitial(pstate->p_rtable);
-			colname = FigureColname((Node *) cref);
-			break;
-		}
-		case 2:
-		{
-			relname = strVal(linitial(cref->fields));
-			colname = strVal(lsecond(cref->fields));
-			rte = refnameRangeTblEntry(pstate, nspname, relname,
-					cref->location,
-					&levels_up);
-			break;
-		}
-		case 3:
-		{
-			nspname = strVal(linitial(cref->fields));
-			relname = strVal(lsecond(cref->fields));
-			colname = strVal(lthird(cref->fields));
-			rte = refnameRangeTblEntry(pstate, nspname, relname,
-					cref->location,
-					&levels_up);
-			break;
-		}
-		case 4:
-		{
-			nspname = strVal(lsecond(cref->fields));
-			relname = strVal(lthird(cref->fields));
-			colname = strVal(lfourth(cref->fields));
-			rte = refnameRangeTblEntry(pstate, nspname, relname,
-					cref->location,
-					&levels_up);
-			break;
-		}
-		default:
-			return NULL;
-	}
-
-	if (rte->relkind != RELKIND_CONTVIEW)
-		return NULL;
-
-	rv = makeRangeVar(
-			get_namespace_name(get_rel_namespace(rte->relid)), get_rel_name(rte->relid), -1);
-
-	if (!IsSWContView(rv))
-		return NULL;
-
-	sw_cref = GetSWTimeColumn(rv);
-	Assert(sw_cref);
-
-	/*
-	 * TODO(usmanm): For now we always allow ARRIVAL_TIMESTAMP because sw hard codes it.
-	 * Should fix it.
-	 */
-	if (pg_strcasecmp(colname, FigureColname((Node *) sw_cref)) != 0 &&
-			pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) != 0)
-		return NULL;
-
-	/* we only need to do something if the column couldn't be resolved at this level */
-	result = makeVar(SW_TIMESTAMP_REF, 1, TIMESTAMPTZOID, -1, InvalidOid, 0);
-
-	return (Node *) result;
-}
-
-/*
  * GetContinuousViewOption
  *
  * Returns the given option or NULL if it wasn't supplied
@@ -4221,4 +4116,15 @@ FindTTLColumnAttrNo(char *colname, Oid matrelid)
 
 	Assert(AttributeNumberIsValid(attno));
 	return attno;
+}
+
+post_parse_analyze_hook_type SavePostParseAnalyzeHook = NULL;
+
+/*
+ * PostParseAnalyzeHook
+ */
+void
+PostParseAnalyzeHook(ParseState *pstate, Query *query)
+{
+
 }

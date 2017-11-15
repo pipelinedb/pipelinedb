@@ -163,8 +163,6 @@ DROP CONTINUOUS VIEW arrts;
 -- WITH sw
 CREATE CONTINUOUS VIEW ma0 WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream;
 \d+ ma0;
-CREATE VIEW ma1 WITH (sw = '10 hours') AS SELECT COUNT(*) FROM ma0;
-\d+ ma1;
 
 -- sw must be a valid interval string
 CREATE CONTINUOUS VIEW mainvalid WITH (sw = 42) AS SELECT COUNT(*) FROM create_cont_stream;
@@ -176,13 +174,6 @@ WHERE x::integer = 1;
 \d+ mawhere;
 
 DROP CONTINUOUS VIEW mawhere;
-
--- sw can't be used on non-sliding window continuous views
-CREATE VIEW manosw WITH (sw = '1 day') AS SELECT COUNT(*) FROM withff;
-
--- or in conjunction with another sliding-window predicate
-CREATE VIEW manosw WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
-WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
 
 DROP STREAM create_cont_stream CASCADE;
 CREATE STREAM create_cont_stream (key integer, url text, value text);

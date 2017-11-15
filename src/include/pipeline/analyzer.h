@@ -17,6 +17,8 @@
 
 extern double sliding_window_step_factor;
 
+extern post_parse_analyze_hook_type SavePostParseAnalyzeHook;
+
 typedef struct ContAnalyzeContext
 {
 	ParseState *pstate;
@@ -57,6 +59,8 @@ typedef struct ContAnalyzeContext
 #define IsMatRelCombine(proname) (pg_strcasecmp(NameStr(proname), MATREL_COMBINE) == 0)
 #define IsMatRelFinalize(proname) (pg_strcasecmp(NameStr(proname), MATREL_FINALIZE) == 0)
 
+extern void PostParseAnalyzeHook(ParseState *pstate, Query *query);
+
 extern bool QueryIsContinuous(Query *query);
 extern void QuerySetIsContinuous(Query *query, bool continuous);
 double QueryGetSWStepFactor(Query *query);
@@ -75,7 +79,6 @@ extern void ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql)
 extern void ValidateContQuery(Query *query);
 extern void ValidateContTrigger(CreateTrigStmt *stmt);
 
-extern void transformContSelectStmt(ParseState *pstate, SelectStmt *select);
 extern List *transformContSelectTargetList(ParseState *pstate, List *tlist);
 extern void ApplyTransitionOut(List *nodes);
 extern List *transformContViewOverlayTargetList(ParseState *pstate, List *tlist);
@@ -98,7 +101,6 @@ extern Node *GetTTLExpiredExpr(RangeVar *cv);
 extern ColumnRef *GetSWTimeColumn(RangeVar *rv);
 extern Interval *GetSWInterval(RangeVar *rv);
 extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
-extern Node *CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var);
 
 extern DefElem *GetContinuousViewOption(List *options, char *name);
 extern void ApplySlidingWindow(SelectStmt *stmt, DefElem *max_age, int *ttl);

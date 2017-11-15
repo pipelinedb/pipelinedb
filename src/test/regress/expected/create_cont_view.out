@@ -909,17 +909,6 @@ View definition:
    FROM ONLY create_cont_stream
   WHERE arrival_timestamp > (clock_timestamp() - '1 day'::interval);
 
-CREATE VIEW ma1 WITH (sw = '10 hours') AS SELECT COUNT(*) FROM ma0;
-\d+ ma1;
-                  View "public.ma1"
- Column |  Type  | Modifiers | Storage | Description 
---------+--------+-----------+---------+-------------
- count  | bigint |           | plain   | 
-View definition:
- SELECT count(*) AS count
-   FROM ma0
-  WHERE arrival_timestamp > (clock_timestamp() - '10:00:00'::interval);
-
 -- sw must be a valid interval string
 CREATE CONTINUOUS VIEW mainvalid WITH (sw = 42) AS SELECT COUNT(*) FROM create_cont_stream;
 ERROR:  "sw" must be a valid interval string
@@ -942,18 +931,10 @@ View definition:
   WHERE arrival_timestamp > (clock_timestamp() - '1 day'::interval) AND x = 1;
 
 DROP CONTINUOUS VIEW mawhere;
--- sw can't be used on non-sliding window continuous views
-CREATE VIEW manosw WITH (sw = '1 day') AS SELECT COUNT(*) FROM withff;
-ERROR:  "sw" can only be specified when reading from a stream or continuous view
--- or in conjunction with another sliding-window predicate
-CREATE VIEW manosw WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
-WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
-ERROR:  cannot specify both "sw" and a sliding window expression in the WHERE clause
 DROP STREAM create_cont_stream CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to continuous view withff
 drop cascades to continuous view ma0
-drop cascades to view ma1
 CREATE STREAM create_cont_stream (key integer, url text, value text);
 CREATE CONTINUOUS VIEW ccv0 AS SELECT 1, count(*) FROM create_cont_stream;
 CREATE CONTINUOUS VIEW ccv1 AS SELECT 1 FROM create_cont_stream;

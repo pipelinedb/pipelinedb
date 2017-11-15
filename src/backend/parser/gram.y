@@ -2809,7 +2809,6 @@ CreateContViewStmt: CREATE CONTINUOUS VIEW create_cv_target AS SelectStmt
           CreateContViewStmt *n = makeNode(CreateContViewStmt);
           n->into = $4;
           n->query = $6;
-          ((SelectStmt *) n->query)->forContinuousView = true;
           $$ = (Node *) n;
         }
     ;
@@ -2865,7 +2864,6 @@ CreateContTransformStmt:
           CreateContTransformStmt *n = makeNode(CreateContTransformStmt);
           n->into = $4;
           n->query = $6;
-          ((SelectStmt *) n->query)->forContinuousView = true;
           n->funcname = $10;
           n->args = $12;
           $$ = (Node *) n;
@@ -2875,7 +2873,6 @@ CreateContTransformStmt:
           CreateContTransformStmt *n = makeNode(CreateContTransformStmt);
           n->into = $4;
           n->query = $6;
-          ((SelectStmt *) n->query)->forContinuousView = true;
           $$ = (Node *) n;
         }
     ;
