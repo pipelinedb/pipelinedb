@@ -125,6 +125,8 @@ parse_analyze(Node *parseTree, const char *sourceText,
 			query->targetList = transformContSelectTargetList(pstate, query->targetList);
 	}
 
+	// can we determine forContinuousView by simply finding a stream in the from clause? seems way cleaner...
+
 	if (post_parse_analyze_hook)
 		(*post_parse_analyze_hook) (pstate, query);
 

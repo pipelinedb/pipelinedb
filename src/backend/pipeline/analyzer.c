@@ -950,14 +950,89 @@ get_query_state(Query *query)
 	return entry;
 }
 
+typedef struct QueryIsContinuousContext
+{
+	Query *query;
+	bool hasStream;
+} QueryIsContinuousContext;
+
+
+static bool
+query_is_continuous_walker(Node *node, QueryIsContinuousContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, RangeTblRef))
+	{
+		RangeTblRef *ref = (RangeTblRef *) node;
+		RangeTblEntry *rte = rt_fetch(ref->rtindex, context->query->rtable);
+
+		if (rte->relkind == RELKIND_STREAM)
+		{
+			context->hasStream = true;
+			return false;
+		}
+	}
+	return expression_tree_walker(node, query_is_continuous_walker, context);
+}
+
+/*
+ * ViewStmtIsForContinuousView
+ */
+bool
+ViewStmtIsForContinuousView(ViewStmt *stmt)
+{
+	ListCell *lc;
+	List *new_opts = NIL;
+
+	foreach(lc, stmt->options)
+	{
+		DefElem *def = (DefElem *) lfirst(lc);
+		if (pg_strcasecmp(def->defname, "forcv") != 0)
+			new_opts = lappend(new_opts, def);
+	}
+
+	if (list_length(new_opts) < list_length(stmt->options))
+	{
+		stmt->options = new_opts;
+		return true;
+	}
+
+	return false;
+}
+
 /*
  * QueryIsContinuous
  */
 bool
 QueryIsContinuous(Query *query)
 {
+	QueryIsContinuousContext context;
+
+	if (query->commandType != CMD_SELECT)
+		return false;
+
+	if (!query->jointree)
+		return false;
+
+	MemSet(&context, 0, sizeof(QueryIsContinuousContext));
+
+	context.query = query;
+	query_is_continuous_walker((Node *) query->jointree->fromlist, &context);
+
+	// just make this function look at FROM!
 	QueryState *state = get_query_state(query);
+
+	// we're not handling the case of an erroneous query, when a user is trying to SELECT from a stream...
+
+	// can we mark the query as for a CREATE CONTINUOUS VIEW?
+	// then: if not CREATE CV and not CQ proc, throw an error
+
+//	Assert(context.hasStream == state->isContinuous);
+
 	return state->isContinuous;
+//	return context.hasStream;
 }
 
 /*
@@ -986,6 +1061,7 @@ QuerySetSWStepFactor(Query *query, double sf)
 void
 QuerySetIsContinuous(Query *query, bool continuous)
 {
+	return;
 	QueryState *state = get_query_state(query);
 	state->isContinuous = continuous;
 }
@@ -3910,6 +3986,7 @@ ApplySlidingWindow(SelectStmt *stmt, DefElem *sw, int *ttl)
 	if (has_clock_timestamp(stmt->whereClause, NULL))
 		elog(ERROR, "cannot specify both \"sw\" and a sliding window expression in the WHERE clause");
 
+	// add IsSelectForContinuousView
 	sw_cv = GetSWContinuousViewRangeVar(stmt->fromClause);
 	if (sw_cv == NULL && stmt->forContinuousView == false)
 		elog(ERROR, "\"sw\" can only be specified when reading from a stream or continuous view");
@@ -4101,7 +4178,6 @@ FindTTLColumnAttrNo(char *colname, Oid matrelid)
 	rel = heap_open(matrelid, AccessShareLock);
 	desc = RelationGetDescr(rel);
 
-
 	for (i = 0; i < desc->natts; i++)
 	{
 		Form_pg_attribute attr = desc->attrs[i];
@@ -4126,5 +4202,11 @@ post_parse_analyze_hook_type SavePostParseAnalyzeHook = NULL;
 void
 PostParseAnalyzeHook(ParseState *pstate, Query *query)
 {
+//	if (QueryIsContinuous(query))
+//		query->targetList = transformContSelectTargetList(pstate, query->targetList);
 
+	// can we detect if we're selecting from a stream but it doesn't belong to a CREATE CONTINUOUS VIEW
+	// in that case, we need to throw the error
+
+//	elog(LOG, "HERE");
 }

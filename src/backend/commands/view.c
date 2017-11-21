@@ -611,7 +611,7 @@ DefineView(ViewStmt *stmt, const char *queryString)
 	 * NOTE: if it already exists and replace is false, the xact will be
 	 * aborted.
 	 */
-	if (QueryIsContinuous(viewParse))
+	if (ViewStmtIsForContinuousView(stmt))
 		address = DefineContVirtualRelation(view, viewParse->targetList);
 	else
 		address = DefineVirtualRelation(view, viewParse->targetList,

@@ -12,6 +12,7 @@
 #ifndef CONT_ANALYZE_H
 #define CONT_ANALYZE_H
 
+#include "parser/analyze.h"
 #include "parser/parse_node.h"
 #include "pipeline/scheduler.h"
 
@@ -60,6 +61,10 @@ typedef struct ContAnalyzeContext
 #define IsMatRelFinalize(proname) (pg_strcasecmp(NameStr(proname), MATREL_FINALIZE) == 0)
 
 extern void PostParseAnalyzeHook(ParseState *pstate, Query *query);
+
+extern void SelectStmtSetForContinuousView(SelectStmt *stmt, bool forContinuousView);
+extern bool SelectStmtGetForContinuousView(SelectStmt *stmt);
+extern bool ViewStmtIsForContinuousView(ViewStmt *stmt);
 
 extern bool QueryIsContinuous(Query *query);
 extern void QuerySetIsContinuous(Query *query, bool continuous);

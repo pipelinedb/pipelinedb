@@ -1356,6 +1356,7 @@ sync_combine(ContQueryCombinerState *state)
 	state->deltas = build_existing_hashtable(state, "CombinerDeltas");
 	foreach_tuple(state->slot, state->combined)
 	{
+		// we're crashing right here...
 		bool new;
 		HeapTupleEntry entry = (HeapTupleEntry) LookupTupleHashEntry(state->deltas, state->slot, &new);
 

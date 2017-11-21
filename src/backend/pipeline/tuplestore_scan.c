@@ -10,6 +10,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "catalog/pipeline_query_fn.h"
 #include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
 #include "pipeline/tuplestore_scan.h"

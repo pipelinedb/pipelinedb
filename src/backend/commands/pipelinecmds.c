@@ -646,7 +646,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	AttrNumber ttl_attno = InvalidAttrNumber;
 	char *ttl_column = NULL;
 
-	Assert(((SelectStmt *) stmt->query)->forContinuousView);
+//	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
 	view = stmt->into->rel;
 
@@ -824,7 +824,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
-	viewselect->forContinuousView = true;
+	view_stmt->options = lappend(view_stmt->options, makeDefElem("forcv", (Node *) makeInteger(1)));
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_overlay();
@@ -1058,7 +1058,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	CreateStreamStmt *create_osrel;
 	Oid osrelid;
 
-	Assert(((SelectStmt *) stmt->query)->forContinuousView);
+//	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
 	transform = stmt->into->rel;
 	check_relation_already_exists(transform);

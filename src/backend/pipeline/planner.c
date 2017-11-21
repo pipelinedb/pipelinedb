@@ -953,7 +953,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 	if (IsA(parsetree, CreateContViewStmt) || IsA(parsetree, CreateContTransformStmt))
 	{
 		Node *node;
-		SelectStmt *stmt;
+//		SelectStmt *stmt;
 
 		if (IsA(parsetree, CreateContViewStmt))
 			node = ((CreateContViewStmt *) parsetree)->query;
@@ -962,8 +962,12 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 
 		/* The grammar should enforce this */
 		Assert(IsA(node, SelectStmt));
-		stmt = (SelectStmt *) node;
-		stmt->forContinuousView = true;
+
+		// set flag indicating we're creating a continuous query?
+		// then we need a try catch though to ensure it's always unset...
+
+//		stmt = (SelectStmt *) node;
+//		stmt->forContinuousView = true;
 	}
 	else if (IsA(parsetree, IndexStmt))
 	{
