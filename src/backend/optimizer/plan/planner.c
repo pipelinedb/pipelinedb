@@ -43,6 +43,7 @@
 #include "parser/analyze.h"
 #include "parser/parsetree.h"
 #include "parser/parse_agg.h"
+#include "pipeline/scheduler.h"
 #include "rewrite/rewriteManip.h"
 #include "utils/rel.h"
 #include "utils/selfuncs.h"
@@ -3562,6 +3563,13 @@ choose_hashed_grouping(PlannerInfo *root,
 	List	   *current_pathkeys;
 	Path		hashed_p;
 	Path		sorted_p;
+
+	/*
+	 * XXX(derekjn) Always using hashed groupings in the combiner is convenient and
+	 * will always be ideal, but sorting should transparently work too
+	 */
+	if (IsContQueryCombinerProcess())
+		return true;
 
 	/*
 	 * Executor doesn't support hashed aggregation with DISTINCT or ORDER BY
