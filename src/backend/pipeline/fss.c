@@ -53,7 +53,7 @@ FSSFromBytes(struct varlena *bytes)
 FSS *
 FSSCreateWithMAndH(uint16_t k, TypeCacheEntry *typ, uint16_t m, uint16_t h)
 {
-	Size sz = sizeof(FSS) + (sizeof(Counter) * h) + (sizeof(MonitoredElement) * m);
+	Size sz = sizeof(FSS) + (sizeof(Counter) * h) + (sizeof(MonitoredElement) * m) + sizeof(ArrayType);
 	char *pos;
 	FSS *fss;
 
@@ -75,7 +75,12 @@ FSSCreateWithMAndH(uint16_t k, TypeCacheEntry *typ, uint16_t m, uint16_t h)
 			fss->monitored_elements[i].varlen_index = (Datum ) i;
 
 		pos += sizeof(MonitoredElement) * m;
-		fss->top_k = construct_empty_array(typ->type_id);
+		fss->top_k = (ArrayType *) pos;
+
+		SET_VARSIZE(fss->top_k, sizeof(ArrayType));
+		fss->top_k->ndim = 0;
+		fss->top_k->dataoffset = 0;
+		fss->top_k->elemtype = typ->type_id;
 	}
 	else
 		fss->top_k = NULL;
