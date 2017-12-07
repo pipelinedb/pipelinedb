@@ -758,30 +758,6 @@ warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
 	}
 }
 
-static bool
-make_selects_continuous(Node *node, void *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, SelectStmt))
-		((SelectStmt *) node)->forContinuousView = true;
-
-	return raw_expression_tree_walker(node, make_selects_continuous, NULL);
-}
-
-/*
- * MakeSelectsContinuous
- *
- * Mark all SELECT queries as continuous. This is necessary for subqueries to be recognized
- * as continuous, as the grammar can't determine that.
- */
-void
-MakeSelectsContinuous(SelectStmt *stmt)
-{
-	make_selects_continuous((Node *) stmt, NULL);
-}
-
 /*
  * is_allowed_subquery
  *
@@ -950,15 +926,17 @@ get_query_state(Query *query)
 	return entry;
 }
 
-typedef struct QueryIsContinuousContext
+typedef struct IsContinuousContext
 {
 	Query *query;
-	bool hasStream;
-} QueryIsContinuousContext;
+	bool isContinuous;
+} IsContinuousContext;
 
+
+#include "utils/memutils.h"
 
 static bool
-query_is_continuous_walker(Node *node, QueryIsContinuousContext *context)
+query_is_continuous_walker(Node *node, IsContinuousContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -970,10 +948,23 @@ query_is_continuous_walker(Node *node, QueryIsContinuousContext *context)
 
 		if (rte->relkind == RELKIND_STREAM)
 		{
-			context->hasStream = true;
+			context->isContinuous = true;
 			return false;
 		}
+		else if (rte->relkind == RELKIND_RELATION && RelIdIsForMatRel(rte->relid, NULL) && IsContQueryCombinerProcess() &&
+				pg_strcasecmp(CurrentMemoryContext->name, "ContQueryBatchContext") != 0)
+		{
+			// groups lookup plan should not be considered continuous, that's what we're doing here with the context ghettoness
+			context->isContinuous = true;
+			return false;
+		}
+		else if (rte->rtekind == RTE_SUBQUERY)
+		{
+			context->isContinuous = QueryIsContinuous(rte->subquery);
+			return true;
+		}
 	}
+
 	return expression_tree_walker(node, query_is_continuous_walker, context);
 }
 
@@ -1008,7 +999,7 @@ ViewStmtIsForContinuousView(ViewStmt *stmt)
 bool
 QueryIsContinuous(Query *query)
 {
-	QueryIsContinuousContext context;
+	IsContinuousContext context;
 
 	if (query->commandType != CMD_SELECT)
 		return false;
@@ -1016,23 +1007,12 @@ QueryIsContinuous(Query *query)
 	if (!query->jointree)
 		return false;
 
-	MemSet(&context, 0, sizeof(QueryIsContinuousContext));
+	MemSet(&context, 0, sizeof(IsContinuousContext));
 
 	context.query = query;
 	query_is_continuous_walker((Node *) query->jointree->fromlist, &context);
 
-	// just make this function look at FROM!
-	QueryState *state = get_query_state(query);
-
-	// we're not handling the case of an erroneous query, when a user is trying to SELECT from a stream...
-
-	// can we mark the query as for a CREATE CONTINUOUS VIEW?
-	// then: if not CREATE CV and not CQ proc, throw an error
-
-//	Assert(context.hasStream == state->isContinuous);
-
-	return state->isContinuous;
-//	return context.hasStream;
+	return context.isContinuous;
 }
 
 /*
@@ -1053,17 +1033,6 @@ QuerySetSWStepFactor(Query *query, double sf)
 {
 	QueryState *state = get_query_state(query);
 	state->swStepFactor = sf;
-}
-
-/*
- * QuerySetIsContinuous
- */
-void
-QuerySetIsContinuous(Query *query, bool continuous)
-{
-	return;
-	QueryState *state = get_query_state(query);
-	state->isContinuous = continuous;
 }
 
 /*
@@ -2396,7 +2365,6 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 
 	context = MakeContAnalyzeContext(make_parsestate(NULL), proc, proc_type);
 
-	make_selects_continuous((Node *) proc, NULL);
 	collect_rels_and_streams((Node *) proc->fromClause, context);
 	collect_cols((Node *) proc, context);
 	collect_agg_funcs((Node *) proc->targetList, context);
@@ -2736,8 +2704,6 @@ GetContViewQuery(RangeVar *rv)
 	sel = get_cont_query_select_stmt(rv);
 	context = MakeContAnalyzeContext(NULL, sel, Worker);
 	rewrite_streaming_aggs(sel, context);
-
-	MakeSelectsContinuous(sel);
 
 	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
@@ -3988,7 +3954,7 @@ ApplySlidingWindow(SelectStmt *stmt, DefElem *sw, int *ttl)
 
 	// add IsSelectForContinuousView
 	sw_cv = GetSWContinuousViewRangeVar(stmt->fromClause);
-	if (sw_cv == NULL && stmt->forContinuousView == false)
+	if (sw_cv == NULL && !creating_cont_query)
 		elog(ERROR, "\"sw\" can only be specified when reading from a stream or continuous view");
 
 	if (!IsA(sw->arg, String))
@@ -4202,11 +4168,6 @@ post_parse_analyze_hook_type SavePostParseAnalyzeHook = NULL;
 void
 PostParseAnalyzeHook(ParseState *pstate, Query *query)
 {
-//	if (QueryIsContinuous(query))
-//		query->targetList = transformContSelectTargetList(pstate, query->targetList);
-
-	// can we detect if we're selecting from a stream but it doesn't belong to a CREATE CONTINUOUS VIEW
-	// in that case, we need to throw the error
-
-//	elog(LOG, "HERE");
+	if (QueryIsContinuous(query))
+		query->targetList = transformContSelectTargetList(pstate, query->targetList);
 }

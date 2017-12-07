@@ -118,14 +118,8 @@ parse_analyze(Node *parseTree, const char *sourceText,
 	{
 		SelectStmt *stmt = (SelectStmt *) parseTree;
 
-		QuerySetIsContinuous(query, stmt->forContinuousView);
 		QuerySetSWStepFactor(query, stmt->swStepFactor);
-
-		if (stmt->forContinuousView)
-			query->targetList = transformContSelectTargetList(pstate, query->targetList);
 	}
-
-	// can we determine forContinuousView by simply finding a stream in the from clause? seems way cleaner...
 
 	if (post_parse_analyze_hook)
 		(*post_parse_analyze_hook) (pstate, query);

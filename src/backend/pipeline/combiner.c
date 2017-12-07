@@ -334,6 +334,7 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 	ps = make_parsestate(NULL);
 	transformFromClause(ps, sel->fromClause);
 
+	// indicate with a flag that this should not be considered continuous
 	qlist = pg_analyze_and_rewrite((Node *) sel, state->base.query->matrel->relname, NULL, 0);
 	query = (Query *) linitial(qlist);
 
@@ -1356,7 +1357,6 @@ sync_combine(ContQueryCombinerState *state)
 	state->deltas = build_existing_hashtable(state, "CombinerDeltas");
 	foreach_tuple(state->slot, state->combined)
 	{
-		// we're crashing right here...
 		bool new;
 		HeapTupleEntry entry = (HeapTupleEntry) LookupTupleHashEntry(state->deltas, state->slot, &new);
 

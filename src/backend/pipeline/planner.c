@@ -80,7 +80,6 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 
 	query = linitial(pg_analyze_and_rewrite(node, sql, NULL, 0));
 
-	QuerySetIsContinuous(query, true);
 	QuerySetContQueryId(query, id);
 
 	plan = pg_plan_query(query, 0, NULL);
@@ -953,21 +952,17 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 	if (IsA(parsetree, CreateContViewStmt) || IsA(parsetree, CreateContTransformStmt))
 	{
 		Node *node;
-//		SelectStmt *stmt;
 
 		if (IsA(parsetree, CreateContViewStmt))
 			node = ((CreateContViewStmt *) parsetree)->query;
 		else
 			node = ((CreateContTransformStmt *) parsetree)->query;
 
+		// this needs to be unset in a finally
+		creating_cont_query = true;
+
 		/* The grammar should enforce this */
 		Assert(IsA(node, SelectStmt));
-
-		// set flag indicating we're creating a continuous query?
-		// then we need a try catch though to ensure it's always unset...
-
-//		stmt = (SelectStmt *) node;
-//		stmt->forContinuousView = true;
 	}
 	else if (IsA(parsetree, IndexStmt))
 	{
@@ -1013,4 +1008,6 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 
 	if (exec_lock)
 		ReleaseContExecutionLock(exec_lock);
+
+	creating_cont_query = false;
 }

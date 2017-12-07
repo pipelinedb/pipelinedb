@@ -73,6 +73,8 @@
 /* guc params */
 int continuous_view_fillfactor;
 
+bool creating_cont_query = false;
+
 /* for binary upgrades */
 static Oid next_matrel_type = InvalidOid;
 static Oid next_matrel_array_type = InvalidOid;
@@ -646,8 +648,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	AttrNumber ttl_attno = InvalidAttrNumber;
 	char *ttl_column = NULL;
 
-//	Assert(((SelectStmt *) stmt->query)->forContinuousView);
-
 	view = stmt->into->rel;
 
 	check_relation_already_exists(view);
@@ -667,7 +667,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
 
 	RewriteFromClause((SelectStmt *) stmt->query);
-	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
 	/* Apply any CQ storage options like sw, step_factor */
 	ApplyStorageOptions(stmt, &has_sw, &ttl, &ttl_column);
@@ -1058,8 +1057,6 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	CreateStreamStmt *create_osrel;
 	Oid osrelid;
 
-//	Assert(((SelectStmt *) stmt->query)->forContinuousView);
-
 	transform = stmt->into->rel;
 	check_relation_already_exists(transform);
 
@@ -1078,7 +1075,6 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
 
 	RewriteFromClause((SelectStmt *) stmt->query);
-	MakeSelectsContinuous((SelectStmt *) stmt->query);
 
 	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
 	ValidateSubselect(stmt->query, "continuous transforms");

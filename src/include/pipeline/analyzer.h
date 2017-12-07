@@ -62,12 +62,9 @@ typedef struct ContAnalyzeContext
 
 extern void PostParseAnalyzeHook(ParseState *pstate, Query *query);
 
-extern void SelectStmtSetForContinuousView(SelectStmt *stmt, bool forContinuousView);
-extern bool SelectStmtGetForContinuousView(SelectStmt *stmt);
 extern bool ViewStmtIsForContinuousView(ViewStmt *stmt);
 
 extern bool QueryIsContinuous(Query *query);
-extern void QuerySetIsContinuous(Query *query, bool continuous);
 double QueryGetSWStepFactor(Query *query);
 extern void QuerySetSWStepFactor(Query *query, double sf);
 extern Oid QueryGetContQueryId(Query *query);
@@ -78,7 +75,7 @@ extern bool collect_cols(Node *node, ContAnalyzeContext *context);
 
 extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType type);
 extern void RewriteFromClause(SelectStmt *stmt);
-extern void MakeSelectsContinuous(SelectStmt *stmt);
+extern void UnMakeSelectsContinuous(SelectStmt *stmt);
 extern void ValidateSubselect(Node *subquery, char *objdesc);
 extern void ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql);
 extern void ValidateContQuery(Query *query);

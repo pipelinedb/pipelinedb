@@ -20,6 +20,7 @@
 #include "executor/executor.h"
 #include "executor/tstoreReceiver.h"
 #include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "pgstat.h"
 #include "pipeline/combiner_receiver.h"
 #include "pipeline/executor.h"
@@ -301,7 +302,6 @@ should_exec_query(ContQuery *query)
 	return true;
 }
 
-#include "nodes/makefuncs.h"
 void
 ContinuousQueryWorkerMain(void)
 {

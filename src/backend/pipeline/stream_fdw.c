@@ -122,6 +122,8 @@ GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 /*
  * GetStreamPaths
  */
+
+#include "commands/pipelinecmds.h"
 void
 GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid relid)
 {
@@ -138,7 +140,8 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid relid)
 		while (parent->parent_root != NULL)
 			parent = parent->parent_root;
 
-		if (!QueryIsContinuous(parent->parse))
+		// and not creating CV
+		if (!(QueryIsContinuous(parent->parse) && !IsContQueryProcess()) || !creating_cont_query)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
