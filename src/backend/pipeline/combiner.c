@@ -328,13 +328,12 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 	res->val = (Node *) cref;
 	sel->targetList = list_make1(res);
 	sel->fromClause = list_make1(state->base.query->matrel);
-	sel->forCombineLookup = true;
 
 	/* populate the ParseState's p_varnamespace member */
 	ps = make_parsestate(NULL);
 	transformFromClause(ps, sel->fromClause);
 
-	// indicate with a flag that this should not be considered continuous
+  // indicate with a flag that this should not be considered continuous
 	qlist = pg_analyze_and_rewrite((Node *) sel, state->base.query->matrel->relname, NULL, 0);
 	query = (Query *) linitial(qlist);
 

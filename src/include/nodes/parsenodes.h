@@ -1318,7 +1318,6 @@ typedef struct SelectStmt
 	/* Eventually add fields for CORRESPONDING spec here */
 
 	/* PipelineDB */
-	bool forCombineLookup; /* is this SELECT stmt for looking up groups in the combiner? */
 	double swStepFactor;
 } SelectStmt;
 
