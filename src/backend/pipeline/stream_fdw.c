@@ -122,8 +122,6 @@ GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 /*
  * GetStreamPaths
  */
-
-#include "commands/pipelinecmds.h"
 void
 GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid relid)
 {
