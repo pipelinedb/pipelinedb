@@ -328,13 +328,14 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 	res->val = (Node *) cref;
 	sel->targetList = list_make1(res);
 	sel->fromClause = list_make1(state->base.query->matrel);
-	sel->forCombineLookup = true;
 
 	/* populate the ParseState's p_varnamespace member */
 	ps = make_parsestate(NULL);
 	transformFromClause(ps, sel->fromClause);
 
+	PipelineContextSetCombinerLookup();
 	qlist = pg_analyze_and_rewrite((Node *) sel, state->base.query->matrel->relname, NULL, 0);
+	ClearPipelineContext();
 	query = (Query *) linitial(qlist);
 
 	if (state->ngroupatts > 0 && list_length(values))
@@ -1945,6 +1946,11 @@ ContinuousQueryCombinerMain(void)
 
 next:
 			ContExecutorEndQuery(cont_exec);
+
+			/*
+			 * Clear analyzer/planner context flags
+			 */
+			ClearPipelineContext();
 
 			/*
 			 * We wait to purge until we're done incrementing all stats, because this will

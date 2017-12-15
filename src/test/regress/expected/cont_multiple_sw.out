@@ -3,18 +3,19 @@ CREATE STREAM msw_stream (x int, y int, z text);
 -- We can't reference arrival_timestamp if the underlying CV isn't a SW
 CREATE CONTINUOUS VIEW msw0 AS SELECT x::integer, COUNT(*) FROM msw_stream
 WHERE x > 10 GROUP BY x;
-CREATE VIEW msw1 AS SELECT combine(count) AS count FROM msw0
-WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
-ERROR:  column "arrival_timestamp" does not exist
-LINE 2: WHERE arrival_timestamp > clock_timestamp() - interval '2 se...
-              ^
+CREATE VIEW msw1 AS SELECT combine(count) AS count FROM msw0;
+-- View depends on CV
 DROP CONTINUOUS VIEW msw0;
+ERROR:  cannot drop continuous view msw0 because other objects depend on it
+DETAIL:  view msw1 depends on continuous view msw0
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+DROP CONTINUOUS VIEW msw0 CASCADE;
+NOTICE:  drop cascades to view msw1
 CREATE CONTINUOUS VIEW msw0 AS SELECT x::integer, COUNT(*), avg(x) FROM msw_stream
 WHERE arrival_timestamp > clock_timestamp() - interval '10 second' GROUP BY x;
-CREATE VIEW msw1 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0
-WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
+CREATE VIEW msw1 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
 -- Verify that we can use sw on views that read from SW CVs
-CREATE VIEW msw1_ma WITH (sw = '2 seconds') AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
+CREATE VIEW msw1_ma AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
 \d+ msw1_ma;
                 View "public.msw1_ma"
  Column |  Type   | Modifiers | Storage | Description 
@@ -24,11 +25,9 @@ CREATE VIEW msw1_ma WITH (sw = '2 seconds') AS SELECT combine(count) AS count, c
 View definition:
  SELECT combine(msw0.count) AS count,
     combine(msw0.avg) AS avg
-   FROM msw0
-  WHERE arrival_timestamp > (clock_timestamp() - '00:00:02'::interval);
+   FROM msw0;
 
-CREATE VIEW msw2 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0
-WHERE arrival_timestamp > clock_timestamp() - interval '5 seconds';
+CREATE VIEW msw2 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
 INSERT INTO msw_stream (x) SELECT generate_series(1, 100) AS x;
 SELECT * FROM msw0 ORDER BY x;
   x  | count |          avg           
@@ -265,15 +264,15 @@ SELECT * FROM msw0  ORDER BY x;
 (100 rows)
 
 SELECT * FROM msw1;
- count | avg 
--------+-----
-     0 |    
+ count |         avg         
+-------+---------------------
+   100 | 50.5000000000000000
 (1 row)
 
 SELECT * FROM msw1_ma;
- count | avg 
--------+-----
-     0 |    
+ count |         avg         
+-------+---------------------
+   100 | 50.5000000000000000
 (1 row)
 
 SELECT * FROM msw2;
@@ -394,30 +393,23 @@ SELECT * FROM msw0  ORDER BY x;
 (100 rows)
 
 SELECT * FROM msw1;
- count | avg 
--------+-----
-     0 |    
+ count |         avg         
+-------+---------------------
+   100 | 50.5000000000000000
 (1 row)
 
 SELECT * FROM msw1_ma;
- count | avg 
--------+-----
-     0 |    
+ count |         avg         
+-------+---------------------
+   100 | 50.5000000000000000
 (1 row)
 
 SELECT * FROM msw2;
- count | avg 
--------+-----
-     0 |    
+ count |         avg         
+-------+---------------------
+   100 | 50.5000000000000000
 (1 row)
 
--- View depends on CV
-DROP CONTINUOUS VIEW msw0;
-ERROR:  cannot drop continuous view msw0 because other objects depend on it
-DETAIL:  view msw1 depends on continuous view msw0
-view msw1_ma depends on continuous view msw0
-view msw2 depends on continuous view msw0
-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW msw0 CASCADE;
 NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to view msw1
@@ -429,8 +421,7 @@ CREATE CONTINUOUS VIEW msw3 AS SELECT
 	substring(z::text, 1, 2) AS c
 FROM msw_stream
 WHERE arrival_timestamp > clock_timestamp() - interval '1 minute';
-CREATE VIEW msw4 AS SELECT * FROM msw3
-WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
+CREATE VIEW msw4 AS SELECT * FROM msw3;
 INSERT INTO msw_stream (x, y, z) VALUES (0, 10, 'two');
 INSERT INTO msw_stream (x, y, z) VALUES (1, 20, 'three');
 INSERT INTO msw_stream (x, y, z) VALUES (2, 30, 'four');
@@ -465,9 +456,12 @@ SELECT * FROM msw3 ORDER BY a;
 (3 rows)
 
 SELECT * FROM msw4 ORDER BY a;
- a | b | c 
----+---+---
-(0 rows)
+ a  |  b  | c  
+----+-----+----
+ 10 | -10 | tw
+ 11 | -19 | th
+ 12 | -28 | fo
+(3 rows)
 
 DROP CONTINUOUS VIEW msw3 CASCADE;
 NOTICE:  drop cascades to view msw4
@@ -486,23 +480,7 @@ View definition:
    FROM ONLY msw_stream
   WHERE arrival_timestamp > (clock_timestamp() - '00:10:00'::interval);
 
-CREATE VIEW msw6 WITH (sw = '1 minute') AS SELECT * FROM msw5;
-\d+ msw6
-                           View "public.msw6"
- Column  |           Type           | Modifiers | Storage | Description 
----------+--------------------------+-----------+---------+-------------
- sw_time | timestamp with time zone |           | plain   | 
-View definition:
- SELECT msw5.sw_time
-   FROM msw5
-  WHERE arrival_timestamp > (clock_timestamp() - '00:01:00'::interval);
-
-SELECT * FROM msw6;
- sw_time 
----------
-(0 rows)
-
-CREATE VIEW msw7 AS SELECT * FROM msw5 WHERE sw_time > clock_timestamp() - INTERVAL '1 minute';
+CREATE VIEW msw7 AS SELECT * FROM msw5;
 \d+ msw7
                            View "public.msw7"
  Column  |           Type           | Modifiers | Storage | Description 
@@ -510,8 +488,7 @@ CREATE VIEW msw7 AS SELECT * FROM msw5 WHERE sw_time > clock_timestamp() - INTER
  sw_time | timestamp with time zone |           | plain   | 
 View definition:
  SELECT msw5.sw_time
-   FROM msw5
-  WHERE msw5.sw_time > (clock_timestamp() - '00:01:00'::interval);
+   FROM msw5;
 
 SELECT * FROM msw7;
  sw_time 
@@ -519,18 +496,8 @@ SELECT * FROM msw7;
 (0 rows)
 
 DROP CONTINUOUS VIEW msw5 CASCADE;
-NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to view msw6
-drop cascades to view msw7
+NOTICE:  drop cascades to view msw7
 -- sw of view vs step_size
 CREATE CONTINUOUS VIEW msw8 WITH (sw='10 minute', step_factor='10') AS SELECT count(*) FROM msw_stream;
-CREATE VIEW msw9 WITH (sw='5 minute') AS SELECT * FROM msw8;
-CREATE VIEW msw10 WITH (sw='2 minute') AS SELECT * FROM msw8;
-CREATE VIEW msw11 WITH (sw='1 minute') AS SELECT * FROM msw8;
-ERROR:  "sw" value is too small
-HINT:  "sw" must be at least twice as much as the step size of the base continuous view.
 DROP CONTINUOUS VIEW msw8 CASCADE;
-NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to view msw9
-drop cascades to view msw10
 DROP STREAM msw_stream CASCADE;

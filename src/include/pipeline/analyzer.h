@@ -12,10 +12,13 @@
 #ifndef CONT_ANALYZE_H
 #define CONT_ANALYZE_H
 
+#include "parser/analyze.h"
 #include "parser/parse_node.h"
 #include "pipeline/scheduler.h"
 
 extern double sliding_window_step_factor;
+
+extern post_parse_analyze_hook_type SavePostParseAnalyzeHook;
 
 typedef struct ContAnalyzeContext
 {
@@ -38,6 +41,12 @@ typedef struct ContAnalyzeContext
 	ContQueryProcType proc_type;
 } ContAnalyzeContext;
 
+extern void PipelineContextSetIsDDL(void);
+extern bool PipelineContextIsDDL(void);
+extern void PipelineContextSetCombinerLookup(void);
+extern bool PipelineContextIsCombinerLookup(void);
+extern void ClearPipelineContext(void);
+
 #define OUTPUT_OF "output_of"
 
 #define MATREL_COMBINE "combine"
@@ -50,15 +59,17 @@ typedef struct ContAnalyzeContext
 #define OPTION_TTL "ttl"
 #define OPTION_TTL_COLUMN "ttl_column"
 
-
 #define SW_TIMESTAMP_REF 65100
 #define IS_SW_TIMESTAMP_REF(var) (IsA((var), Var) && ((Var *) (var))->varno >= SW_TIMESTAMP_REF)
 
 #define IsMatRelCombine(proname) (pg_strcasecmp(NameStr(proname), MATREL_COMBINE) == 0)
 #define IsMatRelFinalize(proname) (pg_strcasecmp(NameStr(proname), MATREL_FINALIZE) == 0)
 
+extern void PostParseAnalyzeHook(ParseState *pstate, Query *query);
+
+extern bool ViewStmtIsForContinuousView(ViewStmt *stmt);
+
 extern bool QueryIsContinuous(Query *query);
-extern void QuerySetIsContinuous(Query *query, bool continuous);
 double QueryGetSWStepFactor(Query *query);
 extern void QuerySetSWStepFactor(Query *query, double sf);
 extern Oid QueryGetContQueryId(Query *query);
@@ -69,13 +80,12 @@ extern bool collect_cols(Node *node, ContAnalyzeContext *context);
 
 extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType type);
 extern void RewriteFromClause(SelectStmt *stmt);
-extern void MakeSelectsContinuous(SelectStmt *stmt);
+extern void UnMakeSelectsContinuous(SelectStmt *stmt);
 extern void ValidateSubselect(Node *subquery, char *objdesc);
 extern void ValidateParsedContQuery(RangeVar *name, Node *node, const char *sql);
 extern void ValidateContQuery(Query *query);
 extern void ValidateContTrigger(CreateTrigStmt *stmt);
 
-extern void transformContSelectStmt(ParseState *pstate, SelectStmt *select);
 extern List *transformContSelectTargetList(ParseState *pstate, List *tlist);
 extern void ApplyTransitionOut(List *nodes);
 extern List *transformContViewOverlayTargetList(ParseState *pstate, List *tlist);
@@ -98,7 +108,6 @@ extern Node *GetTTLExpiredExpr(RangeVar *cv);
 extern ColumnRef *GetSWTimeColumn(RangeVar *rv);
 extern Interval *GetSWInterval(RangeVar *rv);
 extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
-extern Node *CreateOuterSWTimeColumnRef(ParseState *pstate, ColumnRef *cref, Node *var);
 
 extern DefElem *GetContinuousViewOption(List *options, char *name);
 extern void ApplySlidingWindow(SelectStmt *stmt, DefElem *max_age, int *ttl);

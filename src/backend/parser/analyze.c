@@ -118,7 +118,6 @@ parse_analyze(Node *parseTree, const char *sourceText,
 	{
 		SelectStmt *stmt = (SelectStmt *) parseTree;
 
-		QuerySetIsContinuous(query, stmt->forContinuousView);
 		QuerySetSWStepFactor(query, stmt->swStepFactor);
 	}
 
@@ -1099,21 +1098,12 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	/* make WINDOW info available for window functions, too */
 	pstate->p_windowdefs = stmt->windowClause;
 
-	if (stmt->forContinuousView)
-		transformContSelectStmt(pstate, stmt);
-
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);
-
-	if (GetSWContinuousViewRangeVar(stmt->fromClause))
-		pstate->p_post_columnref_hook = CreateOuterSWTimeColumnRef;
 
 	/* transform targetlist */
 	qry->targetList = transformTargetList(pstate, stmt->targetList,
 										  EXPR_KIND_SELECT_TARGET);
-
-	if (stmt->forContinuousView)
-		qry->targetList = transformContSelectTargetList(pstate, qry->targetList);
 
 	/* mark column origins */
 	markTargetListOrigins(pstate, qry->targetList);

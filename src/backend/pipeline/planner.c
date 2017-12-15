@@ -80,7 +80,6 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 
 	query = linitial(pg_analyze_and_rewrite(node, sql, NULL, 0));
 
-	QuerySetIsContinuous(query, true);
 	QuerySetContQueryId(query, id);
 
 	plan = pg_plan_query(query, 0, NULL);
@@ -950,48 +949,80 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 {
 	ContExecutionLock exec_lock = NULL;
 
-	if (IsA(parsetree, IndexStmt))
+	PG_TRY();
 	{
-		IndexStmt *stmt = (IndexStmt *) parsetree;
-		if (IsAContinuousView(stmt->relation))
-			create_index_on_matrel(stmt);
-	}
-	else if (IsA(parsetree, VacuumStmt))
-	{
-		VacuumStmt *vstmt = (VacuumStmt *) parsetree;
-		/*
-		 * If the user is trying to vacuum a CV, what they're really
-		 * trying to do is create it on the CV's materialization table, so rewrite
-		 * the name of the target relation if we need to.
-		 */
-		if (vstmt->relation && IsAContinuousView(vstmt->relation))
-			vstmt->relation = GetMatRelName(vstmt->relation);
-	}
-	else if (IsA(parsetree, DropStmt))
-	{
-		DropStmt *stmt = (DropStmt *) parsetree;
-		/*
-		 * If we're dropping a CQ, we must acquire the continuous execution lock,
-		 * which when held exclusively prevents all CQs (they acquire it as a shared lock)
-		 * from being executed by workers/combiners. This prevents deadlocks between
-		 * this process and workers/combiners, which can all acquire contended locks in
-		 * basically any order they want.
-		 *
-		 * So we simply ensure mutual exclusion between droppers and workers/combiners execution.
-		 */
-		if (list_length(stmt->objects) == 1 && IsA(linitial(stmt->objects), List))
+		if (IsA(parsetree, CreateContViewStmt) || IsA(parsetree, CreateContTransformStmt))
 		{
-			RangeVar *rv = makeRangeVarFromNameList(linitial(stmt->objects));
-			if (IsAContinuousView(rv))
-				exec_lock = AcquireContExecutionLock(AccessExclusiveLock);
+			Node *node;
+
+			if (IsA(parsetree, CreateContViewStmt))
+				node = ((CreateContViewStmt *) parsetree)->query;
+			else
+				node = ((CreateContTransformStmt *) parsetree)->query;
+
+			/*
+			 * Indicate to the analyzer/planner hooks that we're executing a CREATE CONTINUOUS statement
+			 */
+			PipelineContextSetIsDDL();
+
+			/* The grammar should enforce this */
+			Assert(IsA(node, SelectStmt));
 		}
+		else if (IsA(parsetree, IndexStmt))
+		{
+			IndexStmt *stmt = (IndexStmt *) parsetree;
+			if (IsAContinuousView(stmt->relation))
+				create_index_on_matrel(stmt);
+		}
+		else if (IsA(parsetree, VacuumStmt))
+		{
+			VacuumStmt *vstmt = (VacuumStmt *) parsetree;
+			/*
+			 * If the user is trying to vacuum a CV, what they're really
+			 * trying to do is create it on the CV's materialization table, so rewrite
+			 * the name of the target relation if we need to.
+			 */
+			if (vstmt->relation && IsAContinuousView(vstmt->relation))
+				vstmt->relation = GetMatRelName(vstmt->relation);
+		}
+		else if (IsA(parsetree, DropStmt))
+		{
+			DropStmt *stmt = (DropStmt *) parsetree;
+			/*
+			 * If we're dropping a CQ, we must acquire the continuous execution lock,
+			 * which when held exclusively prevents all CQs (they acquire it as a shared lock)
+			 * from being executed by workers/combiners. This prevents deadlocks between
+			 * this process and workers/combiners, which can all acquire contended locks in
+			 * basically any order they want.
+			 *
+			 * So we simply ensure mutual exclusion between droppers and workers/combiners execution.
+			 */
+			if (list_length(stmt->objects) == 1 && IsA(linitial(stmt->objects), List))
+			{
+				RangeVar *rv = makeRangeVarFromNameList(linitial(stmt->objects));
+				if (IsAContinuousView(rv))
+					exec_lock = AcquireContExecutionLock(AccessExclusiveLock);
+			}
+		}
+
+		if (SaveUtilityHook != NULL)
+			(*SaveUtilityHook) (parsetree, sql, context, params, dest, tag);
+		else
+			standard_ProcessUtility(parsetree, sql, context, params, dest, tag);
+
+		if (exec_lock)
+			ReleaseContExecutionLock(exec_lock);
+
+		/*
+		 * Clear analyzer/planner context flags
+		 */
+		ClearPipelineContext();
 	}
+	PG_CATCH();
+	{
+		ClearPipelineContext();
 
-	if (SaveUtilityHook != NULL)
-		(*SaveUtilityHook) (parsetree, sql, context, params, dest, tag);
-	else
-		standard_ProcessUtility(parsetree, sql, context, params, dest, tag);
-
-	if (exec_lock)
-		ReleaseContExecutionLock(exec_lock);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 }

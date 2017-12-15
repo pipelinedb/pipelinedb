@@ -138,7 +138,7 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid relid)
 		while (parent->parent_root != NULL)
 			parent = parent->parent_root;
 
-		if (!QueryIsContinuous(parent->parse))
+		if (!(QueryIsContinuous(parent->parse) && !IsContQueryProcess()) || !PipelineContextIsDDL())
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
