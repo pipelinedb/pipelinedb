@@ -958,8 +958,10 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 		else
 			node = ((CreateContTransformStmt *) parsetree)->query;
 
-		// this needs to be unset in a finally
-		creating_cont_query = true;
+		/*
+		 * Indicate to the analyzer/planner hooks that we're executing a CREATE CONTINUOUS statement
+		 */
+		PipelineContextSetIsDDL();
 
 		/* The grammar should enforce this */
 		Assert(IsA(node, SelectStmt));
@@ -1009,5 +1011,8 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 	if (exec_lock)
 		ReleaseContExecutionLock(exec_lock);
 
-	creating_cont_query = false;
+	/*
+	 * Clear analyzer/planner context flags
+	 */
+	ClearPipelineContext();
 }

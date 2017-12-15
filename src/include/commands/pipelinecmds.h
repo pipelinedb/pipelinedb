@@ -23,8 +23,6 @@
 /* guc parameter */
 extern int continuous_view_fillfactor;
 
-extern bool creating_cont_query;
-
 extern void ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring);
 extern void ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring);
 

@@ -73,8 +73,6 @@
 /* guc params */
 int continuous_view_fillfactor;
 
-bool creating_cont_query = false;
-
 /* for binary upgrades */
 static Oid next_matrel_type = InvalidOid;
 static Oid next_matrel_array_type = InvalidOid;
