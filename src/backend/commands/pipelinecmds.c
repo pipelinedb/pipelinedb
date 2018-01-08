@@ -645,6 +645,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	int ttl = -1;
 	AttrNumber ttl_attno = InvalidAttrNumber;
 	char *ttl_column = NULL;
+	double sf = 0;
 
 	view = stmt->into->rel;
 
@@ -675,14 +676,14 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
 	cont_select_sql = deparse_query_def(cont_query);
 	select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
-	select->swStepFactor = ((SelectStmt *) stmt->query)->swStepFactor;
 
+	sf = QueryGetSWStepFactor(cont_query);
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying matrel.
 	 */
-	workerselect = TransformSelectStmtForContProcess(matrel_name, copyObject(select), &viewselect, Worker);
+	workerselect = TransformSelectStmtForContProcess(matrel_name, copyObject(select), &viewselect, sf, Worker);
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
 	ValidateContQuery(query);
@@ -889,7 +890,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/* Create group look up index and record dependencies */
 	if (IsBinaryUpgrade)
 		set_next_oids_for_lookup_index();
-	select = TransformSelectStmtForContProcess(matrel_name, copyObject(select), NULL, Combiner);
+	select = TransformSelectStmtForContProcess(matrel_name, copyObject(select), NULL, sf, Combiner);
 	lookup_idx_oid = create_lookup_index(view, matrelid, matrel_name, select, has_sw);
 
 	if (IsBinaryUpgrade)

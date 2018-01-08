@@ -42,6 +42,8 @@ typedef struct ContAnalyzeContext
 } ContAnalyzeContext;
 
 extern void PipelineContextSetIsDDL(void);
+extern void PipelineContextSetStepFactor(double sf);
+extern double PipelineContextGetStepFactor(void);
 extern bool PipelineContextIsDDL(void);
 extern void PipelineContextSetCombinerLookup(void);
 extern bool PipelineContextIsCombinerLookup(void);
@@ -90,7 +92,7 @@ extern List *transformContSelectTargetList(ParseState *pstate, List *tlist);
 extern void ApplyTransitionOut(List *nodes);
 extern List *transformContViewOverlayTargetList(ParseState *pstate, List *tlist);
 extern void transformCreateStreamStmt(CreateStreamStmt *stmt);
-extern SelectStmt *TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, SelectStmt **viewptr, ContQueryProcType type);
+extern SelectStmt *TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, SelectStmt **viewptr, double sw_step_factor, ContQueryProcType type);
 
 extern TupleDesc parserGetStreamDescr(Oid relid, ContAnalyzeContext *context);
 extern Node *ParseCombineFuncCall(ParseState *pstate, List *args, List *order, Expr *filter, WindowDef *over, int location);

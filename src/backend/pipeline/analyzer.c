@@ -533,7 +533,7 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 }
 
 static Node *
-get_truncation_from_interval(SelectStmt *select, Node *time, Node *interval)
+get_truncation_from_interval(SelectStmt *select, Node *time, double sf, Node *interval)
 {
 	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), interval, EXPR_KIND_WHERE);
 	Const *c;
@@ -541,7 +541,7 @@ get_truncation_from_interval(SelectStmt *select, Node *time, Node *interval)
 	FuncCall *func;
 	Interval *step;
 	Interval min_step;
-	float8 factor = select->swStepFactor / (float8) 100.0;
+	float8 factor = sf / (float8) 100.0;
 	int cmp;
 	char *step_str;
 	A_Const *step_const;
@@ -2219,7 +2219,7 @@ make_distincts_explicit(SelectStmt *stmt, ContAnalyzeContext *context)
 }
 
 static void
-truncate_timestamp_field(SelectStmt *select, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
+truncate_timestamp_field(SelectStmt *select, Node *time, A_Expr *sw_expr, double sf, ContAnalyzeContext *context)
 {
 	context->funcs = NIL;
 	collect_funcs(time, context);
@@ -2234,7 +2234,7 @@ truncate_timestamp_field(SelectStmt *select, Node *time, A_Expr *sw_expr, ContAn
 		else
 			ct_expr = (A_Expr *) sw_expr->lexpr;
 
-		time = get_truncation_from_interval(select, time, ct_expr->rexpr);
+		time = get_truncation_from_interval(select, time, sf, ct_expr->rexpr);
 	}
 	else
 	{
@@ -2248,14 +2248,14 @@ truncate_timestamp_field(SelectStmt *select, Node *time, A_Expr *sw_expr, ContAn
 }
 
 static ColumnRef *
-hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
+hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, double sf, ContAnalyzeContext *context)
 {
 	ListCell *lc;
 	bool found = false;
 	ColumnRef *cref;
 	List *groupClause;
 
-	truncate_timestamp_field(proc, time, sw_expr, context);
+	truncate_timestamp_field(proc, time, sw_expr, sf, context);
 
 	/* Replace timestamp column with the truncated expr */
 	foreach(lc, proc->targetList)
@@ -2302,7 +2302,7 @@ hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContex
 }
 
 static void
-proj_and_group_for_sliding_window(SelectStmt *proc, SelectStmt *view, ContAnalyzeContext *context)
+proj_and_group_for_sliding_window(SelectStmt *proc, SelectStmt *view, double sw_step_factor, ContAnalyzeContext *context)
 {
 	Node *time;
 	A_Expr *sw_expr = NULL;
@@ -2330,7 +2330,7 @@ proj_and_group_for_sliding_window(SelectStmt *proc, SelectStmt *view, ContAnalyz
 	/* Create and truncate projection and grouping on temporal expression */
 	context->hoisted_name = FigureColname(linitial(context->cols));
 	if (context->view_combines)
-		cref = hoist_time_node(proc, time, sw_expr, context);
+		cref = hoist_time_node(proc, time, sw_expr, sw_step_factor, context);
 	else
 		cref = hoist_node(&proc->targetList, time, context);
 
@@ -2349,7 +2349,7 @@ proj_and_group_for_sliding_window(SelectStmt *proc, SelectStmt *view, ContAnalyz
  * TransformSelectStmtForContProc
  */
 SelectStmt *
-TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, SelectStmt **viewptr, ContQueryProcType proc_type)
+TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, SelectStmt **viewptr, double sw_step_factor, ContQueryProcType proc_type)
 {
 	ContAnalyzeContext *context;
 	SelectStmt *proc;
@@ -2392,7 +2392,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 			(list_length(context->funcs) || list_length(stmt->groupClause)));
 
 	if (context->is_sw)
-		proj_and_group_for_sliding_window(proc, view, context);
+		proj_and_group_for_sliding_window(proc, view, sw_step_factor, context);
 
 	/*
 	 * We can't use the standard hypothetical/ordered set aggregate functions because
@@ -2664,7 +2664,7 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 }
 
 static SelectStmt *
-get_cont_query_select_stmt(RangeVar *rv)
+get_cont_query_select_stmt(RangeVar *rv, double *step_factor)
 {
 	HeapTuple tup;
 	bool isnull;
@@ -2687,7 +2687,8 @@ get_cont_query_select_stmt(RangeVar *rv)
 
 	sql = deparse_query_def(query);
 	select = (SelectStmt *) linitial(pg_parse_query(sql));
-	select->swStepFactor = row->step_factor;
+	if (step_factor)
+		*step_factor = (double) row->step_factor;
 
 	ReleaseSysCache(tup);
 
@@ -2705,7 +2706,7 @@ GetContViewQuery(RangeVar *rv)
 	SelectStmt *sel;
 	ContAnalyzeContext *context;
 
-	sel = get_cont_query_select_stmt(rv);
+	sel = get_cont_query_select_stmt(rv, NULL);
 	context = MakeContAnalyzeContext(NULL, sel, Worker);
 	rewrite_streaming_aggs(sel, context);
 
@@ -2720,10 +2721,11 @@ GetContWorkerQuery(RangeVar *rv)
 {
 	SelectStmt *sel;
 	RangeVar *matrel;
+	double sf;
 
 	matrel = GetMatRelName(rv);
-	sel = get_cont_query_select_stmt(rv);
-	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Worker);
+	sel = get_cont_query_select_stmt(rv, &sf);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, sf, Worker);
 
 	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
@@ -2736,10 +2738,12 @@ GetContCombinerQuery(RangeVar *rv)
 {
 	SelectStmt *sel;
 	RangeVar *matrel;
+	double sf;
 
 	matrel = GetMatRelName(rv);
-	sel = get_cont_query_select_stmt(rv);
-	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Combiner);
+	sel = get_cont_query_select_stmt(rv, &sf);
+
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, sf, Combiner);
 	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
@@ -2857,13 +2861,12 @@ get_worker_query_for_id(Oid id)
 
 	sql = deparse_query_def(query);
 	sel = (SelectStmt *) linitial(pg_parse_query(sql));
-	sel->swStepFactor = row->step_factor;
 
 	matrel = makeRangeVar(get_namespace_name(get_rel_namespace(row->matrelid)), get_rel_name(row->matrelid), -1);
 
 	ReleaseSysCache(tup);
 
-	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, Worker);
+	sel = TransformSelectStmtForContProcess(matrel, sel, NULL, row->step_factor, Worker);
 	return parse_analyze((Node *) sel, "SELECT", 0, 0);
 }
 
@@ -3724,9 +3727,10 @@ GetSWExpr(RangeVar *cv)
 {
 	SelectStmt *view;
 	SelectStmt *sel;
+	double sf;
 
-	sel = get_cont_query_select_stmt(cv);
-	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
+	sel = get_cont_query_select_stmt(cv, &sf);
+	TransformSelectStmtForContProcess(cv, sel, &view, sf, Worker);
 
 	return view->whereClause;
 }
@@ -3871,9 +3875,10 @@ GetWindowTimeColumn(RangeVar *cv)
 	SelectStmt *view;
 	SelectStmt *sel;
 	ContAnalyzeContext context;
+	double sf;
 
-	sel = get_cont_query_select_stmt(cv);
-	TransformSelectStmtForContProcess(cv, sel, &view, Worker);
+	sel = get_cont_query_select_stmt(cv, &sf);
+	TransformSelectStmtForContProcess(cv, sel, &view, sf, Worker);
 
 	if (view->whereClause)
 	{
@@ -4044,7 +4049,6 @@ ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw, int *ttl, char **ttl
 	}
 
 	/* step_factor */
-	select->swStepFactor = 0;
 	def = GetContinuousViewOption(stmt->into->options, OPTION_STEP_FACTOR);
 	if (def)
 	{
@@ -4064,12 +4068,12 @@ ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw, int *ttl, char **ttl
 					 errmsg("\"step_size\" must be a valid float in the range 0..50"),
 					 errhint("For example, ... WITH (step_factor = '25') ...")));
 
-		select->swStepFactor = factor;
 		stmt->into->options = list_delete(stmt->into->options, def);
+		PipelineContextSetStepFactor(factor);
 	}
 	else if (*has_sw)
 	{
-		select->swStepFactor = sliding_window_step_factor;
+		PipelineContextSetStepFactor(sliding_window_step_factor);
 	}
 }
 
@@ -4173,12 +4177,17 @@ PostParseAnalyzeHook(ParseState *pstate, Query *query)
 {
 	if (QueryIsContinuous(query))
 		query->targetList = transformContSelectTargetList(pstate, query->targetList);
+
+	if (query->commandType == CMD_SELECT)
+		QuerySetSWStepFactor(query, PipelineContextGetStepFactor());
 }
 
 #define PIPELINE_EXECUTING_DDL 	0x1
 #define COMBINER_LOOKUP_PLAN 		0x2
+#define DDL_HAS_STEP_FACTOR 			0x4
 
 static int pipeline_context_flags = 0;
+static int pipeline_context_step_factor = 0;
 
 /*
  * PipelineContextSetIsDDL
@@ -4189,6 +4198,24 @@ void
 PipelineContextSetIsDDL(void)
 {
 	pipeline_context_flags |= PIPELINE_EXECUTING_DDL;
+}
+
+/*
+ * PipelineContextSetStepFactor
+ */
+void
+PipelineContextSetStepFactor(double sf)
+{
+	pipeline_context_flags |= DDL_HAS_STEP_FACTOR;
+	pipeline_context_step_factor = sf;
+}
+
+double
+PipelineContextGetStepFactor(void)
+{
+	if ((pipeline_context_flags & DDL_HAS_STEP_FACTOR) == 0)
+		return 0.0;
+	return pipeline_context_step_factor;
 }
 
 /*
@@ -4233,4 +4260,5 @@ void
 ClearPipelineContext(void)
 {
 	pipeline_context_flags = 0;
+	pipeline_context_step_factor = 0;
 }

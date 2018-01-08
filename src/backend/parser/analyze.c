@@ -114,13 +114,6 @@ parse_analyze(Node *parseTree, const char *sourceText,
 
 	query = transformTopLevelStmt(pstate, parseTree);
 
-	if (IsA(parseTree, SelectStmt))
-	{
-		SelectStmt *stmt = (SelectStmt *) parseTree;
-
-		QuerySetSWStepFactor(query, stmt->swStepFactor);
-	}
-
 	if (post_parse_analyze_hook)
 		(*post_parse_analyze_hook) (pstate, query);
 

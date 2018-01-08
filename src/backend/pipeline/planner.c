@@ -97,9 +97,7 @@ get_worker_select_stmt(ContQuery* view, SelectStmt** viewptr)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	selectstmt->swStepFactor = view->sw_step_factor;
-	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt,
-												   viewptr, Worker);
+	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, viewptr, view->sw_step_factor, Worker);
 
 	return selectstmt;
 }
@@ -724,8 +722,7 @@ get_combiner_plan(ContQuery *view)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	selectstmt->swStepFactor = view->sw_step_factor;
-	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Combiner);
+	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, view->sw_step_factor, Combiner);
 	join_search_hook = get_combiner_join_rel;
 
 	return get_plan_with_hook(view->id, (Node*) selectstmt, view->sql, true);
