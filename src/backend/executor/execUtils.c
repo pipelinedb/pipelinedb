@@ -819,22 +819,6 @@ ExecOpenScanRelation(EState *estate, Index scanrelid, int eflags)
 	/* Open the relation and acquire lock as needed */
 	reloid = getrelid(scanrelid, estate->es_range_table);
 
-	/*
-	 * Streams are only scanned within CQ worker procs, so they're already
-	 * protected and locking them here would introduce deadlocks between stream
-	 * writers and CV droppers when synchronous stream inserts are enabled.
-	 */
-	if ((eflags & EXEC_NO_STREAM_LOCKING) && is_stream_relid(reloid))
-		lockmode = NoLock;
-
-	/*
-	 * Similarly to the above, combiners manage matrel locks themselves and
-	 * so the relation is already locked. Acquiring an extraneous lock here
-	 * can then ultimately cause deadlocks when CVs are being dropped.
-	 */
-	if ((eflags & EXEC_NO_MATREL_LOCKING))
-		lockmode = NoLock;
-
 	rel = heap_open(reloid, lockmode);
 
 	/*

@@ -112,7 +112,7 @@ init_query_state(ContExecutor *exec, ContQueryState *base)
 
 	RegisterSnapshotOnOwner(state->query_desc->snapshot, WorkerResOwner);
 
-	ExecutorStart(state->query_desc, EXEC_NO_STREAM_LOCKING | PIPELINE_EXEC_CONTINUOUS);
+	ExecutorStart(state->query_desc, PIPELINE_EXEC_CONTINUOUS);
 
 	state->query_desc->snapshot->active_count++;
 	UnregisterSnapshotFromOwner(state->query_desc->snapshot, WorkerResOwner);
@@ -194,11 +194,11 @@ init_plan(ContQueryWorkerState *state)
 		Plan *subplan = (Plan *) lfirst(lc);
 		PlanState  *subplanstate;
 
-		subplanstate = ExecInitNode(subplan, query_desc->estate, EXEC_NO_STREAM_LOCKING | PIPELINE_EXEC_CONTINUOUS);
+		subplanstate = ExecInitNode(subplan, query_desc->estate, PIPELINE_EXEC_CONTINUOUS);
 		query_desc->estate->es_subplanstates = lappend(query_desc->estate->es_subplanstates, subplanstate);
 	}
 
-	query_desc->planstate = ExecInitNode(plan, query_desc->estate, EXEC_NO_STREAM_LOCKING | PIPELINE_EXEC_CONTINUOUS);
+	query_desc->planstate = ExecInitNode(plan, query_desc->estate, PIPELINE_EXEC_CONTINUOUS);
 	query_desc->tupDesc = ExecGetResultType(query_desc->planstate);
 
 	state->result_slot = MakeSingleTupleTableSlot(query_desc->tupDesc);
