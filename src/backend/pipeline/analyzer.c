@@ -4045,6 +4045,7 @@ ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw, int *ttl, char **ttl
 
 	/* step_factor */
 	select->swStepFactor = 0;
+
 	def = GetContinuousViewOption(stmt->into->options, OPTION_STEP_FACTOR);
 	if (def)
 	{
@@ -4066,10 +4067,14 @@ ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw, int *ttl, char **ttl
 
 		select->swStepFactor = factor;
 		stmt->into->options = list_delete(stmt->into->options, def);
+
+		PipelineContextSetStepFactor(factor);
+
 	}
 	else if (*has_sw)
 	{
 		select->swStepFactor = sliding_window_step_factor;
+		PipelineContextSetStepFactor(sliding_window_step_factor);
 	}
 }
 
@@ -4173,12 +4178,17 @@ PostParseAnalyzeHook(ParseState *pstate, Query *query)
 {
 	if (QueryIsContinuous(query))
 		query->targetList = transformContSelectTargetList(pstate, query->targetList);
+
+	if (query->commandType == CMD_SELECT)
+		QuerySetSWStepFactor(query, PipelineContextGetStepFactor());
 }
 
 #define PIPELINE_EXECUTING_DDL 	0x1
 #define COMBINER_LOOKUP_PLAN 		0x2
+#define DDL_HAS_STEP_FACTOR 			0x4
 
 static int pipeline_context_flags = 0;
+static int pipeline_context_step_factor = 0;
 
 /*
  * PipelineContextSetIsDDL
@@ -4189,6 +4199,24 @@ void
 PipelineContextSetIsDDL(void)
 {
 	pipeline_context_flags |= PIPELINE_EXECUTING_DDL;
+}
+
+/*
+ * PipelineContextSetStepFactor
+ */
+void
+PipelineContextSetStepFactor(double sf)
+{
+	pipeline_context_flags |= DDL_HAS_STEP_FACTOR;
+	pipeline_context_step_factor = sf;
+}
+
+double
+PipelineContextGetStepFactor(void)
+{
+	if ((pipeline_context_flags & DDL_HAS_STEP_FACTOR) == 0)
+		return 0.0;
+	return pipeline_context_step_factor;
 }
 
 /*
@@ -4233,4 +4261,5 @@ void
 ClearPipelineContext(void)
 {
 	pipeline_context_flags = 0;
+	pipeline_context_step_factor = 0;
 }

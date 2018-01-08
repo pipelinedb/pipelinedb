@@ -786,6 +786,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	}
 	else
 	{
+		// should be set here!
 		ttl_attno = FindSWTimeColumnAttrNo(viewselect, matrelid, &ttl);
 		/*
 		 * has_sw will already be true if the sw storage parameter was set,

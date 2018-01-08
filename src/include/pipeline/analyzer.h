@@ -42,6 +42,8 @@ typedef struct ContAnalyzeContext
 } ContAnalyzeContext;
 
 extern void PipelineContextSetIsDDL(void);
+extern void PipelineContextSetStepFactor(double sf);
+extern double PipelineContextGetStepFactor(void);
 extern bool PipelineContextIsDDL(void);
 extern void PipelineContextSetCombinerLookup(void);
 extern bool PipelineContextIsCombinerLookup(void);
