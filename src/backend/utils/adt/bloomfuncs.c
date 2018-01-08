@@ -219,7 +219,7 @@ bloom_operation(FunctionCallInfo fcinfo, bool intersection)
 				elog(ERROR, "bloom filters must have the same n");
 		}
 		if (result == NULL)
-			result = bf;
+			result = BloomFilterCopy(bf);
 		else if (intersection)
 			result = BloomFilterIntersection(result, bf);
 		else
