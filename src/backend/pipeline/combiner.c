@@ -466,7 +466,7 @@ select_existing_groups(ContQueryCombinerState *state)
 	 */
 	dest = CreateDestReceiver(DestNone);
 
-	PortalStart(portal, NULL, EXEC_NO_MATREL_LOCKING, NULL);
+	PortalStart(portal, NULL, 0, NULL);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,
@@ -1270,7 +1270,7 @@ combine(ContQueryCombinerState *state, bool lookup)
 	dest = CreateDestReceiver(DestTuplestore);
 	SetTuplestoreDestReceiverParams(dest, state->combined, state->combine_cxt, false);
 
-	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, NULL);
+	PortalStart(portal, NULL, 0, NULL);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,
