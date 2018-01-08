@@ -945,7 +945,6 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 													  ParamListInfo params, DestReceiver *dest, char *tag)
 {
 	ContExecutionLock exec_lock = NULL;
-	double save_sliding_window_step_factor = sliding_window_step_factor;
 
 	PG_TRY();
 	{
@@ -1015,12 +1014,10 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 		 * Clear analyzer/planner context flags
 		 */
 		ClearPipelineContext();
-		sliding_window_step_factor = save_sliding_window_step_factor;
 	}
 	PG_CATCH();
 	{
 		ClearPipelineContext();
-		sliding_window_step_factor = save_sliding_window_step_factor;
 
 		PG_RE_THROW();
 	}
