@@ -1316,9 +1316,6 @@ typedef struct SelectStmt
 	struct SelectStmt *larg;	/* left child */
 	struct SelectStmt *rarg;	/* right child */
 	/* Eventually add fields for CORRESPONDING spec here */
-
-	/* PipelineDB */
-	double swStepFactor;
 } SelectStmt;
 
 

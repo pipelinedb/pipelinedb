@@ -13,6 +13,7 @@
 #include "catalog/pipeline_query_fn.h"
 #include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
+#include "pipeline/analyzer.h"
 #include "pipeline/tuplestore_scan.h"
 #include "utils/rel.h"
 
