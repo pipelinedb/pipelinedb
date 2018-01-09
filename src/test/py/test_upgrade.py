@@ -59,16 +59,24 @@ def test_binary_upgrade(pipeline, clean_db):
 
   pipeline.create_stream('stream0', z='text')
 
-  # Create some transforms
+  # Create some transforms with trigger functions
   for n in range(8):
     name = 'ct_%d' % n
     pipeline.create_ct(name, 'SELECT z::text FROM stream0', 'tg_fn()')
+
+  # Create some transforms without trigger functions
+  for n in range(8):
+    name = 'ct_no_trig_%d' % n
+    pipeline.create_ct(name, 'SELECT z::text FROM stream0')
 
   time.sleep(10)
 
   old_bin_dir = new_bin_dir = pipeline.bin_dir
   old_data_dir = pipeline.data_dir
   new_data_dir = os.path.abspath('test_binary_upgrade_data_dir')
+
+  if os.path.exists(new_data_dir):
+    shutil.rmtree(new_data_dir)
 
   pipeline.stop()
 
@@ -128,9 +136,19 @@ def test_binary_upgrade(pipeline, clean_db):
     assert rows[0][1] == 1
     assert rows[0][2] == 1000
 
-  # Transforms
+  # Transforms with trigger functions
   for n in range(8):
     name = 'ct_%d' % n
+    q = """
+    SELECT c.relname FROM pg_class c JOIN pipeline_query pq
+    ON c.oid = pq.relid WHERE pq.type = 't' AND c.relname = '%s'
+    """ % name
+    rows = list(upgraded.execute(q))
+    assert len(rows) == 1
+
+  # Transforms without trigger functions
+  for n in range(8):
+    name = 'ct_no_trig_%d' % n
     q = """
     SELECT c.relname FROM pg_class c JOIN pipeline_query pq
     ON c.oid = pq.relid WHERE pq.type = 't' AND c.relname = '%s'

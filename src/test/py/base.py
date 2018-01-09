@@ -211,13 +211,14 @@ class PipelineDB(object):
             result = self.execute('CREATE CONTINUOUS VIEW %s AS %s' % (name, stmt))
         return result
 
-    def create_ct(self, name, stmt, trigfn):
+    def create_ct(self, name, stmt, trigfn=''):
         """
         Create a continuous transform
         """
+        if trigfn:
+            trigfn = ' THEN EXECUTE PROCEDURE %s' % trigfn
         result = self.execute(
-          'CREATE CONTINUOUS TRANSFORM %s AS %s THEN EXECUTE PROCEDURE %s' %
-          (name, stmt, trigfn))
+          'CREATE CONTINUOUS TRANSFORM %s AS %s%s' % (name, stmt, trigfn))
         return result
 
     def create_table(self, name, **cols):
