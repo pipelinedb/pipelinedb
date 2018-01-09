@@ -28,6 +28,7 @@
 #include "foreign/foreign.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
+#include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_coerce.h"
@@ -574,6 +575,9 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 void
 ReconcilePipelineStreams(void)
 {
+	if (pg_class_aclcheck(PipelineStreamRelationOid, GetUserId(), ACL_DELETE) != ACLCHECK_OK)
+		return;
+
 	PushActiveSnapshot(GetTransactionSnapshot());
 
 	if (SPI_connect() != SPI_OK_CONNECT)
@@ -586,30 +590,6 @@ ReconcilePipelineStreams(void)
 		elog(ERROR, "SPI_finish failed");
 
 	PopActiveSnapshot();
-}
-
-/*
- * RemovePipelineStreamById
- */
-void
-RemovePipelineStreamById(Oid oid)
-{
-	Relation pipeline_stream;
-	HeapTuple tuple;
-
-	pipeline_stream = heap_open(PipelineStreamRelationOid, RowExclusiveLock);
-
-	tuple = SearchPipelineSysCache1(PIPELINESTREAMOID, ObjectIdGetDatum(oid));
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for stream with OID %u", oid);
-
-	simple_heap_delete(pipeline_stream, &tuple->t_self);
-
-	ReleaseSysCache(tuple);
-
-	CommandCounterIncrement();
-
-	heap_close(pipeline_stream, RowExclusiveLock);
 }
 
 /*
