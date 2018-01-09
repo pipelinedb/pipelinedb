@@ -154,7 +154,6 @@ typedef enum ObjectClass
 	OCLASS_EXTENSION,			/* pg_extension */
 	OCLASS_EVENT_TRIGGER,		/* pg_event_trigger */
 	OCLASS_CONTINUOUS_QUERY, 	/* pipeline_query */
-	OCLASS_STREAM, 				/* pipeline_stream */
 	OCLASS_COMBINE,				/* pipeline_combine */
 	OCLASS_POLICY,				/* pg_policy */
 	OCLASS_TRANSFORM			/* pg_transform */

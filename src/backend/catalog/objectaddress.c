@@ -3171,21 +3171,6 @@ getObjectDescription(const ObjectAddress *object)
 				break;
 			}
 
-		case OCLASS_STREAM:
-			{
-				HeapTuple	tup;
-
-				tup = SearchPipelineSysCache1(PIPELINESTREAMOID,
-									  ObjectIdGetDatum(object->objectId));
-				if (!HeapTupleIsValid(tup))
-					elog(ERROR, "cache lookup failed for pipeline_stream %u",
-						 object->objectId);
-				appendStringInfo(&buffer, _("pipeline_stream %s"),
-						get_rel_name(((Form_pipeline_stream) GETSTRUCT(tup))->relid));
-				ReleaseSysCache(tup);
-				break;
-			}
-
 		default:
 			appendStringInfo(&buffer, "unrecognized object %u %u %d",
 							 object->classId,
@@ -3682,10 +3667,6 @@ getObjectTypeDescription(const ObjectAddress *object)
 
 		case OCLASS_CONTINUOUS_QUERY:
 			appendStringInfoString(&buffer, "continuous query");
-			break;
-
-		case OCLASS_STREAM:
-			appendStringInfoString(&buffer, "stream");
 			break;
 
 		default:

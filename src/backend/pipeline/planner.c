@@ -1011,6 +1011,13 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			ReleaseContExecutionLock(exec_lock);
 
 		/*
+		 * We may have dropped a PipelineDB object, so we reconcile our own catalog tables
+		 * to ensure any orphaned entries are removed in this transaction.
+		 */
+		if (IsA(parsetree, DropStmt))
+			ReconcilePipelineStreams();
+
+		/*
 		 * Clear analyzer/planner context flags
 		 */
 		ClearPipelineContext();

@@ -23,6 +23,7 @@
 #include "catalog/pipeline_stream_fn.h"
 #include "commands/defrem.h"
 #include "commands/tablecmds.h"
+#include "executor/spi.h"
 #include "fmgr.h"
 #include "foreign/foreign.h"
 #include "funcapi.h"
@@ -47,6 +48,7 @@
 #include "utils/typcache.h"
 
 #define NUMERIC_OID 1700
+#define RECONCILE_PIPELINE_STREAM_STMT "DELETE FROM pipeline_stream WHERE relid IN (SELECT s.relid FROM pg_class c RIGHT JOIN pipeline_stream s ON c.oid = s.relid WHERE c.oid IS NULL);"
 
 Oid PipelineStreamRelationOid = InvalidOid;
 
@@ -549,9 +551,6 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	Datum values[Natts_pipeline_stream];
 	bool nulls[Natts_pipeline_stream];
 	HeapTuple tup;
-	ObjectAddress referenced;
-	ObjectAddress dependent;
-	Oid entry_oid;
 
 	MemSet(nulls, 0, sizeof(nulls));
 
@@ -562,23 +561,31 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	simple_heap_insert(pipeline_stream, tup);
 	CatalogUpdateIndexes(pipeline_stream, tup);
 
-	entry_oid = HeapTupleGetOid(tup);
-
-	CommandCounterIncrement();
-
-	/* Record dependency between tuple in pipeline_stream and the relation */
-	dependent.classId = PipelineStreamRelationOid;
-	dependent.objectId = entry_oid;
-	dependent.objectSubId = 0;
-
-	referenced.classId = RelationRelationId;
-	referenced.objectId = relid;
-	referenced.objectSubId = 0;
-	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
-
 	CommandCounterIncrement();
 
 	heap_close(pipeline_stream, NoLock);
+}
+
+/*
+ * ReconcilePipelineStreams
+ *
+ * DELETE any pipeline_stream rows that no longer have a corresponding stream relation
+ */
+void
+ReconcilePipelineStreams(void)
+{
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI manager");
+
+	if (SPI_execute(RECONCILE_PIPELINE_STREAM_STMT, false, 0) != SPI_OK_DELETE)
+		elog(ERROR, "SPI_execute failed: %s", RECONCILE_PIPELINE_STREAM_STMT);
+
+	if (SPI_finish() != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed");
+
+	PopActiveSnapshot();
 }
 
 /*
