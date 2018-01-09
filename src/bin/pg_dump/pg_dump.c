@@ -626,8 +626,12 @@ dumpContinuousTransform(Archive *fout, TableInfo *ti, PQExpBuffer delq)
 	}
 	tgargs = pstrdup(pq->data);
 
-	appendPQExpBuffer(q, "CREATE CONTINUOUS TRANSFORM %s.%s AS %s THEN EXECUTE PROCEDURE %s(%s);\n\n",
-			ti->dobj.namespace->dobj.name, ti->dobj.name, qdef, tgfn, tgargs);
+	appendPQExpBuffer(q, "CREATE CONTINUOUS TRANSFORM %s.%s AS %s", ti->dobj.namespace->dobj.name, ti->dobj.name, qdef);
+
+	if (strlen(tgfn) > 0)
+		appendPQExpBuffer(q, " THEN EXECUTE PROCEDURE %s(%s)", tgfn, tgargs);
+
+	appendPQExpBuffer(q, ";\n\n");
 
 	ArchiveEntry(fout, ti->dobj.catId, ti->dobj.dumpId,
 			ti->dobj.name,
