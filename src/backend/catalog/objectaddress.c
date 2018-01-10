@@ -749,7 +749,6 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 			case OBJECT_MATVIEW:
 			case OBJECT_FOREIGN_TABLE:
 			case OBJECT_CONTVIEW:
-			case OBJECT_STREAM:
 			case OBJECT_CONTTRANSFORM:
 				address =
 					get_relation_by_qualified_name(objtype, objname,
@@ -1191,13 +1190,6 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a foreign table",
-								RelationGetRelationName(relation))));
-			break;
-		case OBJECT_STREAM:
-			if (relation->rd_rel->relkind != RELKIND_STREAM)
-				ereport(ERROR,
-						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						 errmsg("\"%s\" is not a stream",
 								RelationGetRelationName(relation))));
 			break;
 		case OBJECT_CONTTRANSFORM:

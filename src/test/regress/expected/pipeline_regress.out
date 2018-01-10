@@ -246,7 +246,7 @@ CREATE CONTINUOUS VIEW sw_ts_expr2 AS
  count  | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count
-   FROM ONLY sw_ts_expr_s
+   FROM sw_ts_expr_s
   WHERE (minute(arrival_timestamp) + '@ 1 sec'::interval) > (clock_timestamp() - '@ 5 mins'::interval);
 
 \d+ sw_ts_expr2
@@ -258,7 +258,7 @@ View definition:
 View definition:
  SELECT minute(arrival_timestamp) AS minute,
     count(*) AS count
-   FROM ONLY sw_ts_expr_s
+   FROM sw_ts_expr_s
   WHERE minute(arrival_timestamp) > (clock_timestamp() - '@ 5 mins'::interval)
   GROUP BY (minute(arrival_timestamp));
 
@@ -289,7 +289,7 @@ CREATE CONTINUOUS VIEW unknown_type_cv AS SELECT x, 'a'::text FROM sw_ts_expr_s;
 View definition:
  SELECT x,
     'a'::text AS text
-   FROM ONLY sw_ts_expr_s;
+   FROM sw_ts_expr_s;
 
 DROP CONTINUOUS VIEW unknown_type_cv;
 CREATE STREAM ct_out_s (x integer, a text);

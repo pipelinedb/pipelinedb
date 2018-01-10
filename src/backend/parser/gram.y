@@ -1938,7 +1938,7 @@ AlterTableStmt:
           AlterTableStmt *n = makeNode(AlterTableStmt);
           n->relation = $3;
           n->cmds = $4;
-          n->relkind = OBJECT_STREAM;
+          n->relkind = OBJECT_FOREIGN_TABLE;
           n->missing_ok = false;
           $$ = (Node *)n;
         }
@@ -5692,7 +5692,7 @@ DropStmt: DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 
 drop_type:  TABLE                 { $$ = OBJECT_TABLE; }
       | CONTINUOUS VIEW           { $$ = OBJECT_CONTVIEW; }
-      | STREAM                    { $$ = OBJECT_STREAM; }
+      | STREAM                    { $$ = OBJECT_FOREIGN_TABLE; }
       | CONTINUOUS TRANSFORM      { $$ = OBJECT_CONTTRANSFORM; }
       | SEQUENCE                { $$ = OBJECT_SEQUENCE; }
       | VIEW                  { $$ = OBJECT_VIEW; }

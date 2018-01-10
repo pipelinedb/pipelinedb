@@ -15,7 +15,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate0';
  key    | integer |           | plain   | 
 View definition:
  SELECT key
-   FROM ONLY create_cont_stream;
+   FROM create_cont_stream;
 
 \d+ cqcreate0_mrel;
                     Table "public.cqcreate0_mrel"
@@ -57,7 +57,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate1';
  substring | text |           | extended | 
 View definition:
  SELECT "substring"(url, 1, 2) AS "substring"
-   FROM ONLY create_cont_stream;
+   FROM create_cont_stream;
 
 \d+ cqcreate1_mrel;
                      Table "public.cqcreate1_mrel"
@@ -101,7 +101,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate2';
 View definition:
  SELECT key,
     "substring"(value, 1, 2) AS s
-   FROM ONLY create_cont_stream;
+   FROM create_cont_stream;
 
 \d+ cqcreate2_mrel;
                     Table "public.cqcreate2_mrel"
@@ -156,7 +156,7 @@ View definition:
  SELECT key,
     count(*) AS count,
     sum(value) AS sum
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   GROUP BY key;
 
 \d+ cqcreate3_mrel;
@@ -206,7 +206,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate4';
 View definition:
  SELECT count(*) AS count,
     sum(value) AS sum
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   GROUP BY key;
 
 \d+ cqcreate4_mrel;
@@ -254,7 +254,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate5';
  key    | text |           | extended | 
 View definition:
  SELECT key
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   WHERE arrival_timestamp > (clock_timestamp() - '00:00:05'::interval);
 
 \d+ cqcreate5_mrel;
@@ -299,7 +299,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate6';
  count  | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   WHERE arrival_timestamp > (clock_timestamp() - '00:00:05'::interval)
   GROUP BY key;
 
@@ -348,7 +348,7 @@ View definition:
     avg(x) AS float_avg,
     avg(y) AS int_avg,
     avg(ts0 - ts1) AS internal_avg
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   GROUP BY key;
 
 \d+ cvavg_mrel;
@@ -392,7 +392,7 @@ CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(key) AS count_col FROM create_c
  count_col | json |           | extended | 
 View definition:
  SELECT json_agg(key) AS count_col
-   FROM ONLY create_cont_stream;
+   FROM create_cont_stream;
 
 \d+ cvjson_mrel;
                        Table "public.cvjson_mrel"
@@ -428,7 +428,7 @@ CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key, value) FROM crea
  json_object_agg | json |           | extended | 
 View definition:
  SELECT json_object_agg(key, value) AS json_object_agg
-   FROM ONLY create_cont_stream;
+   FROM create_cont_stream;
 
 \d+ cvjsonobj_mrel;
                         Table "public.cvjsonobj_mrel"
@@ -465,7 +465,7 @@ CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(z + y) AS sum_col FROM create_cont_
  sum_col | numeric |           | main    | 
 View definition:
  SELECT sum(z + y) AS sum_col
-   FROM ONLY create_cont_stream;
+   FROM create_cont_stream;
 
 \d+ cvcount_mrel;
                      Table "public.cvcount_mrel"
@@ -501,7 +501,7 @@ CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_
  count_col | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count_col
-   FROM ONLY create_cont_stream;
+   FROM create_cont_stream;
 
 \d+ cvarray_mrel;
                       Table "public.cvarray_mrel"
@@ -539,7 +539,7 @@ CREATE CONTINUOUS VIEW cvtext AS SELECT key, string_agg(substring(key, 1, 2), ',
 View definition:
  SELECT key,
     string_agg("substring"(key, 1, 2), ','::text) AS string_agg
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   GROUP BY key;
 
 \d+ cvtext_mrel;
@@ -580,7 +580,7 @@ CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(y) FROM create_cont_s
  ?column? | numeric |           | main    | 
 View definition:
  SELECT count(*)::numeric OPERATOR(pg_catalog.+) sum(y)
-   FROM ONLY create_cont_stream;
+   FROM create_cont_stream;
 
 \d+ cqaggexpr1_mrel;
                    Table "public.cqaggexpr1_mrel"
@@ -619,7 +619,7 @@ CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key, AVG(x) + MAX(y) AS value FROM c
 View definition:
  SELECT key,
     avg(x) OPERATOR(pg_catalog.+) max(y)::double precision AS value
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   GROUP BY key;
 
 \d+ cqaggexpr2_mrel;
@@ -662,7 +662,7 @@ CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key, COUNT(*) AS value FROM create_c
 View definition:
  SELECT key,
     count(*) AS value
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   WHERE arrival_timestamp > (clock_timestamp() - '00:00:05'::interval)
   GROUP BY key;
 
@@ -707,7 +707,7 @@ CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key, floor(AVG(x)) AS value FROM cre
 View definition:
  SELECT key,
     pg_catalog.floor(avg(x)) AS value
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   GROUP BY key;
 
 \d+ cqaggexpr4_mrel;
@@ -751,7 +751,7 @@ View definition:
  SELECT key,
     x,
     count(*) AS count
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   GROUP BY key, x;
 
 \d+ cqgroupby_mrel;
@@ -804,7 +804,7 @@ View definition:
     z,
     value,
     count(*) AS count
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   GROUP BY key, x, y, z, value;
 
 \d+ multigroupindex_mrel;
@@ -906,7 +906,7 @@ CREATE CONTINUOUS VIEW ma0 WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_co
  count  | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   WHERE arrival_timestamp > (clock_timestamp() - '1 day'::interval);
 
 -- sw must be a valid interval string
@@ -927,7 +927,7 @@ WHERE x::integer = 1;
  count  | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count
-   FROM ONLY create_cont_stream
+   FROM create_cont_stream
   WHERE arrival_timestamp > (clock_timestamp() - '1 day'::interval) AND x = 1;
 
 DROP CONTINUOUS VIEW mawhere;

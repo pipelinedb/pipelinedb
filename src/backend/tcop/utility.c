@@ -970,6 +970,8 @@ ProcessUtilitySlow(Node *parsetree,
 						stmt->stream = true;
 					}
 
+					// rewrite to a CREATE FOREIGN TABLE here and use that
+
 					/* Run parse analysis ... */
 					stmts = transformCreateStmt((CreateStmt *) parsetree,
 												queryString);
@@ -1029,10 +1031,11 @@ ProcessUtilitySlow(Node *parsetree,
 						}
 						else if (IsA(stmt, CreateStreamStmt))
 						{
+							// move this all to hook
 							transformCreateStreamStmt((CreateStreamStmt *) stmt);
 							/* Create the table itself */
 							address = DefineRelation((CreateStmt *) stmt,
-													RELKIND_STREAM,
+									RELKIND_FOREIGN_TABLE,
 													InvalidOid, NULL);
 							CreateForeignTable((CreateForeignTableStmt *) stmt,
 											   address.objectId);
@@ -1626,7 +1629,6 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_FOREIGN_TABLE:
 		case OBJECT_CONTVIEW:
 		case OBJECT_CONTTRANSFORM:
-		case OBJECT_STREAM:
 			RemoveRelations(stmt);
 			break;
 		default:
@@ -1934,9 +1936,6 @@ AlterObjectTypeCommandTag(ObjectType objtype)
 		case OBJECT_MATVIEW:
 			tag = "ALTER MATERIALIZED VIEW";
 			break;
-		case OBJECT_STREAM:
-			tag = "ALTER STREAM";
-			break;
 		default:
 			tag = "???";
 			break;
@@ -2219,9 +2218,6 @@ CreateCommandTag(Node *parsetree)
 					break;
 				case OBJECT_OPFAMILY:
 					tag = "DROP OPERATOR FAMILY";
-					break;
-				case OBJECT_STREAM:
-					tag = "DROP STREAM";
 					break;
 				case OBJECT_POLICY:
 					tag = "DROP POLICY";

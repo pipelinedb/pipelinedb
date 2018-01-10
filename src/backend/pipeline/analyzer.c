@@ -932,8 +932,6 @@ typedef struct IsContinuousContext
 } IsContinuousContext;
 
 
-#include "utils/memutils.h"
-
 static bool
 query_is_continuous_walker(Node *node, IsContinuousContext *context)
 {
@@ -945,7 +943,8 @@ query_is_continuous_walker(Node *node, IsContinuousContext *context)
 		RangeTblRef *ref = (RangeTblRef *) node;
 		RangeTblEntry *rte = rt_fetch(ref->rtindex, context->query->rtable);
 
-		if (rte->relkind == RELKIND_STREAM)
+		// need to check if it's a stream RTE
+		if (rte->relkind == RELKIND_FOREIGN_TABLE)
 		{
 			context->isContinuous = true;
 			return false;

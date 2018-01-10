@@ -183,7 +183,7 @@ CREATE CONTINUOUS VIEW cqregress5 AS SELECT count(DISTINCT x), percentile_cont(0
 View definition:
  SELECT count(DISTINCT x) AS count,
     percentile_cont(0.1::double precision) WITHIN GROUP (ORDER BY (x::double precision)) AS percentile_cont
-   FROM ONLY analyze_cont_stream;
+   FROM analyze_cont_stream;
 
 CREATE CONTINUOUS VIEW cqregress6 AS SELECT id, avg(x) FROM analyze_cont_stream GROUP BY id;
 \d+ cqregress6
@@ -195,7 +195,7 @@ CREATE CONTINUOUS VIEW cqregress6 AS SELECT id, avg(x) FROM analyze_cont_stream 
 View definition:
  SELECT id,
     avg(x) AS avg
-   FROM ONLY analyze_cont_stream
+   FROM analyze_cont_stream
   GROUP BY id;
 
 CREATE VIEW cqregress7 AS SELECT combine(avg) FROM cqregress6;

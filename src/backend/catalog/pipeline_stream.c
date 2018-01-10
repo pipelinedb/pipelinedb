@@ -145,17 +145,21 @@ streams_to_meta(Relation pipeline_query)
 	return targets;
 }
 
-bool
-is_stream_relid(Oid relid)
+/*
+ * has_pipeline_stream_row
+ */
+static bool
+has_pipeline_stream_row(Oid relid)
 {
-	Relation rel = heap_open(relid, NoLock);
-	bool result = rel->rd_rel->relkind == RELKIND_STREAM;
+	HeapTuple tup = SearchPipelineSysCache1(PIPELINESTREAMRELID, relid);
 
-	heap_close(rel, NoLock);
+	if (!HeapTupleIsValid(tup))
+		return false;
 
-	return result;
+	ReleaseSysCache(tup);
+
+	return true;
 }
-
 
 /*
  * Deserialize a TupleDesc from a bytea *
@@ -405,7 +409,6 @@ UpdatePipelineStreamCatalog(void)
  * Gets a bitmap indexed by continuous query id that represents which
  * queries are reading from the given stream.
  */
-#include "pipeline/syscache.h"
 Bitmapset *
 GetAllStreamReaders(Oid relid)
 {
@@ -516,12 +519,11 @@ bool
 RangeVarIsForStream(RangeVar *rv)
 {
 	Relation rel = heap_openrv(rv, NoLock);
-	bool is_stream;
+	Oid relid = RelationGetRelid(rel);
 
-	is_stream = rel->rd_rel->relkind == RELKIND_STREAM;
 	heap_close(rel, NoLock);
 
-	return is_stream;
+	return has_pipeline_stream_row(relid);
 }
 
 /*
@@ -530,16 +532,7 @@ RangeVarIsForStream(RangeVar *rv)
 bool
 IsStream(Oid relid)
 {
-	Relation rel = try_relation_open(relid, NoLock);
-	bool result;
-
-	if (rel == NULL)
-		return false;
-
-	result = rel->rd_rel->relkind == RELKIND_STREAM;
-	heap_close(rel, NoLock);
-
-	return result;
+	return has_pipeline_stream_row(relid);
 }
 
 /*

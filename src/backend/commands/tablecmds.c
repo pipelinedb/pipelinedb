@@ -888,10 +888,6 @@ RemoveRelations(DropStmt *drop)
 			relkind = RELKIND_CONTVIEW;
 			break;
 
-		case OBJECT_STREAM:
-			relkind = RELKIND_STREAM;
-			break;
-
 		case OBJECT_CONTTRANSFORM:
 			relkind = RELKIND_CONTTRANSFORM;
 			break;
@@ -12096,11 +12092,6 @@ RangeVarCallbackForAlterRelation(const RangeVar *rv, Oid relid, Oid oldrelid,
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not an index", rv->relname)));
-
-	if (reltype == OBJECT_STREAM && relkind != RELKIND_STREAM)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						errmsg("\"%s\" is not a stream", rv->relname)));
 
 	/*
 	 * Don't allow ALTER TABLE on composite types. We want people to use ALTER

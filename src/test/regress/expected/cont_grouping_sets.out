@@ -7,7 +7,7 @@ SELECT pipeline_get_worker_querydef('test_gs0');
   SELECT x,                  +
      y,                      +
      count(*) AS count       +
-    FROM ONLY test_gs_stream +
+    FROM test_gs_stream      +
    GROUP BY CUBE(x, y)
 (1 row)
 
@@ -39,7 +39,7 @@ SELECT pipeline_get_worker_querydef('test_gs1');
      y,                      +
      z,                      +
      count(*) AS count       +
-    FROM ONLY test_gs_stream +
+    FROM test_gs_stream      +
    GROUP BY x, y, z
 (1 row)
 
@@ -72,7 +72,7 @@ SELECT pipeline_get_worker_querydef('test_gs2');
   SELECT x,                  +
      y,                      +
      count(*) AS count       +
-    FROM ONLY test_gs_stream +
+    FROM test_gs_stream      +
    GROUP BY x, y
 (1 row)
 
@@ -105,7 +105,7 @@ SELECT pipeline_get_worker_querydef('test_gs3');
      y,                                                                                        +
      z,                                                                                        +
      count(*) AS count                                                                         +
-    FROM ONLY test_gs_stream                                                                   +
+    FROM test_gs_stream                                                                        +
    WHERE (arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval))                      +
    GROUP BY GROUPING SETS ((x), (y), (z)), (date_round(arrival_timestamp, '@ 1 sec'::interval))
 (1 row)

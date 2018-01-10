@@ -477,7 +477,7 @@ WHERE arrival_timestamp > clock_timestamp() - INTERVAL '10 minute';
  sw_time | timestamp with time zone |           | plain   | 
 View definition:
  SELECT arrival_timestamp AS sw_time
-   FROM ONLY msw_stream
+   FROM msw_stream
   WHERE arrival_timestamp > (clock_timestamp() - '00:10:00'::interval);
 
 CREATE VIEW msw7 AS SELECT * FROM msw5;
