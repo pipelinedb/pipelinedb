@@ -21,6 +21,7 @@
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
+#include "optimizer/cost.h"
 #include "optimizer/clauses.h"
 #include "optimizer/planner.h"
 #include "parser/parse_expr.h"
@@ -238,6 +239,13 @@ ContinuousQueryReaperMain(void)
 	hctl.keysize = sizeof(Oid);
 	hctl.entrysize = sizeof(ReaperEntry);
 	last_expired = hash_create("ReaperHash", 32, &hctl, HASH_CONTEXT | HASH_ELEM | HASH_BLOBS);
+
+	/*
+	 * We'll basically never want to prefer a sequential scan over an index scan for the expired rows lookup,
+	 * assuming there is an index available. In particular, CVs with shorter TTLs (and thus short-lived rows) do not
+	 * facilitate very good statistics keeping so we provide a strong hint to the planner as to what plan we want.
+	 */
+	enable_seqscan = false;
 
 	for (;;)
 	{
