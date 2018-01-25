@@ -2828,7 +2828,7 @@ static struct config_int ConfigureNamesInt[] =
 		 NULL,
 		},
 		&continuous_query_num_reapers,
-		1, 1, MAX_BACKENDS,
+		1, 0, MAX_BACKENDS,
 		NULL, NULL, NULL
 	},
 
