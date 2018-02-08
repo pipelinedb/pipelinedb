@@ -1875,6 +1875,7 @@ ContinuousQueryCombinerMain(void)
 
 	for (;;)
 	{
+		TimestampTz start = GetCurrentTimestamp();
 		CHECK_FOR_INTERRUPTS();
 
 		if (get_sigterm_flag())
@@ -1967,6 +1968,7 @@ next:
 			do_commit = false;
 
 		ContExecutorEndBatch(cont_exec, do_commit);
+		elog(LOG, "finished batch in %ld ms", ((GetCurrentTimestamp() - start)/1000));
 	}
 
 	for (query_id = 0; query_id < MAX_CQS; query_id++)
