@@ -688,6 +688,6 @@ microbatch_send_to_combiner(microbatch_t *mb, int combiner_id)
 
 	recv_id = db_meta->db_procs[continuous_query_num_workers + combiner_id].pzmq_id;
 
-	microbatch_send(mb, recv_id, false, db_meta);
+	microbatch_send(mb, recv_id, true, db_meta);
 	microbatch_reset(mb);
 }
