@@ -315,7 +315,6 @@ ContinuousQueryWorkerMain(void)
 
 	for (;;)
 	{
-		TimestampTz start = GetCurrentTimestamp();
 		CHECK_FOR_INTERRUPTS();
 
 		if (get_sigterm_flag())
@@ -398,7 +397,6 @@ ContinuousQueryWorkerMain(void)
 
 next:
 			ContExecutorEndQuery(cont_exec);
-			elog(LOG, "finished batch in %ld ms", ((GetCurrentTimestamp() - start)/1000));
 
 			/*
 			 * We wait to purge until we're done incrementing all stats, because this will
