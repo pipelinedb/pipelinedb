@@ -52,4 +52,5 @@ src/test/regress/regression.out
 /.pydevproject
 /.settings/
 
-
+# VSCode project files
+/.vscode

@@ -940,11 +940,14 @@ create_index_on_matrel(IndexStmt *stmt)
  *
  * Hook to intercept relevant utility queries run on continuous views
  */
+#include "catalog/pipeline_query.h"
+
 void
 ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext context,
 													  ParamListInfo params, DestReceiver *dest, char *tag)
 {
 	ContExecutionLock exec_lock = NULL;
+	Relation rel = NULL;
 
 	PG_TRY();
 	{
@@ -964,6 +967,8 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 
 			/* The grammar should enforce this */
 			Assert(IsA(node, SelectStmt));
+
+			rel = heap_open(PipelineQueryRelationOid, AccessExclusiveLock);
 		}
 		else if (IsA(parsetree, IndexStmt))
 		{
@@ -1000,6 +1005,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 				if (IsAContinuousView(rv))
 					exec_lock = AcquireContExecutionLock(AccessExclusiveLock);
 			}
+			rel = heap_open(PipelineQueryRelationOid, AccessExclusiveLock);
 		}
 
 		if (SaveUtilityHook != NULL)
@@ -1029,4 +1035,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+
+	if (rel)
+		heap_close(rel, NoLock);
 }
