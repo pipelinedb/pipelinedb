@@ -18,6 +18,7 @@ def _dump(pipeline, out_filename, tables=[], data_only=False, schema_only=False)
 
 def _restore(pipeline, in_filename):
   cmd = [os.path.join(pipeline.bin_dir, 'pipeline'), '-p', str(pipeline.port), '-d', 'pipeline', '-f', in_filename]
+  print ' '.join(cmd)
   subprocess.Popen(cmd).communicate()
   os.remove(in_filename)
 

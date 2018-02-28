@@ -859,7 +859,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
 
 		/* if it's an actual relation, we need to check permissions */
-		if (rel->rd_rel->relkind != RELKIND_STREAM)
+		if (!IsStream(rte->relid))
 		{
 			foreach(cur, attnums)
 			{
@@ -1367,7 +1367,7 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = rel && rel->rd_rel->relkind == RELKIND_STREAM;
+	cstate->to_stream = rel && IsStream(RelationGetRelid(rel));
 	cstate->attnamelist = attnamelist;
 
 	if (cstate->to_stream)
@@ -1720,7 +1720,7 @@ BeginCopyTo(Relation rel,
 					 errmsg("cannot copy from continuous view \"%s\"",
 							RelationGetRelationName(rel)),
 					 errhint("Try the COPY (SELECT ...) TO variant.")));
-		else if (rel->rd_rel->relkind == RELKIND_STREAM)
+		else if (IsStream(RelationGetRelid(rel)))
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy from stream \"%s\"",
@@ -2239,7 +2239,7 @@ CopyFrom(CopyState cstate)
 	Assert(cstate->rel);
 
 	if (cstate->rel->rd_rel->relkind != RELKIND_RELATION &&
-			cstate->rel->rd_rel->relkind != RELKIND_STREAM)
+		!IsStream(RelationGetRelid(cstate->rel)))
 	{
 		if (cstate->rel->rd_rel->relkind == RELKIND_VIEW)
 			ereport(ERROR,
@@ -4482,7 +4482,7 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
 					errmsg("column \"%s\" of %s \"%s\" does not exist",
-						   name, rel->rd_rel->relkind == RELKIND_STREAM ? "stream" : "relation",
+						   name, IsStream(RelationGetRelid(rel)) ? "stream" : "relation",
 								   RelationGetRelationName(rel))));
 				else
 					ereport(ERROR,

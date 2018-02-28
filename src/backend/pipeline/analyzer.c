@@ -944,7 +944,7 @@ query_is_continuous_walker(Node *node, IsContinuousContext *context)
 		RangeTblEntry *rte = rt_fetch(ref->rtindex, context->query->rtable);
 
 		// need to check if it's a stream RTE
-		if (rte->relkind == RELKIND_FOREIGN_TABLE)
+		if (IsStream(rte->relid))
 		{
 			context->isContinuous = true;
 			return false;
@@ -1566,7 +1566,7 @@ transformContSelectTargetList(ParseState *pstate, List *tlist)
  * transformCreateStreamStmt
  */
 void
-transformCreateStreamStmt(CreateStreamStmt *stmt)
+transformCreateStreamStmt(CreateForeignTableStmt *stmt)
 {
 	ListCell *lc;
 	bool saw_atime = false;

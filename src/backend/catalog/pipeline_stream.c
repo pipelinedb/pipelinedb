@@ -539,7 +539,7 @@ IsStream(Oid relid)
  * CreatePipelineStreamCatalogEntry
  */
 void
-CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
+CreatePipelineStreamEntry(CreateForeignTableStmt *stmt, Oid relid)
 {
 	Relation pipeline_stream = heap_open(PipelineStreamRelationOid, RowExclusiveLock);
 	Datum values[Natts_pipeline_stream];

@@ -215,7 +215,6 @@ check_xact_readonly(Node *parsetree)
 		case T_ImportForeignSchemaStmt:
 		case T_SecLabelStmt:
 		case T_CreateContViewStmt:
-		case T_CreateStreamStmt:
 			PreventCommandIfReadOnly(CreateCommandTag(parsetree));
 			PreventCommandIfParallelMode(CreateCommandTag(parsetree));
 			break;
@@ -959,18 +958,9 @@ ProcessUtilitySlow(Node *parsetree,
 
 			case T_CreateStmt:
 			case T_CreateForeignTableStmt:
-			case T_CreateStreamStmt:
 				{
 					List	   *stmts;
 					ListCell   *l;
-
-					if (IsA(parsetree, CreateStreamStmt))
-					{
-						CreateStmt *stmt = (CreateStmt *) parsetree;
-						stmt->stream = true;
-					}
-
-					// rewrite to a CREATE FOREIGN TABLE here and use that
 
 					/* Run parse analysis ... */
 					stmts = transformCreateStmt((CreateStmt *) parsetree,
@@ -1028,18 +1018,6 @@ ProcessUtilitySlow(Node *parsetree,
 							EventTriggerCollectSimpleCommand(address,
 															 secondaryObject,
 															 stmt);
-						}
-						else if (IsA(stmt, CreateStreamStmt))
-						{
-							// move this all to hook
-							transformCreateStreamStmt((CreateStreamStmt *) stmt);
-							/* Create the table itself */
-							address = DefineRelation((CreateStmt *) stmt,
-									RELKIND_FOREIGN_TABLE,
-													InvalidOid, NULL);
-							CreateForeignTable((CreateForeignTableStmt *) stmt,
-											   address.objectId);
-							CreatePipelineStreamEntry((CreateStreamStmt *) stmt, address.objectId);
 						}
 						else
 						{
@@ -2079,10 +2057,6 @@ CreateCommandTag(Node *parsetree)
 
 		case T_CreateExtensionStmt:
 			tag = "CREATE EXTENSION";
-			break;
-
-		case T_CreateStreamStmt:
-			tag = "CREATE STREAM";
 			break;
 
 		case T_AlterExtensionStmt:
@@ -3208,7 +3182,6 @@ GetCommandLogLevel(Node *parsetree)
 			/* PipelineDB */
 			case T_CreateContViewStmt:
 			case T_CreateContTransformStmt:
-			case T_CreateStreamStmt:
 				lev = LOGSTMT_DDL;
 				break;
 

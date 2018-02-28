@@ -948,6 +948,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 {
 	ContExecutionLock exec_lock = NULL;
 	Relation rel = NULL;
+	bool isstream = false;
 
 	PG_TRY();
 	{
@@ -963,6 +964,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			/*
 			 * Indicate to the analyzer/planner hooks that we're executing a CREATE CONTINUOUS statement
 			 */
+			// pipeline_query lock should probably be acquired here
 			PipelineContextSetIsDDL();
 
 			/* The grammar should enforce this */
@@ -1007,6 +1009,25 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			}
 			rel = heap_open(PipelineQueryRelationOid, AccessExclusiveLock);
 		}
+		else if (IsA(parsetree, CreateForeignTableStmt))
+		{
+			// comment
+			// need to get rid of CreateStreamStmt it's just an alias for CreateForeignTableStmt anyways!
+			if (pg_strcasecmp(((CreateForeignTableStmt *) parsetree)->servername, PIPELINE_STREAM_SERVER) == 0)
+			{
+				CreateStmt *stmt = (CreateStmt *) parsetree;
+
+				// remove this
+				stmt->stream = true;
+
+				// and call:
+				// validate_stream_constraints(stmt, &cxt);
+
+				isstream = true;
+
+				transformCreateStreamStmt((CreateForeignTableStmt *) stmt);
+			}
+		}
 
 		if (SaveUtilityHook != NULL)
 			(*SaveUtilityHook) (parsetree, sql, context, params, dest, tag);
@@ -1015,6 +1036,14 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 
 		if (exec_lock)
 			ReleaseContExecutionLock(exec_lock);
+
+		// comment
+		if (isstream)
+		{
+			CreateForeignTableStmt *stmt = (CreateForeignTableStmt *) parsetree;
+			Oid relid = RangeVarGetRelid(stmt->base.relation, NoLock, false);
+			CreatePipelineStreamEntry(stmt, relid);
+		}
 
 		/*
 		 * We may have dropped a PipelineDB object, so we reconcile our own catalog tables

@@ -3741,7 +3741,6 @@ DESCR("I/O");
 /* tablesample method handlers */
 DATA(insert OID = 3313 (  bernoulli			PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 3310 "2281" _null_ _null_ _null_ _null_ _null_ tsm_bernoulli_handler _null_ _null_ _null_ ));
 DESCR("BERNOULLI tablesample method handler");
-#define BERNOULLI_OID 3313
 DATA(insert OID = 3314 (  system			PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 3310 "2281" _null_ _null_ _null_ _null_ _null_ tsm_system_handler _null_ _null_ _null_ ));
 DESCR("SYSTEM tablesample method handler");
 

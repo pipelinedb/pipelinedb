@@ -3065,8 +3065,6 @@ typedef struct CreateContViewStmt
 	Node 		*query;
 } CreateContViewStmt;
 
-typedef struct CreateForeignTableStmt CreateStreamStmt;
-
 typedef struct CreateContTransformStmt
 {
 	NodeTag		type;

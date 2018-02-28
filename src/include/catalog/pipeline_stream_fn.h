@@ -36,7 +36,7 @@ extern TupleDesc UnpackTupleDesc(bytea *bytes);
 extern bool RangeVarIsForStream(RangeVar *stream);
 extern bool IsStream(Oid relid);
 
-extern void CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid);
+extern void CreatePipelineStreamEntry(CreateForeignTableStmt *stmt, Oid relid);
 extern void ReconcilePipelineStreams(void);
 extern bool RelIdIsForOutputStream(Oid id, Oid *cqid);
 

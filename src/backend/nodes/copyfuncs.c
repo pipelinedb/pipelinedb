@@ -3764,15 +3764,6 @@ _copyCreateForeignTableStmt(const CreateForeignTableStmt *from)
 	return newnode;
 }
 
-static CreateStreamStmt *
-_copyCreateStreamStmt(const CreateStreamStmt *from)
-{
-	CreateStreamStmt *newnode = _copyCreateForeignTableStmt(from);
-	((Node *) newnode)->type = T_CreateStreamStmt;
-
-	return newnode;
-}
-
 static ImportForeignSchemaStmt *
 _copyImportForeignSchemaStmt(const ImportForeignSchemaStmt *from)
 {
@@ -4968,9 +4959,6 @@ copyObject(const void *from)
 			break;
 		case T_RoleSpec:
 			retval = _copyRoleSpec(from);
-			break;
-		case T_CreateStreamStmt:
-			retval = _copyCreateStreamStmt(from);
 			break;
 
 		default:

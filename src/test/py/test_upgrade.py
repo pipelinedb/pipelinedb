@@ -113,7 +113,7 @@ def test_binary_upgrade(pipeline, clean_db):
   # Streams
   for n in range(8):
     name = 's_%d' % n
-    rows = list(upgraded.execute("SELECT oid FROM pg_class WHERE relkind = '$' AND relname = '%s'" % name))
+    rows = list(upgraded.execute("SELECT oid FROM pg_class WHERE relkind = 'f' AND relname = '%s'" % name))
     assert len(rows) == 1
 
   # CVs

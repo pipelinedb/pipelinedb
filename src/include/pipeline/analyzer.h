@@ -91,7 +91,7 @@ extern void ValidateContTrigger(CreateTrigStmt *stmt);
 extern List *transformContSelectTargetList(ParseState *pstate, List *tlist);
 extern void ApplyTransitionOut(List *nodes);
 extern List *transformContViewOverlayTargetList(ParseState *pstate, List *tlist);
-extern void transformCreateStreamStmt(CreateStreamStmt *stmt);
+extern void transformCreateStreamStmt(CreateForeignTableStmt *stmt);
 extern SelectStmt *TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, SelectStmt **viewptr, double sw_step_factor, ContQueryProcType type);
 
 extern TupleDesc parserGetStreamDescr(Oid relid, ContAnalyzeContext *context);

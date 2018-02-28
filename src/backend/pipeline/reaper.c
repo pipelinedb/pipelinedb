@@ -260,7 +260,12 @@ ContinuousQueryReaperMain(void)
 
 			PG_TRY();
 			{
+				// use cleaner locking call/wrapper here
+				Relation rel = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
+
 				ttl_rels = get_ttl_rels(&min_sleep);
+
+				heap_close(rel, NoLock);
 
 				foreach(lc, ttl_rels)
 				{

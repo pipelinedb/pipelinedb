@@ -2832,7 +2832,7 @@ create_cv_target:
 
 CreateStreamStmt: CREATE STREAM qualified_name '(' OptTableElementList ')'
         {
-          CreateStreamStmt *n = makeNode(CreateStreamStmt);
+          CreateForeignTableStmt *n = makeNode(CreateForeignTableStmt);
           n->base.relation = $3;
           n->base.tableElts = $5;
           n->base.if_not_exists = false;
@@ -2841,7 +2841,7 @@ CreateStreamStmt: CREATE STREAM qualified_name '(' OptTableElementList ')'
         }
     | CREATE STREAM IF_P NOT EXISTS qualified_name '(' OptTableElementList ')'
         {
-          CreateStreamStmt *n = makeNode(CreateStreamStmt);
+          CreateForeignTableStmt *n = makeNode(CreateForeignTableStmt);
           n->base.relation = $6;
           n->base.tableElts = $8;
           n->base.if_not_exists = true;

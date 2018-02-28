@@ -639,7 +639,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ColumnDef *old;
 	ColumnDef *new;
 	ColumnDef *delta;
-	CreateStreamStmt *create_osrel;
+	CreateForeignTableStmt *create_osrel;
 	Oid osrelid = InvalidOid;
 	bool has_sw = false;
 	int ttl = -1;
@@ -864,7 +864,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		heap_close(matrel, NoLock);
 	}
 
-	create_osrel = makeNode(CreateStreamStmt);
+	create_osrel = makeNode(CreateForeignTableStmt);
 	create_osrel->servername = PIPELINE_STREAM_SERVER;
 	create_osrel->base.stream = true;
 	create_osrel->base.tableElts = list_make2(old, new);
@@ -879,8 +879,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		set_next_oids_for_osrel();
 	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_STREAM, InvalidOid, NULL);
 
-	CreateForeignTable((CreateForeignTableStmt *) create_osrel, address.objectId);
-	CreatePipelineStreamEntry((CreateStreamStmt *) create_osrel, address.objectId);
+	CreateForeignTable(create_osrel, address.objectId);
+	CreatePipelineStreamEntry(create_osrel, address.objectId);
 
 	osrelid = address.objectId;
 
@@ -1053,7 +1053,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	Oid tgfnid = InvalidOid;
 	Oid funcrettype = InvalidOid;
 	CreateStmt *create;
-	CreateStreamStmt *create_osrel;
+	CreateForeignTableStmt *create_osrel;
 	Oid osrelid;
 
 	transform = stmt->into->rel;
@@ -1095,7 +1095,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	CommandCounterIncrement();
 
 	/* Create output stream */
-	create_osrel = makeNode(CreateStreamStmt);
+	create_osrel = makeNode(CreateForeignTableStmt);
 	create_osrel->servername = PIPELINE_STREAM_SERVER;
 	create_osrel->base.stream = true;
 	create_osrel->base.tableElts = create_coldefs_from_tlist(query);
@@ -1111,8 +1111,8 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, tgfnid, stmt->args);
 	CommandCounterIncrement();
 
-	CreateForeignTable((CreateForeignTableStmt *) create_osrel, address.objectId);
-	CreatePipelineStreamEntry((CreateStreamStmt *) create_osrel, address.objectId);
+	CreateForeignTable(create_osrel, address.objectId);
+	CreatePipelineStreamEntry(create_osrel, address.objectId);
 	CommandCounterIncrement();
 
 	record_ct_dependencies(pqoid, relid, osrelid, tgfnid, (SelectStmt *) stmt->query, query, stmt->args);
