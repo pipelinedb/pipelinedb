@@ -2515,12 +2515,6 @@ _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 			WRITE_OID_FIELD(relid);
 			WRITE_CHAR_FIELD(relkind);
 			WRITE_NODE_FIELD(tablesample);
-			if (node->relkind == RELKIND_STREAM)
-			{
-				WRITE_NODE_FIELD(ctecoltypes);
-				WRITE_NODE_FIELD(ctecoltypmods);
-				WRITE_NODE_FIELD(ctecolcollations);
-			}
 			break;
 		case RTE_SUBQUERY:
 			WRITE_NODE_FIELD(subquery);

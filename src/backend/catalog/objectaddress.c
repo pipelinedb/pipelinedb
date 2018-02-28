@@ -3252,10 +3252,6 @@ getRelationDescription(StringInfo buffer, Oid relid)
 			appendStringInfo(buffer, _("continuous view %s"),
 							 relname);
 			break;
-		case RELKIND_STREAM:
-			appendStringInfo(buffer, _("stream %s"),
-							 relname);
-			break;
 		case RELKIND_CONTTRANSFORM:
 			appendStringInfo(buffer, _("continuous transform %s"),
 							 relname);
@@ -3712,9 +3708,6 @@ getRelationTypeDescription(StringInfo buffer, Oid relid, int32 objectSubId)
 			break;
 		case RELKIND_CONTVIEW:
 			appendStringInfoString(buffer, "continuous view");
-			break;
-		case RELKIND_STREAM:
-			appendStringInfoString(buffer, "stream");
 			break;
 		case RELKIND_CONTTRANSFORM:
 			appendStringInfoString(buffer, "continuous transform");

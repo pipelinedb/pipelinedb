@@ -352,7 +352,7 @@ is_output_stream(Archive *fout, TableInfo *ti)
 	PGresult *res;
 	bool result = false;
 
-	if (ti->relkind != RELKIND_STREAM)
+	if (ti->relkind != RELKIND_FOREIGN_TABLE)
 		return false;
 
 	appendPQExpBuffer(ps, "SELECT osrelid FROM pipeline_query WHERE osrelid = %d", ti->dobj.catId.oid);
@@ -1605,10 +1605,10 @@ expand_table_name_patterns(Archive *fout,
 						  "SELECT c.oid"
 						  "\nFROM pg_catalog.pg_class c"
 		"\n     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace"
-					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c')\n",
+					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c')\n",
 						  RELKIND_RELATION, RELKIND_SEQUENCE, RELKIND_VIEW,
 						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
-						  RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM, RELKIND_STREAM);
+						  RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM);
 		processSQLNamePattern(GetConnection(fout), query, cell->val, true,
 							  false, "n.nspname", "c.relname", NULL,
 							  "pg_catalog.pg_table_is_visible(c.oid)");
@@ -2262,8 +2262,9 @@ dumpTableData(Archive *fout, TableDataInfo *tdinfo)
 	/*
 	 * Streams don't contain any data
 	 */
-	if (tbinfo->relkind == RELKIND_STREAM)
-		return;
+	// can we remove this entirely?
+//	if (tbinfo->relkind == RELKIND_FOREIGN_TABLE)
+//		return;
 
 	if (!dopt->dump_inserts)
 	{
@@ -2387,8 +2388,6 @@ makeTableDataInfo(DumpOptions *dopt, TableInfo *tbinfo, bool oids)
 	if (tbinfo->relkind == RELKIND_CONTVIEW)
 		return;
 	if (tbinfo->relkind == RELKIND_CONTTRANSFORM)
-		return;
-	if (tbinfo->relkind == RELKIND_STREAM)
 		return;
 
 	/* Don't dump data in unlogged tables, if so requested */
@@ -5096,14 +5095,14 @@ getTables(Archive *fout, int *numTables)
 						  "d.objsubid = 0 AND "
 						  "d.refclassid = c.tableoid AND d.deptype = 'a') "
 					   "LEFT JOIN pg_class tc ON (c.reltoastrelid = tc.oid) "
-				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
+				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
 						  "ORDER BY c.oid",
 						  username_subquery,
 						  RELKIND_SEQUENCE,
 						  RELKIND_RELATION, RELKIND_SEQUENCE,
 						  RELKIND_VIEW, RELKIND_COMPOSITE_TYPE,
 						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
-						  RELKIND_CONTVIEW, RELKIND_STREAM, RELKIND_CONTTRANSFORM);
+						  RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM);
 	}
 	else if (fout->remoteVersion >= 90400)
 	{
@@ -5139,14 +5138,14 @@ getTables(Archive *fout, int *numTables)
 						  "d.objsubid = 0 AND "
 						  "d.refclassid = c.tableoid AND d.deptype = 'a') "
 					   "LEFT JOIN pg_class tc ON (c.reltoastrelid = tc.oid) "
-				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
+				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
 						  "ORDER BY c.oid",
 						  username_subquery,
 						  RELKIND_SEQUENCE,
 						  RELKIND_RELATION, RELKIND_SEQUENCE,
 						  RELKIND_VIEW, RELKIND_COMPOSITE_TYPE,
 						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
-						  RELKIND_CONTVIEW, RELKIND_STREAM, RELKIND_CONTTRANSFORM);
+						  RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM);
 	}
 	else if (fout->remoteVersion >= 90300)
 	{
@@ -14358,11 +14357,6 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 				break;
 			case (RELKIND_CONTVIEW):
 				reltypename = "CONTINUOUS VIEW";
-				srvname = NULL;
-				ftoptions = NULL;
-				break;
-			case (RELKIND_STREAM):
-				reltypename = "STREAM";
 				srvname = NULL;
 				ftoptions = NULL;
 				break;

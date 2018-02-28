@@ -866,9 +866,6 @@ extractRelOptions(HeapTuple tuple, TupleDesc tupdesc, Oid amoptions)
 		case RELKIND_FOREIGN_TABLE:
 			options = NULL;
 			break;
-		case RELKIND_STREAM:
-			options = NULL;
-			break;
 		case RELKIND_CONTTRANSFORM:
 			options = NULL;
 			break;

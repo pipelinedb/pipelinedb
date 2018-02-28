@@ -232,12 +232,6 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 							RelationGetRelationName(rel)),
 			  errdetail("Foreign tables cannot have constraint triggers.")));
 	}
-	else if (rel->rd_rel->relkind == RELKIND_STREAM)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is a stream",
-						RelationGetRelationName(rel)),
-		  errdetail("Streams don't support triggers.")));
 	else if (rel->rd_rel->relkind == RELKIND_CONTTRANSFORM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),

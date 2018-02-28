@@ -154,9 +154,6 @@ AcquireRewriteLocks(Query *parsetree,
 		{
 			case RTE_RELATION:
 
-				if (rte->relkind == RELKIND_STREAM)
-					break;
-
 				/*
 				 * Grab the appropriate lock type for the relation, and do not
 				 * release it until end of transaction. This protects the

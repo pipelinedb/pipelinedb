@@ -1167,31 +1167,6 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 	return rel;
 }
 
-static void
-transformRelationRTEToStreamRTE(RangeTblEntry *rte, Relation rel)
-{
-	int i;
-
-	Assert(rte->rtekind == RTE_RELATION);
-
-	/*
-	 * We cheat a little and use the CTE fields here, because they're exactly
-	 * what we need for stream type information. Eventually we can add our own
-	 * identical fields if we need to.
-	 */
-	rte->ctecoltypes = NIL;
-	rte->ctecoltypmods = NIL;
-	rte->ctecolcollations = NIL;
-
-	for (i = 0; i < rel->rd_att->natts; i++)
-	{
-		Form_pg_attribute attr = rel->rd_att->attrs[i];
-		rte->ctecoltypes = lappend_oid(rte->ctecoltypes, attr->atttypid);
-		rte->ctecoltypmods = lappend_int(rte->ctecoltypmods, attr->atttypmod);
-		rte->ctecolcollations = lappend_oid(rte->ctecolcollations, attr->attcollation);
-	}
-}
-
 /*
  * Add an entry for a relation to the pstate's range table (p_rtable).
  *
@@ -1233,12 +1208,6 @@ addRangeTableEntry(ParseState *pstate,
 	 */
 	rte->eref = makeAlias(refname, NIL);
 	buildRelationAliases(rel->rd_att, alias, rte->eref);
-
-	if (rte->relkind == RELKIND_STREAM)
-	{
-		inh = false;
-		transformRelationRTEToStreamRTE(rte, rel);
-	}
 
 	/*
 	 * Drop the rel refcount, but keep the access lock till end of transaction
@@ -1301,12 +1270,6 @@ addRangeTableEntryForRelation(ParseState *pstate,
 	 */
 	rte->eref = makeAlias(refname, NIL);
 	buildRelationAliases(rel->rd_att, alias, rte->eref);
-
-	if (rte->relkind == RELKIND_STREAM)
-	{
-		inh = false;
-		transformRelationRTEToStreamRTE(rte, rel);
-	}
 
 	/*
 	 * Set flags and access permissions.
@@ -2029,46 +1992,6 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 	if (colvars)
 		*colvars = NIL;
 
-	if (rte->relkind == RELKIND_STREAM)
-	{
-		ListCell   *aliasp_item = list_head(rte->eref->colnames);
-		ListCell   *lct;
-		ListCell   *lcm;
-		ListCell   *lcc;
-
-		varattno = 0;
-		forthree(lct, rte->ctecoltypes,
-				 lcm, rte->ctecoltypmods,
-				 lcc, rte->ctecolcollations)
-		{
-			Oid			coltype = lfirst_oid(lct);
-			int32		coltypmod = lfirst_int(lcm);
-			Oid			colcoll = lfirst_oid(lcc);
-
-			varattno++;
-
-			if (colnames)
-			{
-				/* Assume there is one alias per output column */
-				char	   *label = strVal(lfirst(aliasp_item));
-
-				*colnames = lappend(*colnames, makeString(pstrdup(label)));
-				aliasp_item = lnext(aliasp_item);
-			}
-
-			if (colvars)
-			{
-				Var		   *varnode;
-
-				varnode = makeVar(rtindex, varattno,
-								  coltype, coltypmod, colcoll,
-								  sublevels_up);
-				*colvars = lappend(*colvars, varnode);
-			}
-		}
-		return;
-	}
-
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
@@ -2598,15 +2521,6 @@ void
 get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 					   Oid *vartype, int32 *vartypmod, Oid *varcollid)
 {
-	if (rte->relkind == RELKIND_STREAM)
-	{
-		Assert(attnum > 0 && attnum <= list_length(rte->ctecoltypes));
-		*vartype = list_nth_oid(rte->ctecoltypes, attnum - 1);
-		*vartypmod = list_nth_int(rte->ctecoltypmods, attnum - 1);
-		*varcollid = list_nth_oid(rte->ctecolcollations, attnum - 1);
-		return;
-	}
-
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
@@ -2798,9 +2712,6 @@ bool
 get_rte_attribute_is_dropped(RangeTblEntry *rte, AttrNumber attnum)
 {
 	bool		result;
-
-	if (rte->relkind == RELKIND_STREAM)
-		return false;
 
 	switch (rte->rtekind)
 	{

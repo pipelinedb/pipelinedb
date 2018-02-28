@@ -16,6 +16,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_combine.h"
+#include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "commands/pipelinecmds.h"
 #include "executor/executor.h"
@@ -128,26 +129,8 @@ get_worker_plan(ContQuery *view)
 {
 	SelectStmt* stmt = get_worker_select_stmt(view, NULL);
 	PlannedStmt *plan;
-	set_join_pathlist_hook_type save_join_hook;
 
-	/*
-	 * Perform everything from here in a try/catch so we can ensure the join path list hook
-	 * is restored to whatever it was set to before we were called
-	 */
-	PG_TRY();
-	{
-//		save_join_hook = set_join_pathlist_hook;
-//		set_join_pathlist_hook = add_stream_index_join_paths;
-
-		plan = get_plan_from_stmt(view->id, (Node *) stmt, view->sql, false);
-//		set_join_pathlist_hook = save_join_hook;
-	}
-	PG_CATCH();
-	{
-//		set_join_pathlist_hook = save_join_hook;
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
+	plan = get_plan_from_stmt(view->id, (Node *) stmt, view->sql, false);
 
 	return plan;
 }
@@ -695,8 +678,6 @@ create_index_on_matrel(IndexStmt *stmt)
  *
  * Hook to intercept relevant utility queries run on continuous views
  */
-#include "catalog/pipeline_query.h"
-
 void
 ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext context,
 													  ParamListInfo params, DestReceiver *dest, char *tag)
@@ -776,11 +757,31 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 				stmt->stream = true;
 
 				// and call:
-//				 validate_stream_constraints(stmt, &cxt);
+				// validate_stream_constraints(stmt, &cxt);
 
 				isstream = true;
 
 				transformCreateStreamStmt((CreateForeignTableStmt *) stmt);
+			}
+		}
+		else if (IsA(parsetree, AlterTableStmt))
+		{
+			// streams don't support all ALTER commands
+			AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
+
+			if (RangeVarIsForStream(stmt->relation))
+			{
+				ListCell *lc;
+				foreach(lc, stmt->cmds)
+				{
+					AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+					if (cmd->subtype != AT_AddColumn && cmd->subtype != AT_ChangeOwner)
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+										(errmsg("streams only support ADD COLUMN or OWNER TO actions"))));
+					}
+				}
 			}
 		}
 

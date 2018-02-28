@@ -69,8 +69,10 @@ def test_online_add_column(pipeline, clean_db):
 def test_online_drop_column(pipeline, clean_db):
   pipeline.create_stream('stream1', c0='integer')
 
+  valid = False
   try:
     pipeline.execute('ALTER STREAM stream1 DROP c0')
-    assert False
+    valid = True
   except:
     pass
+  assert not valid

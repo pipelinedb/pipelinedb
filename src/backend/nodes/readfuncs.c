@@ -1292,12 +1292,6 @@ _readRangeTblEntry(void)
 			READ_OID_FIELD(relid);
 			READ_CHAR_FIELD(relkind);
 			READ_NODE_FIELD(tablesample);
-			if (local_node->relkind == RELKIND_STREAM)
-			{
-				READ_NODE_FIELD(ctecoltypes);
-				READ_NODE_FIELD(ctecoltypmods);
-				READ_NODE_FIELD(ctecolcollations);
-			}
 			break;
 		case RTE_SUBQUERY:
 			READ_NODE_FIELD(subquery);
