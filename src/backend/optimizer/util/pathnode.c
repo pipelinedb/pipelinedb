@@ -1129,9 +1129,6 @@ create_unique_path(PlannerInfo *root, RelOptInfo *rel, Path *subpath,
 	if (rel->cheapest_unique_path)
 		return (UniquePath *) rel->cheapest_unique_path;
 
-	if (IS_STREAM_RTE(rel->relid, root))
-		sjinfo->semi_can_hash = false;
-
 	/* If it's not possible to unique-ify, return NULL */
 	if (!(sjinfo->semi_can_btree || sjinfo->semi_can_hash))
 		return NULL;
