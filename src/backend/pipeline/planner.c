@@ -1021,7 +1021,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 				stmt->stream = true;
 
 				// and call:
-				// validate_stream_constraints(stmt, &cxt);
+//				 validate_stream_constraints(stmt, &cxt);
 
 				isstream = true;
 
@@ -1037,7 +1037,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 		if (exec_lock)
 			ReleaseContExecutionLock(exec_lock);
 
-		// comment
+		// we need to create a pipeline_stream entry if the FT we created is a stream
 		if (isstream)
 		{
 			CreateForeignTableStmt *stmt = (CreateForeignTableStmt *) parsetree;

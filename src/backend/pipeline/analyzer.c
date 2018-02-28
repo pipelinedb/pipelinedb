@@ -3185,7 +3185,7 @@ combine_target_for_osrel(Node *node, List *rtable, FieldSelect **fsp, Oid *cqid,
 	v = (Var *) fs->arg;
 
 	rte = rt_fetch(v->varno, rtable);
-	if (rte->relkind != RELKIND_STREAM)
+	if (!IsStream(rte->relid))
 		return false;
 
 	if (!RelIdIsForOutputStream(rte->relid, cqid))

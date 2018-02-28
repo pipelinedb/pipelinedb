@@ -877,7 +877,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_osrel();
-	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_STREAM, InvalidOid, NULL);
+	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_FOREIGN_TABLE, InvalidOid, NULL);
 
 	CreateForeignTable(create_osrel, address.objectId);
 	CreatePipelineStreamEntry(create_osrel, address.objectId);
@@ -1104,7 +1104,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_osrel();
-	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_STREAM, InvalidOid, NULL);
+	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_FOREIGN_TABLE, InvalidOid, NULL);
 	osrelid = address.objectId;
 	CommandCounterIncrement();
 

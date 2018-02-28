@@ -11,11 +11,6 @@ DROP STREAM t0;
 -- It isn't possible for users to directly read a stream
 SELECT * FROM s0;
 
--- LIKE is supported for streams
-CREATE STREAM l0 (x integer, y integer);
-CREATE STREAM l1 (LIKE l0);
-\d l1;
-
 CREATE CONTINUOUS VIEW v0 AS
 SELECT x, COUNT(*) FROM test_typed_streams.s0 GROUP BY x;
 
