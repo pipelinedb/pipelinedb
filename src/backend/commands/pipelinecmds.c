@@ -866,7 +866,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	create_osrel = makeNode(CreateForeignTableStmt);
 	create_osrel->servername = PIPELINE_STREAM_SERVER;
-	create_osrel->base.stream = true;
 	create_osrel->base.tableElts = list_make2(old, new);
 
 	if (delta)
@@ -1006,7 +1005,7 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid osrelid, Oid fnoid, SelectStmt 
 			Relation srel;
 			TupleDesc desc;
 
-			if (!RangeVarIsForStream(rv))
+			if (!RangeVarIsForStream(rv, true))
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						errmsg("\"%s\" is not a stream", strVal(v)),
@@ -1097,7 +1096,6 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	/* Create output stream */
 	create_osrel = makeNode(CreateForeignTableStmt);
 	create_osrel->servername = PIPELINE_STREAM_SERVER;
-	create_osrel->base.stream = true;
 	create_osrel->base.tableElts = create_coldefs_from_tlist(query);
 	create_osrel->base.relation = makeRangeVar(transform->schemaname, CVNameToOSRelName(transform->relname), -1);
 	transformCreateStreamStmt(create_osrel);

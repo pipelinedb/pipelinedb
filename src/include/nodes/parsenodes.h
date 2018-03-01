@@ -1752,7 +1752,6 @@ typedef struct CreateStmt
 	OnCommitAction oncommit;	/* what do we do at COMMIT? */
 	char	   *tablespacename; /* table space to use, or NULL */
 	bool		if_not_exists;	/* just do nothing if it already exists? */
-	bool		stream;			/* for stream? */
 } CreateStmt;
 
 /* ----------

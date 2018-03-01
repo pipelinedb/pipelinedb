@@ -2096,7 +2096,10 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateForeignTableStmt:
-			tag = "CREATE FOREIGN TABLE";
+			if (pg_strcasecmp((((CreateForeignTableStmt *) parsetree)->servername), PIPELINE_STREAM_SERVER) == 0)
+				tag = "CREATE STREAM";
+			else
+				tag = "CREATE FOREIGN TABLE";
 			break;
 
 		case T_ImportForeignSchemaStmt:
@@ -2152,7 +2155,21 @@ CreateCommandTag(Node *parsetree)
 					tag = "DROP TEXT SEARCH CONFIGURATION";
 					break;
 				case OBJECT_FOREIGN_TABLE:
-					tag = "DROP FOREIGN TABLE";
+					{
+						DropStmt *stmt = (DropStmt *) parsetree;
+
+						tag = "DROP FOREIGN TABLE";
+						if (list_length(stmt->objects) == 1)
+						{
+							Node *n = linitial(stmt->objects);
+							if (IsA(n, List))
+							{
+								RangeVar *rv = makeRangeVarFromNameList((List *) n);
+								if (RangeVarIsForStream(rv, true))
+									tag = "DROP STREAM";
+							}
+						}
+					}
 					break;
 				case OBJECT_EXTENSION:
 					tag = "DROP EXTENSION";

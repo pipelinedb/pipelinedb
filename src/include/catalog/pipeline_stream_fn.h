@@ -33,7 +33,7 @@ extern Bitmapset *GetLocalStreamReaders(Oid relid);
 extern bytea *PackTupleDesc(TupleDesc desc);
 extern TupleDesc UnpackTupleDesc(bytea *bytes);
 
-extern bool RangeVarIsForStream(RangeVar *stream);
+extern bool RangeVarIsForStream(RangeVar *rv, bool missing_ok);
 extern bool IsStream(Oid relid);
 
 extern void CreatePipelineStreamEntry(CreateForeignTableStmt *stmt, Oid relid);

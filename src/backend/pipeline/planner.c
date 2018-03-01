@@ -674,6 +674,37 @@ create_index_on_matrel(IndexStmt *stmt)
 }
 
 /*
+ * validate_stream_constraints
+ *
+ * We allow some stuff that is technically supported by the grammar
+ * for CREATE STREAM, so we do some validation here so that we can generate more
+ * informative errors than simply syntax errors.
+ */
+static void
+validate_stream_constraints(CreateStmt *stmt)
+{
+	ListCell *lc;
+
+	foreach(lc, stmt->tableElts)
+	{
+		Node *n = (Node *) lfirst(lc);
+		ColumnDef *cdef;
+
+		if (!IsA(n, ColumnDef))
+			continue;
+
+		cdef = (ColumnDef *) n;
+		if (cdef->constraints)
+		{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot create constraint on stream %s", stmt->relation->relname),
+						 errhint("Constraints are currently unsupported on streams.")));
+		}
+	}
+}
+
+/*
  * ProcessUtilityOnContView
  *
  * Hook to intercept relevant utility queries run on continuous views
@@ -740,10 +771,12 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			if (list_length(stmt->objects) == 1 && IsA(linitial(stmt->objects), List))
 			{
 				RangeVar *rv = makeRangeVarFromNameList(linitial(stmt->objects));
-				if (IsAContinuousView(rv))
+				if (IsAContinuousView(rv) || RangeVarIsForStream(rv, true))
+				{
 					exec_lock = AcquireContExecutionLock(AccessExclusiveLock);
+					rel = heap_open(PipelineQueryRelationOid, AccessExclusiveLock);
+				}
 			}
-			rel = heap_open(PipelineQueryRelationOid, AccessExclusiveLock);
 		}
 		else if (IsA(parsetree, CreateForeignTableStmt))
 		{
@@ -753,11 +786,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			{
 				CreateStmt *stmt = (CreateStmt *) parsetree;
 
-				// remove this
-				stmt->stream = true;
-
-				// and call:
-				// validate_stream_constraints(stmt, &cxt);
+				validate_stream_constraints(stmt);
 
 				isstream = true;
 
@@ -769,7 +798,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			// streams don't support all ALTER commands
 			AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
 
-			if (RangeVarIsForStream(stmt->relation))
+			if (RangeVarIsForStream(stmt->relation, true))
 			{
 				ListCell *lc;
 				foreach(lc, stmt->cmds)

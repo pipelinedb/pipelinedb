@@ -21,6 +21,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "commands/dbcommands.h"
 #include "commands/defrem.h"
 #include "commands/tablecmds.h"
 #include "executor/spi.h"
@@ -516,12 +517,20 @@ GetLocalStreamReaders(Oid relid)
  * RangeVarIsForStream
  */
 bool
-RangeVarIsForStream(RangeVar *rv)
+RangeVarIsForStream(RangeVar *rv, bool missing_ok)
 {
-	Relation rel = heap_openrv(rv, NoLock);
-	Oid relid = RelationGetRelid(rel);
+	Oid relid;
 
-	heap_close(rel, NoLock);
+	/* Ignore cross-database references */
+	if (rv->catalogname && pg_strcasecmp(rv->catalogname, get_database_name(MyDatabaseId)) != 0)
+		return false;
+
+	relid = RangeVarGetRelid(rv, NoLock, missing_ok);
+	if (!OidIsValid(relid))
+		return false;
+
+	if (get_rel_relkind(relid) != RELKIND_FOREIGN_TABLE)
+		return false;
 
 	return has_pipeline_stream_row(relid);
 }

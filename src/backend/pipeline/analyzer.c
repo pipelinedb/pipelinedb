@@ -276,7 +276,7 @@ collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 
 	if (IsA(node, RangeVar))
 	{
-		if (RangeVarIsForStream((RangeVar *) node))
+		if (RangeVarIsForStream((RangeVar *) node, false))
 			context->streams = lappend(context->streams, node);
 		else
 			context->rels = lappend(context->rels, node);
