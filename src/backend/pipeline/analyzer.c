@@ -943,7 +943,6 @@ query_is_continuous_walker(Node *node, IsContinuousContext *context)
 		RangeTblRef *ref = (RangeTblRef *) node;
 		RangeTblEntry *rte = rt_fetch(ref->rtindex, context->query->rtable);
 
-		// need to check if it's a stream RTE
 		if (IsStream(rte->relid))
 		{
 			context->isContinuous = true;

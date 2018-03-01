@@ -260,7 +260,10 @@ ContinuousQueryReaperMain(void)
 
 			PG_TRY();
 			{
-				// use cleaner locking call/wrapper here
+				/*
+				 * We need to acquire a pipeline_query lock first to ensure proper lock ordering
+				 * of all remaining lock acquisitions to avoid deadlocks.
+				 */
 				Relation rel = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
 
 				ttl_rels = get_ttl_rels(&min_sleep);

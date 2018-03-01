@@ -299,9 +299,6 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	result = list_concat(result, cxt.alist);
 	result = list_concat(result, save_alist);
 
-//	if (stmt->stream)
-//		validate_stream_constraints(stmt, &cxt);
-
 	return result;
 }
 

@@ -2259,13 +2259,6 @@ dumpTableData(Archive *fout, TableDataInfo *tdinfo)
 	DataDumperPtr dumpFn;
 	char	   *copyStmt;
 
-	/*
-	 * Streams don't contain any data
-	 */
-	// can we remove this entirely?
-//	if (tbinfo->relkind == RELKIND_FOREIGN_TABLE)
-//		return;
-
 	if (!dopt->dump_inserts)
 	{
 		/* Dump/restore using COPY */
