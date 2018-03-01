@@ -117,6 +117,9 @@ GetStreamSize(PlannerInfo *root, RelOptInfo *baserel, Oid streamid)
 
 	sinfo->colnames = rte->eref->colnames;
 	baserel->fdw_private = (void *) sinfo;
+
+	/* We'll have at most continuous_query_batch_size stream rows per plan execution */
+	baserel->rows = (double) continuous_query_batch_size;
 }
 
 /*
