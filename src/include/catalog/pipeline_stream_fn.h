@@ -21,7 +21,7 @@
 #include "parser/parse_node.h"
 #include "utils/relcache.h"
 
-#define PIPELINE_STREAM_SERVER "pipeline_streams"
+#define PIPELINEDB_SERVER "pipelinedb"
 
 extern bool is_stream_relid(Oid relid);
 
@@ -33,11 +33,11 @@ extern Bitmapset *GetLocalStreamReaders(Oid relid);
 extern bytea *PackTupleDesc(TupleDesc desc);
 extern TupleDesc UnpackTupleDesc(bytea *bytes);
 
-extern bool RangeVarIsForStream(RangeVar *stream);
+extern bool RangeVarIsForStream(RangeVar *rv, bool missing_ok);
 extern bool IsStream(Oid relid);
 
-extern void CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid);
-extern void RemovePipelineStreamById(Oid oid);
+extern void CreatePipelineStreamEntry(CreateForeignTableStmt *stmt, Oid relid);
+extern void ReconcilePipelineStreams(void);
 extern bool RelIdIsForOutputStream(Oid id, Oid *cqid);
 
 #endif

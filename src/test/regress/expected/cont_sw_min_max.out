@@ -77,4 +77,4 @@ SELECT key, intervalmax, txtmin, txtmax, nmin, nmax, amin, amax FROM test_sw_min
 
 DROP CONTINUOUS VIEW sw_minmax_stream CASCADE;
 ERROR:  "sw_minmax_stream" is not a continuous view 
-HINT:  Use DROP STREAM to remove a stream.
+HINT:  Use DROP FOREIGN TABLE to remove a foreign table.

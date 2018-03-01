@@ -3213,7 +3213,7 @@ set_relation_column_names(deparse_namespace *dpns, RangeTblEntry *rte,
 	 * get_rte_attribute_name, except that it's important to disregard dropped
 	 * columns.  We put NULL into the array for a dropped column.
 	 */
-	if (rte->rtekind == RTE_RELATION && rte->relkind != RELKIND_STREAM)
+	if (rte->rtekind == RTE_RELATION)
 	{
 		/* Relation --- look to the system catalogs for up-to-date info */
 		Relation	rel;

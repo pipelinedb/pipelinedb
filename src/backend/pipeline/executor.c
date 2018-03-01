@@ -474,23 +474,3 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 	debug_query_string = NULL;
 	MyStatCQEntry = NULL;
 }
-
-/*
- * AcquireContExecutionLock
- */
-ContExecutionLock
-AcquireContExecutionLock(LOCKMODE mode)
-{
-	Assert(OidIsValid(PipelineExecLockRelationOid));
-
-	return heap_open(PipelineExecLockRelationOid, mode);
-}
-
-/*
- * ReleaseContExecutionLock
- */
-void
-ReleaseContExecutionLock(ContExecutionLock lock)
-{
-	heap_close(lock, NoLock);
-}

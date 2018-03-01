@@ -1081,7 +1081,6 @@ EventTriggerSupportsObjectType(ObjectType obtype)
 			/* no support for event triggers on event triggers */
 			return false;
 		case OBJECT_CONTVIEW:
-		case OBJECT_STREAM:
 		case OBJECT_CONTTRANSFORM:
 			/* no support for continuous views & streams (for now) */
 			return false;
@@ -1146,7 +1145,6 @@ EventTriggerSupportsObjectClass(ObjectClass objclass)
 			/* no support for event triggers on event triggers */
 			return false;
 		case OCLASS_CONTINUOUS_QUERY:
-		case OCLASS_STREAM:
 			/* no support for continuous views (for now) */
 			return false;
 		case OCLASS_CLASS:

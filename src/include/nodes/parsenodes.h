@@ -1419,7 +1419,6 @@ typedef enum ObjectType
 	OBJECT_USER_MAPPING,
 	OBJECT_VIEW,
 	OBJECT_CONTVIEW,
-	OBJECT_STREAM,
 	OBJECT_CONTTRANSFORM
 } ObjectType;
 
@@ -1753,7 +1752,6 @@ typedef struct CreateStmt
 	OnCommitAction oncommit;	/* what do we do at COMMIT? */
 	char	   *tablespacename; /* table space to use, or NULL */
 	bool		if_not_exists;	/* just do nothing if it already exists? */
-	bool		stream;			/* for stream? */
 } CreateStmt;
 
 /* ----------
@@ -3065,8 +3063,6 @@ typedef struct CreateContViewStmt
 	IntoClause 	*into;
 	Node 		*query;
 } CreateContViewStmt;
-
-typedef struct CreateForeignTableStmt CreateStreamStmt;
 
 typedef struct CreateContTransformStmt
 {

@@ -140,15 +140,6 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptKind reloptkind)
 		case RTE_RELATION:
 			/* Table --- retrieve statistics from the system catalogs */
 			get_relation_info(root, rte->relid, rte->inh, rel);
-			if (rte->relkind == RELKIND_STREAM)
-			{
-				rel->min_attr = 0;
-				rel->max_attr = list_length(rte->eref->colnames);
-				rel->attr_needed = (Relids *)
-					palloc0((rel->max_attr - rel->min_attr + 1) * sizeof(Relids));
-				rel->attr_widths = (int32 *)
-					palloc0((rel->max_attr - rel->min_attr + 1) * sizeof(int32));
-			}
 			break;
 		case RTE_SUBQUERY:
 		case RTE_FUNCTION:

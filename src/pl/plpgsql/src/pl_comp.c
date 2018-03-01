@@ -2001,7 +2001,6 @@ build_row_from_class(Oid classOid)
 		classStruct->relkind != RELKIND_MATVIEW &&
 		classStruct->relkind != RELKIND_COMPOSITE_TYPE &&
 		classStruct->relkind != RELKIND_FOREIGN_TABLE &&
-		classStruct->relkind != RELKIND_STREAM &&
 		classStruct->relkind != RELKIND_CONTVIEW &&
 		classStruct->relkind != RELKIND_CONTTRANSFORM)
 		ereport(ERROR,

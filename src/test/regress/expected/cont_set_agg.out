@@ -82,7 +82,7 @@ SELECT * FROM test_set_agg4;
 View definition:
  SELECT array_agg(DISTINCT x) AS array_agg,
     array_agg(DISTINCT x) AS set_agg
-   FROM ONLY test_set_agg_stream;
+   FROM test_set_agg_stream;
 
 DROP CONTINUOUS VIEW test_set_agg4;
 -- Check for NULLs

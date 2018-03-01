@@ -749,7 +749,6 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 			case OBJECT_MATVIEW:
 			case OBJECT_FOREIGN_TABLE:
 			case OBJECT_CONTVIEW:
-			case OBJECT_STREAM:
 			case OBJECT_CONTTRANSFORM:
 				address =
 					get_relation_by_qualified_name(objtype, objname,
@@ -1191,13 +1190,6 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a foreign table",
-								RelationGetRelationName(relation))));
-			break;
-		case OBJECT_STREAM:
-			if (relation->rd_rel->relkind != RELKIND_STREAM)
-				ereport(ERROR,
-						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						 errmsg("\"%s\" is not a stream",
 								RelationGetRelationName(relation))));
 			break;
 		case OBJECT_CONTTRANSFORM:
@@ -3171,21 +3163,6 @@ getObjectDescription(const ObjectAddress *object)
 				break;
 			}
 
-		case OCLASS_STREAM:
-			{
-				HeapTuple	tup;
-
-				tup = SearchPipelineSysCache1(PIPELINESTREAMOID,
-									  ObjectIdGetDatum(object->objectId));
-				if (!HeapTupleIsValid(tup))
-					elog(ERROR, "cache lookup failed for pipeline_stream %u",
-						 object->objectId);
-				appendStringInfo(&buffer, _("pipeline_stream %s"),
-						get_rel_name(((Form_pipeline_stream) GETSTRUCT(tup))->relid));
-				ReleaseSysCache(tup);
-				break;
-			}
-
 		default:
 			appendStringInfo(&buffer, "unrecognized object %u %u %d",
 							 object->classId,
@@ -3273,10 +3250,6 @@ getRelationDescription(StringInfo buffer, Oid relid)
 			break;
 		case RELKIND_CONTVIEW:
 			appendStringInfo(buffer, _("continuous view %s"),
-							 relname);
-			break;
-		case RELKIND_STREAM:
-			appendStringInfo(buffer, _("stream %s"),
 							 relname);
 			break;
 		case RELKIND_CONTTRANSFORM:
@@ -3684,10 +3657,6 @@ getObjectTypeDescription(const ObjectAddress *object)
 			appendStringInfoString(&buffer, "continuous query");
 			break;
 
-		case OCLASS_STREAM:
-			appendStringInfoString(&buffer, "stream");
-			break;
-
 		default:
 			appendStringInfo(&buffer, "unrecognized %u", object->classId);
 			break;
@@ -3739,9 +3708,6 @@ getRelationTypeDescription(StringInfo buffer, Oid relid, int32 objectSubId)
 			break;
 		case RELKIND_CONTVIEW:
 			appendStringInfoString(buffer, "continuous view");
-			break;
-		case RELKIND_STREAM:
-			appendStringInfoString(buffer, "stream");
 			break;
 		case RELKIND_CONTTRANSFORM:
 			appendStringInfoString(buffer, "continuous transform");

@@ -1938,7 +1938,7 @@ AlterTableStmt:
           AlterTableStmt *n = makeNode(AlterTableStmt);
           n->relation = $3;
           n->cmds = $4;
-          n->relkind = OBJECT_STREAM;
+          n->relkind = OBJECT_FOREIGN_TABLE;
           n->missing_ok = false;
           $$ = (Node *)n;
         }
@@ -2832,20 +2832,20 @@ create_cv_target:
 
 CreateStreamStmt: CREATE STREAM qualified_name '(' OptTableElementList ')'
         {
-          CreateStreamStmt *n = makeNode(CreateStreamStmt);
+          CreateForeignTableStmt *n = makeNode(CreateForeignTableStmt);
           n->base.relation = $3;
           n->base.tableElts = $5;
           n->base.if_not_exists = false;
-          n->servername = PIPELINE_STREAM_SERVER;
+          n->servername = PIPELINEDB_SERVER;
           $$ = (Node *)n;
         }
     | CREATE STREAM IF_P NOT EXISTS qualified_name '(' OptTableElementList ')'
         {
-          CreateStreamStmt *n = makeNode(CreateStreamStmt);
+          CreateForeignTableStmt *n = makeNode(CreateForeignTableStmt);
           n->base.relation = $6;
           n->base.tableElts = $8;
           n->base.if_not_exists = true;
-          n->servername = PIPELINE_STREAM_SERVER;
+          n->servername = PIPELINEDB_SERVER;
           $$ = (Node *)n;
         }
     ;
@@ -5692,7 +5692,7 @@ DropStmt: DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 
 drop_type:  TABLE                 { $$ = OBJECT_TABLE; }
       | CONTINUOUS VIEW           { $$ = OBJECT_CONTVIEW; }
-      | STREAM                    { $$ = OBJECT_STREAM; }
+      | STREAM                    { $$ = OBJECT_FOREIGN_TABLE; }
       | CONTINUOUS TRANSFORM      { $$ = OBJECT_CONTTRANSFORM; }
       | SEQUENCE                { $$ = OBJECT_SEQUENCE; }
       | VIEW                  { $$ = OBJECT_VIEW; }

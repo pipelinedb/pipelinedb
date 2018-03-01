@@ -215,7 +215,6 @@ check_xact_readonly(Node *parsetree)
 		case T_ImportForeignSchemaStmt:
 		case T_SecLabelStmt:
 		case T_CreateContViewStmt:
-		case T_CreateStreamStmt:
 			PreventCommandIfReadOnly(CreateCommandTag(parsetree));
 			PreventCommandIfParallelMode(CreateCommandTag(parsetree));
 			break;
@@ -959,16 +958,9 @@ ProcessUtilitySlow(Node *parsetree,
 
 			case T_CreateStmt:
 			case T_CreateForeignTableStmt:
-			case T_CreateStreamStmt:
 				{
 					List	   *stmts;
 					ListCell   *l;
-
-					if (IsA(parsetree, CreateStreamStmt))
-					{
-						CreateStmt *stmt = (CreateStmt *) parsetree;
-						stmt->stream = true;
-					}
 
 					/* Run parse analysis ... */
 					stmts = transformCreateStmt((CreateStmt *) parsetree,
@@ -1026,17 +1018,6 @@ ProcessUtilitySlow(Node *parsetree,
 							EventTriggerCollectSimpleCommand(address,
 															 secondaryObject,
 															 stmt);
-						}
-						else if (IsA(stmt, CreateStreamStmt))
-						{
-							transformCreateStreamStmt((CreateStreamStmt *) stmt);
-							/* Create the table itself */
-							address = DefineRelation((CreateStmt *) stmt,
-													RELKIND_STREAM,
-													InvalidOid, NULL);
-							CreateForeignTable((CreateForeignTableStmt *) stmt,
-											   address.objectId);
-							CreatePipelineStreamEntry((CreateStreamStmt *) stmt, address.objectId);
 						}
 						else
 						{
@@ -1626,7 +1607,6 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_FOREIGN_TABLE:
 		case OBJECT_CONTVIEW:
 		case OBJECT_CONTTRANSFORM:
-		case OBJECT_STREAM:
 			RemoveRelations(stmt);
 			break;
 		default:
@@ -1934,9 +1914,6 @@ AlterObjectTypeCommandTag(ObjectType objtype)
 		case OBJECT_MATVIEW:
 			tag = "ALTER MATERIALIZED VIEW";
 			break;
-		case OBJECT_STREAM:
-			tag = "ALTER STREAM";
-			break;
 		default:
 			tag = "???";
 			break;
@@ -2082,10 +2059,6 @@ CreateCommandTag(Node *parsetree)
 			tag = "CREATE EXTENSION";
 			break;
 
-		case T_CreateStreamStmt:
-			tag = "CREATE STREAM";
-			break;
-
 		case T_AlterExtensionStmt:
 			tag = "ALTER EXTENSION";
 			break;
@@ -2123,7 +2096,10 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateForeignTableStmt:
-			tag = "CREATE FOREIGN TABLE";
+			if (pg_strcasecmp((((CreateForeignTableStmt *) parsetree)->servername), PIPELINEDB_SERVER) == 0)
+				tag = "CREATE STREAM";
+			else
+				tag = "CREATE FOREIGN TABLE";
 			break;
 
 		case T_ImportForeignSchemaStmt:
@@ -2179,7 +2155,21 @@ CreateCommandTag(Node *parsetree)
 					tag = "DROP TEXT SEARCH CONFIGURATION";
 					break;
 				case OBJECT_FOREIGN_TABLE:
-					tag = "DROP FOREIGN TABLE";
+					{
+						DropStmt *stmt = (DropStmt *) parsetree;
+
+						tag = "DROP FOREIGN TABLE";
+						if (list_length(stmt->objects) == 1)
+						{
+							Node *n = linitial(stmt->objects);
+							if (IsA(n, List))
+							{
+								RangeVar *rv = makeRangeVarFromNameList((List *) n);
+								if (RangeVarIsForStream(rv, true))
+									tag = "DROP STREAM";
+							}
+						}
+					}
 					break;
 				case OBJECT_EXTENSION:
 					tag = "DROP EXTENSION";
@@ -2219,9 +2209,6 @@ CreateCommandTag(Node *parsetree)
 					break;
 				case OBJECT_OPFAMILY:
 					tag = "DROP OPERATOR FAMILY";
-					break;
-				case OBJECT_STREAM:
-					tag = "DROP STREAM";
 					break;
 				case OBJECT_POLICY:
 					tag = "DROP POLICY";
@@ -3212,7 +3199,6 @@ GetCommandLogLevel(Node *parsetree)
 			/* PipelineDB */
 			case T_CreateContViewStmt:
 			case T_CreateContTransformStmt:
-			case T_CreateStreamStmt:
 				lev = LOGSTMT_DDL;
 				break;
 

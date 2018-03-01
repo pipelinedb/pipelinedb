@@ -276,7 +276,7 @@ collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 
 	if (IsA(node, RangeVar))
 	{
-		if (RangeVarIsForStream((RangeVar *) node))
+		if (RangeVarIsForStream((RangeVar *) node, false))
 			context->streams = lappend(context->streams, node);
 		else
 			context->rels = lappend(context->rels, node);
@@ -932,8 +932,6 @@ typedef struct IsContinuousContext
 } IsContinuousContext;
 
 
-#include "utils/memutils.h"
-
 static bool
 query_is_continuous_walker(Node *node, IsContinuousContext *context)
 {
@@ -945,7 +943,7 @@ query_is_continuous_walker(Node *node, IsContinuousContext *context)
 		RangeTblRef *ref = (RangeTblRef *) node;
 		RangeTblEntry *rte = rt_fetch(ref->rtindex, context->query->rtable);
 
-		if (rte->relkind == RELKIND_STREAM)
+		if (IsStream(rte->relid))
 		{
 			context->isContinuous = true;
 			return false;
@@ -1567,7 +1565,7 @@ transformContSelectTargetList(ParseState *pstate, List *tlist)
  * transformCreateStreamStmt
  */
 void
-transformCreateStreamStmt(CreateStreamStmt *stmt)
+transformCreateStreamStmt(CreateForeignTableStmt *stmt)
 {
 	ListCell *lc;
 	bool saw_atime = false;
@@ -3186,7 +3184,7 @@ combine_target_for_osrel(Node *node, List *rtable, FieldSelect **fsp, Oid *cqid,
 	v = (Var *) fs->arg;
 
 	rte = rt_fetch(v->varno, rtable);
-	if (rte->relkind != RELKIND_STREAM)
+	if (!IsStream(rte->relid))
 		return false;
 
 	if (!RelIdIsForOutputStream(rte->relid, cqid))

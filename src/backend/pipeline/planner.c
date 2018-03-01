@@ -16,6 +16,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_combine.h"
+#include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "commands/pipelinecmds.h"
 #include "executor/executor.h"
@@ -102,70 +103,6 @@ get_worker_select_stmt(ContQuery* view, SelectStmt** viewptr)
 	return selectstmt;
 }
 
-static List *
-subbuild_joinrel_restrictlist(RelOptInfo *joinrel,
-							  List *joininfo_list,
-							  List *new_restrictlist)
-{
-	ListCell   *l;
-
-	foreach(l, joininfo_list)
-	{
-		RestrictInfo *rinfo = (RestrictInfo *) lfirst(l);
-
-		if (bms_is_subset(rinfo->required_relids, joinrel->relids))
-		{
-			/*
-			 * This clause becomes a restriction clause for the joinrel, since
-			 * it refers to no outside rels.  Add it to the list, being
-			 * careful to eliminate duplicates. (Since RestrictInfo nodes in
-			 * different joinlists will have been multiply-linked rather than
-			 * copied, pointer equality should be a sufficient test.)
-			 */
-			new_restrictlist = list_append_unique_ptr(new_restrictlist, rinfo);
-		}
-		else
-		{
-			/*
-			 * This clause is still a join clause at this level, so we ignore
-			 * it in this routine.
-			 */
-		}
-	}
-
-	return new_restrictlist;
-}
-
-static List *
-build_joinrel_restrictlist(PlannerInfo *root,
-						   RelOptInfo *joinrel,
-						   RelOptInfo *outer_rel,
-						   RelOptInfo *inner_rel)
-{
-	List	   *result;
-
-	/*
-	 * Collect all the clauses that syntactically belong at this level,
-	 * eliminating any duplicates (important since we will see many of the
-	 * same clauses arriving from both input relations).
-	 */
-	result = subbuild_joinrel_restrictlist(joinrel, outer_rel->joininfo, NIL);
-	result = subbuild_joinrel_restrictlist(joinrel, inner_rel->joininfo, result);
-
-	/*
-	 * Add on any clauses derived from EquivalenceClasses.  These cannot be
-	 * redundant with the clauses in the joininfo lists, so don't bother
-	 * checking.
-	 */
-	result = list_concat(result,
-						 generate_join_implied_equalities(root,
-														  joinrel->relids,
-														  outer_rel->relids,
-														  inner_rel));
-
-	return result;
-}
-
 static inline bool
 clause_sides_match_join(RestrictInfo *rinfo, RelOptInfo *outerrel,
 						RelOptInfo *innerrel)
@@ -187,212 +124,13 @@ clause_sides_match_join(RestrictInfo *rinfo, RelOptInfo *outerrel,
 	return false;				/* no good for these input relations */
 }
 
-/*
- * try_stream_index_join_path
- * 		Consider nestloop join of a stream scan and an indexed table
- */
-static void
-try_stream_index_join_path(PlannerInfo *root,
-						RelOptInfo *joinrel,
-						JoinType jointype,
-						SpecialJoinInfo *sjinfo,
-						Path *outer_path,
-						Path *inner_path,
-						List *restrict_clauses,
-						JoinPathExtraData *extra)
-{
-	Relids required_outer = calc_nestloop_required_outer(outer_path, inner_path);
-	JoinCostWorkspace workspace;
-	List *pathkeys = build_join_pathkeys(root, joinrel, jointype, outer_path->pathkeys);
-	NestPath *path;
-
-	/* if there's no index path, we'll use the stream-table hashjoin */
-	if (inner_path->pathtype == T_SeqScan || inner_path->pathtype == T_HashJoin || inner_path->pathtype == T_MergeJoin)
-		return;
-
-	path = create_nestloop_path(root, joinrel, jointype, &workspace,
-									  sjinfo, &extra->semifactors, outer_path, inner_path,
-									  restrict_clauses,
-									  pathkeys, required_outer);
-
-	path->path.startup_cost = 0;
-	/* We only care about the cost of the table side of a stream-table join */
-	path->path.total_cost = inner_path->total_cost;
-
-	add_path(joinrel, (Path *) path);
-}
-
-/*
- * create_stream_hash_join_path
- *	  Creates a pathnode corresponding to a join between a stream and a table.
- */
-static HashPath *
-create_stream_hashjoin_path(PlannerInfo *root,
-				 RelOptInfo *joinrel,
-				 JoinType jointype,
-				 Path *outer_path,
-				 Path *inner_path,
-				 Relids required_outer,
-				 List *hashclauses,
-				 JoinPathExtraData *extra)
-{
-	HashPath *pathnode = makeNode(HashPath);
-	JoinCostWorkspace workspace;
-
-	initial_cost_hashjoin(root, &workspace, jointype, hashclauses,
-						  outer_path, inner_path,
-						  extra->sjinfo, &extra->semifactors);
-
-	pathnode->jpath.path.pathtype = T_HashJoin;
-	pathnode->jpath.path.parent = joinrel;
-	pathnode->jpath.path.param_info = get_baserel_parampathinfo(root, joinrel,
-													 required_outer);
-	pathnode->jpath.path.pathkeys = NIL;
-	pathnode->jpath.jointype = jointype;
-	pathnode->jpath.outerjoinpath = outer_path;
-	pathnode->jpath.innerjoinpath = inner_path;
-	pathnode->jpath.joinrestrictinfo = extra->restrictlist;
-	pathnode->path_hashclauses = hashclauses;
-
-	final_cost_hashjoin(root, pathnode, &workspace, extra->sjinfo, &extra->semifactors);
-
-	return pathnode;
-}
-
-/*
- * add_stream_index_join_paths
- */
-static void
-add_stream_index_join_paths(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
-		RelOptInfo *innerrel, JoinType jointype, JoinPathExtraData *extra)
-{
-	ListCell *lc;
-	List *restrictlist = build_joinrel_restrictlist(root, joinrel, outerrel, innerrel);
-	SpecialJoinInfo sjinfo;
-
-	sjinfo.type = T_SpecialJoinInfo;
-	sjinfo.min_lefthand = outerrel->relids;
-	sjinfo.min_righthand = innerrel->relids;
-	sjinfo.syn_lefthand = outerrel->relids;
-	sjinfo.syn_righthand = innerrel->relids;
-	sjinfo.jointype = jointype;
-	sjinfo.lhs_strict = false;
-	sjinfo.delay_upper_joins = false;
-	sjinfo.semi_can_btree = false;
-	sjinfo.semi_can_hash = false;
-	sjinfo.semi_operators = NIL;
-	sjinfo.semi_rhs_exprs = NIL;
-
-	/*
-	 * If this is a stream-table join and the stream is the inner relation, then we should only
-	 * consider a hash join with the stream as the inner relation which is hashed.
-	 */
-	if (IS_STREAM_RTE(innerrel->relid, root))
-	{
-		HashPath *path;
-		Path *outerpath = outerrel->cheapest_total_path;
-		Path *innerpath = innerrel->cheapest_total_path;
-		Relids requiredouter = NULL;
-		ListCell *lc;
-		List *hashclauses = NIL;
-
-		if (outerrel->rtekind == RTE_RELATION)
-		 requiredouter = calc_non_nestloop_required_outer(outerpath, innerpath);
-
-		foreach(lc, restrictlist)
-		{
-			RestrictInfo *restrictinfo = (RestrictInfo *) lfirst(lc);
-
-			/*
-			 * If processing an outer join, only use its own join clauses for
-			 * hashing.  For inner joins we need not be so picky.
-			 */
-			if (IS_OUTER_JOIN(jointype) && restrictinfo->is_pushed_down)
-				continue;
-
-			if (!restrictinfo->can_join ||
-				restrictinfo->hashjoinoperator == InvalidOid)
-				continue;			/* not hashjoinable */
-
-			/*
-			 * Check if clause has the form "outer op inner" or "inner op outer".
-			 */
-			if (!clause_sides_match_join(restrictinfo, outerrel, innerrel))
-				continue;			/* no good for these input relations */
-
-			hashclauses = lappend(hashclauses, restrictinfo);
-		}
-
-		path = create_stream_hashjoin_path(root, joinrel, jointype,
-				outerpath, innerpath, requiredouter, hashclauses, extra);
-
-		add_path(joinrel, (Path *) path);
-		set_cheapest(joinrel);
-
-		return;
-	}
-
-	/*
-	 * If this is a stream-table join and the stream is the outer relation, then we should
-	 * only consider a nested loop join with the stream on the outside.
-	 */
-	if (IS_STREAM_RTE(outerrel->relid, root))
-	{
-		Path *outerpath = outerrel->cheapest_total_path;
-		Path *innerpath;
-
-		/*
-		 * If the inner relation has any index paths for this join, those are
-		 * going to be faster on large tables so we try them.
-		 */
-		foreach(lc, innerrel->pathlist)
-		{
-			innerpath = (Path *) lfirst(lc);
-			try_stream_index_join_path(root, joinrel, jointype, &sjinfo,
-					outerpath, innerpath, restrictlist, extra);
-		}
-
-		foreach(lc, innerrel->cheapest_parameterized_paths)
-		{
-			innerpath = (Path *) lfirst(lc);
-			try_stream_index_join_path(root, joinrel, jointype, &sjinfo,
-					outerpath, innerpath, restrictlist, extra);
-		}
-
-		/* Set the cheapest path, only if we actually added any paths. */
-		if (joinrel->pathlist)
-		{
-			set_cheapest(joinrel);
-			return;
-		}
-	}
-}
-
 static PlannedStmt *
 get_worker_plan(ContQuery *view)
 {
 	SelectStmt* stmt = get_worker_select_stmt(view, NULL);
 	PlannedStmt *plan;
-	set_join_pathlist_hook_type save_join_hook;
 
-	/*
-	 * Perform everything from here in a try/catch so we can ensure the join path list hook
-	 * is restored to whatever it was set to before we were called
-	 */
-	PG_TRY();
-	{
-		save_join_hook = set_join_pathlist_hook;
-		set_join_pathlist_hook = add_stream_index_join_paths;
-
-		plan = get_plan_from_stmt(view->id, (Node *) stmt, view->sql, false);
-		set_join_pathlist_hook = save_join_hook;
-	}
-	PG_CATCH();
-	{
-		set_join_pathlist_hook = save_join_hook;
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
+	plan = get_plan_from_stmt(view->id, (Node *) stmt, view->sql, false);
 
 	return plan;
 }
@@ -936,6 +674,37 @@ create_index_on_matrel(IndexStmt *stmt)
 }
 
 /*
+ * validate_stream_constraints
+ *
+ * We allow some stuff that is technically supported by the grammar
+ * for CREATE STREAM, so we do some validation here so that we can generate more
+ * informative errors than simply syntax errors.
+ */
+static void
+validate_stream_constraints(CreateStmt *stmt)
+{
+	ListCell *lc;
+
+	foreach(lc, stmt->tableElts)
+	{
+		Node *n = (Node *) lfirst(lc);
+		ColumnDef *cdef;
+
+		if (!IsA(n, ColumnDef))
+			continue;
+
+		cdef = (ColumnDef *) n;
+		if (cdef->constraints)
+		{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot create constraint on stream %s", stmt->relation->relname),
+						 errhint("Constraints are currently unsupported on streams.")));
+		}
+	}
+}
+
+/*
  * ProcessUtilityOnContView
  *
  * Hook to intercept relevant utility queries run on continuous views
@@ -945,6 +714,9 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 													  ParamListInfo params, DestReceiver *dest, char *tag)
 {
 	ContExecutionLock exec_lock = NULL;
+	PipelineDDLLock ddl_lock = NULL;
+	Relation rel = NULL;
+	bool isstream = false;
 
 	PG_TRY();
 	{
@@ -961,6 +733,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			 * Indicate to the analyzer/planner hooks that we're executing a CREATE CONTINUOUS statement
 			 */
 			PipelineContextSetIsDDL();
+			ddl_lock = AcquirePipelineDDLLock();
 
 			/* The grammar should enforce this */
 			Assert(IsA(node, SelectStmt));
@@ -997,8 +770,53 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			if (list_length(stmt->objects) == 1 && IsA(linitial(stmt->objects), List))
 			{
 				RangeVar *rv = makeRangeVarFromNameList(linitial(stmt->objects));
-				if (IsAContinuousView(rv))
+
+				if (IsPipelineObject(rv)||
+						stmt->removeType == OBJECT_SCHEMA ||
+						stmt->removeType == OBJECT_TYPE ||
+						stmt->removeType == OBJECT_FUNCTION)
+				{
 					exec_lock = AcquireContExecutionLock(AccessExclusiveLock);
+					ddl_lock = AcquirePipelineDDLLock();
+				}
+			}
+		}
+		else if (IsA(parsetree, CreateForeignTableStmt))
+		{
+			/*
+			 * If we're creating a stream, we perform a constraints check since constraints are not
+			 * supported by streams although they are supported by the grammar.
+			 */
+			if (pg_strcasecmp(((CreateForeignTableStmt *) parsetree)->servername, PIPELINEDB_SERVER) == 0)
+			{
+				CreateStmt *stmt = (CreateStmt *) parsetree;
+
+				validate_stream_constraints(stmt);
+				isstream = true;
+				transformCreateStreamStmt((CreateForeignTableStmt *) stmt);
+			}
+		}
+		else if (IsA(parsetree, AlterTableStmt))
+		{
+			/*
+			 * Streams only support adding columns,
+			 * so if we're altering a stream ensure that's all we're doing.
+			 */
+			AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
+
+			if (RangeVarIsForStream(stmt->relation, true))
+			{
+				ListCell *lc;
+				foreach(lc, stmt->cmds)
+				{
+					AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+					if (cmd->subtype != AT_AddColumn && cmd->subtype != AT_ChangeOwner)
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+										(errmsg("streams only support ADD COLUMN or OWNER TO actions"))));
+					}
+				}
 			}
 		}
 
@@ -1009,6 +827,27 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 
 		if (exec_lock)
 			ReleaseContExecutionLock(exec_lock);
+
+		if (ddl_lock)
+			ReleasePipelineDDLLock(ddl_lock);
+
+		/*
+		 * If we created a stream, we need to create a pipeline_stream entry in addition
+		 * to the underlying foreign table.
+		 */
+		if (isstream)
+		{
+			CreateForeignTableStmt *stmt = (CreateForeignTableStmt *) parsetree;
+			Oid relid = RangeVarGetRelid(stmt->base.relation, NoLock, false);
+			CreatePipelineStreamEntry(stmt, relid);
+		}
+
+		/*
+		 * We may have dropped a PipelineDB object, so we reconcile our own catalog tables
+		 * to ensure any orphaned entries are removed in this transaction.
+		 */
+		if (IsA(parsetree, DropStmt))
+			ReconcilePipelineStreams();
 
 		/*
 		 * Clear analyzer/planner context flags
@@ -1022,4 +861,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+
+	if (rel)
+		heap_close(rel, NoLock);
 }

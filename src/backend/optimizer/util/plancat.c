@@ -387,7 +387,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	rel->indexlist = indexinfos;
 
 	/* Grab foreign-table info using the relcache, while we have it */
-	if (relation->rd_rel->relkind == RELKIND_FOREIGN_TABLE || relation->rd_rel->relkind == RELKIND_STREAM)
+	if (relation->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
 	{
 		rel->serverid = GetForeignServerIdByRelId(RelationGetRelid(relation));
 		rel->fdwroutine = GetFdwRoutineForRelation(relation, true);
@@ -1254,34 +1254,6 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 			relation = heap_open(rte->relid, NoLock);
 
 			numattrs = RelationGetNumberOfAttributes(relation);
-			if (rte->relkind == RELKIND_STREAM)
-			{
-				expandRTE(rte, varno, 0, -1, true /* include dropped */ ,
-						  NULL, &colvars);
-				foreach(l, colvars)
-				{
-					var = (Var *) lfirst(l);
-
-					/*
-					 * A non-Var in expandRTE's output means a dropped column;
-					 * must punt.
-					 */
-					if (!IsA(var, Var))
-					{
-						tlist = NIL;
-						break;
-					}
-
-					tlist = lappend(tlist,
-									makeTargetEntry((Expr *) var,
-													var->varattno,
-													NULL,
-													false));
-				}
-
-				heap_close(relation, NoLock);
-				break;
-			}
 			for (attrno = 1; attrno <= numattrs; attrno++)
 			{
 				Form_pg_attribute att_tup = relation->rd_att->attrs[attrno - 1];

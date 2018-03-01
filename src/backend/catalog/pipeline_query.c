@@ -992,3 +992,29 @@ GetTTLInfo(RangeVar *cvname, char **ttl_col, int *ttl)
 	heap_close(rel, NoLock);
 	ReleaseSysCache(tup);
 }
+
+/*
+ * IsPipelineObject
+ *
+ * Determine if the given identifier refers to a PipelineDB object, which
+ * is a CV, CT, or stream. This is mainly useful for DDL operations when we need to
+ * perform locking in a way that doesn't conflict with workers/combiners.
+ */
+bool
+IsPipelineObject(RangeVar *name)
+{
+	HeapTuple tup;
+
+	/* Is it a stream? */
+	if (RangeVarIsForStream(name, true))
+		return true;
+
+	/* Is it a CV/CT? */
+	tup = GetPipelineQueryTuple(name);
+	if (!HeapTupleIsValid(tup))
+		return false;
+
+	ReleaseSysCache(tup);
+
+	return true;
+}

@@ -127,48 +127,6 @@ static void transformColumnType(CreateStmtContext *cxt, ColumnDef *column);
 static void setSchemaName(char *context_schema, char **stmt_schema_name);
 
 /*
- * validate_stream_constraints
- *
- * We allow some stuff that is technically supported by the grammar
- * for CREATE STREAM, so we do some validation here so that we can generate more
- * informative errors than simply syntax errors.
- */
-static void
-validate_stream_constraints(CreateStmt *stmt, CreateStmtContext *cxt)
-{
-	ListCell *lc;
-	List *nodes = list_concat(stmt->tableElts, stmt->constraints);
-
-	nodes = list_concat(list_copy(nodes), cxt->ckconstraints);
-	nodes = list_concat(list_copy(nodes), cxt->fkconstraints);
-	nodes = list_concat(list_copy(nodes), cxt->ixconstraints);
-
-	foreach(lc, nodes)
-	{
-		Node *n = (Node *) lfirst(lc);
-		Constraint *c;
-
-		if (!IsA(n, Constraint))
-			continue;
-
-		c = (Constraint *) n;
-
-		switch (c->contype)
-		{
-			case CONSTR_NULL:
-			case CONSTR_NOTNULL:
-			case CONSTR_DEFAULT:
-			case CONSTR_CHECK:
-			default:
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("cannot create constraint %s on stream %s", c->conname ? c->conname : "", stmt->relation->relname),
-						 errhint("Constraints are currently unsupported on streams.")));
-		}
-	}
-}
-
-/*
  * transformCreateStmt -
  *	  parse analysis for CREATE TABLE
  *
@@ -340,9 +298,6 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	result = lappend(cxt.blist, stmt);
 	result = list_concat(result, cxt.alist);
 	result = list_concat(result, save_alist);
-
-	if (stmt->stream)
-		validate_stream_constraints(stmt, &cxt);
 
 	return result;
 }
@@ -769,7 +724,6 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 		relation->rd_rel->relkind != RELKIND_COMPOSITE_TYPE &&
 		relation->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
 		relation->rd_rel->relkind != RELKIND_CONTVIEW &&
-		relation->rd_rel->relkind != RELKIND_STREAM &&
 		relation->rd_rel->relkind != RELKIND_CONTTRANSFORM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),

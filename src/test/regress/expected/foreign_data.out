@@ -26,9 +26,9 @@ SELECT fdwname, fdwhandler::regproc, fdwvalidator::regproc, fdwoptions FROM pg_f
 (3 rows)
 
 SELECT srvname, srvoptions FROM pg_foreign_server;
-     srvname      | srvoptions 
-------------------+------------
- pipeline_streams | 
+  srvname   | srvoptions 
+------------+------------
+ pipelinedb | 
 (1 row)
 
 SELECT * FROM pg_user_mapping;
@@ -247,11 +247,11 @@ CREATE USER MAPPING FOR current_user SERVER s1;
 (4 rows)
 
 \des+
-                                                     List of foreign servers
-       Name       |       Owner       | Foreign-data wrapper | Access privileges | Type | Version | FDW Options |  Description   
-------------------+-------------------+----------------------+-------------------+------+---------+-------------+----------------
- pipeline_streams | unknown (OID=0)   | stream_fdw           |                   |      |         |             | 
- s1               | foreign_data_user | foo                  |                   |      |         |             | foreign server
+                                                  List of foreign servers
+    Name    |       Owner       | Foreign-data wrapper | Access privileges | Type | Version | FDW Options |  Description   
+------------+-------------------+----------------------+-------------------+------+---------+-------------+----------------
+ pipelinedb | unknown (OID=0)   | stream_fdw           |                   |      |         |             | 
+ s1         | foreign_data_user | foo                  |                   |      |         |             | foreign server
 (2 rows)
 
 \deu+
@@ -284,10 +284,10 @@ drop cascades to user mapping for foreign_data_user on server s1
 (3 rows)
 
 \des+
-                                                  List of foreign servers
-       Name       |      Owner      | Foreign-data wrapper | Access privileges | Type | Version | FDW Options | Description 
-------------------+-----------------+----------------------+-------------------+------+---------+-------------+-------------
- pipeline_streams | unknown (OID=0) | stream_fdw           |                   |      |         |             | 
+                                               List of foreign servers
+    Name    |      Owner      | Foreign-data wrapper | Access privileges | Type | Version | FDW Options | Description 
+------------+-----------------+----------------------+-------------------+------+---------+-------------+-------------
+ pipelinedb | unknown (OID=0) | stream_fdw           |                   |      |         |             | 
 (1 row)
 
 \deu+
@@ -314,18 +314,18 @@ ERROR:  invalid option "foo"
 HINT:  Valid options in this context are: authtype, service, connect_timeout, dbname, host, hostaddr, port, tty, options, requiressl, sslmode, gsslib
 CREATE SERVER s8 FOREIGN DATA WRAPPER postgresql OPTIONS (host 'localhost', dbname 's8db');
 \des+
-                                                               List of foreign servers
-       Name       |       Owner       | Foreign-data wrapper | Access privileges |  Type  | Version |            FDW Options            | Description 
-------------------+-------------------+----------------------+-------------------+--------+---------+-----------------------------------+-------------
- pipeline_streams | unknown (OID=0)   | stream_fdw           |                   |        |         |                                   | 
- s1               | foreign_data_user | foo                  |                   |        |         |                                   | 
- s2               | foreign_data_user | foo                  |                   |        |         | (host 'a', dbname 'b')            | 
- s3               | foreign_data_user | foo                  |                   | oracle |         |                                   | 
- s4               | foreign_data_user | foo                  |                   | oracle |         | (host 'a', dbname 'b')            | 
- s5               | foreign_data_user | foo                  |                   |        | 15.0    |                                   | 
- s6               | foreign_data_user | foo                  |                   |        | 16.0    | (host 'a', dbname 'b')            | 
- s7               | foreign_data_user | foo                  |                   | oracle | 17.0    | (host 'a', dbname 'b')            | 
- s8               | foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
+                                                            List of foreign servers
+    Name    |       Owner       | Foreign-data wrapper | Access privileges |  Type  | Version |            FDW Options            | Description 
+------------+-------------------+----------------------+-------------------+--------+---------+-----------------------------------+-------------
+ pipelinedb | unknown (OID=0)   | stream_fdw           |                   |        |         |                                   | 
+ s1         | foreign_data_user | foo                  |                   |        |         |                                   | 
+ s2         | foreign_data_user | foo                  |                   |        |         | (host 'a', dbname 'b')            | 
+ s3         | foreign_data_user | foo                  |                   | oracle |         |                                   | 
+ s4         | foreign_data_user | foo                  |                   | oracle |         | (host 'a', dbname 'b')            | 
+ s5         | foreign_data_user | foo                  |                   |        | 15.0    |                                   | 
+ s6         | foreign_data_user | foo                  |                   |        | 16.0    | (host 'a', dbname 'b')            | 
+ s7         | foreign_data_user | foo                  |                   | oracle | 17.0    | (host 'a', dbname 'b')            | 
+ s8         | foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
 (9 rows)
 
 SET ROLE regress_test_role;
@@ -337,19 +337,19 @@ SET ROLE regress_test_role;
 CREATE SERVER t1 FOREIGN DATA WRAPPER foo;
 RESET ROLE;
 \des+
-                                                               List of foreign servers
-       Name       |       Owner       | Foreign-data wrapper | Access privileges |  Type  | Version |            FDW Options            | Description 
-------------------+-------------------+----------------------+-------------------+--------+---------+-----------------------------------+-------------
- pipeline_streams | unknown (OID=0)   | stream_fdw           |                   |        |         |                                   | 
- s1               | foreign_data_user | foo                  |                   |        |         |                                   | 
- s2               | foreign_data_user | foo                  |                   |        |         | (host 'a', dbname 'b')            | 
- s3               | foreign_data_user | foo                  |                   | oracle |         |                                   | 
- s4               | foreign_data_user | foo                  |                   | oracle |         | (host 'a', dbname 'b')            | 
- s5               | foreign_data_user | foo                  |                   |        | 15.0    |                                   | 
- s6               | foreign_data_user | foo                  |                   |        | 16.0    | (host 'a', dbname 'b')            | 
- s7               | foreign_data_user | foo                  |                   | oracle | 17.0    | (host 'a', dbname 'b')            | 
- s8               | foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
- t1               | regress_test_role | foo                  |                   |        |         |                                   | 
+                                                            List of foreign servers
+    Name    |       Owner       | Foreign-data wrapper | Access privileges |  Type  | Version |            FDW Options            | Description 
+------------+-------------------+----------------------+-------------------+--------+---------+-----------------------------------+-------------
+ pipelinedb | unknown (OID=0)   | stream_fdw           |                   |        |         |                                   | 
+ s1         | foreign_data_user | foo                  |                   |        |         |                                   | 
+ s2         | foreign_data_user | foo                  |                   |        |         | (host 'a', dbname 'b')            | 
+ s3         | foreign_data_user | foo                  |                   | oracle |         |                                   | 
+ s4         | foreign_data_user | foo                  |                   | oracle |         | (host 'a', dbname 'b')            | 
+ s5         | foreign_data_user | foo                  |                   |        | 15.0    |                                   | 
+ s6         | foreign_data_user | foo                  |                   |        | 16.0    | (host 'a', dbname 'b')            | 
+ s7         | foreign_data_user | foo                  |                   | oracle | 17.0    | (host 'a', dbname 'b')            | 
+ s8         | foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
+ t1         | regress_test_role | foo                  |                   |        |         |                                   | 
 (10 rows)
 
 REVOKE USAGE ON FOREIGN DATA WRAPPER foo FROM regress_test_role;
@@ -362,20 +362,20 @@ GRANT regress_test_indirect TO regress_test_role;
 SET ROLE regress_test_role;
 CREATE SERVER t2 FOREIGN DATA WRAPPER foo;
 \des+
-                                                               List of foreign servers
-       Name       |       Owner       | Foreign-data wrapper | Access privileges |  Type  | Version |            FDW Options            | Description 
-------------------+-------------------+----------------------+-------------------+--------+---------+-----------------------------------+-------------
- pipeline_streams | unknown (OID=0)   | stream_fdw           |                   |        |         |                                   | 
- s1               | foreign_data_user | foo                  |                   |        |         |                                   | 
- s2               | foreign_data_user | foo                  |                   |        |         | (host 'a', dbname 'b')            | 
- s3               | foreign_data_user | foo                  |                   | oracle |         |                                   | 
- s4               | foreign_data_user | foo                  |                   | oracle |         | (host 'a', dbname 'b')            | 
- s5               | foreign_data_user | foo                  |                   |        | 15.0    |                                   | 
- s6               | foreign_data_user | foo                  |                   |        | 16.0    | (host 'a', dbname 'b')            | 
- s7               | foreign_data_user | foo                  |                   | oracle | 17.0    | (host 'a', dbname 'b')            | 
- s8               | foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
- t1               | regress_test_role | foo                  |                   |        |         |                                   | 
- t2               | regress_test_role | foo                  |                   |        |         |                                   | 
+                                                            List of foreign servers
+    Name    |       Owner       | Foreign-data wrapper | Access privileges |  Type  | Version |            FDW Options            | Description 
+------------+-------------------+----------------------+-------------------+--------+---------+-----------------------------------+-------------
+ pipelinedb | unknown (OID=0)   | stream_fdw           |                   |        |         |                                   | 
+ s1         | foreign_data_user | foo                  |                   |        |         |                                   | 
+ s2         | foreign_data_user | foo                  |                   |        |         | (host 'a', dbname 'b')            | 
+ s3         | foreign_data_user | foo                  |                   | oracle |         |                                   | 
+ s4         | foreign_data_user | foo                  |                   | oracle |         | (host 'a', dbname 'b')            | 
+ s5         | foreign_data_user | foo                  |                   |        | 15.0    |                                   | 
+ s6         | foreign_data_user | foo                  |                   |        | 16.0    | (host 'a', dbname 'b')            | 
+ s7         | foreign_data_user | foo                  |                   | oracle | 17.0    | (host 'a', dbname 'b')            | 
+ s8         | foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
+ t1         | regress_test_role | foo                  |                   |        |         |                                   | 
+ t2         | regress_test_role | foo                  |                   |        |         |                                   | 
 (11 rows)
 
 RESET ROLE;
@@ -393,22 +393,22 @@ ALTER SERVER s3 OPTIONS ("tns name" 'orcl', port '1521');
 GRANT USAGE ON FOREIGN SERVER s1 TO regress_test_role;
 GRANT USAGE ON FOREIGN SERVER s6 TO regress_test_role2 WITH GRANT OPTION;
 \des+
-                                                                          List of foreign servers
-       Name       |       Owner       | Foreign-data wrapper |            Access privileges            |  Type  | Version |            FDW Options            | Description 
-------------------+-------------------+----------------------+-----------------------------------------+--------+---------+-----------------------------------+-------------
- pipeline_streams | unknown (OID=0)   | stream_fdw           |                                         |        |         |                                   | 
- s1               | foreign_data_user | foo                  | foreign_data_user=U/foreign_data_user  +|        | 1.0     | (servername 's1')                 | 
-                  |                   |                      | regress_test_role=U/foreign_data_user   |        |         |                                   | 
- s2               | foreign_data_user | foo                  |                                         |        | 1.1     | (host 'a', dbname 'b')            | 
- s3               | foreign_data_user | foo                  |                                         | oracle |         | ("tns name" 'orcl', port '1521')  | 
- s4               | foreign_data_user | foo                  |                                         | oracle |         | (host 'a', dbname 'b')            | 
- s5               | foreign_data_user | foo                  |                                         |        | 15.0    |                                   | 
- s6               | foreign_data_user | foo                  | foreign_data_user=U/foreign_data_user  +|        | 16.0    | (host 'a', dbname 'b')            | 
-                  |                   |                      | regress_test_role2=U*/foreign_data_user |        |         |                                   | 
- s7               | foreign_data_user | foo                  |                                         | oracle | 17.0    | (host 'a', dbname 'b')            | 
- s8               | foreign_data_user | postgresql           |                                         |        |         | (host 'localhost', dbname 's8db') | 
- t1               | regress_test_role | foo                  |                                         |        |         |                                   | 
- t2               | regress_test_role | foo                  |                                         |        |         |                                   | 
+                                                                       List of foreign servers
+    Name    |       Owner       | Foreign-data wrapper |            Access privileges            |  Type  | Version |            FDW Options            | Description 
+------------+-------------------+----------------------+-----------------------------------------+--------+---------+-----------------------------------+-------------
+ pipelinedb | unknown (OID=0)   | stream_fdw           |                                         |        |         |                                   | 
+ s1         | foreign_data_user | foo                  | foreign_data_user=U/foreign_data_user  +|        | 1.0     | (servername 's1')                 | 
+            |                   |                      | regress_test_role=U/foreign_data_user   |        |         |                                   | 
+ s2         | foreign_data_user | foo                  |                                         |        | 1.1     | (host 'a', dbname 'b')            | 
+ s3         | foreign_data_user | foo                  |                                         | oracle |         | ("tns name" 'orcl', port '1521')  | 
+ s4         | foreign_data_user | foo                  |                                         | oracle |         | (host 'a', dbname 'b')            | 
+ s5         | foreign_data_user | foo                  |                                         |        | 15.0    |                                   | 
+ s6         | foreign_data_user | foo                  | foreign_data_user=U/foreign_data_user  +|        | 16.0    | (host 'a', dbname 'b')            | 
+            |                   |                      | regress_test_role2=U*/foreign_data_user |        |         |                                   | 
+ s7         | foreign_data_user | foo                  |                                         | oracle | 17.0    | (host 'a', dbname 'b')            | 
+ s8         | foreign_data_user | postgresql           |                                         |        |         | (host 'localhost', dbname 's8db') | 
+ t1         | regress_test_role | foo                  |                                         |        |         |                                   | 
+ t2         | regress_test_role | foo                  |                                         |        |         |                                   | 
 (11 rows)
 
 SET ROLE regress_test_role;
@@ -445,40 +445,40 @@ ERROR:  role "regress_test_indirect" cannot be dropped because some objects depe
 DETAIL:  owner of server s1
 privileges for foreign-data wrapper foo
 \des+
-                                                                                 List of foreign servers
-       Name       |         Owner         | Foreign-data wrapper |               Access privileges               |  Type  | Version |             FDW Options              | Description 
-------------------+-----------------------+----------------------+-----------------------------------------------+--------+---------+--------------------------------------+-------------
- pipeline_streams | unknown (OID=0)       | stream_fdw           |                                               |        |         |                                      | 
- s1               | regress_test_indirect | foo                  | regress_test_indirect=U/regress_test_indirect |        | 1.1     | (servername 's1')                    | 
- s2               | foreign_data_user     | foo                  |                                               |        | 1.1     | (host 'a', dbname 'b')               | 
- s3               | foreign_data_user     | foo                  |                                               | oracle |         | ("tns name" 'orcl', port '1521')     | 
- s4               | foreign_data_user     | foo                  |                                               | oracle |         | (host 'a', dbname 'b')               | 
- s5               | foreign_data_user     | foo                  |                                               |        | 15.0    |                                      | 
- s6               | foreign_data_user     | foo                  | foreign_data_user=U/foreign_data_user        +|        | 16.0    | (host 'a', dbname 'b')               | 
-                  |                       |                      | regress_test_role2=U*/foreign_data_user       |        |         |                                      | 
- s7               | foreign_data_user     | foo                  |                                               | oracle | 17.0    | (host 'a', dbname 'b')               | 
- s8               | foreign_data_user     | postgresql           |                                               |        |         | (dbname 'db1', connect_timeout '30') | 
- t1               | regress_test_role     | foo                  |                                               |        |         |                                      | 
- t2               | regress_test_role     | foo                  |                                               |        |         |                                      | 
+                                                                              List of foreign servers
+    Name    |         Owner         | Foreign-data wrapper |               Access privileges               |  Type  | Version |             FDW Options              | Description 
+------------+-----------------------+----------------------+-----------------------------------------------+--------+---------+--------------------------------------+-------------
+ pipelinedb | unknown (OID=0)       | stream_fdw           |                                               |        |         |                                      | 
+ s1         | regress_test_indirect | foo                  | regress_test_indirect=U/regress_test_indirect |        | 1.1     | (servername 's1')                    | 
+ s2         | foreign_data_user     | foo                  |                                               |        | 1.1     | (host 'a', dbname 'b')               | 
+ s3         | foreign_data_user     | foo                  |                                               | oracle |         | ("tns name" 'orcl', port '1521')     | 
+ s4         | foreign_data_user     | foo                  |                                               | oracle |         | (host 'a', dbname 'b')               | 
+ s5         | foreign_data_user     | foo                  |                                               |        | 15.0    |                                      | 
+ s6         | foreign_data_user     | foo                  | foreign_data_user=U/foreign_data_user        +|        | 16.0    | (host 'a', dbname 'b')               | 
+            |                       |                      | regress_test_role2=U*/foreign_data_user       |        |         |                                      | 
+ s7         | foreign_data_user     | foo                  |                                               | oracle | 17.0    | (host 'a', dbname 'b')               | 
+ s8         | foreign_data_user     | postgresql           |                                               |        |         | (dbname 'db1', connect_timeout '30') | 
+ t1         | regress_test_role     | foo                  |                                               |        |         |                                      | 
+ t2         | regress_test_role     | foo                  |                                               |        |         |                                      | 
 (11 rows)
 
 ALTER SERVER s8 RENAME to s8new;
 \des+
-                                                                                 List of foreign servers
-       Name       |         Owner         | Foreign-data wrapper |               Access privileges               |  Type  | Version |             FDW Options              | Description 
-------------------+-----------------------+----------------------+-----------------------------------------------+--------+---------+--------------------------------------+-------------
- pipeline_streams | unknown (OID=0)       | stream_fdw           |                                               |        |         |                                      | 
- s1               | regress_test_indirect | foo                  | regress_test_indirect=U/regress_test_indirect |        | 1.1     | (servername 's1')                    | 
- s2               | foreign_data_user     | foo                  |                                               |        | 1.1     | (host 'a', dbname 'b')               | 
- s3               | foreign_data_user     | foo                  |                                               | oracle |         | ("tns name" 'orcl', port '1521')     | 
- s4               | foreign_data_user     | foo                  |                                               | oracle |         | (host 'a', dbname 'b')               | 
- s5               | foreign_data_user     | foo                  |                                               |        | 15.0    |                                      | 
- s6               | foreign_data_user     | foo                  | foreign_data_user=U/foreign_data_user        +|        | 16.0    | (host 'a', dbname 'b')               | 
-                  |                       |                      | regress_test_role2=U*/foreign_data_user       |        |         |                                      | 
- s7               | foreign_data_user     | foo                  |                                               | oracle | 17.0    | (host 'a', dbname 'b')               | 
- s8new            | foreign_data_user     | postgresql           |                                               |        |         | (dbname 'db1', connect_timeout '30') | 
- t1               | regress_test_role     | foo                  |                                               |        |         |                                      | 
- t2               | regress_test_role     | foo                  |                                               |        |         |                                      | 
+                                                                              List of foreign servers
+    Name    |         Owner         | Foreign-data wrapper |               Access privileges               |  Type  | Version |             FDW Options              | Description 
+------------+-----------------------+----------------------+-----------------------------------------------+--------+---------+--------------------------------------+-------------
+ pipelinedb | unknown (OID=0)       | stream_fdw           |                                               |        |         |                                      | 
+ s1         | regress_test_indirect | foo                  | regress_test_indirect=U/regress_test_indirect |        | 1.1     | (servername 's1')                    | 
+ s2         | foreign_data_user     | foo                  |                                               |        | 1.1     | (host 'a', dbname 'b')               | 
+ s3         | foreign_data_user     | foo                  |                                               | oracle |         | ("tns name" 'orcl', port '1521')     | 
+ s4         | foreign_data_user     | foo                  |                                               | oracle |         | (host 'a', dbname 'b')               | 
+ s5         | foreign_data_user     | foo                  |                                               |        | 15.0    |                                      | 
+ s6         | foreign_data_user     | foo                  | foreign_data_user=U/foreign_data_user        +|        | 16.0    | (host 'a', dbname 'b')               | 
+            |                       |                      | regress_test_role2=U*/foreign_data_user       |        |         |                                      | 
+ s7         | foreign_data_user     | foo                  |                                               | oracle | 17.0    | (host 'a', dbname 'b')               | 
+ s8new      | foreign_data_user     | postgresql           |                                               |        |         | (dbname 'db1', connect_timeout '30') | 
+ t1         | regress_test_role     | foo                  |                                               |        |         |                                      | 
+ t2         | regress_test_role     | foo                  |                                               |        |         |                                      | 
 (11 rows)
 
 ALTER SERVER s8new RENAME to s8;
@@ -488,20 +488,20 @@ ERROR:  server "nonexistent" does not exist
 DROP SERVER IF EXISTS nonexistent;
 NOTICE:  server "nonexistent" does not exist, skipping
 \des
-                     List of foreign servers
-       Name       |         Owner         | Foreign-data wrapper 
-------------------+-----------------------+----------------------
- pipeline_streams | unknown (OID=0)       | stream_fdw
- s1               | regress_test_indirect | foo
- s2               | foreign_data_user     | foo
- s3               | foreign_data_user     | foo
- s4               | foreign_data_user     | foo
- s5               | foreign_data_user     | foo
- s6               | foreign_data_user     | foo
- s7               | foreign_data_user     | foo
- s8               | foreign_data_user     | postgresql
- t1               | regress_test_role     | foo
- t2               | regress_test_role     | foo
+                  List of foreign servers
+    Name    |         Owner         | Foreign-data wrapper 
+------------+-----------------------+----------------------
+ pipelinedb | unknown (OID=0)       | stream_fdw
+ s1         | regress_test_indirect | foo
+ s2         | foreign_data_user     | foo
+ s3         | foreign_data_user     | foo
+ s4         | foreign_data_user     | foo
+ s5         | foreign_data_user     | foo
+ s6         | foreign_data_user     | foo
+ s7         | foreign_data_user     | foo
+ s8         | foreign_data_user     | postgresql
+ t1         | regress_test_role     | foo
+ t2         | regress_test_role     | foo
 (11 rows)
 
 SET ROLE regress_test_role;
@@ -510,19 +510,19 @@ ERROR:  must be owner of foreign server s2
 DROP SERVER s1;
 RESET ROLE;
 \des
-                   List of foreign servers
-       Name       |       Owner       | Foreign-data wrapper 
-------------------+-------------------+----------------------
- pipeline_streams | unknown (OID=0)   | stream_fdw
- s2               | foreign_data_user | foo
- s3               | foreign_data_user | foo
- s4               | foreign_data_user | foo
- s5               | foreign_data_user | foo
- s6               | foreign_data_user | foo
- s7               | foreign_data_user | foo
- s8               | foreign_data_user | postgresql
- t1               | regress_test_role | foo
- t2               | regress_test_role | foo
+                List of foreign servers
+    Name    |       Owner       | Foreign-data wrapper 
+------------+-------------------+----------------------
+ pipelinedb | unknown (OID=0)   | stream_fdw
+ s2         | foreign_data_user | foo
+ s3         | foreign_data_user | foo
+ s4         | foreign_data_user | foo
+ s5         | foreign_data_user | foo
+ s6         | foreign_data_user | foo
+ s7         | foreign_data_user | foo
+ s8         | foreign_data_user | postgresql
+ t1         | regress_test_role | foo
+ t2         | regress_test_role | foo
 (10 rows)
 
 ALTER SERVER s2 OWNER TO regress_test_role;
@@ -530,18 +530,18 @@ SET ROLE regress_test_role;
 DROP SERVER s2;
 RESET ROLE;
 \des
-                   List of foreign servers
-       Name       |       Owner       | Foreign-data wrapper 
-------------------+-------------------+----------------------
- pipeline_streams | unknown (OID=0)   | stream_fdw
- s3               | foreign_data_user | foo
- s4               | foreign_data_user | foo
- s5               | foreign_data_user | foo
- s6               | foreign_data_user | foo
- s7               | foreign_data_user | foo
- s8               | foreign_data_user | postgresql
- t1               | regress_test_role | foo
- t2               | regress_test_role | foo
+                List of foreign servers
+    Name    |       Owner       | Foreign-data wrapper 
+------------+-------------------+----------------------
+ pipelinedb | unknown (OID=0)   | stream_fdw
+ s3         | foreign_data_user | foo
+ s4         | foreign_data_user | foo
+ s5         | foreign_data_user | foo
+ s6         | foreign_data_user | foo
+ s7         | foreign_data_user | foo
+ s8         | foreign_data_user | postgresql
+ t1         | regress_test_role | foo
+ t2         | regress_test_role | foo
 (9 rows)
 
 CREATE USER MAPPING FOR current_user SERVER s3;
@@ -559,17 +559,17 @@ HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP SERVER s3 CASCADE;
 NOTICE:  drop cascades to user mapping for foreign_data_user on server s3
 \des
-                   List of foreign servers
-       Name       |       Owner       | Foreign-data wrapper 
-------------------+-------------------+----------------------
- pipeline_streams | unknown (OID=0)   | stream_fdw
- s4               | foreign_data_user | foo
- s5               | foreign_data_user | foo
- s6               | foreign_data_user | foo
- s7               | foreign_data_user | foo
- s8               | foreign_data_user | postgresql
- t1               | regress_test_role | foo
- t2               | regress_test_role | foo
+                List of foreign servers
+    Name    |       Owner       | Foreign-data wrapper 
+------------+-------------------+----------------------
+ pipelinedb | unknown (OID=0)   | stream_fdw
+ s4         | foreign_data_user | foo
+ s5         | foreign_data_user | foo
+ s6         | foreign_data_user | foo
+ s7         | foreign_data_user | foo
+ s8         | foreign_data_user | postgresql
+ t1         | regress_test_role | foo
+ t2         | regress_test_role | foo
 (8 rows)
 
 \deu
@@ -1821,9 +1821,9 @@ SELECT fdwname, fdwhandler, fdwvalidator, fdwoptions FROM pg_foreign_data_wrappe
 (1 row)
 
 SELECT srvname, srvoptions FROM pg_foreign_server;
-     srvname      | srvoptions 
-------------------+------------
- pipeline_streams | 
+  srvname   | srvoptions 
+------------+------------
+ pipelinedb | 
 (1 row)
 
 SELECT * FROM pg_user_mapping;

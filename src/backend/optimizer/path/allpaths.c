@@ -313,7 +313,7 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 		switch (rel->rtekind)
 		{
 			case RTE_RELATION:
-				if (rte->relkind == RELKIND_FOREIGN_TABLE || rte->relkind == RELKIND_STREAM)
+				if (rte->relkind == RELKIND_FOREIGN_TABLE)
 				{
 					/* Foreign table */
 					set_foreign_size(root, rel, rte);
@@ -390,7 +390,7 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 		switch (rel->rtekind)
 		{
 			case RTE_RELATION:
-				if (rte->relkind == RELKIND_FOREIGN_TABLE || rte->relkind == RELKIND_STREAM)
+				if (rte->relkind == RELKIND_FOREIGN_TABLE)
 				{
 					/* Foreign table */
 					set_foreign_pathlist(root, rel, rte);
