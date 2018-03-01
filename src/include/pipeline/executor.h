@@ -69,6 +69,9 @@ struct ContExecutor
 
 extern Oid PipelineExecLockRelationOid;
 
+#define AcquireContExecutionLock(mode) heap_open(PipelineExecLockRelationOid, (mode));
+#define ReleaseContExecutionLock(lock) heap_close(lock, NoLock);
+
 extern ContExecutor *ContExecutorNew(ContQueryStateInit initfn);
 extern void ContExecutorDestroy(ContExecutor *exec);
 extern void ContExecutorStartBatch(ContExecutor *exec, int timeout);
@@ -78,7 +81,5 @@ extern void *ContExecutorIterate(ContExecutor *exec, int *len);
 extern void ContExecutorEndQuery(ContExecutor *exec);
 extern void ContExecutorEndBatch(ContExecutor *exec, bool commit);
 extern void ContExecutorAbortQuery(ContExecutor *exec);
-extern ContExecutionLock AcquireContExecutionLock(LOCKMODE mode);
-extern void ReleaseContExecutionLock(ContExecutionLock rel);
 
 #endif

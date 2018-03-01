@@ -138,5 +138,5 @@ SELECT bloom_contains(bloom_agg, 'world') FROM test_cont_complex4;
 
 DROP TYPE test_cont_complex_type CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to stream cont_complex_stream column r
+DETAIL:  drop cascades to foreign table cont_complex_stream column r
 drop cascades to continuous view test_cont_complex1

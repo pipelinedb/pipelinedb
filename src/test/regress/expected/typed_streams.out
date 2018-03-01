@@ -4,26 +4,15 @@ SET search_path TO test_typed_streams,public;
 CREATE STREAM s0 (x integer, y integer);
 DROP TABLE s0;
 ERROR:  "s0" is not a table
-HINT:  Use DROP STREAM to remove a stream.
+HINT:  Use DROP FOREIGN TABLE to remove a foreign table.
 CREATE TABLE t0 (x integer);
 DROP STREAM t0;
-ERROR:  "t0" is not a stream
+ERROR:  "t0" is not a foreign table
 HINT:  Use DROP TABLE to remove a table.
 -- It isn't possible for users to directly read a stream
 SELECT * FROM s0;
 ERROR:  "s0" is a stream
 HINT:  Streams can only be read by a continuous view's FROM clause.
--- LIKE is supported for streams
-CREATE STREAM l0 (x integer, y integer);
-CREATE STREAM l1 (LIKE l0);
-\d l1;
-        Stream "test_typed_streams.l1"
-      Column       |           Type           
--------------------+--------------------------
- x                 | integer
- y                 | integer
- arrival_timestamp | timestamp with time zone
-
 CREATE CONTINUOUS VIEW v0 AS
 SELECT x, COUNT(*) FROM test_typed_streams.s0 GROUP BY x;
 -- Nothing is reading from this stream
@@ -33,7 +22,7 @@ PREPARE p AS INSERT INTO no_readers (x) VALUES ($1);
 EXECUTE p(0);
 -- Stream doesn't exist
 DROP STREAM IF EXISTS not_here;
-NOTICE:  stream "not_here" does not exist, skipping
+NOTICE:  foreign table "not_here" does not exist, skipping
 INSERT INTO s0 (x) VALUES (0);
 INSERT INTO test_typed_streams.s0 (x) VALUES (0);
 SELECT * FROM v0;
@@ -309,17 +298,15 @@ ERROR:  column name "arrival_timestamp" conflicts with a system column name
 CREATE STREAM invalid (arrival_timestamp timestamptz, x int);
 ERROR:  column name "arrival_timestamp" conflicts with a system column name
 DROP SCHEMA test_typed_streams CASCADE;
-NOTICE:  drop cascades to 26 other objects
-DETAIL:  drop cascades to stream s0
+NOTICE:  drop cascades to 24 other objects
+DETAIL:  drop cascades to foreign table s0
 drop cascades to table t0
-drop cascades to stream l0
-drop cascades to stream l1
 drop cascades to continuous view v0
-drop cascades to stream no_readers
+drop cascades to foreign table no_readers
 drop cascades to table t
 drop cascades to continuous view stj
 drop cascades to continuous view aliased
-drop cascades to stream stj_stream
+drop cascades to foreign table stj_stream
 drop cascades to table stj_t0
 drop cascades to continuous view stj0
 drop cascades to continuous view stj1
@@ -331,7 +318,7 @@ drop cascades to table stj_t2
 drop cascades to continuous view stj5
 drop cascades to table stj_t3
 drop cascades to continuous view stj6
-drop cascades to stream test_hs_stream
+drop cascades to foreign table test_hs_stream
 drop cascades to continuous view test_percent0
 drop cascades to continuous view test_percent1
 drop cascades to continuous view test_percent2

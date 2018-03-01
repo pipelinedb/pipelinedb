@@ -2096,7 +2096,7 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateForeignTableStmt:
-			if (pg_strcasecmp((((CreateForeignTableStmt *) parsetree)->servername), PIPELINE_STREAM_SERVER) == 0)
+			if (pg_strcasecmp((((CreateForeignTableStmt *) parsetree)->servername), PIPELINEDB_SERVER) == 0)
 				tag = "CREATE STREAM";
 			else
 				tag = "CREATE FOREIGN TABLE";

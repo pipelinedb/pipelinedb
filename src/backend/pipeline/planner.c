@@ -714,6 +714,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 													  ParamListInfo params, DestReceiver *dest, char *tag)
 {
 	ContExecutionLock exec_lock = NULL;
+	PipelineDDLLock ddl_lock = NULL;
 	Relation rel = NULL;
 	bool isstream = false;
 
@@ -731,13 +732,11 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			/*
 			 * Indicate to the analyzer/planner hooks that we're executing a CREATE CONTINUOUS statement
 			 */
-			// pipeline_query lock should probably be acquired here
 			PipelineContextSetIsDDL();
+			ddl_lock = AcquirePipelineDDLLock();
 
 			/* The grammar should enforce this */
 			Assert(IsA(node, SelectStmt));
-
-			rel = heap_open(PipelineQueryRelationOid, AccessExclusiveLock);
 		}
 		else if (IsA(parsetree, IndexStmt))
 		{
@@ -771,31 +770,38 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			if (list_length(stmt->objects) == 1 && IsA(linitial(stmt->objects), List))
 			{
 				RangeVar *rv = makeRangeVarFromNameList(linitial(stmt->objects));
-				if (IsAContinuousView(rv) || RangeVarIsForStream(rv, true))
+
+				if (IsPipelineObject(rv)||
+						stmt->removeType == OBJECT_SCHEMA ||
+						stmt->removeType == OBJECT_TYPE ||
+						stmt->removeType == OBJECT_FUNCTION)
 				{
 					exec_lock = AcquireContExecutionLock(AccessExclusiveLock);
-					rel = heap_open(PipelineQueryRelationOid, AccessExclusiveLock);
+					ddl_lock = AcquirePipelineDDLLock();
 				}
 			}
 		}
 		else if (IsA(parsetree, CreateForeignTableStmt))
 		{
-			// comment
-			// need to get rid of CreateStreamStmt it's just an alias for CreateForeignTableStmt anyways!
-			if (pg_strcasecmp(((CreateForeignTableStmt *) parsetree)->servername, PIPELINE_STREAM_SERVER) == 0)
+			/*
+			 * If we're creating a stream, we perform a constraints check since constraints are not
+			 * supported by streams although they are supported by the grammar.
+			 */
+			if (pg_strcasecmp(((CreateForeignTableStmt *) parsetree)->servername, PIPELINEDB_SERVER) == 0)
 			{
 				CreateStmt *stmt = (CreateStmt *) parsetree;
 
 				validate_stream_constraints(stmt);
-
 				isstream = true;
-
 				transformCreateStreamStmt((CreateForeignTableStmt *) stmt);
 			}
 		}
 		else if (IsA(parsetree, AlterTableStmt))
 		{
-			// streams don't support all ALTER commands
+			/*
+			 * Streams only support adding columns,
+			 * so if we're altering a stream ensure that's all we're doing.
+			 */
 			AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
 
 			if (RangeVarIsForStream(stmt->relation, true))
@@ -822,7 +828,13 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 		if (exec_lock)
 			ReleaseContExecutionLock(exec_lock);
 
-		// we need to create a pipeline_stream entry if the FT we created is a stream
+		if (ddl_lock)
+			ReleasePipelineDDLLock(ddl_lock);
+
+		/*
+		 * If we created a stream, we need to create a pipeline_stream entry in addition
+		 * to the underlying foreign table.
+		 */
 		if (isstream)
 		{
 			CreateForeignTableStmt *stmt = (CreateForeignTableStmt *) parsetree;

@@ -21,7 +21,7 @@
 #include "parser/parse_node.h"
 #include "utils/relcache.h"
 
-#define PIPELINE_STREAM_SERVER "pipeline_streams"
+#define PIPELINEDB_SERVER "pipelinedb"
 
 extern bool is_stream_relid(Oid relid);
 

@@ -2275,14 +2275,14 @@ load_pipelinedb(void)
 
 	PG_CMD_PUTS("CREATE TABLE _pipeline_exec_lock ();\n");
 	PG_CMD_PUTS("CREATE FOREIGN DATA WRAPPER stream_fdw HANDLER stream_fdw_handler;\n");
-	PG_CMD_PUTS("CREATE SERVER pipeline_streams FOREIGN DATA WRAPPER stream_fdw;\n");
+	PG_CMD_PUTS("CREATE SERVER pipelinedb FOREIGN DATA WRAPPER stream_fdw;\n");
 
 	/* Add system level dependencies for the fdw and server */
-	PG_CMD_PUTS("INSERT INTO pg_depend SELECT 0,0,0,tableoid,oid,0,'p' FROM pg_foreign_server WHERE srvname = 'pipeline_streams';\n");
+	PG_CMD_PUTS("INSERT INTO pg_depend SELECT 0,0,0,tableoid,oid,0,'p' FROM pg_foreign_server WHERE srvname = 'pipelinedb';\n");
 	PG_CMD_PUTS("INSERT INTO pg_depend SELECT 0,0,0,tableoid,oid,0,'p' FROM pg_foreign_data_wrapper WHERE fdwname = 'stream_fdw';\n");
 
 	/* Change owner to InvalidOid */
-	PG_CMD_PUTS("UPDATE pg_foreign_server SET srvowner = 0 WHERE srvname = 'pipeline_streams';\n");
+	PG_CMD_PUTS("UPDATE pg_foreign_server SET srvowner = 0 WHERE srvname = 'pipelinedb';\n");
 	PG_CMD_PUTS("UPDATE pg_foreign_data_wrapper SET fdwowner = 0 WHERE fdwname = 'stream_fdw';\n");
 
 	PG_CMD_CLOSE;

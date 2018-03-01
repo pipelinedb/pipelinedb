@@ -1,5 +1,5 @@
 DROP SERVER pipeline_streams;
-ERROR:  cannot drop server pipeline_streams because it is required by the database system
+ERROR:  server "pipeline_streams" does not exist
 DROP FOREIGN DATA WRAPPER stream_fdw;
 ERROR:  cannot drop foreign-data wrapper stream_fdw because it is required by the database system
 CREATE STREAM sanity_stream (key text, value float8, x int, y int, z int, a int, b int, k text, v int);

@@ -2836,7 +2836,7 @@ CreateStreamStmt: CREATE STREAM qualified_name '(' OptTableElementList ')'
           n->base.relation = $3;
           n->base.tableElts = $5;
           n->base.if_not_exists = false;
-          n->servername = PIPELINE_STREAM_SERVER;
+          n->servername = PIPELINEDB_SERVER;
           $$ = (Node *)n;
         }
     | CREATE STREAM IF_P NOT EXISTS qualified_name '(' OptTableElementList ')'
@@ -2845,7 +2845,7 @@ CreateStreamStmt: CREATE STREAM qualified_name '(' OptTableElementList ')'
           n->base.relation = $6;
           n->base.tableElts = $8;
           n->base.if_not_exists = true;
-          n->servername = PIPELINE_STREAM_SERVER;
+          n->servername = PIPELINEDB_SERVER;
           $$ = (Node *)n;
         }
     ;

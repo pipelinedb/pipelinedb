@@ -38,7 +38,7 @@ SELECT * FROM os0_output ORDER BY old_count, new_count;
 -- We shouldn't be able to drop this because os0_output depends on it now
 DROP CONTINUOUS VIEW os0;
 ERROR:  cannot drop continuous view os0 because other objects depend on it
-DETAIL:  continuous view os0_output depends on stream os0_osrel
+DETAIL:  continuous view os0_output depends on foreign table os0_osrel
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW os0_output;
 DROP CONTINUOUS VIEW os0;

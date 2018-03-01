@@ -60,6 +60,11 @@ typedef struct ContQuery
 	char **tgargs;
 } ContQuery;
 
+typedef Relation PipelineDDLLock;
+
+#define AcquirePipelineDDLLock() heap_open(PipelineQueryRelationOid, AccessExclusiveLock);
+#define ReleasePipelineDDLLock(lock) heap_close(lock, NoLock);
+
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern void RemovePipelineQueryById(Oid oid);
 
@@ -70,6 +75,7 @@ extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid os
 
 extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);
 extern bool IsAContinuousView(RangeVar *name);
+extern bool IsPipelineObject(RangeVar *name);
 extern RangeVar *GetSWContinuousViewRangeVar(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
 extern bool RelIdIsForMatRel(Oid relid, Oid *id);
