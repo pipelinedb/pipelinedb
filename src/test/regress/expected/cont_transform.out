@@ -80,7 +80,7 @@ SELECT * FROM ct2 ORDER BY x;
 (51 rows)
 
 DROP FUNCTION ct_tg() CASCADE;
-NOTICE:  drop cascades to continuous transform ct3
+NOTICE:  drop cascades to view ct3
 DROP TABLE ct2;
 DROP CONTINUOUS TRANSFORM ct1;
 DROP CONTINUOUS VIEW ct0;
@@ -119,7 +119,7 @@ CREATE CONTINUOUS TRANSFORM ct_invalid AS SELECT x, x AS y FROM ct_s THEN EXECUT
 ERROR:  "ct_s" must have the same schema as the transform
 CREATE CONTINUOUS TRANSFORM ct_valid AS SELECT x, 'a'::text FROM ct_s THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_s');
 DROP STREAM ct_s CASCADE;
-NOTICE:  drop cascades to continuous transform ct_valid
+NOTICE:  drop cascades to view ct_valid
 CREATE STREAM ct_s0 (x int);
 CREATE STREAM ct_s1 (x int);
 CREATE CONTINUOUS TRANSFORM ct_t AS SELECT x % 4 AS x FROM ct_s0 THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_s1');
@@ -159,7 +159,7 @@ SELECT * FROM ct_v1;
 CREATE CONTINUOUS TRANSFORM ct_ostream AS SELECT 1 AS a, 2 AS b, 3 AS c, x + 42 AS d FROM ct_s1;
 DROP STREAM ct_s0 CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous transform ct_t
+DETAIL:  drop cascades to view ct_t
 drop cascades to continuous view ct_v1
 CREATE STREAM fanout (x integer);
 CREATE CONTINUOUS TRANSFORM fanout0 AS SELECT generate_series(1, 2) FROM fanout;
@@ -197,17 +197,17 @@ SELECT * FROM fanout11;
 
 DROP STREAM fanout CASCADE;
 NOTICE:  drop cascades to 12 other objects
-DETAIL:  drop cascades to continuous transform fanout0
-drop cascades to continuous transform fanout1
-drop cascades to continuous transform fanout2
-drop cascades to continuous transform fanout3
-drop cascades to continuous transform fanout4
-drop cascades to continuous transform fanout5
-drop cascades to continuous transform fanout6
-drop cascades to continuous transform fanout7
-drop cascades to continuous transform fanout8
-drop cascades to continuous transform fanout9
-drop cascades to continuous transform fanout10
+DETAIL:  drop cascades to view fanout0
+drop cascades to view fanout1
+drop cascades to view fanout2
+drop cascades to view fanout3
+drop cascades to view fanout4
+drop cascades to view fanout5
+drop cascades to view fanout6
+drop cascades to view fanout7
+drop cascades to view fanout8
+drop cascades to view fanout9
+drop cascades to view fanout10
 drop cascades to continuous view fanout11
 CREATE STREAM ct_a (n int);
 CREATE STREAM ct_b (n int);
@@ -237,7 +237,7 @@ SELECT count(*) FROM ct_stream_insert0;
 (1 row)
 
 DROP FUNCTION insert_into_b() CASCADE;
-NOTICE:  drop cascades to continuous transform ct_stream_insert1
+NOTICE:  drop cascades to view ct_stream_insert1
 DROP STREAM ct_b CASCADE;
 NOTICE:  drop cascades to continuous view ct_stream_insert0
 DROP STREAM ct_a;

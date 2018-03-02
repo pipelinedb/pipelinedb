@@ -300,11 +300,13 @@ HINT:  Explicitly cast the expression to a known type.
 CREATE CONTINUOUS TRANSFORM unknown_type_ct AS SELECT x, 'a'::text FROM sw_ts_expr_s
   THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_out_s');
 \d+ unknown_type_ct
-Continuous transform "public.unknown_type_ct"
- Column |  Type   | Storage  
---------+---------+----------
- x      | integer | plain
- text   | text    | extended
+             View "public.unknown_type_ct"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ x      | integer |           | plain    | 
+ text   | text    |           | extended | 
+View definition:
+Not a view
 
 DROP CONTINUOUS TRANSFORM unknown_type_ct;
 DROP STREAM ct_out_s;

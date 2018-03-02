@@ -1606,7 +1606,6 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_MATVIEW:
 		case OBJECT_FOREIGN_TABLE:
 		case OBJECT_CONTVIEW:
-		case OBJECT_CONTTRANSFORM:
 			RemoveRelations(stmt);
 			break;
 		default:
@@ -2116,6 +2115,7 @@ CreateCommandTag(Node *parsetree)
 					tag = "DROP SEQUENCE";
 					break;
 				case OBJECT_VIEW:
+					// if it was a transform, DROP CONTINUOUS TRANSFORM
 					tag = "DROP VIEW";
 					break;
 				case OBJECT_CONTVIEW:
@@ -2215,9 +2215,6 @@ CreateCommandTag(Node *parsetree)
 					break;
 				case OBJECT_TRANSFORM:
 					tag = "DROP TRANSFORM";
-					break;
-				case OBJECT_CONTTRANSFORM:
-					tag = "DROP CONTINUOUS TRANSFORM";
 					break;
 				default:
 					tag = "???";

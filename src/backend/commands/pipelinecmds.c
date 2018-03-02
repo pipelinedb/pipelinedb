@@ -1089,7 +1089,7 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_matrel();
-	address = DefineRelation(create, RELKIND_CONTTRANSFORM, InvalidOid, NULL);
+	address = DefineRelation(create, RELKIND_VIEW, InvalidOid, NULL);
 	relid = address.objectId;
 	CommandCounterIncrement();
 

@@ -281,7 +281,7 @@ SELECT * FROM os4 ORDER BY x;
 
 DROP STREAM os_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous transform os_xform
+DETAIL:  drop cascades to view os_xform
 drop cascades to continuous view os4
 CREATE STREAM os_stream (x integer, y numeric);
 CREATE CONTINUOUS VIEW os5 AS

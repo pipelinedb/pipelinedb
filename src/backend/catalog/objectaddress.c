@@ -749,7 +749,6 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 			case OBJECT_MATVIEW:
 			case OBJECT_FOREIGN_TABLE:
 			case OBJECT_CONTVIEW:
-			case OBJECT_CONTTRANSFORM:
 				address =
 					get_relation_by_qualified_name(objtype, objname,
 												   &relation, lockmode,
@@ -1190,13 +1189,6 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a foreign table",
-								RelationGetRelationName(relation))));
-			break;
-		case OBJECT_CONTTRANSFORM:
-			if (relation->rd_rel->relkind != RELKIND_CONTTRANSFORM)
-				ereport(ERROR,
-						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						 errmsg("\"%s\" is not a continuous transform",
 								RelationGetRelationName(relation))));
 			break;
 		default:
@@ -3252,10 +3244,6 @@ getRelationDescription(StringInfo buffer, Oid relid)
 			appendStringInfo(buffer, _("continuous view %s"),
 							 relname);
 			break;
-		case RELKIND_CONTTRANSFORM:
-			appendStringInfo(buffer, _("continuous transform %s"),
-							 relname);
-			break;
 		default:
 			/* shouldn't get here */
 			appendStringInfo(buffer, _("relation %s"),
@@ -3708,9 +3696,6 @@ getRelationTypeDescription(StringInfo buffer, Oid relid, int32 objectSubId)
 			break;
 		case RELKIND_CONTVIEW:
 			appendStringInfoString(buffer, "continuous view");
-			break;
-		case RELKIND_CONTTRANSFORM:
-			appendStringInfoString(buffer, "continuous transform");
 			break;
 		default:
 			/* shouldn't get here */

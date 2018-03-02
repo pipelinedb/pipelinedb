@@ -1605,10 +1605,10 @@ expand_table_name_patterns(Archive *fout,
 						  "SELECT c.oid"
 						  "\nFROM pg_catalog.pg_class c"
 		"\n     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace"
-					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c')\n",
+					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c')\n",
 						  RELKIND_RELATION, RELKIND_SEQUENCE, RELKIND_VIEW,
 						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
-						  RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM);
+						  RELKIND_CONTVIEW);
 		processSQLNamePattern(GetConnection(fout), query, cell->val, true,
 							  false, "n.nspname", "c.relname", NULL,
 							  "pg_catalog.pg_table_is_visible(c.oid)");
@@ -2379,8 +2379,6 @@ makeTableDataInfo(DumpOptions *dopt, TableInfo *tbinfo, bool oids)
 	if (tbinfo->relkind == RELKIND_FOREIGN_TABLE)
 		return;
 	if (tbinfo->relkind == RELKIND_CONTVIEW)
-		return;
-	if (tbinfo->relkind == RELKIND_CONTTRANSFORM)
 		return;
 
 	/* Don't dump data in unlogged tables, if so requested */
@@ -5088,14 +5086,14 @@ getTables(Archive *fout, int *numTables)
 						  "d.objsubid = 0 AND "
 						  "d.refclassid = c.tableoid AND d.deptype = 'a') "
 					   "LEFT JOIN pg_class tc ON (c.reltoastrelid = tc.oid) "
-				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
+				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c') "
 						  "ORDER BY c.oid",
 						  username_subquery,
 						  RELKIND_SEQUENCE,
 						  RELKIND_RELATION, RELKIND_SEQUENCE,
 						  RELKIND_VIEW, RELKIND_COMPOSITE_TYPE,
 						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
-						  RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM);
+						  RELKIND_CONTVIEW);
 	}
 	else if (fout->remoteVersion >= 90400)
 	{
@@ -5131,14 +5129,14 @@ getTables(Archive *fout, int *numTables)
 						  "d.objsubid = 0 AND "
 						  "d.refclassid = c.tableoid AND d.deptype = 'a') "
 					   "LEFT JOIN pg_class tc ON (c.reltoastrelid = tc.oid) "
-				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
+				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c') "
 						  "ORDER BY c.oid",
 						  username_subquery,
 						  RELKIND_SEQUENCE,
 						  RELKIND_RELATION, RELKIND_SEQUENCE,
 						  RELKIND_VIEW, RELKIND_COMPOSITE_TYPE,
 						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
-						  RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM);
+						  RELKIND_CONTVIEW);
 	}
 	else if (fout->remoteVersion >= 90300)
 	{
@@ -14353,11 +14351,6 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 				srvname = NULL;
 				ftoptions = NULL;
 				break;
-			case (RELKIND_CONTTRANSFORM):
-				reltypename = "CONTINUOUS TRANSFORM";
-				srvname = NULL;
-				ftoptions = NULL;
-				break;
 			default:
 				reltypename = "TABLE";
 				srvname = NULL;
@@ -14389,11 +14382,11 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 			return;
 		}
 
-		if (tbinfo->relkind == RELKIND_CONTTRANSFORM)
-		{
-			dumpContinuousTransform(fout, tbinfo, delq);
-			return;
-		}
+//		if (tbinfo->relkind == RELKIND_CONTTRANSFORM)
+//		{
+//			dumpContinuousTransform(fout, tbinfo, delq);
+//			return;
+//		}
 
 		if (dopt->binary_upgrade)
 			binary_upgrade_set_pg_class_oids(fout, q,

@@ -162,7 +162,6 @@ DESCR("");
 #define		  RELKIND_FOREIGN_TABLE   'f'		/* foreign table */
 #define		  RELKIND_MATVIEW		  'm'		/* materialized view */
 #define		  RELKIND_CONTVIEW		  'C'		/* continuous view */
-#define       RELKIND_CONTTRANSFORM   'X'       /* continuous transform */
 
 #define		  RELPERSISTENCE_PERMANENT	'p'		/* regular table */
 #define		  RELPERSISTENCE_UNLOGGED	'u'		/* unlogged permanent table */

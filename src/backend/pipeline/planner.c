@@ -722,6 +722,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 	{
 		if (IsA(parsetree, CreateContViewStmt) || IsA(parsetree, CreateContTransformStmt))
 		{
+			// if transform, verify no constraints
 			Node *node;
 
 			if (IsA(parsetree, CreateContViewStmt))
@@ -818,6 +819,11 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 					}
 				}
 			}
+		}
+		else if (IsA(parsetree, SelectStmt))
+		{
+			// if transform anywhere in FROM, error!
+			// we should probably start breaking this up into smaller functions :)
 		}
 
 		if (SaveUtilityHook != NULL)
