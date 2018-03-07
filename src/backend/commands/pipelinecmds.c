@@ -761,8 +761,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	toast_options = transformRelOptions((Datum) 0, create_stmt->options, "toast",
 			validnsps, true, false);
 
-	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options,
-						   true);
+	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	AlterTableCreateToastTable(matrelid, toast_options, AccessExclusiveLock);
 
 	/* Create the sequence for primary keys */
@@ -1089,7 +1088,13 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 
 	if (IsBinaryUpgrade)
 		set_next_oids_for_matrel();
-	address = DefineRelation(create, RELKIND_VIEW, InvalidOid, NULL);
+
+	ViewStmt *vstmt = makeNode(ViewStmt);
+	vstmt->view = create->relation;
+	vstmt->query = stmt->query;
+
+//	address = DefineRelation(create, RELKIND_VIEW, InvalidOid, NULL);
+	address = DefineView(vstmt, querystring);
 	relid = address.objectId;
 	CommandCounterIncrement();
 

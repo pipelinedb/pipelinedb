@@ -306,7 +306,9 @@ CREATE CONTINUOUS TRANSFORM unknown_type_ct AS SELECT x, 'a'::text FROM sw_ts_ex
  x      | integer |           | plain    | 
  text   | text    |           | extended | 
 View definition:
-Not a view
+ SELECT sw_ts_expr_s.x,
+    'a'::text AS text
+   FROM sw_ts_expr_s;
 
 DROP CONTINUOUS TRANSFORM unknown_type_ct;
 DROP STREAM ct_out_s;

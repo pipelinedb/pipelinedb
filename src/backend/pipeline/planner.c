@@ -750,7 +750,7 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			VacuumStmt *vstmt = (VacuumStmt *) parsetree;
 			/*
 			 * If the user is trying to vacuum a CV, what they're really
-			 * trying to do is create it on the CV's materialization table, so rewrite
+			 * trying to do vacuum the CV's materialization table, so rewrite
 			 * the name of the target relation if we need to.
 			 */
 			if (vstmt->relation && IsAContinuousView(vstmt->relation))
