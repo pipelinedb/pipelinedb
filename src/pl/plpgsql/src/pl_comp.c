@@ -2001,8 +2001,7 @@ build_row_from_class(Oid classOid)
 		classStruct->relkind != RELKIND_MATVIEW &&
 		classStruct->relkind != RELKIND_COMPOSITE_TYPE &&
 		classStruct->relkind != RELKIND_FOREIGN_TABLE &&
-		classStruct->relkind != RELKIND_CONTVIEW &&
-		classStruct->relkind != RELKIND_CONTTRANSFORM)
+		classStruct->relkind != RELKIND_CONTVIEW)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("relation \"%s\" is not a table", relname)));
