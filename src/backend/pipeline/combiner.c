@@ -1091,27 +1091,22 @@ find_attr(TupleDesc desc, char *name)
  * plan refers to the matrel, which will have an extra step column. Since this
  * column is aggregated out of the overlay plan's output, we need to adjust
  * the aggregate plan's attribute numbers to reflect their positions in the
+ * overlay plan.
  */
 static void
 set_overlay_group_attrs(Agg *agg, AttrNumber *overlay_group_idx)
 {
-	int i = 0;
 	ListCell *lc;
-	AttrNumber attno = 1;
 
 	foreach(lc, agg->plan.targetlist)
 	{
 		TargetEntry *te = (TargetEntry *) lfirst(lc);
-
-		/*
-		 * Since this is an overlay plan, if it's a Var then it must be in the grouping
-		 */
-		if (IsA(te->expr, Var))
-			overlay_group_idx[i++] = attno;
-		attno++;
+		if (te->ressortgroupref)
+		{
+			Assert(te->ressortgroupref <= agg->numCols);
+			overlay_group_idx[te->ressortgroupref - 1] = te->resno;
+		}
 	}
-
-	Assert(i == agg->numCols);
 }
 
 /*

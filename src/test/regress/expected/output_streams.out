@@ -325,3 +325,23 @@ DROP STREAM os_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to continuous view os5
 drop cascades to continuous view os6
+CREATE STREAM os_stream (ts timestamp, x text, y float);
+CREATE CONTINUOUS VIEW os7 WITH (sw = '5 minutes') AS
+  SELECT x, second(ts), y, count(*)
+FROM os_stream
+GROUP BY second, y, x;
+CREATE CONTINUOUS VIEW os8 AS SELECT (new).x, (new).y FROM output_of('os7');
+INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
+INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
+INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
+SELECT x, y FROM os8 ORDER BY x, y;
+   x   |   y   
+-------+-------
+ text! | 42.42
+ text! | 42.42
+(2 rows)
+
+DROP STREAM os_stream CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to continuous view os7
+drop cascades to continuous view os8

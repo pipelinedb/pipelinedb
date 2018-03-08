@@ -188,3 +188,20 @@ SELECT * FROM os6 ORDER BY g;
 SELECT combine(avg) FROM os6;
 
 DROP STREAM os_stream CASCADE;
+
+CREATE STREAM os_stream (ts timestamp, x text, y float);
+
+CREATE CONTINUOUS VIEW os7 WITH (sw = '5 minutes') AS
+  SELECT x, second(ts), y, count(*)
+FROM os_stream
+GROUP BY second, y, x;
+
+CREATE CONTINUOUS VIEW os8 AS SELECT (new).x, (new).y FROM output_of('os7');
+
+INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
+INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
+INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
+
+SELECT x, y FROM os8 ORDER BY x, y;
+
+DROP STREAM os_stream CASCADE;
