@@ -768,8 +768,6 @@ PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext c
 				PipelineContextSetIsDDL();
 				ddl_lock = AcquirePipelineDDLLock();
 
-				// verify no constraints
-
 				AnalyzeCreateViewForTransform(stmt);
 				ExecCreateContTransformStmt(stmt->view, stmt->query, stmt->options, sql);
 				goto done;
