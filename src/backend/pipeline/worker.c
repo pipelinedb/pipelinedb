@@ -320,7 +320,6 @@ ContinuousQueryWorkerMain(void)
 		if (get_sigterm_flag())
 			break;
 
-		CurrentResourceOwner = WorkerResOwner;
 		ContExecutorStartBatch(cont_exec, 0);
 
 		while ((query_id = ContExecutorStartNextQuery(cont_exec, 0)) != InvalidOid)
@@ -371,7 +370,7 @@ ContinuousQueryWorkerMain(void)
 
 				MemoryContextResetAndDeleteChildren(state->base.tmp_cxt);
 				MemoryContextSwitchTo(state->base.state_cxt);
-				ResourceOwnerRelease(WorkerResOwner, RESOURCE_RELEASE_AFTER_LOCKS, false, true);
+				ResourceOwnerRelease(CurTransactionResourceOwner, RESOURCE_RELEASE_AFTER_LOCKS, false, true);
 			}
 			PG_CATCH();
 			{
