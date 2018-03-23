@@ -813,7 +813,7 @@ GetContQueryId(RangeVar *name)
 }
 
 Oid
-DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List *options)
+DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -870,6 +870,9 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List
 	atypeid = get_array_type(typeid);
 	options = lappend(options, makeDefElem(OPTION_OSRELATYPE, (Node *) makeInteger(atypeid)));
 
+	if (ptgfnid)
+		*ptgfnid = InvalidOid;
+
 	if (GetOptionAsString(options, OPTION_TGFN, &funcname))
 	{
 		Oid fargtypes[1];
@@ -877,6 +880,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List
 
 		tgfnoid = LookupFuncName(textToQualifiedNameList((text *) CStringGetTextDatum(funcname)), 0, fargtypes, false);
 		values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(tgfnoid);
+		*ptgfnid = tgfnoid;
 	}
 	else
 	{

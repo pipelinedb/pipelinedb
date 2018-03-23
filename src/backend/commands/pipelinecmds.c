@@ -1037,38 +1037,33 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid osrelid, Oid fnoid, SelectStmt 
  * parse_outputfunc_args
  */
 static void
-parse_outputfunc_args(List *options, Oid *tgfnoid, List **args)
+parse_outputfunc_args(List *options, List **args)
 {
-	DefElem *def = GetContinuousViewOption(options, OPTION_TGFN);
+	int nargs;
+	char *raw;
+	bytea *val;
+	char *p;
+	int i;
 
-	*tgfnoid = InvalidOid;
 	*args = NIL;
 
-	if (def && IsA(def->arg, Integer))
-		*tgfnoid = intVal(def->arg);
+	if (!GetOptionAsInteger(options, OPTION_TGNARGS, &nargs))
+		return;
 
-	def = GetContinuousViewOption(options, OPTION_TGNARGS);
+	if (nargs <= 0)
+		return;
 
-	// we need to handle integer and string
-	if (def && IsA(def->arg, Integer))
+	if (!GetOptionAsString(options, OPTION_TGARGS, &raw))
+		return;
+
+	val = (bytea *) DirectFunctionCall1(byteain, (Datum) CStringGetDatum(raw));
+	p = (char *) VARDATA(val);
+
+	/* Trigger function arguments will always be an array of strings */
+	for (i = 0; i < nargs; i++)
 	{
-		int nargs = intVal(def->arg);
-		if (nargs <= 0)
-			return;
-		def = GetContinuousViewOption(options, OPTION_TGARGS);
-		if (def && IsA(def->arg, String))
-		{
-			bytea *val = (bytea *) DirectFunctionCall1(byteain, (Datum) CStringGetDatum(strVal(def->arg)));
-			char *p = (char *) VARDATA(val);
-			int i;
-
-			/* Trigger function arguments will always be an array of strings */
-			for (i = 0; i < nargs; i++)
-			{
-				*args = lappend(*args, makeString(pstrdup(p)));
-				p += strlen(p) + 1;
-			}
-		}
+		*args = lappend(*args, makeString(pstrdup(p)));
+		p += strlen(p) + 1;
 	}
 }
 
@@ -1151,14 +1146,14 @@ ExecCreateContTransformStmt(RangeVar *transform, Node *stmt, List *options, cons
 	osrelid = address.objectId;
 	CommandCounterIncrement();
 
-	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, options);
+	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, options, &tgfnid);
 	CommandCounterIncrement();
 
 	CreateForeignTable(create_osrel, address.objectId);
 	CreatePipelineStreamEntry(create_osrel, address.objectId);
 	CommandCounterIncrement();
 
-	parse_outputfunc_args(options, &tgfnid, &args);
+	parse_outputfunc_args(options, &args);
 	record_ct_dependencies(pqoid, relid, osrelid, tgfnid, (SelectStmt *) stmt, query, args);
 
 	CommandCounterIncrement();
