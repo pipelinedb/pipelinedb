@@ -528,65 +528,6 @@ dumpContinuousView(Archive *fout, TableInfo *ti, PQExpBuffer delq)
 	destroyPQExpBuffer(pq);
 }
 
-/*
- * binary_upgrade_set_oids_for_create_ct
- */
-static bool
-binary_upgrade_set_oids_for_create_ct(Archive *fout, PQExpBuffer upgrade_buffer,
-		char *ct_namespace, char *ct_name)
-{
-	PQExpBuffer q = createPQExpBuffer();
-	PGresult *res;
-	Oid matrel_class;
-	Oid matrel_type;
-	Oid matrel_arraytype;
-	Oid toast_class;
-	Oid toast_type;
-	Oid toast_index_class;
-	Oid osrel_class;
-	Oid osrel_type;
-	Oid osrel_arraytype;
-
-	appendPQExpBuffer(q,
-		"SELECT matrel.oid AS matrel_class, matrel.reltype AS matrel_type, matrel_type.typarray AS matrel_arraytype, "
-		"osrel.oid AS osrel_class, osrel.reltype AS osrel_type, osrel_type.typarray AS osrel_arraytype, "
-		"COALESCE(toast.oid, 0) AS toast_class, COALESCE(toast.reltype, 0) AS toast_type, COALESCE(toast_index.indexrelid, 0) AS toast_index "
-		"FROM pg_class matrel JOIN pipeline_query pq ON matrel.oid = pq.matrelid "
-		"JOIN pg_namespace nsp ON nsp.oid = matrel.relnamespace "
-		"JOIN pg_class ct ON ct.oid = pq.relid "
-		"JOIN pg_class osrel ON osrel.oid = pq.osrelid "
-		"JOIN pg_type matrel_type ON matrel_type.oid = matrel.reltype "
-		"JOIN pg_type overlay_type ON overlay_type.oid = ct.reltype "
-		"JOIN pg_type osrel_type ON osrel_type.oid = osrel.reltype "
-		"LEFT JOIN pg_class toast ON toast.oid = matrel.reltoastrelid "
-		"LEFT JOIN pg_index toast_index ON (toast.oid = toast_index.indrelid AND toast_index.indisvalid)"
-		"WHERE nsp.nspname = '%s' AND ct.relname = '%s';", ct_namespace, ct_name);
-
-	res = ExecuteSqlQueryForSingleRow(fout, q->data);
-
-	matrel_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "matrel_class")));
-	matrel_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "matrel_type")));
-	matrel_arraytype = atooid(PQgetvalue(res, 0, PQfnumber(res, "matrel_arraytype")));
-	toast_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "toast_class")));
-	toast_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "toast_type")));
-	toast_index_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "toast_index")));
-	osrel_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "osrel_class")));
-	osrel_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "osrel_type")));
-	osrel_arraytype = atooid(PQgetvalue(res, 0, PQfnumber(res, "osrel_arraytype")));
-
-	appendPQExpBuffer(upgrade_buffer,
-			"SELECT create_cq_set_next_oids_for_matrel("
-			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid, "
-			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid);\n",
-			matrel_class, matrel_type, matrel_arraytype, toast_class, toast_type, toast_index_class);
-
-	appendPQExpBuffer(upgrade_buffer,
-			"SELECT create_cq_set_next_oids_for_osrel("
-			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid);\n", osrel_class, osrel_type, osrel_arraytype);
-
-	return false;
-}
-
 int
 main(int argc, char **argv)
 {
