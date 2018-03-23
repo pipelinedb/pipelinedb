@@ -587,68 +587,6 @@ binary_upgrade_set_oids_for_create_ct(Archive *fout, PQExpBuffer upgrade_buffer,
 	return false;
 }
 
-/*
- * dumpContinuousTransform
- *
- * Dump a CREATE CONTINUOUS TRANSFORM statement
- */
-static void
-dumpContinuousTransform(Archive *fout, TableInfo *ti, PQExpBuffer delq)
-{
-	PQExpBuffer q = createPQExpBuffer();
-	PQExpBuffer pq = createPQExpBuffer();
-	PGresult *res;
-	int i;
-	char *qdef;
-	char *tgfn;
-	char *tgargs;
-
-	if (fout->dopt->binary_upgrade)
-		binary_upgrade_set_oids_for_create_ct(fout, q, ti->dobj.namespace->dobj.name, ti->dobj.name);
-
-	appendPQExpBuffer(pq, "SELECT tgfn, query FROM pipeline_transforms() WHERE schema = '%s' AND name = '%s'",
-			ti->dobj.namespace->dobj.name, ti->dobj.name);
-	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
-	qdef = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "query")));
-	tgfn = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "tgfn")));
-
-	resetPQExpBuffer(pq);
-	appendPQExpBuffer(pq, "SELECT unnest(tgargs) FROM pipeline_transforms() WHERE schema = '%s' AND name = '%s'",
-			ti->dobj.namespace->dobj.name, ti->dobj.name);
-	res = ExecuteSqlQuery(fout, pq->data, PGRES_TUPLES_OK);
-	resetPQExpBuffer(pq);
-	for (i = 0; i < PQntuples(res); i++)
-	{
-		if (i == 0)
-			appendPQExpBuffer(pq, "'%s'", PQgetvalue(res, i, PQfnumber(res, "unnest")));
-		else
-			appendPQExpBuffer(pq, ", '%s'", PQgetvalue(res, i, PQfnumber(res, "unnest")));
-	}
-	tgargs = pstrdup(pq->data);
-
-	appendPQExpBuffer(q, "CREATE CONTINUOUS TRANSFORM %s.%s AS %s", ti->dobj.namespace->dobj.name, ti->dobj.name, qdef);
-
-	if (strlen(tgfn) > 0)
-		appendPQExpBuffer(q, " THEN EXECUTE PROCEDURE %s(%s)", tgfn, tgargs);
-
-	appendPQExpBuffer(q, ";\n\n");
-
-	ArchiveEntry(fout, ti->dobj.catId, ti->dobj.dumpId,
-			ti->dobj.name,
-			ti->dobj.namespace->dobj.name,
-			ti->reltablespace,
-			ti->rolname,
-			   false,
-				 "CONTINUOUS TRANSFORM",
-				 SECTION_PRE_DATA,
-				 q->data, delq->data, NULL,
-				 NULL, 0,
-				 NULL, NULL);
-
-	destroyPQExpBuffer(q);
-	destroyPQExpBuffer(pq);
-}
-
 int
 main(int argc, char **argv)
 {
@@ -14379,14 +14317,6 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 		if (tbinfo->relkind == RELKIND_CONTVIEW)
 		{
 			dumpContinuousView(fout, tbinfo, delq);
-			return;
-		}
-
-		// if it's a transform
-		// relkind will just be 'v' now
-		if (tbinfo->relkind == 'x')
-		{
-			dumpContinuousTransform(fout, tbinfo, delq);
 			return;
 		}
 
