@@ -7992,7 +7992,6 @@ ATPrepAlterColumnType(List **wqueue,
 	if (tab->relkind == RELKIND_COMPOSITE_TYPE ||
 		tab->relkind == RELKIND_FOREIGN_TABLE)
 	{
-		// we were previously handling transforms here too
 		/*
 		 * For composite types, do this check now.  Tables will check it later
 		 * when the table is being rewritten.
