@@ -44,7 +44,7 @@ extern EState *CreateEState(QueryDesc *query_desc);
 extern void SetEStateSnapshot(EState *estate);
 extern void UnsetEStateSnapshot(EState *estate);
 
-extern void ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext context,
+extern void PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext context,
 													  ParamListInfo params, DestReceiver *dest, char *tag);
 
 #endif

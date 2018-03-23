@@ -61,6 +61,7 @@
 #include "parser/gramparse.h"
 #include "parser/parser.h"
 #include "parser/parse_expr.h"
+#include "pipeline/analyzer.h"
 #include "storage/lmgr.h"
 #include "utils/date.h"
 #include "utils/datetime.h"
@@ -383,7 +384,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <defelt>  fdw_option
 
 %type <range> OptTempTableName
-%type <into>  into_clause create_as_target create_mv_target create_cv_target create_ct_target
+%type <into>  into_clause create_as_target create_mv_target create_cv_target
 
 %type <defelt>  createfunc_opt_item common_func_opt_item dostmt_opt_item
 %type <fun_param> func_arg func_arg_with_default table_func_column aggr_arg
@@ -2858,31 +2859,33 @@ CreateStreamStmt: CREATE STREAM qualified_name '(' OptTableElementList ')'
  *****************************************************************************/
 
 CreateContTransformStmt:
-		CREATE CONTINUOUS TRANSFORM create_ct_target AS SelectStmt
+		CREATE CONTINUOUS TRANSFORM qualified_name opt_reloptions AS SelectStmt
 		THEN EXECUTE PROCEDURE func_name '(' TriggerFuncArgs ')'
         {
-          CreateContTransformStmt *n = makeNode(CreateContTransformStmt);
-          n->into = $4;
-          n->query = $6;
-          n->funcname = $10;
-          n->args = $12;
-          $$ = (Node *) n;
+          ViewStmt *vstmt = makeNode(ViewStmt);
+          vstmt->query = $7;
+          vstmt->view = $4;
+          vstmt->options = $5;
+          
+          vstmt->options = lappend(vstmt->options, makeDefElem(OPTION_ACTION, (Node *) makeString(ACTION_TRANSFORM)));
+          //vstmt->options = lappend(vstmt->options, makeDefElem(OPTION_TGFNID, (Node *) makeInteger(LookupOutputFunc($11))));
+          vstmt->options = lappend(vstmt->options, makeDefElem(OPTION_TGFN, (Node *) makeString(NameListToString($11))));
+		  if (list_length($13))
+		  {
+            vstmt->options = lappend(vstmt->options, makeDefElem(OPTION_TGARGS, (Node *) makeString(DeparseOutputFuncArgs($13))));
+            vstmt->options = lappend(vstmt->options, makeDefElem(OPTION_TGNARGS, (Node *) makeInteger(list_length($13))));
+          }
+          $$ = (Node *) vstmt;
         }
-    | CREATE CONTINUOUS TRANSFORM create_ct_target AS SelectStmt
+    | CREATE CONTINUOUS TRANSFORM qualified_name opt_reloptions AS SelectStmt
         {
-          CreateContTransformStmt *n = makeNode(CreateContTransformStmt);
-          n->into = $4;
-          n->query = $6;
-          $$ = (Node *) n;
-        }
-    ;
-
-create_ct_target:
-    qualified_name opt_reloptions
-        {
-          $$ = makeNode(IntoClause);
-          $$->rel = $1;
-          $$->options = $2;
+          ViewStmt *vstmt = makeNode(ViewStmt);
+          vstmt->query = $7;
+          vstmt->view = $4;
+          vstmt->options = $5;
+          
+          vstmt->options = lappend(vstmt->options, makeDefElem(OPTION_ACTION, (Node *) makeString(ACTION_TRANSFORM)));
+          $$ = (Node *) vstmt;
         }
     ;
 

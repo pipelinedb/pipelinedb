@@ -45,6 +45,7 @@
 #include "parser/parse_clause.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
+#include "parser/parse_func.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_node.h"
 #include "parser/parse_relation.h"
@@ -58,6 +59,7 @@
 #include "rewrite/rewriteHandler.h"
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
+#include "utils/bytea.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
@@ -3932,6 +3934,70 @@ GetContinuousViewOption(List *options, char *name)
 }
 
 /*
+ * GetOptionAsString
+ */
+bool
+GetOptionAsString(List *options, char *option, char **result)
+{
+	DefElem *def = GetContinuousViewOption(options, option);
+
+	if (!def)
+		return false;
+
+	if (IsA(def->arg, String))
+	{
+		*result = strVal(def->arg);
+	}
+	else if (IsA(def->arg, Integer))
+	{
+		StringInfoData buf;
+
+		initStringInfo(&buf);
+		appendStringInfo(&buf, "%ld", intVal(def->arg));
+
+		*result = buf.data;
+	}
+	else if (IsA(def->arg, TypeName))
+	{
+		TypeName *t = (TypeName *) def->arg;
+		*result = NameListToString(t->names);
+	}
+	else
+	{
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * GetOptionAsInteger
+ */
+bool
+GetOptionAsInteger(List *options, char *option, int *result)
+{
+	DefElem *def = GetContinuousViewOption(options, option);
+
+	if (!def)
+		return false;
+
+	if (IsA(def->arg, String))
+	{
+		*result = atoi(strVal(def->arg));
+	}
+	else if (IsA(def->arg, Integer))
+	{
+		*result = intVal(def->arg);
+	}
+	else
+	{
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * IntervalToEpoch
  */
 int
@@ -4163,6 +4229,158 @@ FindTTLColumnAttrNo(char *colname, Oid matrelid)
 
 	Assert(AttributeNumberIsValid(attno));
 	return attno;
+}
+
+/*
+ * delete_continuous_transform_options
+ */
+static void
+delete_continuous_transform_options(ViewStmt *stmt)
+{
+	ListCell *lc;
+	List *to_delete = NIL;
+
+	foreach(lc, stmt->options)
+	{
+		DefElem *def = (DefElem *) lfirst(lc);
+		if (pg_strcasecmp(def->defname, OPTION_ACTION) == 0 ||
+				pg_strcasecmp(def->defname, OPTION_OUTPUTFUNC) == 0)
+		{
+			to_delete = lappend(to_delete, def);
+		}
+	}
+
+	foreach(lc, to_delete)
+		stmt->options = list_delete(stmt->options, lfirst(lc));
+}
+
+/*
+ * LookupOutputFunc
+ */
+Oid
+LookupOutputFunc(List *name)
+{
+	Oid fargtypes[1];
+	Oid tgfnid = InvalidOid;
+	Oid funcrettype = InvalidOid;
+
+	if (name)
+	{
+		tgfnid = LookupFuncName(name, 0, fargtypes, false);
+		funcrettype = get_func_rettype(tgfnid);
+		if (funcrettype != TRIGGEROID)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+					errmsg("function %s must return type \"trigger\"",
+					NameListToString(name))));
+	}
+
+	return tgfnid;
+}
+
+/*
+ * DeparseOutputFuncArgs
+ */
+char *
+DeparseOutputFuncArgs(List *args)
+{
+	bytea *tgbytes;
+	char *tgs;
+
+	if (list_length(args))
+	{
+		ListCell *lc;
+		char *argsbytes;
+		int	len = 0;
+
+		foreach(lc, args)
+		{
+			char *ar = strVal(lfirst(lc));
+
+			len += strlen(ar) + 4;
+			for (; *ar; ar++)
+			{
+				if (*ar == '\\')
+					len++;
+			}
+		}
+
+		argsbytes = (char *) palloc(len + 1);
+		argsbytes[0] = '\0';
+
+		foreach(lc, args)
+		{
+			char *s = strVal(lfirst(lc));
+			char *d = argsbytes + strlen(argsbytes);
+
+			while (*s)
+			{
+				if (*s == '\\')
+					*d++ = '\\';
+				*d++ = *s++;
+			}
+			strcpy(d, "\\000");
+		}
+
+		tgbytes = (bytea *) DirectFunctionCall1(byteain, CStringGetDatum(argsbytes));
+		tgs = (char *) DirectFunctionCall1(byteaout, (Datum) tgbytes);
+	}
+	else
+	{
+		/* No arguments to output function */
+		tgbytes = (bytea *) DirectFunctionCall1(byteain, CStringGetDatum(""));
+		tgs = (char *) DirectFunctionCall1(byteaout, (Datum) tgbytes);
+	}
+
+	return tgs;
+}
+
+/*
+ * AnalyzeCreateViewForTransform
+ */
+void
+AnalyzeCreateViewForTransform(ViewStmt *stmt)
+{
+	ListCell *lc;
+	TypeName *t = NULL;
+	List *func = NIL;
+	List *args = NIL;
+
+	foreach(lc, stmt->options)
+	{
+		DefElem *def = (DefElem *) lfirst(lc);
+		if (pg_strcasecmp(def->defname, OPTION_OUTPUTFUNC) == 0 && IsA(def->arg, TypeName))
+			t = (TypeName *) def->arg;
+	}
+
+	if (t != NULL)
+	{
+		ListCell *mlc;
+
+		func = t->names;
+		foreach(mlc, t->typmods)
+		{
+			A_Const *v;
+
+			if (!IsA(lfirst(mlc), A_Const))
+				elog(ERROR, "invalid output function argument");
+
+			v = (A_Const *) lfirst(mlc);
+			if (v->val.type != T_String)
+				elog(ERROR, "invalid output function argument");
+
+			args = lappend(args, &v->val);
+		}
+	}
+
+	delete_continuous_transform_options(stmt);
+
+	if (func)
+	{
+		stmt->options = lappend(stmt->options, makeDefElem(OPTION_TGFN, (Node *) makeString(NameListToString(func))));
+		stmt->options = lappend(stmt->options, makeDefElem(OPTION_TGNARGS, (Node *) makeInteger(list_length(args))));
+		stmt->options = lappend(stmt->options, makeDefElem(OPTION_TGARGS, (Node *) makeString(DeparseOutputFuncArgs(args))));
+	}
 }
 
 post_parse_analyze_hook_type SavePostParseAnalyzeHook = NULL;

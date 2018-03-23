@@ -88,4 +88,18 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define PIPELINE_QUERY_VIEW 		'v'
 #define PIPELINE_QUERY_TRANSFORM 	't'
 
+#define OPTION_ACTION "action"
+#define OPTION_OUTPUTFUNC "outputfunc"
+#define OPTION_MATRELID "matrelid"
+#define OPTION_OSRELID "osrelid"
+#define OPTION_OSRELTYPE "osreltype"
+#define OPTION_OSRELATYPE "osrelatype"
+#define OPTION_TGFNID "tgfnid"
+#define OPTION_TGFN "tgfn"
+#define OPTION_TGNARGS "tgnargs"
+#define OPTION_TGARGS "tgargs"
+
+#define ACTION_TRANSFORM "transform"
+#define ACTION_MATERIALIZE "materialize"
+
 #endif   /* PIPELINE_QUERIES_H */

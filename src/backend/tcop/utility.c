@@ -530,10 +530,6 @@ standard_ProcessUtility(Node *parsetree,
 			ExecCreateContViewStmt((CreateContViewStmt *) parsetree, queryString);
 			break;
 
-		case T_CreateContTransformStmt:
-			ExecCreateContTransformStmt((CreateContTransformStmt *) parsetree, queryString);
-			break;
-
 		case T_DropTableSpaceStmt:
 			/* no event triggers for global objects */
 			PreventTransactionChain(isTopLevel, "DROP TABLESPACE");

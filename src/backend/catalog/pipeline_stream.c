@@ -24,7 +24,6 @@
 #include "commands/dbcommands.h"
 #include "commands/defrem.h"
 #include "commands/tablecmds.h"
-#include "executor/spi.h"
 #include "fmgr.h"
 #include "foreign/foreign.h"
 #include "funcapi.h"
@@ -50,7 +49,6 @@
 #include "utils/typcache.h"
 
 #define NUMERIC_OID 1700
-#define RECONCILE_PIPELINE_STREAM_STMT "DELETE FROM pipeline_stream WHERE relid IN (SELECT s.relid FROM pg_class c RIGHT JOIN pipeline_stream s ON c.oid = s.relid WHERE c.oid IS NULL);"
 
 Oid PipelineStreamRelationOid = InvalidOid;
 
@@ -567,31 +565,6 @@ CreatePipelineStreamEntry(CreateForeignTableStmt *stmt, Oid relid)
 	CommandCounterIncrement();
 
 	heap_close(pipeline_stream, NoLock);
-}
-
-/*
- * ReconcilePipelineStreams
- *
- * DELETE any pipeline_stream rows that no longer have a corresponding stream relation
- */
-void
-ReconcilePipelineStreams(void)
-{
-	if (pg_class_aclcheck(PipelineStreamRelationOid, GetUserId(), ACL_DELETE) != ACLCHECK_OK)
-		return;
-
-	PushActiveSnapshot(GetTransactionSnapshot());
-
-	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI manager");
-
-	if (SPI_execute(RECONCILE_PIPELINE_STREAM_STMT, false, 0) != SPI_OK_DELETE)
-		elog(ERROR, "SPI_execute failed: %s", RECONCILE_PIPELINE_STREAM_STMT);
-
-	if (SPI_finish() != SPI_OK_FINISH)
-		elog(ERROR, "SPI_finish failed");
-
-	PopActiveSnapshot();
 }
 
 /*

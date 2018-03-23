@@ -37,7 +37,6 @@ extern bool RangeVarIsForStream(RangeVar *rv, bool missing_ok);
 extern bool IsStream(Oid relid);
 
 extern void CreatePipelineStreamEntry(CreateForeignTableStmt *stmt, Oid relid);
-extern void ReconcilePipelineStreams(void);
 extern bool RelIdIsForOutputStream(Oid id, Oid *cqid);
 
 #endif

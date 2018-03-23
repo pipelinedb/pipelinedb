@@ -3063,13 +3063,4 @@ typedef struct CreateContViewStmt
 	Node 		*query;
 } CreateContViewStmt;
 
-typedef struct CreateContTransformStmt
-{
-	NodeTag		type;
-	IntoClause 	*into;
-	Node 		*query;
-	List	    *funcname;
-	List	    *args;
-} CreateContTransformStmt;
-
 #endif   /* PARSENODES_H */

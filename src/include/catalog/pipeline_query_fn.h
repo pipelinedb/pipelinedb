@@ -71,7 +71,7 @@ extern void RemovePipelineQueryById(Oid oid);
 extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid seqrel, int ttl, AttrNumber ttl_attno, Oid *pq_id);
 extern void UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid);
 extern void UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid);
-extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid fnoid, List *args);
+extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List *options);
 
 extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);
 extern bool IsAContinuousView(RangeVar *name);

@@ -198,9 +198,13 @@ GROUP BY second, y, x;
 
 CREATE CONTINUOUS VIEW os8 AS SELECT (new).x, (new).y FROM output_of('os7');
 
+BEGIN;
 INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
 INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
 INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
+COMMIT;
+
+SELECT pg_sleep(1);
 
 SELECT x, y FROM os8 ORDER BY x, y;
 

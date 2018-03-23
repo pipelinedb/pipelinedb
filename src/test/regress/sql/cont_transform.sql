@@ -74,6 +74,7 @@ SELECT * FROM ct_v1;
 CREATE CONTINUOUS TRANSFORM ct_ostream AS SELECT 1 AS a, 2 AS b, 3 AS c, x + 42 AS d FROM ct_s1;
 
 DROP STREAM ct_s0 CASCADE;
+DROP STREAM ct_s1 CASCADE;
 
 CREATE STREAM fanout (x integer);
 

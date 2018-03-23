@@ -14382,11 +14382,13 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 			return;
 		}
 
-//		if (tbinfo->relkind == RELKIND_CONTTRANSFORM)
-//		{
-//			dumpContinuousTransform(fout, tbinfo, delq);
-//			return;
-//		}
+		// if it's a transform
+		// relkind will just be 'v' now
+		if (tbinfo->relkind == 'x')
+		{
+			dumpContinuousTransform(fout, tbinfo, delq);
+			return;
+		}
 
 		if (dopt->binary_upgrade)
 			binary_upgrade_set_pg_class_oids(fout, q,

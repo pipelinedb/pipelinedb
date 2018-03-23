@@ -705,12 +705,49 @@ validate_stream_constraints(CreateStmt *stmt)
 }
 
 /*
- * ProcessUtilityOnContView
+ * has_transform_action
+ */
+static bool
+has_transform_action(List *options)
+{
+	ListCell *lc;
+	foreach(lc, options)
+	{
+		DefElem *def = (DefElem *) lfirst(lc);
+		if (pg_strcasecmp(def->defname, OPTION_ACTION) == 0)
+		{
+			Value *v;
+			if (IsA(def->arg, String))
+			{
+				v = (Value *) def->arg;
+			}
+			else if (IsA(def->arg, TypeName))
+			{
+				TypeName *t = (TypeName *) def->arg;
+				if (list_length(t->names) != 1)
+					elog(ERROR, "invalid action");
+				v = linitial(t->names);
+			}
+			else
+			{
+				elog(ERROR, "invalid action");
+			}
+
+			Assert(v);
+			if (pg_strcasecmp(strVal(v), ACTION_TRANSFORM) == 0)
+				return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * PipelineProcessUtility
  *
- * Hook to intercept relevant utility queries run on continuous views
+ * Hook for PipelineDB to intercept relevant utility queries
  */
 void
-ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext context,
+PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext context,
 													  ParamListInfo params, DestReceiver *dest, char *tag)
 {
 	ContExecutionLock exec_lock = NULL;
@@ -720,24 +757,31 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 
 	PG_TRY();
 	{
-		if (IsA(parsetree, CreateContViewStmt) || IsA(parsetree, CreateContTransformStmt))
+		if (IsA(parsetree, ViewStmt) && IsA(((ViewStmt *) parsetree)->query, SelectStmt))
 		{
-			// if transform, verify no constraints
-			Node *node;
+			ViewStmt *stmt = (ViewStmt *) parsetree;
+			/*
+			 * If it's a VIEW with action=transform, we're creating a transform
+			 */
+			if (has_transform_action(stmt->options))
+			{
+				PipelineContextSetIsDDL();
+				ddl_lock = AcquirePipelineDDLLock();
 
-			if (IsA(parsetree, CreateContViewStmt))
-				node = ((CreateContViewStmt *) parsetree)->query;
-			else
-				node = ((CreateContTransformStmt *) parsetree)->query;
+				// verify no constraints
 
+				AnalyzeCreateViewForTransform(stmt);
+				ExecCreateContTransformStmt(stmt->view, stmt->query, stmt->options, sql);
+				goto done;
+			}
+		}
+		else if (IsA(parsetree, CreateContViewStmt))
+		{
 			/*
 			 * Indicate to the analyzer/planner hooks that we're executing a CREATE CONTINUOUS statement
 			 */
 			PipelineContextSetIsDDL();
 			ddl_lock = AcquirePipelineDDLLock();
-
-			/* The grammar should enforce this */
-			Assert(IsA(node, SelectStmt));
 		}
 		else if (IsA(parsetree, IndexStmt))
 		{
@@ -826,10 +870,14 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 			// we should probably start breaking this up into smaller functions :)
 		}
 
+		// we handle create cont transform ourselves here
+
 		if (SaveUtilityHook != NULL)
 			(*SaveUtilityHook) (parsetree, sql, context, params, dest, tag);
 		else
 			standard_ProcessUtility(parsetree, sql, context, params, dest, tag);
+
+done:
 
 		if (exec_lock)
 			ReleaseContExecutionLock(exec_lock);
@@ -853,7 +901,12 @@ ProcessUtilityOnContView(Node *parsetree, const char *sql, ProcessUtilityContext
 		 * to ensure any orphaned entries are removed in this transaction.
 		 */
 		if (IsA(parsetree, DropStmt))
-			ReconcilePipelineStreams();
+			ReconcilePipelineObjects();
+
+		// don't we need a reconcile pipeline_query
+		// i know we've tried this in the past but why isn't it being done yet?
+		// maybe it just wasn't time yet?
+		// we basically just want to remove any pipeline_query rows for which there is no relid
 
 		/*
 		 * Clear analyzer/planner context flags

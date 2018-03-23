@@ -111,7 +111,13 @@ extern ColumnRef *GetSWTimeColumn(RangeVar *rv);
 extern Interval *GetSWInterval(RangeVar *rv);
 extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
 
+extern void AnalyzeCreateViewForTransform(ViewStmt *stmt);
+extern Oid LookupOutputFunc(List *name);
+extern char *DeparseOutputFuncArgs(List *args);
+
 extern DefElem *GetContinuousViewOption(List *options, char *name);
+extern bool GetOptionAsString(List *options, char *option, char **result);
+extern bool GetOptionAsInteger(List *options, char *option, int *result);
 extern void ApplySlidingWindow(SelectStmt *stmt, DefElem *max_age, int *ttl);
 extern int IntervalToEpoch(Interval *i);
 extern void ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_max_age, int *ttl, char **ttl_column);

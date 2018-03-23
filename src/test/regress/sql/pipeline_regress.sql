@@ -209,7 +209,7 @@ CREATE CONTINUOUS TRANSFORM unknown_type_ct AS SELECT x, 'a' FROM sw_ts_expr_s
 CREATE CONTINUOUS TRANSFORM unknown_type_ct AS SELECT x, 'a'::text FROM sw_ts_expr_s
   THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_out_s');
 
-\d+ unknown_type_ct
+SELECT pg_get_viewdef('unknown_type_ct');
 
 DROP CONTINUOUS TRANSFORM unknown_type_ct;
 DROP STREAM ct_out_s;

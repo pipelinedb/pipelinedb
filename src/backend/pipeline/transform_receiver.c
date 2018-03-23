@@ -170,6 +170,8 @@ insert_into_rel(TransformReceiver *t, Relation rel, TupleTableSlot *event_slot)
 	sis = (StreamInsertState *) rinfo->ri_FdwState;
 	Assert(sis);
 
+
+	elog(LOG, "inserting into %s", rel->rd_rel->relname.data);
 	if (sis->queries)
 	{
 		TupleDesc osreldesc = RelationGetDescr(rel);

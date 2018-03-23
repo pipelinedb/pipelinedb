@@ -161,6 +161,10 @@ DROP STREAM ct_s0 CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view ct_t
 drop cascades to continuous view ct_v1
+DROP STREAM ct_s1 CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view ct_ostream
+drop cascades to continuous view ct_v0
 CREATE STREAM fanout (x integer);
 CREATE CONTINUOUS TRANSFORM fanout0 AS SELECT generate_series(1, 2) FROM fanout;
 CREATE CONTINUOUS TRANSFORM fanout1 AS SELECT generate_series(1, 2) FROM output_of('fanout0');
