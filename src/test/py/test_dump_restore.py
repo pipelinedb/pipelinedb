@@ -199,7 +199,7 @@ def test_cont_transforms(pipeline, clean_db):
   LANGUAGE plpgsql;
   ''')
   pipeline.create_ct('test_ct2', 'SELECT x::int, y::text FROM ct_stream',
-                     'test_tg()')
+                     'test_tg')
 
   pipeline.insert('ct_stream', ('x', 'y'), [(1, 'hello'), (2, 'world')])
   time.sleep(1)

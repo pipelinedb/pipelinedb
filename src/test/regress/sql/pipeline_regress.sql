@@ -204,14 +204,15 @@ CREATE CONTINUOUS VIEW unknown_type_cv AS SELECT x, 'a'::text FROM sw_ts_expr_s;
 DROP CONTINUOUS VIEW unknown_type_cv;
 
 CREATE STREAM ct_out_s (x integer, a text);
-CREATE CONTINUOUS TRANSFORM unknown_type_ct AS SELECT x, 'a' FROM sw_ts_expr_s
-  THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_out_s');
-CREATE CONTINUOUS TRANSFORM unknown_type_ct AS SELECT x, 'a'::text FROM sw_ts_expr_s
-  THEN EXECUTE PROCEDURE pipeline_stream_insert('ct_out_s');
+CREATE VIEW unknown_type_ct WITH (action=transform, outputfunc=pipeline_stream_insert('ct_out_s')) AS
+  SELECT x, 'a' FROM sw_ts_expr_s;
+
+CREATE VIEW unknown_type_ct WITH (action=transform, outputfunc=pipeline_stream_insert('ct_out_s')) AS
+  SELECT x, 'a'::text FROM sw_ts_expr_s;
 
 SELECT pg_get_viewdef('unknown_type_ct');
 
-DROP CONTINUOUS TRANSFORM unknown_type_ct;
+DROP VIEW unknown_type_ct;
 DROP STREAM ct_out_s;
 
 

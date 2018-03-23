@@ -118,7 +118,7 @@ CREATE CONTINUOUS VIEW cqregress6 AS SELECT id, avg(x) FROM analyze_cont_stream 
 CREATE VIEW cqregress7 AS SELECT combine(avg) FROM cqregress6;
 \d+ cqregress7
 
-CREATE CONTINUOUS TRANSFORM cqregress8 AS SELECT id FROM analyze_cont_stream;
+CREATE VIEW cqregress8 WITH (action=transform) AS SELECT id FROM analyze_cont_stream;
 
 DROP STREAM analyze_cont_stream CASCADE;
 

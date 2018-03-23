@@ -266,7 +266,7 @@ SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 DROP CONTINUOUS VIEW os3 CASCADE;
 NOTICE:  drop cascades to continuous view os3_output
 -- Verify that transforms write to output streams
-CREATE CONTINUOUS TRANSFORM os_xform AS SELECT x, y FROM os_stream;
+CREATE VIEW os_xform WITH (action=transform) AS SELECT x, y FROM os_stream;
 CREATE CONTINUOUS VIEW os4 AS SELECT x, y FROM output_of('os_xform');
 INSERT INTO os_stream (x, y) VALUES (7, 7);
 INSERT INTO os_stream (x, y) VALUES (8, 8);
