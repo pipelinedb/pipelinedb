@@ -289,7 +289,6 @@ heap_create(const char *relname,
 		case RELKIND_COMPOSITE_TYPE:
 		case RELKIND_FOREIGN_TABLE:
 		case RELKIND_CONTVIEW:
-//		case RELKIND_CONTTRANSFORM:
 			create_storage = false;
 
 			/*
@@ -1145,7 +1144,6 @@ heap_create_with_catalog(const char *relname,
 			case RELKIND_MATVIEW:
 			case RELKIND_FOREIGN_TABLE:
 			case RELKIND_CONTVIEW:
-//			case RELKIND_CONTTRANSFORM:
 				relacl = get_user_default_acl(ACL_OBJECT_RELATION, ownerid,
 											  relnamespace);
 				break;

@@ -862,13 +862,6 @@ PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext c
 				}
 			}
 		}
-		else if (IsA(parsetree, SelectStmt))
-		{
-			// if transform anywhere in FROM, error!
-			// we should probably start breaking this up into smaller functions :)
-		}
-
-		// we handle create cont transform ourselves here
 
 		if (SaveUtilityHook != NULL)
 			(*SaveUtilityHook) (parsetree, sql, context, params, dest, tag);
@@ -900,11 +893,6 @@ done:
 		 */
 		if (IsA(parsetree, DropStmt))
 			ReconcilePipelineObjects();
-
-		// don't we need a reconcile pipeline_query
-		// i know we've tried this in the past but why isn't it being done yet?
-		// maybe it just wasn't time yet?
-		// we basically just want to remove any pipeline_query rows for which there is no relid
 
 		/*
 		 * Clear analyzer/planner context flags
