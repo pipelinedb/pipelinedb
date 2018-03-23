@@ -3982,17 +3982,11 @@ GetOptionAsInteger(List *options, char *option, int *result)
 		return false;
 
 	if (IsA(def->arg, String))
-	{
 		*result = atoi(strVal(def->arg));
-	}
 	else if (IsA(def->arg, Integer))
-	{
 		*result = intVal(def->arg);
-	}
 	else
-	{
 		return false;
-	}
 
 	return true;
 }
