@@ -16,6 +16,7 @@
 
 #include "access/heapam.h"
 #include "access/htup_details.h"
+#include "access/reloptions.h"
 #include "access/xact.h"
 #include "catalog/indexing.h"
 #include "catalog/pipeline_query.h"
@@ -26,6 +27,7 @@
 #include "catalog/namespace.h"
 #include "nodes/makefuncs.h"
 #include "parser/analyze.h"
+#include "parser/parse_func.h"
 #include "pipeline/analyzer.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/scheduler.h"
@@ -810,8 +812,49 @@ GetContQueryId(RangeVar *name)
 	return row_id;
 }
 
+/*
+ * store_pipeline_query_reloptions
+ *
+ * Stores the given custom options in the pg_class catalog
+ */
+static void
+store_pipeline_query_reloptions(Oid relid, List *options)
+{
+	Datum classopts;
+	HeapTuple classtup;
+	HeapTuple newtup;
+	Relation pgclass;
+	Datum class_values[Natts_pg_class];
+	bool class_null[Natts_pg_class];
+	bool class_repl[Natts_pg_class];
+
+	pgclass = heap_open(RelationRelationId, RowExclusiveLock);
+	classtup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(classtup))
+		elog(ERROR, "cache lookup failed for OID %u", relid);
+
+	classopts = transformRelOptions((Datum) 0, options, NULL, NULL, false, false);
+	view_reloptions(classopts, false);
+
+	MemSet(class_values, 0, sizeof(class_values));
+	MemSet(class_null, 0, sizeof(class_null));
+	MemSet(class_repl, 0, sizeof(class_repl));
+
+	class_values[Anum_pg_class_reloptions - 1] = classopts;
+	class_repl[Anum_pg_class_reloptions - 1] = true;
+
+	newtup = heap_modify_tuple(classtup, RelationGetDescr(pgclass), class_values, class_null, class_repl);
+	simple_heap_update(pgclass, &newtup->t_self, newtup);
+	CatalogUpdateIndexes(pgclass, newtup);
+
+	heap_freetuple(newtup);
+	heap_close(pgclass, NoLock);
+	ReleaseSysCache(classtup);
+}
+
 Oid
-DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid fnoid, List *args)
+DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -820,6 +863,11 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid 
 	Oid id;
 	Oid result;
 	char *query_str;
+	char *tgs;
+	int nargs;
+	Oid typeid;
+	Oid atypeid;
+	char *funcname;
 
 	if (!query)
 		ereport(ERROR,
@@ -842,57 +890,46 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid 
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
-	values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(fnoid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(typoid); /* HACK(usmanm): So matrel index works */
 	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 	values[Anum_pipeline_query_pkidxid - 1] = ObjectIdGetDatum(InvalidOid);
 	values[Anum_pipeline_query_lookupidxid - 1] = ObjectIdGetDatum(InvalidOid);
 
-	/* This code is copied from trigger.c:CreateTrigger */
-	if (list_length(args))
+	options = lappend(options, makeDefElem(OPTION_ACTION, (Node *) makeString(ACTION_TRANSFORM)));
+	options = lappend(options, makeDefElem(OPTION_OSRELID, (Node *) makeInteger(osrelid)));
+
+	typeid = get_rel_type_id(osrelid);
+	options = lappend(options, makeDefElem(OPTION_OSRELTYPE, (Node *) makeInteger(typeid)));
+
+	atypeid = get_array_type(typeid);
+	options = lappend(options, makeDefElem(OPTION_OSRELATYPE, (Node *) makeInteger(atypeid)));
+
+	if (ptgfnid)
+		*ptgfnid = InvalidOid;
+
+	if (GetOptionAsString(options, OPTION_TGFN, &funcname))
 	{
-		ListCell *lc;
-		char *argsbytes;
-		int16 nargs = list_length(args);
-		int	len = 0;
+		Oid fargtypes[1];
+		Oid tgfnoid = InvalidOid;
 
-		foreach(lc, args)
-		{
-			char *ar = strVal(lfirst(lc));
-
-			len += strlen(ar) + 4;
-			for (; *ar; ar++)
-			{
-				if (*ar == '\\')
-					len++;
-			}
-		}
-
-		argsbytes = (char *) palloc(len + 1);
-		argsbytes[0] = '\0';
-
-		foreach(lc, args)
-		{
-			char *s = strVal(lfirst(lc));
-			char *d = argsbytes + strlen(argsbytes);
-
-			while (*s)
-			{
-				if (*s == '\\')
-					*d++ = '\\';
-				*d++ = *s++;
-			}
-			strcpy(d, "\\000");
-		}
-
-		values[Anum_pipeline_query_tgnargs - 1] = Int16GetDatum(nargs);
-		values[Anum_pipeline_query_tgargs - 1] = DirectFunctionCall1(byteain, CStringGetDatum(argsbytes));
+		tgfnoid = LookupFuncName(textToQualifiedNameList((text *) CStringGetTextDatum(funcname)), 0, fargtypes, false);
+		values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(tgfnoid);
+		*ptgfnid = tgfnoid;
 	}
 	else
 	{
-		values[Anum_pipeline_query_tgnargs - 1] = Int16GetDatum(0);
-		values[Anum_pipeline_query_tgargs - 1] = DirectFunctionCall1(byteain, CStringGetDatum(""));
+		values[Anum_pipeline_query_tgfn - 1] = ObjectIdGetDatum(InvalidOid);
 	}
+
+	if (GetOptionAsString(options, OPTION_TGARGS, &tgs))
+		values[Anum_pipeline_query_tgargs - 1] = DirectFunctionCall1(byteain, CStringGetDatum(tgs));
+	else
+		values[Anum_pipeline_query_tgargs - 1] = DirectFunctionCall1(byteain, CStringGetDatum(""));
+
+	if (GetOptionAsInteger(options, OPTION_TGNARGS, &nargs))
+		values[Anum_pipeline_query_tgnargs - 1] = Int16GetDatum(nargs);
+	else
+		values[Anum_pipeline_query_tgnargs - 1] = Int16GetDatum(0);
 
 	/* unused */
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(InvalidOid);
@@ -911,6 +948,10 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, Oid 
 	UpdatePipelineStreamCatalog();
 
 	heap_close(pipeline_query, NoLock);
+
+	CommandCounterIncrement();
+
+	store_pipeline_query_reloptions(relid, options);
 
 	return result;
 }

@@ -266,7 +266,7 @@ SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 DROP CONTINUOUS VIEW os3 CASCADE;
 NOTICE:  drop cascades to continuous view os3_output
 -- Verify that transforms write to output streams
-CREATE CONTINUOUS TRANSFORM os_xform AS SELECT x, y FROM os_stream;
+CREATE VIEW os_xform WITH (action=transform) AS SELECT x, y FROM os_stream;
 CREATE CONTINUOUS VIEW os4 AS SELECT x, y FROM output_of('os_xform');
 INSERT INTO os_stream (x, y) VALUES (7, 7);
 INSERT INTO os_stream (x, y) VALUES (8, 8);
@@ -281,7 +281,7 @@ SELECT * FROM os4 ORDER BY x;
 
 DROP STREAM os_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous transform os_xform
+DETAIL:  drop cascades to view os_xform
 drop cascades to continuous view os4
 CREATE STREAM os_stream (x integer, y numeric);
 CREATE CONTINUOUS VIEW os5 AS
@@ -331,9 +331,17 @@ CREATE CONTINUOUS VIEW os7 WITH (sw = '5 minutes') AS
 FROM os_stream
 GROUP BY second, y, x;
 CREATE CONTINUOUS VIEW os8 AS SELECT (new).x, (new).y FROM output_of('os7');
+BEGIN;
 INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
 INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
 INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
+COMMIT;
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
 SELECT x, y FROM os8 ORDER BY x, y;
    x   |   y   
 -------+-------

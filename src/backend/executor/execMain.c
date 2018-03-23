@@ -1095,12 +1095,6 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 					errmsg("cannot change continuous view \"%s\"",
 							RelationGetRelationName(resultRel))));
 			break;
-		case RELKIND_CONTTRANSFORM:
-			ereport(ERROR,
-					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					errmsg("cannot change continuous transform \"%s\"",
-							RelationGetRelationName(resultRel))));
-			break;
 		case RELKIND_FOREIGN_TABLE:
 			/* Okay only if the FDW supports it */
 			fdwroutine = GetFdwRoutineForRelation(resultRel, false);

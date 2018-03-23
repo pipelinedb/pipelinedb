@@ -289,7 +289,6 @@ heap_create(const char *relname,
 		case RELKIND_COMPOSITE_TYPE:
 		case RELKIND_FOREIGN_TABLE:
 		case RELKIND_CONTVIEW:
-		case RELKIND_CONTTRANSFORM:
 			create_storage = false;
 
 			/*
@@ -1110,8 +1109,7 @@ heap_create_with_catalog(const char *relname,
 			(relkind == RELKIND_RELATION || relkind == RELKIND_SEQUENCE ||
 			 relkind == RELKIND_VIEW || relkind == RELKIND_MATVIEW ||
 			 relkind == RELKIND_COMPOSITE_TYPE || relkind == RELKIND_FOREIGN_TABLE ||
-			 relkind == RELKIND_CONTVIEW ||
-			 relkind == RELKIND_CONTTRANSFORM))
+			 relkind == RELKIND_CONTVIEW))
 		{
 			if (!OidIsValid(binary_upgrade_next_heap_pg_class_oid))
 				ereport(ERROR,
@@ -1146,7 +1144,6 @@ heap_create_with_catalog(const char *relname,
 			case RELKIND_MATVIEW:
 			case RELKIND_FOREIGN_TABLE:
 			case RELKIND_CONTVIEW:
-			case RELKIND_CONTTRANSFORM:
 				relacl = get_user_default_acl(ACL_OBJECT_RELATION, ownerid,
 											  relnamespace);
 				break;
@@ -1204,8 +1201,7 @@ heap_create_with_catalog(const char *relname,
 							  relkind == RELKIND_MATVIEW ||
 							  relkind == RELKIND_FOREIGN_TABLE ||
 							  relkind == RELKIND_COMPOSITE_TYPE ||
-							  relkind == RELKIND_CONTVIEW ||
-							  relkind == RELKIND_CONTTRANSFORM))
+							  relkind == RELKIND_CONTVIEW))
 		new_array_oid = AssignTypeArrayOid();
 
 	/*
@@ -1829,8 +1825,7 @@ heap_drop_with_catalog(Oid relid)
 	if (rel->rd_rel->relkind != RELKIND_VIEW &&
 		rel->rd_rel->relkind != RELKIND_COMPOSITE_TYPE &&
 		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
-		rel->rd_rel->relkind != RELKIND_CONTVIEW &&
-		rel->rd_rel->relkind != RELKIND_CONTTRANSFORM)
+		rel->rd_rel->relkind != RELKIND_CONTVIEW)
 	{
 		RelationDropStorage(rel);
 	}

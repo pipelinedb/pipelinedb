@@ -35,6 +35,7 @@
 #include "catalog/pipeline_stream_fn.h"
 #include "catalog/toasting.h"
 #include "executor/execdesc.h"
+#include "executor/spi.h"
 #include "executor/tstoreReceiver.h"
 #include "libpq/libpq-be.h"
 #include "miscadmin.h"
@@ -57,6 +58,7 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/bytea.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/palloc.h"
@@ -761,8 +763,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	toast_options = transformRelOptions((Datum) 0, create_stmt->options, "toast",
 			validnsps, true, false);
 
-	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options,
-						   true);
+	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	AlterTableCreateToastTable(matrelid, toast_options, AccessExclusiveLock);
 
 	/* Create the sequence for primary keys */
@@ -940,18 +941,11 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid osrelid, Oid fnoid, SelectStmt 
 	}
 
 	/*
-	 * Record a dependency between the type its pipeline_query entry so that when
-	 * the view is dropped the pipeline_query meta data cleanup hook is invoked.
+	 * Record a dependency between the transform and its output stream
 	 */
 	referenced.classId = RelationRelationId;
 	referenced.objectId = relid;
 	referenced.objectSubId = 0;
-
-	dependent.classId = PipelineQueryRelationOid;
-	dependent.objectId = pqoid;
-	dependent.objectSubId = 0;
-
-	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
 	/* Record dependency with output stream */
 	dependent.classId = RelationRelationId;
@@ -1039,57 +1033,102 @@ record_ct_dependencies(Oid pqoid, Oid relid, Oid osrelid, Oid fnoid, SelectStmt 
 	}
 }
 
-void
-ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring)
+/*
+ * parse_outputfunc_args
+ */
+static void
+parse_outputfunc_args(List *options, List **args)
 {
-	RangeVar *transform;
+	int nargs;
+	char *raw;
+	bytea *val;
+	char *p;
+	int i;
+
+	*args = NIL;
+
+	if (!GetOptionAsInteger(options, OPTION_TGNARGS, &nargs))
+		return;
+
+	if (nargs <= 0)
+		return;
+
+	if (!GetOptionAsString(options, OPTION_TGARGS, &raw))
+		return;
+
+	val = (bytea *) DirectFunctionCall1(byteain, (Datum) CStringGetDatum(raw));
+	p = (char *) VARDATA(val);
+
+	/* Trigger function arguments will always be an array of strings */
+	for (i = 0; i < nargs; i++)
+	{
+		*args = lappend(*args, makeString(pstrdup(p)));
+		p += strlen(p) + 1;
+	}
+}
+
+/*
+ * set_next_oids_for_transform_osrel
+ */
+static void
+set_next_oids_for_transform_osrel(List *options)
+{
+	int relid;
+	int typid;
+	int atypeid;
+
+	reset_next_oids();
+
+	if (!GetOptionAsInteger(options, OPTION_OSRELID, &relid))
+		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELID);
+
+	binary_upgrade_next_heap_pg_class_oid = (Oid) relid;
+
+	if (!GetOptionAsInteger(options, OPTION_OSRELTYPE, &typid))
+		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELTYPE);
+
+	binary_upgrade_next_pg_type_oid = (Oid) typid;
+
+	if (!GetOptionAsInteger(options, OPTION_OSRELATYPE, &atypeid))
+		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELATYPE);
+
+	binary_upgrade_next_array_pg_type_oid = (Oid) atypeid;
+}
+
+/*
+ * ExecCreateContTransformStmt
+ */
+void
+ExecCreateContTransformStmt(RangeVar *transform, Node *stmt, List *options, const char *querystring)
+{
 	Relation pipeline_query;
 	Query *query;
 	Oid pqoid;
 	ObjectAddress address;
 	Oid relid;
-	Oid fargtypes[1];	/* dummy */
 	Oid tgfnid = InvalidOid;
-	Oid funcrettype = InvalidOid;
-	CreateStmt *create;
 	CreateForeignTableStmt *create_osrel;
 	Oid osrelid;
+	ViewStmt *vstmt;
+	List *args = NIL;
 
-	transform = stmt->into->rel;
 	check_relation_already_exists(transform);
-
-	/* Find and validate the transform output function. */
-	if (stmt->funcname)
-	{
-		tgfnid = LookupFuncName(stmt->funcname, 0, fargtypes, false);
-		funcrettype = get_func_rettype(tgfnid);
-		if (funcrettype != TRIGGEROID)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-					errmsg("function %s must return type \"trigger\"",
-					NameListToString(stmt->funcname))));
-	}
 
 	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
 
-	RewriteFromClause((SelectStmt *) stmt->query);
+	RewriteFromClause((SelectStmt *) stmt);
 
-	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
-	ValidateSubselect(stmt->query, "continuous transforms");
+	ValidateParsedContQuery(transform, stmt, querystring);
+	ValidateSubselect(stmt, "continuous transforms");
 
-	query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
+	query = parse_analyze(copyObject(stmt), querystring, NULL, 0);
 	ValidateContQuery(query);
 
-	create = makeNode(CreateStmt);
-	create->relation = stmt->into->rel;
-	create->tableElts = create_coldefs_from_tlist(query);
-	create->tablespacename = stmt->into->tableSpaceName;
-	create->oncommit = stmt->into->onCommit;
-	create->options = stmt->into->options;
+	vstmt = makeNode(ViewStmt);
+	vstmt->view = transform;
+	vstmt->query = stmt;
 
-	if (IsBinaryUpgrade)
-		set_next_oids_for_matrel();
-	address = DefineRelation(create, RELKIND_CONTTRANSFORM, InvalidOid, NULL);
+	address = DefineView(vstmt, querystring);
 	relid = address.objectId;
 	CommandCounterIncrement();
 
@@ -1101,23 +1140,94 @@ ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystri
 	transformCreateStreamStmt(create_osrel);
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_osrel();
+		set_next_oids_for_transform_osrel(options);
+
 	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_FOREIGN_TABLE, InvalidOid, NULL);
 	osrelid = address.objectId;
 	CommandCounterIncrement();
 
-	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, tgfnid, stmt->args);
+	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, options, &tgfnid);
 	CommandCounterIncrement();
 
 	CreateForeignTable(create_osrel, address.objectId);
 	CreatePipelineStreamEntry(create_osrel, address.objectId);
 	CommandCounterIncrement();
 
-	record_ct_dependencies(pqoid, relid, osrelid, tgfnid, (SelectStmt *) stmt->query, query, stmt->args);
+	parse_outputfunc_args(options, &args);
+	record_ct_dependencies(pqoid, relid, osrelid, tgfnid, (SelectStmt *) stmt, query, args);
+
 	CommandCounterIncrement();
 
 	heap_close(pipeline_query, NoLock);
 }
+
+static void
+reconcile_pipeline_query(void)
+{
+	HeapTuple tup;
+	Relation pipeline_query;
+	HeapScanDesc scan_desc;
+
+	if (pg_class_aclcheck(PipelineQueryRelationOid, GetUserId(), ACL_DELETE) != ACLCHECK_OK)
+		return;
+
+	pipeline_query = heap_open(PipelineQueryRelationOid, NoLock);
+	scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
+
+	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+		if (row->type == PIPELINE_QUERY_TRANSFORM && !OidIsValid(get_rel_name(row->relid)))
+			simple_heap_delete(pipeline_query, &tup->t_self);
+	}
+
+	heap_endscan(scan_desc);
+	heap_close(pipeline_query, NoLock);
+}
+
+static void
+reconcile_pipeline_stream(void)
+{
+	HeapTuple tup;
+	Relation pipeline_stream;
+	HeapScanDesc scan_desc;
+
+	if (pg_class_aclcheck(PipelineStreamRelationOid, GetUserId(), ACL_DELETE) != ACLCHECK_OK)
+		return;
+
+	pipeline_stream = heap_open(PipelineStreamRelationOid, NoLock);
+	scan_desc = heap_beginscan_catalog(pipeline_stream, 0, NULL);
+
+	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_stream row = (Form_pipeline_stream) GETSTRUCT(tup);
+		if (!OidIsValid(get_rel_name(row->relid)))
+			simple_heap_delete(pipeline_stream, &tup->t_self);
+	}
+
+	heap_endscan(scan_desc);
+	heap_close(pipeline_stream, NoLock);
+}
+
+/*
+ * ReconcilePipelineObjects
+ *
+ * DELETE any pipeline_stream and pipeline_query rows that no longer have a corresponding relation
+ */
+void
+ReconcilePipelineObjects(void)
+{
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	reconcile_pipeline_query();
+
+	reconcile_pipeline_stream();
+
+	CommandCounterIncrement();
+
+	PopActiveSnapshot();
+}
+
 
 /*
  * create_cq_set_next_oids_for_matrel

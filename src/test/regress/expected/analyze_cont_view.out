@@ -208,10 +208,17 @@ View definition:
  SELECT combine(cqregress6.avg) AS combine
    FROM cqregress6;
 
+CREATE VIEW cqregress8 WITH (action=transform) AS SELECT id FROM analyze_cont_stream;
 DROP STREAM analyze_cont_stream CASCADE;
-NOTICE:  drop cascades to 5 other objects
-DETAIL:  drop cascades to continuous view cqregress1
+NOTICE:  drop cascades to 6 other objects
+DETAIL:  drop cascades to view cqregress8
+drop cascades to continuous view cqregress1
 drop cascades to continuous view cqregress2
 drop cascades to continuous view cqregress5
 drop cascades to continuous view cqregress6
 drop cascades to view cqregress7
+SELECT * FROM pipeline_query;
+ id | type | relid | active | osrelid | matrelid | seqrelid | pkidxid | lookupidxid | step_factor | ttl | ttl_attno | tgfn | tgnargs | tgargs | query 
+----+------+-------+--------+---------+----------+----------+---------+-------------+-------------+-----+-----------+------+---------+--------+-------
+(0 rows)
+

@@ -232,12 +232,6 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 							RelationGetRelationName(rel)),
 			  errdetail("Foreign tables cannot have constraint triggers.")));
 	}
-	else if (rel->rd_rel->relkind == RELKIND_CONTTRANSFORM)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is a continuous transform",
-						RelationGetRelationName(rel)),
-		  errdetail("Continuous transforms don't support triggers.")));
 	else
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),

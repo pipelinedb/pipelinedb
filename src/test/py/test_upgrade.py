@@ -62,7 +62,7 @@ def test_binary_upgrade(pipeline, clean_db):
   # Create some transforms with trigger functions
   for n in range(8):
     name = 'ct_%d' % n
-    pipeline.create_ct(name, 'SELECT z::text FROM stream0', 'tg_fn()')
+    pipeline.create_ct(name, 'SELECT z::text FROM stream0', 'tg_fn')
 
   # Create some transforms without trigger functions
   for n in range(8):

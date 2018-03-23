@@ -24,7 +24,8 @@
 extern int continuous_view_fillfactor;
 
 extern void ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring);
-extern void ExecCreateContTransformStmt(CreateContTransformStmt *stmt, const char *querystring);
+extern void ExecCreateContTransformStmt(RangeVar *transform, Node *stmt, List *options, const char *querystring);
+extern void ReconcilePipelineObjects(void);
 
 /* Binary upgrade support */
 extern Datum create_cq_set_next_oids_for_matrel(PG_FUNCTION_ARGS);
