@@ -456,8 +456,7 @@ typedef enum NodeTag
 	/*
 	 * TAGS FOR PIPELINEDB
 	 */
-	T_CreateContViewStmt,
-	T_CreateContTransformStmt
+	T_CreateContViewStmt
 } NodeTag;
 
 /*

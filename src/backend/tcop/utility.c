@@ -2091,10 +2091,7 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateForeignTableStmt:
-			if (pg_strcasecmp((((CreateForeignTableStmt *) parsetree)->servername), PIPELINEDB_SERVER) == 0)
-				tag = "CREATE STREAM";
-			else
-				tag = "CREATE FOREIGN TABLE";
+			tag = "CREATE FOREIGN TABLE";
 			break;
 
 		case T_ImportForeignSchemaStmt:
@@ -2111,7 +2108,6 @@ CreateCommandTag(Node *parsetree)
 					tag = "DROP SEQUENCE";
 					break;
 				case OBJECT_VIEW:
-					// if it was a transform, DROP CONTINUOUS TRANSFORM
 					tag = "DROP VIEW";
 					break;
 				case OBJECT_CONTVIEW:
@@ -2151,21 +2147,7 @@ CreateCommandTag(Node *parsetree)
 					tag = "DROP TEXT SEARCH CONFIGURATION";
 					break;
 				case OBJECT_FOREIGN_TABLE:
-					{
-						DropStmt *stmt = (DropStmt *) parsetree;
-
-						tag = "DROP FOREIGN TABLE";
-						if (list_length(stmt->objects) == 1)
-						{
-							Node *n = linitial(stmt->objects);
-							if (IsA(n, List))
-							{
-								RangeVar *rv = makeRangeVarFromNameList((List *) n);
-								if (RangeVarIsForStream(rv, true))
-									tag = "DROP STREAM";
-							}
-						}
-					}
+					tag = "DROP FOREIGN TABLE";
 					break;
 				case OBJECT_EXTENSION:
 					tag = "DROP EXTENSION";
@@ -2588,10 +2570,6 @@ CreateCommandTag(Node *parsetree)
 				else
 					tag = "DEALLOCATE";
 			}
-			break;
-
-		case T_CreateContTransformStmt:
-			tag = "CREATE CONTINUOUS TRANSFORM";
 			break;
 
 			/* already-planned queries */
@@ -3191,7 +3169,6 @@ GetCommandLogLevel(Node *parsetree)
 
 			/* PipelineDB */
 			case T_CreateContViewStmt:
-			case T_CreateContTransformStmt:
 				lev = LOGSTMT_DDL;
 				break;
 

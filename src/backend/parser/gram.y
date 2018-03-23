@@ -2866,7 +2866,6 @@ CreateContTransformStmt:
           vstmt->query = $7;
           vstmt->view = $4;
           vstmt->options = $5;
-          
           vstmt->options = lappend(vstmt->options, makeDefElem(OPTION_ACTION, (Node *) makeString(ACTION_TRANSFORM)));
           vstmt->options = lappend(vstmt->options, makeDefElem(OPTION_TGFN, (Node *) makeString(NameListToString($11))));
 		  if (list_length($13))
@@ -2882,7 +2881,6 @@ CreateContTransformStmt:
           vstmt->query = $7;
           vstmt->view = $4;
           vstmt->options = $5;
-          
           vstmt->options = lappend(vstmt->options, makeDefElem(OPTION_ACTION, (Node *) makeString(ACTION_TRANSFORM)));
           $$ = (Node *) vstmt;
         }
