@@ -1601,7 +1601,7 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_VIEW:
 		case OBJECT_MATVIEW:
 		case OBJECT_FOREIGN_TABLE:
-		case OBJECT_CONTVIEW:
+//		case OBJECT_CONTVIEW:
 			RemoveRelations(stmt);
 			break;
 		default:
@@ -2110,9 +2110,9 @@ CreateCommandTag(Node *parsetree)
 				case OBJECT_VIEW:
 					tag = "DROP VIEW";
 					break;
-				case OBJECT_CONTVIEW:
-					tag = "DROP CONTINUOUS VIEW";
-					break;
+//				case OBJECT_CONTVIEW:
+//					tag = "DROP CONTINUOUS VIEW";
+//					break;
 				case OBJECT_MATVIEW:
 					tag = "DROP MATERIALIZED VIEW";
 					break;

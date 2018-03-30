@@ -2576,11 +2576,11 @@ RenameRelation(RenameStmt *stmt)
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("cannot rename materialization table \"%s\" for continuous view \"%s\"",
 						stmt->relation->relname, cv->relname)));
-	else if (stmt->renameType == OBJECT_CONTVIEW)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("cannot rename continuous view \"%s\"",
-						stmt->relation->relname)));
+//	else if (stmt->renameType == OBJECT_CONTVIEW)
+//		ereport(ERROR,
+//				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+//				 errmsg("cannot rename continuous view \"%s\"",
+//						stmt->relation->relname)));
 
 	/*
 	 * Grab an exclusive lock on the target table, index, sequence, view,

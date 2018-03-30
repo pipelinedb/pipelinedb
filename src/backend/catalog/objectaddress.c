@@ -748,7 +748,7 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 			case OBJECT_VIEW:
 			case OBJECT_MATVIEW:
 			case OBJECT_FOREIGN_TABLE:
-			case OBJECT_CONTVIEW:
+//			case OBJECT_CONTVIEW:
 				address =
 					get_relation_by_qualified_name(objtype, objname,
 												   &relation, lockmode,

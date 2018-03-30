@@ -5691,7 +5691,7 @@ DropStmt: DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 
 
 drop_type:  TABLE                 { $$ = OBJECT_TABLE; }
-      | CONTINUOUS VIEW           { $$ = OBJECT_CONTVIEW; }
+      | CONTINUOUS VIEW           { $$ = OBJECT_VIEW; }
       | STREAM                    { $$ = OBJECT_FOREIGN_TABLE; }
       | CONTINUOUS TRANSFORM      { $$ = OBJECT_VIEW; }
       | SEQUENCE                { $$ = OBJECT_SEQUENCE; }
