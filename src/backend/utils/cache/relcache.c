@@ -432,7 +432,7 @@ RelationParseRelOptions(Relation relation, HeapTuple tuple)
 		case RELKIND_INDEX:
 		case RELKIND_VIEW:
 		case RELKIND_MATVIEW:
-		case RELKIND_CONTVIEW:
+//		case RELKIND_CONTVIEW:
 			break;
 		default:
 			return;

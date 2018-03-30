@@ -757,8 +757,8 @@ objectsInSchemaToOids(GrantObjectType objtype, List *nspnames)
 				objects = list_concat(objects, objs);
 				objs = getRelationsInNamespace(namespaceId, RELKIND_FOREIGN_TABLE);
 				objects = list_concat(objects, objs);
-				objs = getRelationsInNamespace(namespaceId, RELKIND_CONTVIEW);
-				objects = list_concat(objects, objs);
+//				objs = getRelationsInNamespace(namespaceId, RELKIND_CONTVIEW);
+//				objects = list_concat(objects, objs);
 				break;
 			case ACL_OBJECT_SEQUENCE:
 				objs = getRelationsInNamespace(namespaceId, RELKIND_SEQUENCE);
@@ -1522,7 +1522,7 @@ expand_all_col_privileges(Oid table_oid, Form_pg_class classForm,
 			continue;
 
 		/* Views don't have any system columns at all */
-		if ((classForm->relkind == RELKIND_VIEW || classForm->relkind == RELKIND_CONTVIEW) && curr_att < 0)
+		if (classForm->relkind == RELKIND_VIEW && curr_att < 0)
 			continue;
 
 		attTuple = SearchSysCache2(ATTNUM,

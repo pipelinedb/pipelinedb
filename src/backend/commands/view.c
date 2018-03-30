@@ -457,7 +457,8 @@ DefineContVirtualRelation(RangeVar *relation, List *tlist)
 	 * existing view, so we don't need more code to complain if "replace"
 	 * is false).
 	 */
-	address = DefineRelation(createStmt, RELKIND_CONTVIEW, InvalidOid, NULL);
+	// move this out of here!
+	address = DefineRelation(createStmt, RELKIND_VIEW, InvalidOid, NULL);
 	Assert(address.objectId != InvalidOid);
 	return address;
 }

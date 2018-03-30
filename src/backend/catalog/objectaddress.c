@@ -1163,13 +1163,13 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 						 errmsg("\"%s\" is not a table",
 								RelationGetRelationName(relation))));
 			break;
-		case OBJECT_CONTVIEW:
-			if (relation->rd_rel->relkind != RELKIND_CONTVIEW)
-				ereport(ERROR,
-						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						 errmsg("\"%s\" is not a continuous view",
-								RelationGetRelationName(relation))));
-			break;
+//		case OBJECT_CONTVIEW:
+//			if (relation->rd_rel->relkind != RELKIND_CONTVIEW)
+//				ereport(ERROR,
+//						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+//						 errmsg("\"%s\" is not a continuous view",
+//								RelationGetRelationName(relation))));
+//			break;
 		case OBJECT_VIEW:
 			if (relation->rd_rel->relkind != RELKIND_VIEW)
 				ereport(ERROR,
@@ -3240,10 +3240,10 @@ getRelationDescription(StringInfo buffer, Oid relid)
 			appendStringInfo(buffer, _("foreign table %s"),
 							 relname);
 			break;
-		case RELKIND_CONTVIEW:
-			appendStringInfo(buffer, _("continuous view %s"),
-							 relname);
-			break;
+//		case RELKIND_CONTVIEW:
+//			appendStringInfo(buffer, _("continuous view %s"),
+//							 relname);
+//			break;
 		default:
 			/* shouldn't get here */
 			appendStringInfo(buffer, _("relation %s"),
@@ -3694,9 +3694,9 @@ getRelationTypeDescription(StringInfo buffer, Oid relid, int32 objectSubId)
 		case RELKIND_FOREIGN_TABLE:
 			appendStringInfoString(buffer, "foreign table");
 			break;
-		case RELKIND_CONTVIEW:
-			appendStringInfoString(buffer, "continuous view");
-			break;
+//		case RELKIND_CONTVIEW:
+//			appendStringInfoString(buffer, "continuous view");
+//			break;
 		default:
 			/* shouldn't get here */
 			appendStringInfoString(buffer, "relation");

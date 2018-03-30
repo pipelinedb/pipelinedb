@@ -288,7 +288,7 @@ heap_create(const char *relname,
 		case RELKIND_VIEW:
 		case RELKIND_COMPOSITE_TYPE:
 		case RELKIND_FOREIGN_TABLE:
-		case RELKIND_CONTVIEW:
+//		case RELKIND_CONTVIEW:
 			create_storage = false;
 
 			/*
@@ -422,7 +422,7 @@ CheckAttributeNamesTypes(TupleDesc tupdesc, char relkind,
 	 * Skip this for a view or type relation, since those don't have system
 	 * attributes.
 	 */
-	if (relkind != RELKIND_VIEW && relkind != RELKIND_COMPOSITE_TYPE && relkind != RELKIND_CONTVIEW)
+	if (relkind != RELKIND_VIEW && relkind != RELKIND_COMPOSITE_TYPE)
 	{
 		for (i = 0; i < natts; i++)
 		{
@@ -721,7 +721,7 @@ AddNewAttributeTuples(Oid new_rel_oid,
 	 * all for a view or type relation.  We don't bother with making datatype
 	 * dependencies here, since presumably all these types are pinned.
 	 */
-	if (relkind != RELKIND_VIEW && relkind != RELKIND_COMPOSITE_TYPE && relkind != RELKIND_CONTVIEW)
+	if (relkind != RELKIND_VIEW && relkind != RELKIND_COMPOSITE_TYPE)
 	{
 		for (i = 0; i < (int) lengthof(SysAtt); i++)
 		{
@@ -1108,8 +1108,7 @@ heap_create_with_catalog(const char *relname,
 		if (IsBinaryUpgrade &&
 			(relkind == RELKIND_RELATION || relkind == RELKIND_SEQUENCE ||
 			 relkind == RELKIND_VIEW || relkind == RELKIND_MATVIEW ||
-			 relkind == RELKIND_COMPOSITE_TYPE || relkind == RELKIND_FOREIGN_TABLE ||
-			 relkind == RELKIND_CONTVIEW))
+			 relkind == RELKIND_COMPOSITE_TYPE || relkind == RELKIND_FOREIGN_TABLE))
 		{
 			if (!OidIsValid(binary_upgrade_next_heap_pg_class_oid))
 				ereport(ERROR,
@@ -1143,7 +1142,7 @@ heap_create_with_catalog(const char *relname,
 			case RELKIND_VIEW:
 			case RELKIND_MATVIEW:
 			case RELKIND_FOREIGN_TABLE:
-			case RELKIND_CONTVIEW:
+//			case RELKIND_CONTVIEW:
 				relacl = get_user_default_acl(ACL_OBJECT_RELATION, ownerid,
 											  relnamespace);
 				break;
@@ -1200,8 +1199,7 @@ heap_create_with_catalog(const char *relname,
 							  relkind == RELKIND_VIEW ||
 							  relkind == RELKIND_MATVIEW ||
 							  relkind == RELKIND_FOREIGN_TABLE ||
-							  relkind == RELKIND_COMPOSITE_TYPE ||
-							  relkind == RELKIND_CONTVIEW))
+							  relkind == RELKIND_COMPOSITE_TYPE))
 		new_array_oid = AssignTypeArrayOid();
 
 	/*
@@ -1824,8 +1822,7 @@ heap_drop_with_catalog(Oid relid)
 	 */
 	if (rel->rd_rel->relkind != RELKIND_VIEW &&
 		rel->rd_rel->relkind != RELKIND_COMPOSITE_TYPE &&
-		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
-		rel->rd_rel->relkind != RELKIND_CONTVIEW)
+		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE)
 	{
 		RelationDropStorage(rel);
 	}
