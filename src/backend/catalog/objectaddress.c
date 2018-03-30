@@ -3140,20 +3140,20 @@ getObjectDescription(const ObjectAddress *object)
 				break;
 			}
 
-		case OCLASS_CONTINUOUS_QUERY:
-			{
-				HeapTuple	tup;
-
-				tup = SearchPipelineSysCache1(PIPELINEQUERYOID,
-									  ObjectIdGetDatum(object->objectId));
-				if (!HeapTupleIsValid(tup))
-					elog(ERROR, "cache lookup failed for pipeline_query %u",
-						 object->objectId);
-				appendStringInfo(&buffer, _("pipeline_query %s"),
-						get_rel_name(((Form_pipeline_query) GETSTRUCT(tup))->relid));
-				ReleaseSysCache(tup);
-				break;
-			}
+//		case OCLASS_CONTINUOUS_QUERY:
+//			{
+//				HeapTuple	tup;
+//
+//				tup = SearchPipelineSysCache1(PIPELINEQUERYOID,
+//									  ObjectIdGetDatum(object->objectId));
+//				if (!HeapTupleIsValid(tup))
+//					elog(ERROR, "cache lookup failed for pipeline_query %u",
+//						 object->objectId);
+//				appendStringInfo(&buffer, _("pipeline_query %s"),
+//						get_rel_name(((Form_pipeline_query) GETSTRUCT(tup))->relid));
+//				ReleaseSysCache(tup);
+//				break;
+//			}
 
 		default:
 			appendStringInfo(&buffer, "unrecognized object %u %u %d",
@@ -3641,9 +3641,9 @@ getObjectTypeDescription(const ObjectAddress *object)
 			appendStringInfoString(&buffer, "transform");
 			break;
 
-		case OCLASS_CONTINUOUS_QUERY:
-			appendStringInfoString(&buffer, "continuous query");
-			break;
+//		case OCLASS_CONTINUOUS_QUERY:
+//			appendStringInfoString(&buffer, "continuous query");
+//			break;
 
 		default:
 			appendStringInfo(&buffer, "unrecognized %u", object->classId);

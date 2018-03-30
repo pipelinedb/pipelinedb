@@ -8335,7 +8335,7 @@ ATExecAlterColumnType(AlteredTableInfo *tab, Relation rel,
 			case OCLASS_USER_MAPPING:
 			case OCLASS_DEFACL:
 			case OCLASS_EXTENSION:
-			case OCLASS_CONTINUOUS_QUERY:
+//			case OCLASS_CONTINUOUS_QUERY:
 
 				/*
 				 * We don't expect any of these sorts of objects to depend on
