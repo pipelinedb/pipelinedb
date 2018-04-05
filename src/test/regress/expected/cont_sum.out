@@ -55,9 +55,9 @@ SELECT * FROM test_int2_sum ORDER BY k;
 
 DROP STREAM int_cqsum_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_int8_sum
-drop cascades to continuous view test_int4_sum
-drop cascades to continuous view test_int2_sum
+DETAIL:  drop cascades to view test_int8_sum
+drop cascades to view test_int4_sum
+drop cascades to view test_int2_sum
 -------------------------------------------------------------------------------
 -- Float sums
 CREATE STREAM float_cqsum_stream (k text, v float8);
@@ -97,8 +97,8 @@ SELECT * FROM test_float4_sum ORDER BY k;
 
 DROP STREAM float_cqsum_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view test_float8_sum
-drop cascades to continuous view test_float4_sum
+DETAIL:  drop cascades to view test_float8_sum
+drop cascades to view test_float4_sum
 -------------------------------------------------------------------------------
 -- Cash sums
 CREATE STREAM cash_cqsum_stream (k text, v money);
@@ -122,7 +122,7 @@ SELECT * FROM test_cash_sum ORDER BY k;
 (2 rows)
 
 DROP STREAM cash_cqsum_stream CASCADE;
-NOTICE:  drop cascades to continuous view test_cash_sum
+NOTICE:  drop cascades to view test_cash_sum
 -------------------------------------------------------------------------------
 -- Numeric sums
 CREATE STREAM numeric_cqsum_stream (k text, v numeric);
@@ -146,7 +146,7 @@ SELECT * FROM test_numeric_sum ORDER BY k;
 (2 rows)
 
 DROP STREAM numeric_cqsum_stream CASCADE;
-NOTICE:  drop cascades to continuous view test_numeric_sum
+NOTICE:  drop cascades to view test_numeric_sum
 -------------------------------------------------------------------------------
 -- Interval sum
 CREATE STREAM interval_cqsum_stream (k text, ts0 timestamp, ts1 timestamp);
@@ -170,4 +170,4 @@ SELECT * FROM test_interval_sum ORDER BY k;
 (3 rows)
 
 DROP STREAM interval_cqsum_stream CASCADE;
-NOTICE:  drop cascades to continuous view test_interval_sum
+NOTICE:  drop cascades to view test_interval_sum

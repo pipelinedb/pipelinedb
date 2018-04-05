@@ -6,8 +6,8 @@ WHERE x > 10 GROUP BY x;
 CREATE VIEW msw1 AS SELECT combine(count) AS count FROM msw0;
 -- View depends on CV
 DROP CONTINUOUS VIEW msw0;
-ERROR:  cannot drop continuous view msw0 because other objects depend on it
-DETAIL:  view msw1 depends on continuous view msw0
+ERROR:  cannot drop view msw0 because other objects depend on it
+DETAIL:  view msw1 depends on view msw0
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW msw0 CASCADE;
 NOTICE:  drop cascades to view msw1
@@ -471,7 +471,7 @@ SELECT
 FROM msw_stream
 WHERE arrival_timestamp > clock_timestamp() - INTERVAL '10 minute';
 \d+ msw5
-                     Continuous view "public.msw5"
+                           View "public.msw5"
  Column  |           Type           | Modifiers | Storage | Description 
 ---------+--------------------------+-----------+---------+-------------
  sw_time | timestamp with time zone |           | plain   | 

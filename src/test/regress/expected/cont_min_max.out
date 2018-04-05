@@ -70,5 +70,5 @@ SELECT key, intervalmax, txtmin, txtmax, nmin, nmax, amin, amax FROM test_min_ma
 (2 rows)
 
 DROP CONTINUOUS VIEW stream_cqminmax CASCADE;
-ERROR:  "stream_cqminmax" is not a continuous view 
+ERROR:  "stream_cqminmax" is not a view
 HINT:  Use DROP FOREIGN TABLE to remove a foreign table.

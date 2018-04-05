@@ -214,7 +214,6 @@ check_xact_readonly(Node *parsetree)
 		case T_CreateForeignTableStmt:
 		case T_ImportForeignSchemaStmt:
 		case T_SecLabelStmt:
-		case T_CreateContViewStmt:
 			PreventCommandIfReadOnly(CreateCommandTag(parsetree));
 			PreventCommandIfParallelMode(CreateCommandTag(parsetree));
 			break;
@@ -524,10 +523,6 @@ standard_ProcessUtility(Node *parsetree,
 			/* no event triggers for global objects */
 			PreventTransactionChain(isTopLevel, "CREATE TABLESPACE");
 			CreateTableSpace((CreateTableSpaceStmt *) parsetree);
-			break;
-
-		case T_CreateContViewStmt:
-			ExecCreateContViewStmt((CreateContViewStmt *) parsetree, queryString);
 			break;
 
 		case T_DropTableSpaceStmt:
@@ -2386,10 +2381,6 @@ CreateCommandTag(Node *parsetree)
 			tag = "EXPLAIN";
 			break;
 
-		case T_CreateContViewStmt:
-			tag = "CREATE CONTINUOUS VIEW";
-			break;
-
 		case T_CreateTableAsStmt:
 			switch (((CreateTableAsStmt *) parsetree)->relkind)
 			{
@@ -3166,11 +3157,6 @@ GetCommandLogLevel(Node *parsetree)
 
 			}
 			break;
-
-			/* PipelineDB */
-			case T_CreateContViewStmt:
-				lev = LOGSTMT_DDL;
-				break;
 
 		default:
 			elog(WARNING, "unrecognized node type: %d",

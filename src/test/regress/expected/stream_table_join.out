@@ -268,16 +268,16 @@ SELECT * FROM test_stj8;
 
 DROP STREAM test_stj_stream CASCADE;
 NOTICE:  drop cascades to 10 other objects
-DETAIL:  drop cascades to continuous view test_stj0
-drop cascades to continuous view test_stj1
-drop cascades to continuous view test_stj2
-drop cascades to continuous view test_stj3
-drop cascades to continuous view test_stj4
-drop cascades to continuous view test_stj5
-drop cascades to continuous view test_stj6
-drop cascades to continuous view stj_no_tl
-drop cascades to continuous view test_stj7
-drop cascades to continuous view test_stj8
+DETAIL:  drop cascades to view test_stj0
+drop cascades to view test_stj1
+drop cascades to view test_stj2
+drop cascades to view test_stj3
+drop cascades to view test_stj4
+drop cascades to view test_stj5
+drop cascades to view test_stj6
+drop cascades to view stj_no_tl
+drop cascades to view test_stj7
+drop cascades to view test_stj8
 -- Regression test for join with empty table.
 CREATE STREAM test_stj_empty_stream (x int);
 CREATE TABLE test_stj_empty (x int);
@@ -342,14 +342,14 @@ NOTICE:  consider creating an index on t.x for improved stream-table join perfor
 -- Table columns being joined on can't be dropped
 ALTER TABLE test_stj_t4 DROP COLUMN x;
 ERROR:  cannot drop table test_stj_t4 column x because other objects depend on it
-DETAIL:  continuous view stj_deps depends on table test_stj_t4 column x
+DETAIL:  view stj_deps depends on table test_stj_t4 column x
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 -- But unused columns can be
 ALTER TABLE test_stj_t4 DROP COLUMN y;
 -- Functions used by CVs can't be dropped
 DROP FUNCTION test_stj_foo(integer);
 ERROR:  cannot drop function test_stj_foo(integer) because other objects depend on it
-DETAIL:  continuous view stj_deps depends on function test_stj_foo(integer)
+DETAIL:  view stj_deps depends on function test_stj_foo(integer)
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW stj_deps;
 -- Now we can drop everything
@@ -386,7 +386,7 @@ DROP TABLE test_stj_t3;
 DROP TABLE test_stj_location;
 DROP TABLE test_stj_blocks;
 DROP TABLE test_stj_empty CASCADE;
-NOTICE:  drop cascades to continuous view test_stj_empty_join
+NOTICE:  drop cascades to view test_stj_empty_join
 -- Join types
 CREATE TABLE test_stj_t (x int);
 INSERT INTO test_stj_t (x) SELECT generate_series(0, 1000) AS x;
@@ -613,10 +613,10 @@ SELECT * FROM test_stj_cross ORDER BY x;
 
 DROP STREAM test_stj_stream CASCADE;
 NOTICE:  drop cascades to 6 other objects
-DETAIL:  drop cascades to continuous view test_stj_inner
-drop cascades to continuous view test_stj_left
-drop cascades to continuous view test_stj_right
-drop cascades to continuous view test_stj_anti
-drop cascades to continuous view test_stj_semi
-drop cascades to continuous view test_stj_cross
+DETAIL:  drop cascades to view test_stj_inner
+drop cascades to view test_stj_left
+drop cascades to view test_stj_right
+drop cascades to view test_stj_anti
+drop cascades to view test_stj_semi
+drop cascades to view test_stj_cross
 DROP TABLE test_stj_t;

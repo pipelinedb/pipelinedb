@@ -451,12 +451,7 @@ typedef enum NodeTag
 	T_TIDBitmap,				/* in nodes/tidbitmap.h */
 	T_InlineCodeBlock,			/* in nodes/parsenodes.h */
 	T_FdwRoutine,				/* in foreign/fdwapi.h */
-	T_TsmRoutine,				/* in access/tsmapi.h */
-
-	/*
-	 * TAGS FOR PIPELINEDB
-	 */
-	T_CreateContViewStmt
+	T_TsmRoutine				/* in access/tsmapi.h */
 } NodeTag;
 
 /*

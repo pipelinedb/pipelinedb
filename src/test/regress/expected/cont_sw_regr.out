@@ -97,14 +97,14 @@ SELECT * FROM test_sw_corr;
 
 DROP STREAM test_sw_regr_stream CASCADE;
 NOTICE:  drop cascades to 11 other objects
-DETAIL:  drop cascades to continuous view test_sw_regr_sxx
-drop cascades to continuous view test_sw_regr_syy
-drop cascades to continuous view test_sw_regr_sxy
-drop cascades to continuous view test_sw_regr_avgx
-drop cascades to continuous view test_sw_regr_avgy
-drop cascades to continuous view test_sw_regr_r2
-drop cascades to continuous view test_sw_regr_slope
-drop cascades to continuous view test_sw_regr_intercept
-drop cascades to continuous view test_sw_regr_count
-drop cascades to continuous view test_sw_covar_pop
-drop cascades to continuous view test_sw_corr
+DETAIL:  drop cascades to view test_sw_regr_sxx
+drop cascades to view test_sw_regr_syy
+drop cascades to view test_sw_regr_sxy
+drop cascades to view test_sw_regr_avgx
+drop cascades to view test_sw_regr_avgy
+drop cascades to view test_sw_regr_r2
+drop cascades to view test_sw_regr_slope
+drop cascades to view test_sw_regr_intercept
+drop cascades to view test_sw_regr_count
+drop cascades to view test_sw_covar_pop
+drop cascades to view test_sw_corr

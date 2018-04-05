@@ -37,8 +37,8 @@ SELECT * FROM os0_output ORDER BY old_count, new_count;
 
 -- We shouldn't be able to drop this because os0_output depends on it now
 DROP CONTINUOUS VIEW os0;
-ERROR:  cannot drop continuous view os0 because other objects depend on it
-DETAIL:  continuous view os0_output depends on foreign table os0_osrel
+ERROR:  cannot drop view os0 because other objects depend on it
+DETAIL:  view os0_output depends on foreign table os0_osrel
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW os0_output;
 DROP CONTINUOUS VIEW os0;
@@ -125,7 +125,7 @@ SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
 (8 rows)
 
 DROP CONTINUOUS VIEW os1 CASCADE;
-NOTICE:  drop cascades to continuous view os1_output
+NOTICE:  drop cascades to view os1_output
 -- Verify SW ticking into output streams
 CREATE CONTINUOUS VIEW os2 WITH (sw = '10 seconds') AS
 SELECT x::integer, COUNT(*)
@@ -180,7 +180,7 @@ SELECT x, old, new FROM os2_output ORDER BY x, old, new;
 (8 rows)
 
 DROP CONTINUOUS VIEW os2 CASCADE;
-NOTICE:  drop cascades to continuous view os2_output
+NOTICE:  drop cascades to view os2_output
 -- Stream-table joins on output streams
 CREATE TABLE os_t0 (x integer, y integer);
 INSERT INTO os_t0 (x, y) VALUES (0, 42);
@@ -217,10 +217,10 @@ SELECT x, new, y FROM os3_output ORDER BY x, new, y;
 
 DROP TABLE os_t0;
 ERROR:  cannot drop table os_t0 because other objects depend on it
-DETAIL:  continuous view os3_output depends on table os_t0
+DETAIL:  view os3_output depends on table os_t0
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW os3 CASCADE;
-NOTICE:  drop cascades to continuous view os3_output
+NOTICE:  drop cascades to view os3_output
 -- Final functions should be applied to output stream tuples where necessary
 CREATE CONTINUOUS VIEW os3 AS SELECT x::integer, avg(y::integer), count(distinct z::integer)
 FROM os_stream GROUP BY x;
@@ -264,7 +264,7 @@ SELECT x, old, new FROM os3_output ORDER BY x, old, new;
 (4 rows)
 
 DROP CONTINUOUS VIEW os3 CASCADE;
-NOTICE:  drop cascades to continuous view os3_output
+NOTICE:  drop cascades to view os3_output
 -- Verify that transforms write to output streams
 CREATE VIEW os_xform WITH (action=transform) AS SELECT x, y FROM os_stream;
 CREATE CONTINUOUS VIEW os4 AS SELECT x, y FROM output_of('os_xform');
@@ -282,7 +282,7 @@ SELECT * FROM os4 ORDER BY x;
 DROP STREAM os_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view os_xform
-drop cascades to continuous view os4
+drop cascades to view os4
 CREATE STREAM os_stream (x integer, y numeric);
 CREATE CONTINUOUS VIEW os5 AS
 SELECT x,
@@ -323,8 +323,8 @@ SELECT combine(avg) FROM os6;
 
 DROP STREAM os_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view os5
-drop cascades to continuous view os6
+DETAIL:  drop cascades to view os5
+drop cascades to view os6
 CREATE STREAM os_stream (ts timestamp, x text, y float);
 CREATE CONTINUOUS VIEW os7 WITH (sw = '5 minutes') AS
   SELECT x, second(ts), y, count(*)
@@ -351,5 +351,5 @@ SELECT x, y FROM os8 ORDER BY x, y;
 
 DROP STREAM os_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view os7
-drop cascades to continuous view os8
+DETAIL:  drop cascades to view os7
+drop cascades to view os8

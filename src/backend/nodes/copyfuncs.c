@@ -4089,17 +4089,6 @@ _copyAlterPolicyStmt(const AlterPolicyStmt *from)
 	return newnode;
 }
 
-static CreateContViewStmt *
-_copyCreateContViewStmt(const CreateContViewStmt *from)
-{
-	CreateContViewStmt *newnode = makeNode(CreateContViewStmt);
-
-	COPY_NODE_FIELD(into);
-	COPY_NODE_FIELD(query);
-
-	return newnode;
-}
-
 /* ****************************************************************
  *					pg_list.h copy functions
  * ****************************************************************
@@ -4832,13 +4821,6 @@ copyObject(const void *from)
 			break;
 		case T_AlterPolicyStmt:
 			retval = _copyAlterPolicyStmt(from);
-			break;
-
-			/*
-			 * PipelineDB
-			 */
-		case T_CreateContViewStmt:
-			retval = _copyCreateContViewStmt(from);
 			break;
 		case T_A_Expr:
 			retval = _copyAExpr(from);

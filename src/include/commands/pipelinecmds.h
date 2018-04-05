@@ -23,7 +23,7 @@
 /* guc parameter */
 extern int continuous_view_fillfactor;
 
-extern void ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring);
+extern void ExecCreateContViewStmt(RangeVar *view, Node *query, List *options, const char *querystring);
 extern void ExecCreateContTransformStmt(RangeVar *transform, Node *stmt, List *options, const char *querystring);
 extern void ReconcilePipelineObjects(void);
 

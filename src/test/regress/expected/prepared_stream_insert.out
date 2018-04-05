@@ -58,7 +58,7 @@ SELECT * FROM prep_insert2;
 
 DROP STREAM prep_insert_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view prep_insert0
-drop cascades to continuous view prep_insert1
-drop cascades to continuous view prep_insert2
+DETAIL:  drop cascades to view prep_insert0
+drop cascades to view prep_insert1
+drop cascades to view prep_insert2
 DROP TABLE prep_insert_t;

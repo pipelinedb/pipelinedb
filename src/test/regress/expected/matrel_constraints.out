@@ -28,4 +28,4 @@ SELECT * FROM mc_v0 ORDER BY x;
 (5 rows)
 
 DROP STREAM mc_s0 CASCADE; 
-NOTICE:  drop cascades to continuous view mc_v0
+NOTICE:  drop cascades to view mc_v0

@@ -111,12 +111,12 @@ SELECT * FROM cont_subselect_v5 ORDER BY x;
 
 DROP STREAM cont_subselect_stream CASCADE;
 NOTICE:  drop cascades to 6 other objects
-DETAIL:  drop cascades to continuous view cont_subselect_v0
-drop cascades to continuous view cont_subselect_v1
-drop cascades to continuous view cont_subselect_v2
-drop cascades to continuous view cont_subselect_v3
-drop cascades to continuous view cont_subselect_v4
-drop cascades to continuous view cont_subselect_v5
+DETAIL:  drop cascades to view cont_subselect_v0
+drop cascades to view cont_subselect_v1
+drop cascades to view cont_subselect_v2
+drop cascades to view cont_subselect_v3
+drop cascades to view cont_subselect_v4
+drop cascades to view cont_subselect_v5
 -- Stream-table joins in subselects
 CREATE TABLE test_cont_sub_t0 (x integer, y integer);
 INSERT INTO test_cont_sub_t0 (x, y) VALUES (0, 0);

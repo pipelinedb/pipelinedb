@@ -36,8 +36,8 @@ SELECT * FROM test_bit_or ORDER BY k DESC;
 
 DROP STREAM bit_stream_cqboolagg CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view test_bit_and
-drop cascades to continuous view test_bit_or
+DETAIL:  drop cascades to view test_bit_and
+drop cascades to view test_bit_or
 -- bool_and, bool_or, every
 CREATE STREAM bool_stream_cqboolagg (k text, b boolean);
 CREATE CONTINUOUS VIEW test_bool_and AS SELECT k::text, bool_and(b::boolean) FROM bool_stream_cqboolagg GROUP BY k;
@@ -91,6 +91,6 @@ SELECT * FROM test_every ORDER BY k DESC;
 
 DROP STREAM bool_stream_cqboolagg CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_bool_and
-drop cascades to continuous view test_bool_or
-drop cascades to continuous view test_every
+DETAIL:  drop cascades to view test_bool_and
+drop cascades to view test_bool_or
+drop cascades to view test_every

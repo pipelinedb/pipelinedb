@@ -69,7 +69,7 @@ extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern void RemovePipelineQueryById(Oid oid);
 
 extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid seqrel, int ttl, AttrNumber ttl_attno, Oid *pq_id);
-extern void UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid);
+extern void UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid, List *options);
 extern void UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid);
 extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid);
 
@@ -98,5 +98,7 @@ extern ContQuery *GetContQueryForTransformId(Oid id);
 extern bool ContQuerySetActive(Oid id, bool active);
 
 extern void GetTTLInfo(RangeVar *cvname, char **ttl_col, int *ttl);
+
+extern void StorePipelineQueryReloptions(Oid relid, List *options);
 
 #endif

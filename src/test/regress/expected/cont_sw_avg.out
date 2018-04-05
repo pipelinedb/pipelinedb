@@ -58,9 +58,9 @@ SELECT * FROM test_int2_avg_sw ORDER BY k;
 
 DROP STREAM int_swavg_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_int8_avg_sw
-drop cascades to continuous view test_int4_avg_sw
-drop cascades to continuous view test_int2_avg_sw
+DETAIL:  drop cascades to view test_int8_avg_sw
+drop cascades to view test_int4_avg_sw
+drop cascades to view test_int2_avg_sw
 -------------------------------------------------------------------------------
 -- Float averages
 CREATE STREAM float_swavg_stream (k text, v float8);
@@ -108,8 +108,8 @@ SELECT k, round(avg::numeric, 5) FROM test_float4_avg_sw ORDER BY k;
 
 DROP STREAM float_swavg_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view test_float8_avg_sw
-drop cascades to continuous view test_float4_avg_sw
+DETAIL:  drop cascades to view test_float8_avg_sw
+drop cascades to view test_float4_avg_sw
 -------------------------------------------------------------------------------
 -- Numeric averages
 CREATE STREAM numeric_swavg_stream (k text, v numeric);
@@ -139,7 +139,7 @@ SELECT * FROM test_numeric_avg_sw ORDER BY k;
 (3 rows)
 
 DROP STREAM numeric_swavg_stream CASCADE;
-NOTICE:  drop cascades to continuous view test_numeric_avg_sw
+NOTICE:  drop cascades to view test_numeric_avg_sw
 -------------------------------------------------------------------------------
 -- Interval averages
 CREATE STREAM interval_swavg_stream (k text, ts0 timestamp, ts1 timestamp);
@@ -170,7 +170,7 @@ SELECT * FROM test_interval_avg_sw ORDER BY k;
 (2 rows)
 
 DROP STREAM interval_swavg_stream CASCADE;
-NOTICE:  drop cascades to continuous view test_interval_avg_sw
+NOTICE:  drop cascades to view test_interval_avg_sw
 CREATE STREAM heart_rates_stream (patient_id int, value float, description text);
 CREATE CONTINUOUS VIEW avg_heart_rates AS
 SELECT patient_id::integer, avg(value::float) FROM heart_rates_stream
@@ -187,4 +187,4 @@ SELECT * FROM avg_heart_rates ORDER BY patient_id;
 (1 row)
 
 DROP STREAM heart_rates_stream CASCADE;
-NOTICE:  drop cascades to continuous view avg_heart_rates
+NOTICE:  drop cascades to view avg_heart_rates

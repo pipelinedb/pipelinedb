@@ -88,16 +88,31 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define PIPELINE_QUERY_VIEW 		'v'
 #define PIPELINE_QUERY_TRANSFORM 	't'
 
+// consolidate these with other CV options we already have #define'd
 #define OPTION_ACTION "action"
 #define OPTION_OUTPUTFUNC "outputfunc"
 #define OPTION_MATRELID "matrelid"
 #define OPTION_OSRELID "osrelid"
 #define OPTION_OSRELTYPE "osreltype"
 #define OPTION_OSRELATYPE "osrelatype"
+#define OPTION_TABLESPACE "tablespace"
 #define OPTION_TGFNID "tgfnid"
 #define OPTION_TGFN "tgfn"
 #define OPTION_TGNARGS "tgnargs"
 #define OPTION_TGARGS "tgargs"
+
+#define OPTION_MATRELID "matrelid"
+#define OPTION_MATRELTYPE "matreltype"
+#define OPTION_MATRELATYPE "matrelatype"
+#define OPTION_MATRELTOASTRELID "matreltoastrelid"
+#define OPTION_MATRELTOASTTYPE "matreltoasttype"
+#define OPTION_MATRELTOASTINDID "matreltoastindid"
+
+#define OPTION_SEQRELID "seqrelid"
+#define OPTION_SEQRELTYPE "seqreltype"
+
+#define OPTION_PKINDID "pkindid"
+#define OPTION_LOOKUPINDID "lookupindid"
 
 #define ACTION_TRANSFORM "transform"
 #define ACTION_MATERIALIZE "materialize"

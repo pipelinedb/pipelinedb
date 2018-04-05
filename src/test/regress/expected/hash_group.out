@@ -207,6 +207,6 @@ ERROR:  cannot drop index ls_hash_group2_mrel_expr_idx because table ls_hash_gro
 HINT:  You can drop table ls_hash_group2_mrel instead.
 DROP STREAM hash_group_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view hash_group
-drop cascades to continuous view ls_hash_group1
-drop cascades to continuous view ls_hash_group2
+DETAIL:  drop cascades to view hash_group
+drop cascades to view ls_hash_group1
+drop cascades to view ls_hash_group2

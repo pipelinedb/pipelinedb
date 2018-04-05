@@ -50,6 +50,13 @@
 
 ProcessUtility_hook_type SaveUtilityHook = NULL;
 
+typedef enum Action
+{
+	NONE,
+	TRANSFORM,
+	MATERIALIZE
+} Action;
+
 /*
  * get_combiner_join_rel
  *
@@ -705,10 +712,10 @@ validate_stream_constraints(CreateStmt *stmt)
 }
 
 /*
- * has_transform_action
+ * get_cont_query_action
  */
-static bool
-has_transform_action(List *options)
+static Action
+get_cont_query_action(List *options)
 {
 	ListCell *lc;
 	foreach(lc, options)
@@ -735,10 +742,15 @@ has_transform_action(List *options)
 
 			Assert(v);
 			if (pg_strcasecmp(strVal(v), ACTION_TRANSFORM) == 0)
-				return true;
+				return TRANSFORM;
+			else if (pg_strcasecmp(strVal(v), ACTION_MATERIALIZE) == 0)
+				return MATERIALIZE;
+			else
+				elog(ERROR, "invalid action \"%s\"", strVal(v));
 		}
 	}
-	return false;
+
+	return NONE;
 }
 
 /*
@@ -760,20 +772,30 @@ PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext c
 		if (IsA(parsetree, ViewStmt) && IsA(((ViewStmt *) parsetree)->query, SelectStmt))
 		{
 			ViewStmt *stmt = (ViewStmt *) parsetree;
-			/*
-			 * If it's a VIEW with action=transform, we're creating a transform
-			 */
-			if (has_transform_action(stmt->options))
+			Action action;
+
+			action = get_cont_query_action(stmt->options);
+
+			if (action != NONE)
 			{
 				PipelineContextSetIsDDL();
 				ddl_lock = AcquirePipelineDDLLock();
+			}
 
+			if (action == TRANSFORM)
+			{
 				AnalyzeCreateViewForTransform(stmt);
 				ExecCreateContTransformStmt(stmt->view, stmt->query, stmt->options, sql);
 				goto done;
 			}
+			else if (action == MATERIALIZE)
+			{
+				AnalyzeCreateContView(stmt);
+				ExecCreateContViewStmt(stmt->view, stmt->query, stmt->options, sql);
+				goto done;
+			}
 		}
-		else if (IsA(parsetree, CreateContViewStmt))
+		else if (false)
 		{
 			/*
 			 * Indicate to the analyzer/planner hooks that we're executing a CREATE CONTINUOUS statement

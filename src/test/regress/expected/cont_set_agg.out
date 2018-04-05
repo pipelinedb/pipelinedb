@@ -74,7 +74,7 @@ SELECT * FROM test_set_agg4;
 (1 row)
 
 \d+ test_set_agg4
-           Continuous view "public.test_set_agg4"
+                View "public.test_set_agg4"
   Column   |   Type    | Modifiers | Storage  | Description 
 -----------+-----------+-----------+----------+-------------
  array_agg | integer[] |           | extended | 

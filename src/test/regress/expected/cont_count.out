@@ -19,4 +19,4 @@ SELECT * FROM test_count ORDER BY k;
 (2 rows)
 
 DROP STREAM stream_cqcount CASCADE;
-NOTICE:  drop cascades to continuous view test_count
+NOTICE:  drop cascades to view test_count

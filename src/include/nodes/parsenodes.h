@@ -3055,11 +3055,4 @@ typedef struct AlterTSConfigurationStmt
 	bool		missing_ok;		/* for DROP - skip error if missing? */
 } AlterTSConfigurationStmt;
 
-typedef struct CreateContViewStmt
-{
-	NodeTag		type;
-	IntoClause 	*into;
-	Node 		*query;
-} CreateContViewStmt;
-
 #endif   /* PARSENODES_H */

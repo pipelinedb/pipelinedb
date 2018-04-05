@@ -240,7 +240,7 @@ CREATE CONTINUOUS VIEW sw_ts_expr2 AS
   WHERE minute(arrival_timestamp) > clock_timestamp() - interval '5 minute'
   GROUP BY minute(arrival_timestamp);
 \d+ sw_ts_expr1
-        Continuous view "public.sw_ts_expr1"
+              View "public.sw_ts_expr1"
  Column |  Type  | Modifiers | Storage | Description 
 --------+--------+-----------+---------+-------------
  count  | bigint |           | plain   | 
@@ -250,7 +250,7 @@ View definition:
   WHERE (minute(arrival_timestamp) + '@ 1 sec'::interval) > (clock_timestamp() - '@ 5 mins'::interval);
 
 \d+ sw_ts_expr2
-                 Continuous view "public.sw_ts_expr2"
+                       View "public.sw_ts_expr2"
  Column |           Type           | Modifiers | Storage | Description 
 --------+--------------------------+-----------+---------+-------------
  minute | timestamp with time zone |           | plain   | 
@@ -281,7 +281,7 @@ ERROR:  column 2 has an unknown type
 HINT:  Explicitly cast the expression to a known type.
 CREATE CONTINUOUS VIEW unknown_type_cv AS SELECT x, 'a'::text FROM sw_ts_expr_s;
 \d+ unknown_type_cv
-       Continuous view "public.unknown_type_cv"
+             View "public.unknown_type_cv"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  x      | integer |           | plain    | 
@@ -311,5 +311,5 @@ DROP VIEW unknown_type_ct;
 DROP STREAM ct_out_s;
 DROP STREAM sw_ts_expr_s CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view sw_ts_expr1
-drop cascades to continuous view sw_ts_expr2
+DETAIL:  drop cascades to view sw_ts_expr1
+drop cascades to view sw_ts_expr2

@@ -9,7 +9,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate0';
 (1 row)
 
 \d+ cqcreate0;
-          Continuous view "public.cqcreate0"
+               View "public.cqcreate0"
  Column |  Type   | Modifiers | Storage | Description 
 --------+---------+-----------+---------+-------------
  key    | integer |           | plain   | 
@@ -52,7 +52,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate1';
 (1 row)
 
 \d+ cqcreate1;
-          Continuous view "public.cqcreate1"
+                View "public.cqcreate1"
   Column   | Type | Modifiers | Storage  | Description 
 -----------+------+-----------+----------+-------------
  substring | text |           | extended | 
@@ -95,7 +95,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate2';
 (1 row)
 
 \d+ cqcreate2;
-          Continuous view "public.cqcreate2"
+                View "public.cqcreate2"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | integer |           | plain    | 
@@ -136,9 +136,9 @@ SELECT pipeline_get_overlay_viewdef('cqcreate2');
 
 DROP STREAM create_cont_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view cqcreate0
-drop cascades to continuous view cqcreate1
-drop cascades to continuous view cqcreate2
+DETAIL:  drop cascades to view cqcreate0
+drop cascades to view cqcreate1
+drop cascades to view cqcreate2
 CREATE STREAM create_cont_stream (key text, value int8, x float8, y int8, z int2, ts0 timestamp, ts1 timestamp);
 -- Group by projections
 CREATE CONTINUOUS VIEW cqcreate3 AS SELECT key, COUNT(*), SUM(value) FROM create_cont_stream GROUP BY key;
@@ -149,7 +149,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate3';
 (1 row)
 
 \d+ cqcreate3;
-          Continuous view "public.cqcreate3"
+                View "public.cqcreate3"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | text    |           | extended | 
@@ -202,7 +202,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate4';
 (1 row)
 
 \d+ cqcreate4;
-          Continuous view "public.cqcreate4"
+               View "public.cqcreate4"
  Column |  Type   | Modifiers | Storage | Description 
 --------+---------+-----------+---------+-------------
  count  | bigint  |           | plain   | 
@@ -253,7 +253,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate5';
 (1 row)
 
 \d+ cqcreate5;
-         Continuous view "public.cqcreate5"
+              View "public.cqcreate5"
  Column | Type | Modifiers | Storage  | Description 
 --------+------+-----------+----------+-------------
  key    | text |           | extended | 
@@ -299,7 +299,7 @@ SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate6';
 (1 row)
 
 \d+ cqcreate6;
-         Continuous view "public.cqcreate6"
+               View "public.cqcreate6"
  Column |  Type  | Modifiers | Storage | Description 
 --------+--------+-----------+---------+-------------
  count  | bigint |           | plain   | 
@@ -343,7 +343,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate6');
 -- These use a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key, AVG(x) AS float_avg, AVG(y) AS int_avg, AVG(ts0 - ts1) AS internal_avg FROM create_cont_stream GROUP BY key;
 \d+ cvavg;
-                    Continuous view "public.cvavg"
+                         View "public.cvavg"
     Column    |       Type       | Modifiers | Storage  | Description 
 --------------+------------------+-----------+----------+-------------
  key          | text             |           | extended | 
@@ -394,7 +394,7 @@ SELECT pipeline_get_overlay_viewdef('cvavg');
 
 CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(key) AS count_col FROM create_cont_stream;
 \d+ cvjson;
-            Continuous view "public.cvjson"
+                 View "public.cvjson"
   Column   | Type | Modifiers | Storage  | Description 
 -----------+------+-----------+----------+-------------
  count_col | json |           | extended | 
@@ -431,7 +431,7 @@ SELECT pipeline_get_overlay_viewdef('cvjson');
 
 CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key, value) FROM create_cont_stream;
 \d+ cvjsonobj;
-             Continuous view "public.cvjsonobj"
+                   View "public.cvjsonobj"
      Column      | Type | Modifiers | Storage  | Description 
 -----------------+------+-----------+----------+-------------
  json_object_agg | json |           | extended | 
@@ -469,7 +469,7 @@ SELECT pipeline_get_overlay_viewdef('cvjsonobj');
 -- But these aggregates don't
 CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(z + y) AS sum_col FROM create_cont_stream;
 \d+ cvcount;
-           Continuous view "public.cvcount"
+                 View "public.cvcount"
  Column  |  Type   | Modifiers | Storage | Description 
 ---------+---------+-----------+---------+-------------
  sum_col | numeric |           | main    | 
@@ -506,7 +506,7 @@ SELECT pipeline_get_overlay_viewdef('cvcount');
 
 CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream;
 \d+ cvarray;
-            Continuous view "public.cvarray"
+                 View "public.cvarray"
   Column   |  Type  | Modifiers | Storage | Description 
 -----------+--------+-----------+---------+-------------
  count_col | bigint |           | plain   | 
@@ -543,7 +543,7 @@ SELECT pipeline_get_overlay_viewdef('cvarray');
 
 CREATE CONTINUOUS VIEW cvtext AS SELECT key, string_agg(substring(key, 1, 2), ',') FROM create_cont_stream GROUP BY key;
 \d+ cvtext;
-            Continuous view "public.cvtext"
+                  View "public.cvtext"
    Column   | Type | Modifiers | Storage  | Description 
 ------------+------+-----------+----------+-------------
  key        | text |           | extended | 
@@ -587,7 +587,7 @@ SELECT pipeline_get_overlay_viewdef('cvtext');
 -- Check for expressions containing aggregates
 CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(y) FROM create_cont_stream;
 \d+ cqaggexpr1;
-          Continuous view "public.cqaggexpr1"
+                View "public.cqaggexpr1"
   Column  |  Type   | Modifiers | Storage | Description 
 ----------+---------+-----------+---------+-------------
  ?column? | numeric |           | main    | 
@@ -625,7 +625,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
 
 CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key, AVG(x) + MAX(y) AS value FROM create_cont_stream GROUP BY key;
 \d+ cqaggexpr2;
-              Continuous view "public.cqaggexpr2"
+                    View "public.cqaggexpr2"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  key    | text             |           | extended | 
@@ -669,7 +669,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
 
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key, COUNT(*) AS value FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key;
 \d+ cqaggexpr3;
-         Continuous view "public.cqaggexpr3"
+               View "public.cqaggexpr3"
  Column |  Type  | Modifiers | Storage  | Description 
 --------+--------+-----------+----------+-------------
  key    | text   |           | extended | 
@@ -715,7 +715,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
 
 CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key, floor(AVG(x)) AS value FROM create_cont_stream GROUP BY key;
 \d+ cqaggexpr4;
-              Continuous view "public.cqaggexpr4"
+                    View "public.cqaggexpr4"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  key    | text             |           | extended | 
@@ -758,7 +758,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
 
 CREATE CONTINUOUS VIEW cqgroupby AS SELECT key, x, COUNT(*) FROM create_cont_stream GROUP BY key, x;
 \d+ cqgroupby
-               Continuous view "public.cqgroupby"
+                    View "public.cqgroupby"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  key    | text             |           | extended | 
@@ -806,7 +806,7 @@ SELECT pipeline_get_overlay_viewdef('cqgroupby');
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT key, x, y, z, value, COUNT(*) FROM create_cont_stream
 GROUP BY key, x, y, z, value;
 \d+ multigroupindex;
-            Continuous view "public.multigroupindex"
+                 View "public.multigroupindex"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  key    | text             |           | extended | 
@@ -865,22 +865,22 @@ SELECT pipeline_get_overlay_viewdef('multigroupindex');
 
 DROP STREAM create_cont_stream CASCADE;
 NOTICE:  drop cascades to 16 other objects
-DETAIL:  drop cascades to continuous view cqcreate3
-drop cascades to continuous view cqcreate4
-drop cascades to continuous view cqcreate5
-drop cascades to continuous view cqcreate6
-drop cascades to continuous view cvavg
-drop cascades to continuous view cvjson
-drop cascades to continuous view cvjsonobj
-drop cascades to continuous view cvcount
-drop cascades to continuous view cvarray
-drop cascades to continuous view cvtext
-drop cascades to continuous view cqaggexpr1
-drop cascades to continuous view cqaggexpr2
-drop cascades to continuous view cqaggexpr3
-drop cascades to continuous view cqaggexpr4
-drop cascades to continuous view cqgroupby
-drop cascades to continuous view multigroupindex
+DETAIL:  drop cascades to view cqcreate3
+drop cascades to view cqcreate4
+drop cascades to view cqcreate5
+drop cascades to view cqcreate6
+drop cascades to view cvavg
+drop cascades to view cvjson
+drop cascades to view cvjsonobj
+drop cascades to view cvcount
+drop cascades to view cvarray
+drop cascades to view cvtext
+drop cascades to view cqaggexpr1
+drop cascades to view cqaggexpr2
+drop cascades to view cqaggexpr3
+drop cascades to view cqaggexpr4
+drop cascades to view cqgroupby
+drop cascades to view multigroupindex
 CREATE STREAM create_cont_stream (x int, y int);
 -- A user-specified fillfactor should override the default
 CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM create_cont_stream;
@@ -897,14 +897,12 @@ Options: fillfactor=42
 -- It shouldn't be possible to DROP a continuous view with DROP VIEW, and vice-versa
 CREATE VIEW ccvv AS SELECT * FROM generate_series(1, 10);
 DROP CONTINUOUS VIEW ccvv;
-ERROR:  "ccvv" is not a continuous view 
-HINT:  Use DROP VIEW to remove a view.
 DROP VIEW ccvv;
+ERROR:  view "ccvv" does not exist
 CREATE CONTINUOUS VIEW ccvv AS SELECT COUNT(*) FROM create_cont_stream;
 DROP VIEW ccvv;
-ERROR:  "ccvv" is not a view
-HINT:  Use DROP CONTINUOUS VIEW to remove a continuous view.
 DROP CONTINUOUS VIEW ccvv;
+ERROR:  view "ccvv" does not exist
 -- Subselects aren't allowed in a CV's target list
 CREATE TABLE ccvt (x integer);
 CREATE CONTINUOUS VIEW noss AS SELECT y, (SELECT x FROM ccvt WHERE x = 1) FROM create_cont_stream;
@@ -919,7 +917,7 @@ DROP CONTINUOUS VIEW arrts;
 -- WITH sw
 CREATE CONTINUOUS VIEW ma0 WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream;
 \d+ ma0;
-            Continuous view "public.ma0"
+                  View "public.ma0"
  Column |  Type  | Modifiers | Storage | Description 
 --------+--------+-----------+---------+-------------
  count  | bigint |           | plain   | 
@@ -940,7 +938,7 @@ ERROR:  invalid input syntax for type interval: "not an interval"
 CREATE CONTINUOUS VIEW mawhere WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
 WHERE x::integer = 1;
 \d+ mawhere;
-          Continuous view "public.mawhere"
+                View "public.mawhere"
  Column |  Type  | Modifiers | Storage | Description 
 --------+--------+-----------+---------+-------------
  count  | bigint |           | plain   | 
@@ -952,8 +950,8 @@ View definition:
 DROP CONTINUOUS VIEW mawhere;
 DROP STREAM create_cont_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view withff
-drop cascades to continuous view ma0
+DETAIL:  drop cascades to view withff
+drop cascades to view ma0
 CREATE STREAM create_cont_stream (key integer, url text, value text);
 CREATE CONTINUOUS VIEW ccv0 AS SELECT 1, count(*) FROM create_cont_stream;
 CREATE CONTINUOUS VIEW ccv1 AS SELECT 1 FROM create_cont_stream;
@@ -1041,15 +1039,15 @@ SELECT * FROM ccv8 ORDER BY g;
 
 DROP STREAM create_cont_stream CASCADE;
 NOTICE:  drop cascades to 9 other objects
-DETAIL:  drop cascades to continuous view ccv0
-drop cascades to continuous view ccv1
-drop cascades to continuous view ccv2
-drop cascades to continuous view ccv3
-drop cascades to continuous view ccv4
-drop cascades to continuous view ccv5
-drop cascades to continuous view ccv6
-drop cascades to continuous view ccv7
-drop cascades to continuous view ccv8
+DETAIL:  drop cascades to view ccv0
+drop cascades to view ccv1
+drop cascades to view ccv2
+drop cascades to view ccv3
+drop cascades to view ccv4
+drop cascades to view ccv5
+drop cascades to view ccv6
+drop cascades to view ccv7
+drop cascades to view ccv8
 -- Custom type
 CREATE TYPE custom_type AS (integerone integer, integertwo integer);
 CREATE STREAM create_cont_stream(val custom_type, x float8);
@@ -1058,4 +1056,4 @@ ERROR:  each grouping column type must be associated with an operator class
 HINT:  Define an operator class using CREATE OPERATOR CLASS.
 CREATE CONTINUOUS VIEW tts AS SELECT COUNT(*) FROM create_cont_stream WHERE to_timestamp(x) > clock_timestamp() - interval '3 months';
 DROP STREAM create_cont_stream CASCADE;
-NOTICE:  drop cascades to continuous view tts
+NOTICE:  drop cascades to view tts

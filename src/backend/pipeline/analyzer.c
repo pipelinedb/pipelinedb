@@ -4092,25 +4092,24 @@ ApplySlidingWindow(SelectStmt *stmt, DefElem *sw, int *ttl)
 /*
  * ApplyStorageOptions
  */
-void
-ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw, int *ttl, char **ttl_column)
+List *
+ApplyStorageOptions(SelectStmt *select, List *options, bool *has_sw, int *ttl, char **ttl_column)
 {
 	DefElem *def;
-	SelectStmt *select = (SelectStmt *) stmt->query;
 
 	Assert(has_sw);
 
 	/* sw */
-	def = GetContinuousViewOption(stmt->into->options, OPTION_SLIDING_WINDOW);
+	def = GetContinuousViewOption(options, OPTION_SLIDING_WINDOW);
 	if (def)
 	{
 		*has_sw = true;
 		ApplySlidingWindow(select, def, ttl);
-		stmt->into->options = list_delete(stmt->into->options, def);
+		options = list_delete(options, def);
 	}
 
 	/* step_factor */
-	def = GetContinuousViewOption(stmt->into->options, OPTION_STEP_FACTOR);
+	def = GetContinuousViewOption(options, OPTION_STEP_FACTOR);
 	if (def)
 	{
 		double factor;
@@ -4129,13 +4128,15 @@ ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_sw, int *ttl, char **ttl
 					 errmsg("\"step_size\" must be a valid float in the range 0..50"),
 					 errhint("For example, ... WITH (step_factor = '25') ...")));
 
-		stmt->into->options = list_delete(stmt->into->options, def);
+		options = list_delete(options, def);
 		PipelineContextSetStepFactor(factor);
 	}
 	else if (*has_sw)
 	{
 		PipelineContextSetStepFactor(sliding_window_step_factor);
 	}
+
+	return options;
 }
 
 AttrNumber
@@ -4229,10 +4230,10 @@ FindTTLColumnAttrNo(char *colname, Oid matrelid)
 }
 
 /*
- * delete_continuous_transform_options
+ * delete_unrecognized_options
  */
 static void
-delete_continuous_transform_options(ViewStmt *stmt)
+delete_unrecognized_options(ViewStmt *stmt)
 {
 	ListCell *lc;
 	List *to_delete = NIL;
@@ -4370,7 +4371,7 @@ AnalyzeCreateViewForTransform(ViewStmt *stmt)
 		}
 	}
 
-	delete_continuous_transform_options(stmt);
+	delete_unrecognized_options(stmt);
 
 	if (func)
 	{
@@ -4378,6 +4379,15 @@ AnalyzeCreateViewForTransform(ViewStmt *stmt)
 		stmt->options = lappend(stmt->options, makeDefElem(OPTION_TGNARGS, (Node *) makeInteger(list_length(args))));
 		stmt->options = lappend(stmt->options, makeDefElem(OPTION_TGARGS, (Node *) makeString(DeparseOutputFuncArgs(args))));
 	}
+}
+
+/*
+ * AnalyzeCreateContView
+ */
+void
+AnalyzeCreateContView(ViewStmt *stmt)
+{
+	delete_unrecognized_options(stmt);
 }
 
 post_parse_analyze_hook_type SavePostParseAnalyzeHook = NULL;

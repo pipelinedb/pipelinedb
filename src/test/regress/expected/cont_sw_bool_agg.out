@@ -42,8 +42,8 @@ SELECT * FROM test_sw_bit_or ORDER BY k DESC;
 
 DROP STREAM bit_test_sw_sw_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view test_sw_bit_and
-drop cascades to continuous view test_sw_bit_or
+DETAIL:  drop cascades to view test_sw_bit_and
+drop cascades to view test_sw_bit_or
 -- bool_and, bool_or, every
 CREATE STREAM bool_test_sw_sw_stream (k text, b boolean);
 CREATE CONTINUOUS VIEW test_sw_bool_and AS SELECT k::text, bool_and(b::boolean) FROM bool_test_sw_sw_stream WHERE arrival_timestamp > clock_timestamp() - interval '60 second'  GROUP BY k;
@@ -103,6 +103,6 @@ SELECT * FROM test_sw_every ORDER BY k DESC;
 
 DROP STREAM bool_test_sw_sw_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_sw_bool_and
-drop cascades to continuous view test_sw_bool_or
-drop cascades to continuous view test_sw_every
+DETAIL:  drop cascades to view test_sw_bool_and
+drop cascades to view test_sw_bool_or
+drop cascades to view test_sw_every

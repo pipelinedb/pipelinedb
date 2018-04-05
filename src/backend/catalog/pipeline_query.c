@@ -212,6 +212,47 @@ GetPipelineQueryTuple(RangeVar *name)
 }
 
 /*
+ * StorePipelineQueryReloptions
+ *
+ * Stores the given custom options in the pg_class catalog
+ */
+void
+StorePipelineQueryReloptions(Oid relid, List *options)
+{
+	Datum classopts;
+	HeapTuple classtup;
+	HeapTuple newtup;
+	Relation pgclass;
+	Datum class_values[Natts_pg_class];
+	bool class_null[Natts_pg_class];
+	bool class_repl[Natts_pg_class];
+
+	pgclass = heap_open(RelationRelationId, RowExclusiveLock);
+	classtup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(classtup))
+		elog(ERROR, "cache lookup failed for OID %u", relid);
+
+	classopts = transformRelOptions((Datum) 0, options, NULL, NULL, false, false);
+	view_reloptions(classopts, false);
+
+	MemSet(class_values, 0, sizeof(class_values));
+	MemSet(class_null, 0, sizeof(class_null));
+	MemSet(class_repl, 0, sizeof(class_repl));
+
+	class_values[Anum_pg_class_reloptions - 1] = classopts;
+	class_repl[Anum_pg_class_reloptions - 1] = true;
+
+	newtup = heap_modify_tuple(classtup, RelationGetDescr(pgclass), class_values, class_null, class_repl);
+	simple_heap_update(pgclass, &newtup->t_self, newtup);
+	CatalogUpdateIndexes(pgclass, newtup);
+
+	heap_freetuple(newtup);
+	heap_close(pgclass, NoLock);
+	ReleaseSysCache(classtup);
+}
+
+/*
  * DefineContinuousView
  *
  * Adds a CV to the `pipeline_query` catalog table.
@@ -310,7 +351,7 @@ UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid)
 }
 
 void
-UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
+UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid, List *options)
 {
 	Relation pipeline_query = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
 	HeapTuple tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
@@ -812,47 +853,6 @@ GetContQueryId(RangeVar *name)
 	return row_id;
 }
 
-/*
- * store_pipeline_query_reloptions
- *
- * Stores the given custom options in the pg_class catalog
- */
-static void
-store_pipeline_query_reloptions(Oid relid, List *options)
-{
-	Datum classopts;
-	HeapTuple classtup;
-	HeapTuple newtup;
-	Relation pgclass;
-	Datum class_values[Natts_pg_class];
-	bool class_null[Natts_pg_class];
-	bool class_repl[Natts_pg_class];
-
-	pgclass = heap_open(RelationRelationId, RowExclusiveLock);
-	classtup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(classtup))
-		elog(ERROR, "cache lookup failed for OID %u", relid);
-
-	classopts = transformRelOptions((Datum) 0, options, NULL, NULL, false, false);
-	view_reloptions(classopts, false);
-
-	MemSet(class_values, 0, sizeof(class_values));
-	MemSet(class_null, 0, sizeof(class_null));
-	MemSet(class_repl, 0, sizeof(class_repl));
-
-	class_values[Anum_pg_class_reloptions - 1] = classopts;
-	class_repl[Anum_pg_class_reloptions - 1] = true;
-
-	newtup = heap_modify_tuple(classtup, RelationGetDescr(pgclass), class_values, class_null, class_repl);
-	simple_heap_update(pgclass, &newtup->t_self, newtup);
-	CatalogUpdateIndexes(pgclass, newtup);
-
-	heap_freetuple(newtup);
-	heap_close(pgclass, NoLock);
-	ReleaseSysCache(classtup);
-}
-
 Oid
 DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid)
 {
@@ -951,7 +951,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List
 
 	CommandCounterIncrement();
 
-	store_pipeline_query_reloptions(relid, options);
+	StorePipelineQueryReloptions(relid, options);
 
 	return result;
 }

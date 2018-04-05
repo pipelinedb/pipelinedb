@@ -60,5 +60,5 @@ SELECT * FROM sw_count1;
 
 DROP STREAM cqswcount_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view sw_count0
+DETAIL:  drop cascades to view sw_count0
 drop cascades to view sw_count1

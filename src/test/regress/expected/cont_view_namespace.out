@@ -32,14 +32,14 @@ SELECT schema, name FROM pipeline_views() WHERE name LIKE '%test_cvn%' ORDER BY 
 DROP SCHEMA test_cvn_schema0_new;
 ERROR:  cannot drop schema test_cvn_schema0_new because other objects depend on it
 DETAIL:  foreign table test_cvn_schema0_new.test_ns_stream depends on schema test_cvn_schema0_new
-continuous view test_cvn_schema0_new.test_cvn0 depends on schema test_cvn_schema0_new
-continuous view test_cvn_schema0_new.test_cvn1 depends on schema test_cvn_schema0_new
+view test_cvn_schema0_new.test_cvn0 depends on schema test_cvn_schema0_new
+view test_cvn_schema0_new.test_cvn1 depends on schema test_cvn_schema0_new
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP SCHEMA test_cvn_schema0_new CASCADE;
 NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to foreign table test_cvn_schema0_new.test_ns_stream
-drop cascades to continuous view test_cvn_schema0_new.test_cvn0
-drop cascades to continuous view test_cvn_schema0_new.test_cvn1
+drop cascades to view test_cvn_schema0_new.test_cvn0
+drop cascades to view test_cvn_schema0_new.test_cvn1
 SELECT schema, name FROM pipeline_views() WHERE name LIKE '%test_cvn%' ORDER BY schema, name;
       schema      |   name    
 ------------------+-----------
@@ -51,7 +51,7 @@ DROP CONTINUOUS VIEW test_cvn0;
 DROP SCHEMA test_cvn_schema1 CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to foreign table test_cvn_schema1.test_ns_stream
-drop cascades to continuous view test_cvn_schema1.test_cvn0
+drop cascades to view test_cvn_schema1.test_cvn0
 SELECT schema, name FROM pipeline_views() WHERE name LIKE '%test_cvn%' ORDER BY schema, name;
  schema | name 
 --------+------
@@ -86,8 +86,8 @@ SELECT * FROM test_cvn_schema0.test_cvn0 ORDER BY x;
 
 DROP STREAM test_ns_stream CASCADE;
 DROP STREAM test_cvn_stream CASCADE;
-NOTICE:  drop cascades to continuous view test_cvn0
+NOTICE:  drop cascades to view test_cvn0
 DROP SCHEMA test_cvn_schema0 CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to foreign table test_cvn_schema0.test_cvn_stream
-drop cascades to continuous view test_cvn_schema0.test_cvn0
+drop cascades to view test_cvn_schema0.test_cvn0

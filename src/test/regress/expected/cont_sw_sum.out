@@ -61,9 +61,9 @@ SELECT * FROM test_sw_int2_sum ORDER BY k;
 
 DROP STREAM int_stream_cqswsum CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_sw_int8_sum
-drop cascades to continuous view test_sw_int4_sum
-drop cascades to continuous view test_sw_int2_sum
+DETAIL:  drop cascades to view test_sw_int8_sum
+drop cascades to view test_sw_int4_sum
+drop cascades to view test_sw_int2_sum
 -------------------------------------------------------------------------------
 -- Float sums
 CREATE STREAM float_stream_cqswsum (k text, v float8);
@@ -109,8 +109,8 @@ SELECT * FROM test_sw_float4_sum ORDER BY k;
 
 DROP STREAM float_stream_cqswsum CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view test_sw_float8_sum
-drop cascades to continuous view test_sw_float4_sum
+DETAIL:  drop cascades to view test_sw_float8_sum
+drop cascades to view test_sw_float4_sum
 -------------------------------------------------------------------------------
 -- Cash sums
 CREATE STREAM cash_stream_cqswsum (k text, v money);
@@ -140,7 +140,7 @@ SELECT * FROM test_sw_cash_sum ORDER BY k;
 (2 rows)
 
 DROP STREAM cash_stream_cqswsum CASCADE;
-NOTICE:  drop cascades to continuous view test_sw_cash_sum
+NOTICE:  drop cascades to view test_sw_cash_sum
 -------------------------------------------------------------------------------
 -- Numeric sums
 CREATE STREAM numeric_stream_cqswsum (k text, v numeric);
@@ -170,7 +170,7 @@ SELECT * FROM test_sw_numeric_sum ORDER BY k;
 (2 rows)
 
 DROP STREAM numeric_stream_cqswsum CASCADE;
-NOTICE:  drop cascades to continuous view test_sw_numeric_sum
+NOTICE:  drop cascades to view test_sw_numeric_sum
 -------------------------------------------------------------------------------
 -- Interval sum
 CREATE STREAM interval_stream_cqswsum (k text, ts0 timestamp, ts1 timestamp);
@@ -200,4 +200,4 @@ SELECT * FROM test_sw_interval_sum ORDER BY k;
 (3 rows)
 
 DROP STREAM interval_stream_cqswsum CASCADE;
-NOTICE:  drop cascades to continuous view test_sw_interval_sum
+NOTICE:  drop cascades to view test_sw_interval_sum

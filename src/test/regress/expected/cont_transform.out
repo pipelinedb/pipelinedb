@@ -159,11 +159,11 @@ CREATE VIEW ct_ostream WITH (action=transform) AS SELECT 1 AS a, 2 AS b, 3 AS c,
 DROP STREAM ct_s0 CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view ct_t
-drop cascades to continuous view ct_v1
+drop cascades to view ct_v1
 DROP STREAM ct_s1 CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view ct_ostream
-drop cascades to continuous view ct_v0
+drop cascades to view ct_v0
 CREATE STREAM fanout (x integer);
 CREATE VIEW fanout0 WITH (action=transform) AS SELECT generate_series(1, 2) FROM fanout;
 CREATE VIEW fanout1 WITH (action=transform) AS SELECT generate_series(1, 2) FROM output_of('fanout0');
@@ -211,7 +211,7 @@ drop cascades to view fanout7
 drop cascades to view fanout8
 drop cascades to view fanout9
 drop cascades to view fanout10
-drop cascades to continuous view fanout11
+drop cascades to view fanout11
 CREATE STREAM ct_a (n int);
 CREATE STREAM ct_b (n int);
 CREATE CONTINUOUS VIEW ct_stream_insert0 AS SELECT n FROM ct_b;
@@ -243,5 +243,5 @@ DROP FUNCTION test_cont_transform.insert_into_b() CASCADE;
 NOTICE:  drop cascades to view ct_stream_insert1
 DROP SCHEMA test_cont_transform;
 DROP STREAM ct_b CASCADE;
-NOTICE:  drop cascades to continuous view ct_stream_insert0
+NOTICE:  drop cascades to view ct_stream_insert0
 DROP STREAM ct_a;
