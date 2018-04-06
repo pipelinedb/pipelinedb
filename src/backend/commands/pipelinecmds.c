@@ -593,7 +593,7 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 			Oid type;
 			ListCell *clc;
 
-			if (!IsA(e->arg, String))
+			if (!IsA(e->arg, String) && !IsA(e->arg, TypeName))
 				elog(ERROR, "ttl_column must be expressed as a column name");
 
 			/*
@@ -602,13 +602,24 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 			foreach(clc, coldefs)
 			{
 				ColumnDef *def = (ColumnDef *) lfirst(clc);
+				char *name;
 
 				type = typenameTypeId(NULL, def->typeName);
 
-				if (pg_strcasecmp(def->colname, strVal(e->arg)) == 0 &&
+				if (IsA(e->arg, TypeName))
+				{
+					TypeName *t = (TypeName *) e->arg;
+					name = NameListToString(t->names);
+				}
+				else
+				{
+					name = strVal(e->arg);
+				}
+
+				if (pg_strcasecmp(def->colname, name) == 0 &&
 						(type == TIMESTAMPOID || type == TIMESTAMPTZOID))
 				{
-					*ttl_column = strVal(e->arg);
+					*ttl_column = name;
 					break;
 				}
 			}
@@ -690,7 +701,7 @@ set_option(List *options, char *option, Node *value)
  * Add the OIDs necessary to support future binary upgrades if they aren't already present in the given options List
  */
 static List *
-add_options_for_binary_upgrade(Oid viewrelid, Oid matrelid, Oid seqrelid, Oid osrelid, Oid pkindexid, Oid lookupindexid, List *options)
+add_options_for_binary_upgrade(Oid viewrelid, Oid matrelid, Oid seqrelid, Oid osrelid, Oid pkindexid, Oid lookupindexid, int ttl, char *ttl_column, List *options)
 {
 	Oid type;
 	Relation matrel;
@@ -729,6 +740,12 @@ add_options_for_binary_upgrade(Oid viewrelid, Oid matrelid, Oid seqrelid, Oid os
 	options = set_option(options, OPTION_PKINDID, (Node *) makeInteger(pkindexid));
 
 	options = set_option(options, OPTION_LOOKUPINDID, (Node *) makeInteger(lookupindexid));
+
+	if (ttl > 0)
+	{
+		options = set_option(options, OPTION_TTL, (Node *) makeInteger(ttl));
+		options = set_option(options, OPTION_TTL_COLUMN, (Node *) makeString(ttl_column));
+	}
 
 	return options;
 }
@@ -1059,7 +1076,7 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	options = lappend(options, makeDefElem(OPTION_ACTION, (Node *) makeString(ACTION_MATERIALIZE)));
-	options = add_options_for_binary_upgrade(overlayid, matrelid, seqrelid, osrelid, pkey_idx_oid, lookup_idx_oid, options);
+	options = add_options_for_binary_upgrade(overlayid, matrelid, seqrelid, osrelid, pkey_idx_oid, lookup_idx_oid, ttl, ttl_column, options);
 	StorePipelineQueryReloptions(overlayid, options);
 
 	/*

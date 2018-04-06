@@ -34,6 +34,9 @@ def test_binary_upgrade(pipeline, clean_db):
     if n >= 16:
       pipeline.execute('CREATE INDEX idx_%s ON %s(z)' % (name, name))
 
+  # Create a CV with a TTL to verify TTL info is restored properly
+  pipeline.create_cv('ttlcv', 'SELECT second(arrival_timestamp), count(*) FROM stream_0 GROUP BY second', ttl='1 hour', ttl_column='second')
+
   # Now create some in another namespace
   pipeline.execute('CREATE SCHEMA namespace')
   for n in range(8):
@@ -125,6 +128,11 @@ def test_binary_upgrade(pipeline, clean_db):
     assert rows[0][0] == name
     assert rows[0][1] == 1
     assert rows[0][2] == 1000
+
+  # CV with TTL
+  row = list(upgraded.execute("SELECT ttl, ttl_attno FROM pg_class c JOIN pipeline_query pq on c.oid = pq.relid WHERE c.relname = 'ttlcv'"))[0]
+  assert row[0] == 3600
+  assert row[1] == 1
 
   # CVs in separate schema
   for n in range(8):
