@@ -953,7 +953,7 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	}
 	else
 	{
-		ttl_attno = FindSWTimeColumnAttrNo(viewselect, matrelid, &ttl);
+		ttl_attno = FindSWTimeColumnAttrNo(viewselect, matrelid, &ttl, &ttl_column);
 		/*
 		 * has_sw will already be true if the sw storage parameter was set,
 		 * but a sliding-window can still be expressed as a WHERE predicate,

@@ -4138,7 +4138,7 @@ ApplyStorageOptions(SelectStmt *select, List *options, bool *has_sw, int *ttl, c
 }
 
 AttrNumber
-FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid, int *ttl)
+FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid, int *ttl, char **ttl_column)
 {
 	ContAnalyzeContext context;
 	char *colname;
@@ -4165,6 +4165,7 @@ FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrelid, int *ttl)
 		if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
 		{
 			attno = i + 1;
+			*ttl_column = pstrdup(NameStr(attr->attname));
 			break;
 		}
 	}

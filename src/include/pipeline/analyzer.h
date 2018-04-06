@@ -96,7 +96,7 @@ extern Query *GetContViewQuery(RangeVar *rv);
 extern Query *GetContWorkerQuery(RangeVar *rv);
 extern Query *GetContCombinerQuery(RangeVar *rv);
 
-extern AttrNumber FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrel, int *ttl);
+extern AttrNumber FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrel, int *ttl, char **ttl_column);
 extern AttrNumber FindTTLColumnAttrNo(char *colname, Oid matrelid);
 extern Node *GetSWExpr(RangeVar *rv);
 extern Node *GetTTLExpiredExpr(RangeVar *cv);
