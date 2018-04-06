@@ -77,27 +77,11 @@
 /* guc params */
 int continuous_view_fillfactor;
 
-/* for binary upgrades */
-static Oid next_matrel_type = InvalidOid;
-static Oid next_matrel_array_type = InvalidOid;
-static Oid next_matrel_toast_type = InvalidOid;
-static Oid next_matrel_class = InvalidOid;
-static Oid next_matrel_toast_class = InvalidOid;
-static Oid next_matrel_toast_index_class = InvalidOid;
-
-static Oid next_seqrel_type = InvalidOid;
-static Oid next_seqrel_class = InvalidOid;
-
-static Oid next_pk_index_class = InvalidOid;
-static Oid next_lookup_index_class = InvalidOid;
-
-static Oid next_overlay_type = InvalidOid;
-static Oid next_overlay_array_type = InvalidOid;
-static Oid next_overlay_class = InvalidOid;
-
-static Oid next_osrel_type = InvalidOid;
-static Oid next_osrel_array_type = InvalidOid;
-static Oid next_osrel_class = InvalidOid;
+typedef struct OptionMapping
+{
+	char *option;
+	Oid *value;
+} OptionMapping;
 
 static void
 reset_next_oids()
@@ -110,57 +94,77 @@ reset_next_oids()
 	binary_upgrade_next_index_pg_class_oid = InvalidOid;
 }
 
+/*
+ * set_next_oids_from_options
+ */
 static void
-old_set_next_oids_for_matrel(void)
+set_next_oids_from_options(List *options, OptionMapping targets[], int len)
 {
-	reset_next_oids();
-	binary_upgrade_next_pg_type_oid = next_matrel_type;
-	binary_upgrade_next_array_pg_type_oid = next_matrel_array_type;
-	binary_upgrade_next_toast_pg_type_oid = next_matrel_toast_type;
+	int i;
 
-	binary_upgrade_next_heap_pg_class_oid = next_matrel_class;
-	binary_upgrade_next_toast_pg_class_oid = next_matrel_toast_class;
-	binary_upgrade_next_index_pg_class_oid = next_matrel_toast_index_class;
+	reset_next_oids();
+
+	for (i = 0; i < len; i++)
+	{
+		int target;
+		if (GetOptionAsInteger(options, targets[i].option, &target))
+			*targets[i].value = (Oid) target;
+	}
 }
 
 static void
-set_next_oids_for_seqrel(void)
+set_next_oids_for_seqrel(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_pg_type_oid = next_seqrel_type;
-	binary_upgrade_next_heap_pg_class_oid = next_seqrel_class;
+	OptionMapping option_map[] = {
+		{OPTION_SEQRELID, &binary_upgrade_next_heap_pg_class_oid},
+		{OPTION_SEQRELTYPE, &binary_upgrade_next_pg_type_oid}
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 static void
-set_next_oids_for_pk_index(void)
+set_next_oids_for_pk_index(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_index_pg_class_oid = next_pk_index_class;
+	OptionMapping option_map[] = {
+		{OPTION_PKINDID, &binary_upgrade_next_index_pg_class_oid}
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 static void
-set_next_oids_for_lookup_index(void)
+set_next_oids_for_lookup_index(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_index_pg_class_oid = next_lookup_index_class;
+	OptionMapping option_map[] = {
+		{OPTION_LOOKUPINDID, &binary_upgrade_next_index_pg_class_oid}
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 static void
-set_next_oids_for_overlay(void)
+set_next_oids_for_overlay(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_pg_type_oid = next_overlay_type;
-	binary_upgrade_next_array_pg_type_oid = next_overlay_array_type;
-	binary_upgrade_next_heap_pg_class_oid = next_overlay_class;
+	OptionMapping option_map[] = {
+		{OPTION_VIEWRELID, &binary_upgrade_next_heap_pg_class_oid},
+		{OPTION_VIEWTYPE, &binary_upgrade_next_pg_type_oid},
+		{OPTION_VIEWATYPE, &binary_upgrade_next_array_pg_type_oid},
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 static void
-set_next_oids_for_osrel(void)
+set_next_oids_for_osrel(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_pg_type_oid = next_osrel_type;
-	binary_upgrade_next_array_pg_type_oid = next_osrel_array_type;
-	binary_upgrade_next_heap_pg_class_oid = next_osrel_class;
+	OptionMapping option_map[] = {
+		{OPTION_OSRELID, &binary_upgrade_next_heap_pg_class_oid},
+		{OPTION_OSRELTYPE, &binary_upgrade_next_pg_type_oid},
+		{OPTION_OSRELATYPE, &binary_upgrade_next_array_pg_type_oid},
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 /*
@@ -641,35 +645,16 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 static void
 set_next_oids_for_matrel(List *options)
 {
-	int relid;
-	int typid;
-	int atypeid;
+	OptionMapping option_map[] = {
+		{OPTION_MATRELID, &binary_upgrade_next_heap_pg_class_oid},
+		{OPTION_MATRELTYPE, &binary_upgrade_next_pg_type_oid},
+		{OPTION_MATRELATYPE, &binary_upgrade_next_array_pg_type_oid},
+		{OPTION_MATRELTOASTRELID, &binary_upgrade_next_toast_pg_class_oid},
+		{OPTION_MATRELTOASTTYPE, &binary_upgrade_next_toast_pg_type_oid},
+		{OPTION_MATRELTOASTINDID, &binary_upgrade_next_index_pg_class_oid}
+	};
 
-	reset_next_oids();
-
-	if (!GetOptionAsInteger(options, OPTION_OSRELID, &relid))
-		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELID);
-
-	binary_upgrade_next_heap_pg_class_oid = (Oid) relid;
-
-	if (!GetOptionAsInteger(options, OPTION_OSRELTYPE, &typid))
-		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELTYPE);
-
-	binary_upgrade_next_pg_type_oid = (Oid) typid;
-
-	if (!GetOptionAsInteger(options, OPTION_OSRELATYPE, &atypeid))
-		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELATYPE);
-
-	binary_upgrade_next_array_pg_type_oid = (Oid) atypeid;
-
-
-//	binary_upgrade_next_pg_type_oid = next_matrel_type;
-//	binary_upgrade_next_array_pg_type_oid = next_matrel_array_type;
-//	binary_upgrade_next_toast_pg_type_oid = next_matrel_toast_type;
-//
-//	binary_upgrade_next_heap_pg_class_oid = next_matrel_class;
-//	binary_upgrade_next_toast_pg_class_oid = next_matrel_toast_class;
-//	binary_upgrade_next_index_pg_class_oid = next_matrel_toast_index_class;
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 /*
@@ -705,65 +690,44 @@ set_option(List *options, char *option, Node *value)
  * Add the OIDs necessary to support future binary upgrades if they aren't already present in the given options List
  */
 static List *
-add_options_for_binary_upgrade(Oid matrelid, Oid seqrelid, Oid osrelid, Oid pkindexid, Oid lookupindexid, List *options)
+add_options_for_binary_upgrade(Oid viewrelid, Oid matrelid, Oid seqrelid, Oid osrelid, Oid pkindexid, Oid lookupindexid, List *options)
 {
-	// add these options if they don't exist!
-	// just wrap that in a function!
 	Oid type;
 	Relation matrel;
 
-	// matrel (can we retrieve all of these from the matrel oid?)
-	// - matrel oid: have
-	options = set_option(options, OPTION_MATRELID, (Node *) makeInteger(matrelid));
+	options = set_option(options, OPTION_VIEWRELID, (Node *) makeInteger(viewrelid));
+	type = get_rel_type_id(viewrelid);
+	options = set_option(options, OPTION_VIEWTYPE, (Node *) makeInteger(type));
+	options = set_option(options, OPTION_VIEWATYPE, (Node *) makeInteger(get_array_type(type)));
 
-	// - matrel type: get_rel_type_id
+
+	options = set_option(options, OPTION_MATRELID, (Node *) makeInteger(matrelid));
 	type = get_rel_type_id(matrelid);
 	options = set_option(options, OPTION_MATRELTYPE, (Node *) makeInteger(type));
-
-	// - matrel array type: get_array_type
 	options = set_option(options, OPTION_MATRELATYPE, (Node *) makeInteger(get_array_type(type)));
 
-	// we actually may not even have toast values!
-	// - matrel toast oid pg_class.reltoastrelid
 	matrel = heap_open(matrelid, NoLock);
 
+	/* Not every matrel will have a toast relation */
 	if (OidIsValid(matrel->rd_rel->reltoastrelid))
 	{
 		options = set_option(options, OPTION_MATRELTOASTRELID, (Node *) makeInteger(matrel->rd_rel->reltoastrelid));
-
-		// - matrel toast type: get_rel_type_id(matrel->rd_rel->reltoastrelid)
 		options = set_option(options, OPTION_MATRELTOASTTYPE, (Node *) makeInteger(get_rel_type_id(matrel->rd_rel->reltoastrelid)));
-
-		// - matrel toast index oid: toast_get_valid_index(reltoastrelid)
 		options = set_option(options, OPTION_MATRELTOASTINDID, (Node *) makeInteger(toast_get_valid_index(matrel->rd_rel->reltoastrelid, NoLock)));
 	}
 
 	heap_close(matrel, NoLock);
 
-	// seqrel
-	// - seqrel oid: have
 	options = set_option(options, OPTION_SEQRELID, (Node *) makeInteger(seqrelid));
-
-	// - seqrel type: get_rel_type_id
 	options = set_option(options, OPTION_SEQRELTYPE, (Node *) makeInteger(get_rel_type_id(seqrelid)));
 
-	// osrel
-	// - osrel oid: have
 	options = set_option(options, OPTION_OSRELID, (Node *) makeInteger(osrelid));
-
-	// - osrel type: get_rel_type_id
 	type = get_rel_type_id(osrelid);
 	options = set_option(options, OPTION_OSRELTYPE, (Node *) makeInteger(type));
-
-	// - osrel array type: get_array_type
 	options = set_option(options, OPTION_OSRELATYPE, (Node *) makeInteger(get_array_type(type)));
 
-	// pk_index
-	// - pk index oid: have
 	options = set_option(options, OPTION_PKINDID, (Node *) makeInteger(pkindexid));
 
-	// lookup_index
-	// - lookup index oid: have
 	options = set_option(options, OPTION_LOOKUPINDID, (Node *) makeInteger(lookupindexid));
 
 	return options;
@@ -955,7 +919,7 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 		create_seq_stmt->sequence = seqrel_name;
 
 		if (IsBinaryUpgrade)
-			set_next_oids_for_seqrel();
+			set_next_oids_for_seqrel(options);
 		address = DefineSequence(create_seq_stmt);
 
 		seqrelid = address.objectId;
@@ -1005,10 +969,9 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
-//	view_stmt->options = lappend(view_stmt->options, makeDefElem("forcv", (Node *) makeInteger(1)));
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_overlay();
+		set_next_oids_for_overlay(options);
 
 	address = DefineView(view_stmt, cont_select_sql);
 
@@ -1058,7 +1021,7 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	transformCreateStreamStmt(create_osrel);
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_osrel();
+		set_next_oids_for_osrel(options);
 	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_FOREIGN_TABLE, InvalidOid, NULL);
 
 	CreateForeignTable(create_osrel, address.objectId);
@@ -1071,13 +1034,13 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 
 	/* Create group look up index and record dependencies */
 	if (IsBinaryUpgrade)
-		set_next_oids_for_lookup_index();
+		set_next_oids_for_lookup_index(options);
 
 	select = TransformSelectStmtForContProcess(matrel_name, copyObject(select), NULL, sf, Combiner);
 	lookup_idx_oid = create_lookup_index(view, matrelid, matrel_name, select, has_sw);
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_pk_index();
+		set_next_oids_for_pk_index(options);
 
 	pkey_idx_oid = create_pkey_index(view, matrelid, matrel_name, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
 
@@ -1087,12 +1050,8 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	record_cv_dependencies(pqoid, matrelid, osrelid, seqrelid, overlayid, lookup_idx_oid, pkey_idx_oid, workerselect, query);
 	allowSystemTableMods = saveAllowSystemTableMods;
 
-	// we'll want to save the reloptions here now that we have everything
-	// we should probably do it this way for transforms too instead of within pipeline_query!
-	// then just make StorePipelineQueryReloptions private to this module :)
-
 	options = lappend(options, makeDefElem(OPTION_ACTION, (Node *) makeString(ACTION_MATERIALIZE)));
-	options = add_options_for_binary_upgrade(matrelid, seqrelid, osrelid, pkey_idx_oid, lookup_idx_oid, options);
+	options = add_options_for_binary_upgrade(overlayid, matrelid, seqrelid, osrelid, pkey_idx_oid, lookup_idx_oid, options);
 	StorePipelineQueryReloptions(overlayid, options);
 
 	/*
@@ -1260,34 +1219,6 @@ parse_outputfunc_args(List *options, List **args)
 }
 
 /*
- * set_next_oids_for_transform_osrel
- */
-static void
-set_next_oids_for_transform_osrel(List *options)
-{
-	int relid;
-	int typid;
-	int atypeid;
-
-	reset_next_oids();
-
-	if (!GetOptionAsInteger(options, OPTION_OSRELID, &relid))
-		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELID);
-
-	binary_upgrade_next_heap_pg_class_oid = (Oid) relid;
-
-	if (!GetOptionAsInteger(options, OPTION_OSRELTYPE, &typid))
-		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELTYPE);
-
-	binary_upgrade_next_pg_type_oid = (Oid) typid;
-
-	if (!GetOptionAsInteger(options, OPTION_OSRELATYPE, &atypeid))
-		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELATYPE);
-
-	binary_upgrade_next_array_pg_type_oid = (Oid) atypeid;
-}
-
-/*
  * ExecCreateContTransformStmt
  */
 void
@@ -1332,7 +1263,7 @@ ExecCreateContTransformStmt(RangeVar *transform, Node *stmt, List *options, cons
 	transformCreateStreamStmt(create_osrel);
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_transform_osrel(options);
+		set_next_oids_for_osrel(options);
 
 	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_FOREIGN_TABLE, InvalidOid, NULL);
 	osrelid = address.objectId;
@@ -1418,114 +1349,4 @@ ReconcilePipelineObjects(void)
 	CommandCounterIncrement();
 
 	PopActiveSnapshot();
-}
-
-
-/*
- * create_cq_set_next_oids_for_matrel
- */
-Datum
-create_cq_set_next_oids_for_matrel(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_matrel_class = PG_GETARG_OID(0);
-	next_matrel_type = PG_GETARG_OID(1);
-	next_matrel_array_type = PG_GETARG_OID(2);
-
-
-	/* Toast (if necessary) */
-	next_matrel_toast_class = PG_GETARG_OID(3);
-	next_matrel_toast_type = PG_GETARG_OID(4);
-	next_matrel_toast_index_class = PG_GETARG_OID(5);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cv_set_next_oids_for_seqrel
- */
-Datum
-create_cv_set_next_oids_for_seqrel(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_seqrel_class = PG_GETARG_OID(0);
-	next_seqrel_type = PG_GETARG_OID(1);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cv_set_next_oids_for_pk_index
- */
-Datum
-create_cv_set_next_oids_for_pk_index(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_pk_index_class = PG_GETARG_OID(0);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cv_set_next_oids_for_lookup_index
- */
-Datum
-create_cv_set_next_oids_for_lookup_index(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_lookup_index_class = PG_GETARG_OID(0);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cv_set_next_oids_for_overlay
- */
-Datum
-create_cv_set_next_oids_for_overlay(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_overlay_type = PG_GETARG_OID(0);
-	next_overlay_array_type = PG_GETARG_OID(1);
-	next_overlay_class = PG_GETARG_OID(2);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cq_set_next_oids_for_osrel
- */
-Datum
-create_cq_set_next_oids_for_osrel(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_osrel_type = PG_GETARG_OID(0);
-	next_osrel_array_type = PG_GETARG_OID(1);
-	next_osrel_class = PG_GETARG_OID(2);
-
-	PG_RETURN_VOID();
 }

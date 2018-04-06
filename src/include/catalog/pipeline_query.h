@@ -101,6 +101,9 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define OPTION_TGNARGS "tgnargs"
 #define OPTION_TGARGS "tgargs"
 
+#define OPTION_VIEWRELID "viewrelid"
+#define OPTION_VIEWTYPE "viewtype"
+#define OPTION_VIEWATYPE "viewatype"
 #define OPTION_MATRELID "matrelid"
 #define OPTION_MATRELTYPE "matreltype"
 #define OPTION_MATRELATYPE "matrelatype"
