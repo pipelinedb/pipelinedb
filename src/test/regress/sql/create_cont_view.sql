@@ -5,21 +5,21 @@ CREATE STREAM create_cont_stream (key integer, url text, value text);
 -- Simple ones
 CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key FROM create_cont_stream;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate0';
-\d+ cqcreate0;
+SELECT pg_get_viewdef('cqcreate0');
 \d+ cqcreate0_mrel;
 \d+ cqcreate0_osrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate0');
 
 CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url, 1, 2) FROM create_cont_stream;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate1';
-\d+ cqcreate1;
+SELECT pg_get_viewdef('cqcreate1');
 \d+ cqcreate1_mrel;
 \d+ cqcreate1_osrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate1');
 
 CREATE CONTINUOUS VIEW cqcreate2 AS SELECT key, substring(value, 1, 2) AS s FROM create_cont_stream;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate2';
-\d+ cqcreate2;
+SELECT pg_get_viewdef('cqcreate2');
 \d+ cqcreate2_mrel;
 \d+ cqcreate2_osrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate2');
@@ -30,14 +30,14 @@ CREATE STREAM create_cont_stream (key text, value int8, x float8, y int8, z int2
 -- Group by projections
 CREATE CONTINUOUS VIEW cqcreate3 AS SELECT key, COUNT(*), SUM(value) FROM create_cont_stream GROUP BY key;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate3';
-\d+ cqcreate3;
+SELECT pg_get_viewdef('cqcreate3');
 \d+ cqcreate3_mrel;
 \d+ cqcreate3_osrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate3');
 
 CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value) FROM create_cont_stream GROUP BY key;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate4';
-\d+ cqcreate4;
+SELECT pg_get_viewdef('cqcreate4');
 \d+ cqcreate4_mrel;
 \d+ cqcreate4_osrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate4');
@@ -45,83 +45,83 @@ SELECT pipeline_get_overlay_viewdef('cqcreate4');
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds');
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate5';
-\d+ cqcreate5;
+SELECT pg_get_viewdef('cqcreate5');
 \d+ cqcreate5_mrel;
 \d+ cqcreate5_osrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate5');
 
 CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate6';
-\d+ cqcreate6;
+SELECT pg_get_viewdef('cqcreate6');
 \d+ cqcreate6_mrel;
 \d+ cqcreate6_osrel;
 SELECT pipeline_get_overlay_viewdef('cqcreate6');
 
 -- These use a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key, AVG(x) AS float_avg, AVG(y) AS int_avg, AVG(ts0 - ts1) AS internal_avg FROM create_cont_stream GROUP BY key;
-\d+ cvavg;
+SELECT pg_get_viewdef('cvavg');
 \d+ cvavg_mrel;
 \d+ cvavg_osrel;
 SELECT pipeline_get_overlay_viewdef('cvavg');
 
 CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(key) AS count_col FROM create_cont_stream;
-\d+ cvjson;
+SELECT pg_get_viewdef('cvjson');
 \d+ cvjson_mrel;
 \d+ cvjson_osrel;
 SELECT pipeline_get_overlay_viewdef('cvjson');
 
 CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key, value) FROM create_cont_stream;
-\d+ cvjsonobj;
+SELECT pg_get_viewdef('cvjsonobj');
 \d+ cvjsonobj_mrel;
 \d+ cvjsonobj_osrel;
 SELECT pipeline_get_overlay_viewdef('cvjsonobj');
 
 -- But these aggregates don't
 CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(z + y) AS sum_col FROM create_cont_stream;
-\d+ cvcount;
+SELECT pg_get_viewdef('cvcount');
 \d+ cvcount_mrel;
 \d+ cvcount_osrel;
 SELECT pipeline_get_overlay_viewdef('cvcount');
 
 CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream;
-\d+ cvarray;
+SELECT pg_get_viewdef('cvarray');
 \d+ cvarray_mrel;
 \d+ cvarray_osrel;
 SELECT pipeline_get_overlay_viewdef('cvarray');
 
 CREATE CONTINUOUS VIEW cvtext AS SELECT key, string_agg(substring(key, 1, 2), ',') FROM create_cont_stream GROUP BY key;
-\d+ cvtext;
+SELECT pg_get_viewdef('cvtext');
 \d+ cvtext_mrel;
 \d+ cvtext_osrel;
 SELECT pipeline_get_overlay_viewdef('cvtext');
 
 -- Check for expressions containing aggregates
 CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(y) FROM create_cont_stream;
-\d+ cqaggexpr1;
+SELECT pg_get_viewdef('cqaggexpr1');
 \d+ cqaggexpr1_mrel;
 \d+ cqaggexpr1_osrel;
 SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
 
 CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key, AVG(x) + MAX(y) AS value FROM create_cont_stream GROUP BY key;
-\d+ cqaggexpr2;
+SELECT pg_get_viewdef('cqaggexpr2');
 \d+ cqaggexpr2_mrel;
 \d+ cqaggexpr2_osrel;
 SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
 
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key, COUNT(*) AS value FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key;
-\d+ cqaggexpr3;
+SELECT pg_get_viewdef('cqaggexpr3');
 \d+ cqaggexpr3_mrel;
 \d+ cqaggexpr3_osrel;
 SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
 
 CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key, floor(AVG(x)) AS value FROM create_cont_stream GROUP BY key;
-\d+ cqaggexpr4;
+SELECT pg_get_viewdef('cqaggexpr4');
 \d+ cqaggexpr4_mrel;
 \d+ cqaggexpr4_osrel;
 SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
 
 CREATE CONTINUOUS VIEW cqgroupby AS SELECT key, x, COUNT(*) FROM create_cont_stream GROUP BY key, x;
-\d+ cqgroupby
+SELECT pg_get_viewdef('cqgroupby');
 \d+ cqgroupby_mrel;
 \d+ cqgroupby_osrel;
 SELECT pipeline_get_overlay_viewdef('cqgroupby');
@@ -129,7 +129,7 @@ SELECT pipeline_get_overlay_viewdef('cqgroupby');
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT key, x, y, z, value, COUNT(*) FROM create_cont_stream
 GROUP BY key, x, y, z, value;
 
-\d+ multigroupindex;
+SELECT pg_get_viewdef('multigroupindex');
 \d+ multigroupindex_mrel;
 \d+ multigroupindex_osrel;
 SELECT pipeline_get_overlay_viewdef('multigroupindex');
@@ -162,7 +162,7 @@ DROP CONTINUOUS VIEW arrts;
 
 -- WITH sw
 CREATE CONTINUOUS VIEW ma0 WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream;
-\d+ ma0;
+SELECT pg_get_viewdef('ma0');
 
 -- sw must be a valid interval string
 CREATE CONTINUOUS VIEW mainvalid WITH (sw = 42) AS SELECT COUNT(*) FROM create_cont_stream;
@@ -171,7 +171,7 @@ CREATE CONTINUOUS VIEW mainvalid WITH (sw = 'not an interval') AS SELECT COUNT(*
 
 CREATE CONTINUOUS VIEW mawhere WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
 WHERE x::integer = 1;
-\d+ mawhere;
+SELECT pg_get_viewdef('mawhere');
 
 DROP CONTINUOUS VIEW mawhere;
 

@@ -239,28 +239,23 @@ CREATE CONTINUOUS VIEW sw_ts_expr2 AS
   SELECT minute(arrival_timestamp), count(*) FROM sw_ts_expr_s
   WHERE minute(arrival_timestamp) > clock_timestamp() - interval '5 minute'
   GROUP BY minute(arrival_timestamp);
-\d+ sw_ts_expr1
-              View "public.sw_ts_expr1"
- Column |  Type  | Modifiers | Storage | Description 
---------+--------+-----------+---------+-------------
- count  | bigint |           | plain   | 
-View definition:
- SELECT count(*) AS count
-   FROM sw_ts_expr_s
-  WHERE (minute(arrival_timestamp) + '@ 1 sec'::interval) > (clock_timestamp() - '@ 5 mins'::interval);
+SELECT pg_get_viewdef('sw_ts_expr1');
+                                              pg_get_viewdef                                               
+-----------------------------------------------------------------------------------------------------------
+  SELECT count(*) AS count                                                                                +
+    FROM sw_ts_expr_s                                                                                     +
+   WHERE ((minute(arrival_timestamp) + '@ 1 sec'::interval) > (clock_timestamp() - '@ 5 mins'::interval));
+(1 row)
 
-\d+ sw_ts_expr2
-                       View "public.sw_ts_expr2"
- Column |           Type           | Modifiers | Storage | Description 
---------+--------------------------+-----------+---------+-------------
- minute | timestamp with time zone |           | plain   | 
- count  | bigint                   |           | plain   | 
-View definition:
- SELECT minute(arrival_timestamp) AS minute,
-    count(*) AS count
-   FROM sw_ts_expr_s
-  WHERE minute(arrival_timestamp) > (clock_timestamp() - '@ 5 mins'::interval)
-  GROUP BY (minute(arrival_timestamp));
+SELECT pg_get_viewdef('sw_ts_expr2');
+                                  pg_get_viewdef                                  
+----------------------------------------------------------------------------------
+  SELECT minute(arrival_timestamp) AS minute,                                    +
+     count(*) AS count                                                           +
+    FROM sw_ts_expr_s                                                            +
+   WHERE (minute(arrival_timestamp) > (clock_timestamp() - '@ 5 mins'::interval))+
+   GROUP BY (minute(arrival_timestamp));
+(1 row)
 
 INSERT INTO sw_ts_expr_s (x) VALUES (1), (1);
 INSERT INTO sw_ts_expr_s (x) VALUES (1), (1);
@@ -280,16 +275,13 @@ CREATE CONTINUOUS VIEW unknown_type_cv AS SELECT x, 'a' FROM sw_ts_expr_s;
 ERROR:  column 2 has an unknown type
 HINT:  Explicitly cast the expression to a known type.
 CREATE CONTINUOUS VIEW unknown_type_cv AS SELECT x, 'a'::text FROM sw_ts_expr_s;
-\d+ unknown_type_cv
-             View "public.unknown_type_cv"
- Column |  Type   | Modifiers | Storage  | Description 
---------+---------+-----------+----------+-------------
- x      | integer |           | plain    | 
- text   | text    |           | extended | 
-View definition:
- SELECT x,
-    'a'::text AS text
-   FROM sw_ts_expr_s;
+SELECT pg_get_viewdef('unknown_type_cv');
+    pg_get_viewdef     
+-----------------------
+  SELECT x,           +
+     'a'::text AS text+
+    FROM sw_ts_expr_s;
+(1 row)
 
 DROP CONTINUOUS VIEW unknown_type_cv;
 CREATE STREAM ct_out_s (x integer, a text);

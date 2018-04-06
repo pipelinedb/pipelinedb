@@ -112,11 +112,11 @@ CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM an
 CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream0.sid::integer FROM analyze_cont_stream;
 CREATE CONTINUOUS VIEW cqregress4 AS SELECT x FROM cqregress4;
 CREATE CONTINUOUS VIEW cqregress5 AS SELECT count(DISTINCT x), percentile_cont(0.1) WITHIN GROUP (ORDER BY x) FROM analyze_cont_stream;
-\d+ cqregress5
+SELECT pg_get_viewdef('cqregress5');
 CREATE CONTINUOUS VIEW cqregress6 AS SELECT id, avg(x) FROM analyze_cont_stream GROUP BY id;
-\d+ cqregress6
+SELECT pg_get_viewdef('cqregress6');
 CREATE VIEW cqregress7 AS SELECT combine(avg) FROM cqregress6;
-\d+ cqregress7
+SELECT pg_get_viewdef('cqregress7');
 
 CREATE VIEW cqregress8 WITH (action=transform) AS SELECT id FROM analyze_cont_stream;
 
