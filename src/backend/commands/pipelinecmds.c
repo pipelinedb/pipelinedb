@@ -1348,5 +1348,9 @@ ReconcilePipelineObjects(void)
 
 	CommandCounterIncrement();
 
+	UpdatePipelineStreamCatalog();
+
+	CommandCounterIncrement();
+
 	PopActiveSnapshot();
 }
