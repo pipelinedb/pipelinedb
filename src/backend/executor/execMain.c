@@ -1089,12 +1089,6 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 						 errmsg("cannot change materialized view \"%s\"",
 								RelationGetRelationName(resultRel))));
 			break;
-//		case RELKIND_CONTVIEW:
-//			ereport(ERROR,
-//					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-//					errmsg("cannot change continuous view \"%s\"",
-//							RelationGetRelationName(resultRel))));
-//			break;
 		case RELKIND_FOREIGN_TABLE:
 			/* Okay only if the FDW supports it */
 			fdwroutine = GetFdwRoutineForRelation(resultRel, false);
@@ -1207,13 +1201,6 @@ CheckValidRowMarkRel(Relation rel, RowMarkType markType)
 						 errmsg("cannot lock rows in foreign table \"%s\"",
 								RelationGetRelationName(rel))));
 			break;
-//		case RELKIND_CONTVIEW:
-			/* Should not get here; planner should have expanded the view */
-//			ereport(ERROR,
-//					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-//					 errmsg("cannot lock rows in continuous view \"%s\"",
-//							RelationGetRelationName(rel))));
-//			break;
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),

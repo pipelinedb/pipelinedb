@@ -2092,8 +2092,6 @@ makeTableDataInfo(DumpOptions *dopt, TableInfo *tbinfo, bool oids)
 	/* Skip FOREIGN TABLEs (no data to dump) */
 	if (tbinfo->relkind == RELKIND_FOREIGN_TABLE)
 		return;
-//	if (tbinfo->relkind == RELKIND_CONTVIEW)
-//		return;
 
 	/* Don't dump data in unlogged tables, if so requested */
 	if (tbinfo->relpersistence == RELPERSISTENCE_UNLOGGED &&
@@ -14057,11 +14055,6 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 				srvname = NULL;
 				ftoptions = NULL;
 				break;
-//			case (RELKIND_CONTVIEW):
-//				reltypename = "CONTINUOUS VIEW";
-//				srvname = NULL;
-//				ftoptions = NULL;
-//				break;
 			default:
 				reltypename = "TABLE";
 				srvname = NULL;
@@ -14086,12 +14079,6 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 
 		appendPQExpBuffer(labelq, "%s %s", reltypename,
 						  fmtId(tbinfo->dobj.name));
-
-//		if (tbinfo->relkind == RELKIND_CONTVIEW)
-//		{
-//			dumpContinuousView(fout, tbinfo, delq);
-//			return;
-//		}
 
 		if (dopt->binary_upgrade)
 			binary_upgrade_set_pg_class_oids(fout, q,

@@ -88,7 +88,13 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define PIPELINE_QUERY_VIEW 		'v'
 #define PIPELINE_QUERY_TRANSFORM 	't'
 
-// consolidate these with other CV options we already have #define'd
+#define OPTION_FILLFACTOR "fillfactor"
+#define OPTION_SLIDING_WINDOW "sw"
+#define OPTION_PK "pk"
+#define OPTION_STEP_FACTOR "step_factor"
+#define OPTION_TTL "ttl"
+#define OPTION_TTL_COLUMN "ttl_column"
+
 #define OPTION_ACTION "action"
 #define OPTION_OUTPUTFUNC "outputfunc"
 #define OPTION_MATRELID "matrelid"

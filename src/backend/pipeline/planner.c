@@ -795,14 +795,6 @@ PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext c
 				goto done;
 			}
 		}
-		else if (false)
-		{
-			/*
-			 * Indicate to the analyzer/planner hooks that we're executing a CREATE CONTINUOUS statement
-			 */
-			PipelineContextSetIsDDL();
-			ddl_lock = AcquirePipelineDDLLock();
-		}
 		else if (IsA(parsetree, IndexStmt))
 		{
 			IndexStmt *stmt = (IndexStmt *) parsetree;

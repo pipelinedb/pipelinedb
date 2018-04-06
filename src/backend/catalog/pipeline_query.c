@@ -583,6 +583,32 @@ RelIdIsForMatRel(Oid relid, Oid *id)
 }
 
 /*
+ * RelIdIsForContView
+ *
+ * * Returns true if the given oid represents a continuous view
+ */
+bool
+RelIdIsForContView(Oid relid)
+{
+	HeapTuple tup;
+	bool result = false;
+	Form_pipeline_query row;
+
+	tup = SearchPipelineSysCache1(PIPELINEQUERYRELID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tup))
+		return false;
+
+	row = (Form_pipeline_query) GETSTRUCT(tup);
+	if (row->type == PIPELINE_QUERY_VIEW)
+		result = true;
+
+	ReleaseSysCache(tup);
+
+	return result;
+}
+
+/*
  * IsSWContView
  */
 bool
@@ -805,35 +831,6 @@ Bitmapset *
 GetContinuousQueryIds(void)
 {
 	return get_cont_query_ids(0);
-}
-
-/*
- * RemovePipelineQueryById
- *
- * Remove a row from pipeline_query along with its associated transition state
- */
-void
-RemovePipelineQueryById(Oid oid)
-{
-	Relation pipeline_query;
-	HeapTuple tuple;
-
-	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
-
-	tuple = SearchPipelineSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for continuous view with OID %u", oid);
-
-	simple_heap_delete(pipeline_query, &tuple->t_self);
-
-	ReleaseSysCache(tuple);
-
-	CommandCounterIncrement();
-	UpdatePipelineStreamCatalog();
-
-	pgstat_report_create_drop_cv(false);
-
-	heap_close(pipeline_query, NoLock);
 }
 
 Oid

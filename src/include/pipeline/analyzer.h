@@ -54,13 +54,6 @@ extern void ClearPipelineContext(void);
 #define MATREL_COMBINE "combine"
 #define MATREL_FINALIZE "finalize"
 
-#define OPTION_FILLFACTOR "fillfactor"
-#define OPTION_SLIDING_WINDOW "sw"
-#define OPTION_PK "pk"
-#define OPTION_STEP_FACTOR "step_factor"
-#define OPTION_TTL "ttl"
-#define OPTION_TTL_COLUMN "ttl_column"
-
 #define SW_TIMESTAMP_REF 65100
 #define IS_SW_TIMESTAMP_REF(var) (IsA((var), Var) && ((Var *) (var))->varno >= SW_TIMESTAMP_REF)
 

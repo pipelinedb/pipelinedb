@@ -253,12 +253,6 @@ static const struct dropmsgstrings dropmsgstringarray[] = {
 		gettext_noop("foreign table \"%s\" does not exist, skipping"),
 		gettext_noop("\"%s\" is not a foreign table"),
 	gettext_noop("Use DROP FOREIGN TABLE to remove a foreign table.")},
-//	{RELKIND_CONTVIEW,
-//		ERRCODE_UNDEFINED_OBJECT,
-//		gettext_noop("continuous view \"%s\" does not exist"),
-//		gettext_noop("continuous view  \"%s\" does not exist, skipping"),
-//		gettext_noop("\"%s\" is not a continuous view "),
-//	gettext_noop("Use DROP CONTINUOUS VIEW to remove a continuous view.")},
 	{'\0', 0, NULL, NULL, NULL, NULL}
 };
 
@@ -863,10 +857,6 @@ RemoveRelations(DropStmt *drop)
 			relkind = RELKIND_FOREIGN_TABLE;
 			break;
 
-//		case OBJECT_CONTVIEW:
-//			relkind = RELKIND_CONTVIEW;
-//			break;
-
 		default:
 			elog(ERROR, "unrecognized drop object type: %d",
 				 (int) drop->removeType);
@@ -883,7 +873,6 @@ RemoveRelations(DropStmt *drop)
 		Oid			relOid;
 		ObjectAddress obj;
 		struct DropRelationCallbackState state;
-		char save;
 
 		/*
 		 * These next few steps are a great deal like relation_openrv, but we
@@ -897,10 +886,6 @@ RemoveRelations(DropStmt *drop)
 		 */
 		AcceptInvalidationMessages();
 
-		save = relkind;
-//		if (drop->removeType == OBJECT_CONTVIEW)
-//			relkind = RELKIND_CONTVIEW;
-
 		/* Look up the appropriate relation using namespace search. */
 		state.relkind = relkind;
 		state.heapOid = InvalidOid;
@@ -913,18 +898,9 @@ RemoveRelations(DropStmt *drop)
 		/* Not there? */
 		if (!OidIsValid(relOid))
 		{
-			/*
-			 * We use a regular relkind of 'v' for continuous views' virtual relations
-			 * because that's what they are, which keeps things simple. However, we do
-			 * want a specific error message if this is a continuous view. This is also
-			 * the case for streams.
-			 */
 			DropErrorMsgNonExistent(rel, relkind, drop->missing_ok);
-			relkind = save;
 			continue;
 		}
-
-		relkind = save;
 
 		/* OK, we're ready to delete this one */
 		obj.classId = RelationRelationId;
@@ -2576,11 +2552,6 @@ RenameRelation(RenameStmt *stmt)
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("cannot rename materialization table \"%s\" for continuous view \"%s\"",
 						stmt->relation->relname, cv->relname)));
-//	else if (stmt->renameType == OBJECT_CONTVIEW)
-//		ereport(ERROR,
-//				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-//				 errmsg("cannot rename continuous view \"%s\"",
-//						stmt->relation->relname)));
 
 	/*
 	 * Grab an exclusive lock on the target table, index, sequence, view,
@@ -8335,7 +8306,6 @@ ATExecAlterColumnType(AlteredTableInfo *tab, Relation rel,
 			case OCLASS_USER_MAPPING:
 			case OCLASS_DEFACL:
 			case OCLASS_EXTENSION:
-//			case OCLASS_CONTINUOUS_QUERY:
 
 				/*
 				 * We don't expect any of these sorts of objects to depend on
@@ -8946,7 +8916,6 @@ ATExecChangeOwner(Oid relationOid, Oid newOwnerId, bool recursing, LOCKMODE lock
 		case RELKIND_VIEW:
 		case RELKIND_MATVIEW:
 		case RELKIND_FOREIGN_TABLE:
-//		case RELKIND_CONTVIEW:
 			/* ok to change owner */
 			break;
 		case RELKIND_INDEX:
@@ -9411,7 +9380,6 @@ ATExecSetRelOptions(Relation rel, List *defList, AlterTableType operation,
 			(void) heap_reloptions(rel->rd_rel->relkind, newOptions, true);
 			break;
 		case RELKIND_VIEW:
-//		case RELKIND_CONTVIEW:
 			(void) view_reloptions(newOptions, true);
 			break;
 		case RELKIND_INDEX:

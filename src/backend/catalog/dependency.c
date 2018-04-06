@@ -164,7 +164,6 @@ static const Oid object_classes[] = {
 	DefaultAclRelationId,		/* OCLASS_DEFACL */
 	ExtensionRelationId,		/* OCLASS_EXTENSION */
 	EventTriggerRelationId,		/* OCLASS_EVENT_TRIGGER */
-//	PipelineQueryRelationId, /* OCLASS_CONTINUOUS_VIEW */
 	PipelineCombineRelationId, /* OCLASS_COMBINE */
 	PolicyRelationId,			/* OCLASS_POLICY */
 	TransformRelationId			/* OCLASS_TRANSFORM */
@@ -1277,10 +1276,6 @@ doDeletion(const ObjectAddress *object, int flags)
 		case OCLASS_TRANSFORM:
 			DropTransformById(object->objectId);
 			break;
-
-//		case OCLASS_CONTINUOUS_QUERY:
-//			RemovePipelineQueryById(object->objectId);
-//			break;
 
 		case OCLASS_COMBINE:
 			RemovePipelineCombineById(object->objectId);
@@ -2432,9 +2427,6 @@ getObjectClass(const ObjectAddress *object)
 
 		case TransformRelationId:
 			return OCLASS_TRANSFORM;
-
-//		case PipelineQueryRelationId:
-//			return OCLASS_CONTINUOUS_QUERY;
 
 		case PipelineCombineRelationId:
 			return OCLASS_COMBINE;

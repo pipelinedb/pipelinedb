@@ -66,7 +66,6 @@ typedef Relation PipelineDDLLock;
 #define ReleasePipelineDDLLock(lock) heap_close(lock, NoLock);
 
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
-extern void RemovePipelineQueryById(Oid oid);
 
 extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid seqrel, int ttl, AttrNumber ttl_attno, Oid *pq_id);
 extern void UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid, List *options);
@@ -79,6 +78,7 @@ extern bool IsPipelineObject(RangeVar *name);
 extern RangeVar *GetSWContinuousViewRangeVar(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
 extern bool RelIdIsForMatRel(Oid relid, Oid *id);
+extern bool RelIdIsForContView(Oid relid);
 extern bool IsSWContView(RangeVar *name);
 extern bool IsTTLContView(RangeVar *name);
 extern RangeVar *GetMatRelName(RangeVar *cv);
