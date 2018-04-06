@@ -258,7 +258,7 @@ StorePipelineQueryReloptions(Oid relid, List *options)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int ttl,
+DefineContinuousView(Oid relid, Query *query, Oid streamrelid, Oid matrelid, Oid seqrelid, int ttl,
 		AttrNumber ttl_attno, Oid *pq_id)
 {
 	Relation pipeline_query;
@@ -290,6 +290,7 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int tt
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
+	values[Anum_pipeline_query_streamrelid - 1] = ObjectIdGetDatum(streamrelid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(matrelid);
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(seqrelid);
 	values[Anum_pipeline_query_ttl - 1] = Int32GetDatum(ttl);
@@ -851,7 +852,7 @@ GetContQueryId(RangeVar *name)
 }
 
 Oid
-DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid)
+DefineContinuousTransform(Oid relid, Query *query, Oid streamrelid, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -887,6 +888,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
+	values[Anum_pipeline_query_streamrelid - 1] = ObjectIdGetDatum(streamrelid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(typoid); /* HACK(usmanm): So matrel index works */
 	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 	values[Anum_pipeline_query_pkidxid - 1] = ObjectIdGetDatum(InvalidOid);

@@ -67,10 +67,10 @@ typedef Relation PipelineDDLLock;
 
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 
-extern Oid DefineContinuousView(Oid relid, Query *query, Oid matrel, Oid seqrel, int ttl, AttrNumber ttl_attno, Oid *pq_id);
+extern Oid DefineContinuousView(Oid relid, Query *query, Oid streamrelid, Oid matrel, Oid seqrel, int ttl, AttrNumber ttl_attno, Oid *pq_id);
 extern void UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid, List *options);
 extern void UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid);
-extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid);
+extern Oid DefineContinuousTransform(Oid relid, Query *query, Oid streamrelid, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid);
 
 extern Relation OpenCVRelFromMatRel(Relation matrel, LOCKMODE lockmode);
 extern bool IsAContinuousView(RangeVar *name);

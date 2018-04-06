@@ -36,6 +36,7 @@ CATALOG(pipeline_query,4242)
 	Oid			relid;
 	bool 		active;
 	Oid 		osrelid;
+	Oid 		streamrelid;
 
 	/* valid for views only */
 	Oid			matrelid;
@@ -67,23 +68,24 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query             16
+#define Natts_pipeline_query             17
 #define Anum_pipeline_query_id           1
 #define Anum_pipeline_query_type         2
-#define Anum_pipeline_query_relid	     3
+#define Anum_pipeline_query_relid  	    3
 #define Anum_pipeline_query_active       4
-#define Anum_pipeline_query_osrelid	     5
-#define Anum_pipeline_query_matrelid     6
-#define Anum_pipeline_query_seqrelid     7
-#define Anum_pipeline_query_pkidxid      8
-#define Anum_pipeline_query_lookupidxid  9
-#define Anum_pipeline_query_step_factor  10
-#define Anum_pipeline_query_ttl  		 11
-#define Anum_pipeline_query_ttl_attno  	 12
-#define Anum_pipeline_query_tgfn         13
-#define Anum_pipeline_query_tgnargs	     14
-#define Anum_pipeline_query_tgargs       15
-#define Anum_pipeline_query_query        16
+#define Anum_pipeline_query_osrelid      5
+#define Anum_pipeline_query_streamrelid  6
+#define Anum_pipeline_query_matrelid     7
+#define Anum_pipeline_query_seqrelid     8
+#define Anum_pipeline_query_pkidxid      9
+#define Anum_pipeline_query_lookupidxid  10
+#define Anum_pipeline_query_step_factor  11
+#define Anum_pipeline_query_ttl  		    12
+#define Anum_pipeline_query_ttl_attno    13
+#define Anum_pipeline_query_tgfn         14
+#define Anum_pipeline_query_tgnargs	    15
+#define Anum_pipeline_query_tgargs       16
+#define Anum_pipeline_query_query        17
 
 #define PIPELINE_QUERY_VIEW 		'v'
 #define PIPELINE_QUERY_TRANSFORM 	't'

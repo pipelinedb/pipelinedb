@@ -786,6 +786,8 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	char *tsname;
 	List *matrel_options = NIL;
 	DefElem *ff = NULL;
+	ContAnalyzeContext cxt;
+	Oid streamrelid;
 
 	check_relation_already_exists(view);
 
@@ -954,6 +956,12 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 		}
 	}
 
+	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
+	collect_rels_and_streams((Node *) workerselect->fromClause, &cxt);
+
+	Assert(list_length(cxt.streams) == 1);
+	streamrelid = RangeVarGetRelid((RangeVar *) linitial(cxt.streams), NoLock, false);
+
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog relation. We don't have relid for
 	 * the continuous view yet, since we need this entry for the DefineView call below to succeed.
@@ -962,7 +970,7 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, ttl, ttl_attno, &cvid);
+	pqoid = DefineContinuousView(InvalidOid, cont_query, streamrelid, matrelid, seqrelid, ttl, ttl_attno, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
@@ -1234,6 +1242,8 @@ ExecCreateContTransformStmt(RangeVar *transform, Node *stmt, List *options, cons
 	Oid osrelid;
 	ViewStmt *vstmt;
 	List *args = NIL;
+	ContAnalyzeContext cxt;
+	Oid streamrelid;
 
 	check_relation_already_exists(transform);
 
@@ -1269,7 +1279,13 @@ ExecCreateContTransformStmt(RangeVar *transform, Node *stmt, List *options, cons
 	osrelid = address.objectId;
 	CommandCounterIncrement();
 
-	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, options, &tgfnid);
+	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
+	collect_rels_and_streams((Node *) ((SelectStmt *) stmt)->fromClause, &cxt);
+
+	Assert(list_length(cxt.streams) == 1);
+	streamrelid = RangeVarGetRelid((RangeVar *) linitial(cxt.streams), NoLock, false);
+
+	pqoid = DefineContinuousTransform(relid, query, streamrelid, relid, osrelid, options, &tgfnid);
 	CommandCounterIncrement();
 
 	CreateForeignTable(create_osrel, address.objectId);

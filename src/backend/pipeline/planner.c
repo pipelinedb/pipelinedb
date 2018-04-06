@@ -884,6 +884,13 @@ PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext c
 
 done:
 
+		/*
+		 * We may have dropped a PipelineDB object, so we reconcile our own catalog tables
+		 * to ensure any orphaned entries are removed in this transaction.
+		 */
+		if (IsA(parsetree, DropStmt))
+			ReconcilePipelineObjects();
+
 		if (exec_lock)
 			ReleaseContExecutionLock(exec_lock);
 
@@ -900,13 +907,6 @@ done:
 			Oid relid = RangeVarGetRelid(stmt->base.relation, NoLock, false);
 			CreatePipelineStreamEntry(stmt, relid);
 		}
-
-		/*
-		 * We may have dropped a PipelineDB object, so we reconcile our own catalog tables
-		 * to ensure any orphaned entries are removed in this transaction.
-		 */
-		if (IsA(parsetree, DropStmt))
-			ReconcilePipelineObjects();
 
 		/*
 		 * Clear analyzer/planner context flags

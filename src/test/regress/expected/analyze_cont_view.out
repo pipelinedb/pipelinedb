@@ -210,7 +210,7 @@ drop cascades to view cqregress5
 drop cascades to view cqregress6
 drop cascades to view cqregress7
 SELECT * FROM pipeline_query;
- id | type | relid | active | osrelid | matrelid | seqrelid | pkidxid | lookupidxid | step_factor | ttl | ttl_attno | tgfn | tgnargs | tgargs | query 
-----+------+-------+--------+---------+----------+----------+---------+-------------+-------------+-----+-----------+------+---------+--------+-------
+ id | type | relid | active | osrelid | streamrelid | matrelid | seqrelid | pkidxid | lookupidxid | step_factor | ttl | ttl_attno | tgfn | tgnargs | tgargs | query 
+----+------+-------+--------+---------+-------------+----------+----------+---------+-------------+-------------+-----+-----------+------+---------+--------+-------
 (0 rows)
 
