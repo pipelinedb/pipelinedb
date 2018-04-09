@@ -210,4 +210,28 @@ CREATE CONTINUOUS VIEW type_cv as SELECT val, count(*) FROM create_cont_stream G
 
 CREATE CONTINUOUS VIEW tts AS SELECT COUNT(*) FROM create_cont_stream WHERE to_timestamp(x) > clock_timestamp() - interval '3 months';
 
+-- Verify that we can't create triggers on continuous views
+CREATE CONTINUOUS VIEW trigcv AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE TRIGGER trig AFTER INSERT OR UPDATE ON trigcv EXECUTE PROCEDURE pipeline_stream_insert('create_cont_stream');
+
+CREATE CONTINUOUS VIEW altercv AS SELECT COUNT(*) FROM create_cont_stream;
+
+-- Verify that we can't alter a CV's columns
+ALTER VIEW altercv ALTER COUNT SET DEFAULT 1;
+
+-- Verify that we can't alter a CV's options
+ALTER VIEW altercv SET (security_barrier);
+
+-- Verify that we can rename a CV
+ALTER VIEW altercv RENAME TO altercv_renamed;
+
+-- Verify that we can change a CV's schema
+CREATE SCHEMA altertest;
+ALTER VIEW altercv_renamed SET SCHEMA altertest;
+SELECT * FROM altertest.altercv_renamed;
+
+-- Verify that we cannot replace an existing CV
+CREATE OR REPLACE VIEW altercv_renamed WITH (action=materialize) AS SELECT COUNT(*) FROM create_cont_stream;
+
+DROP SCHEMA altertest CASCADE;
 DROP STREAM create_cont_stream CASCADE;

@@ -875,6 +875,21 @@ PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext c
 					}
 				}
 			}
+			else if (stmt->relkind == OBJECT_VIEW && IsAContinuousView(stmt->relation))
+			{
+				/*
+				 * Note that continuous views can be renamed and their schemas may be altered, but neither
+				 * of those operations is encoded as an AlterTableStmt so we need not handle them here.
+				 */
+				elog(ERROR, "continuous views cannot be modified");
+			}
+		}
+		else if (IsA(parsetree, CreateTrigStmt))
+		{
+			CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
+
+			if (IsAContinuousView(stmt->relation))
+				elog(ERROR, "continuous views do not support triggers");
 		}
 
 		if (SaveUtilityHook != NULL)
