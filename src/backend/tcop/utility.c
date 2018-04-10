@@ -214,7 +214,6 @@ check_xact_readonly(Node *parsetree)
 		case T_CreateForeignTableStmt:
 		case T_ImportForeignSchemaStmt:
 		case T_SecLabelStmt:
-		case T_CreateContViewStmt:
 			PreventCommandIfReadOnly(CreateCommandTag(parsetree));
 			PreventCommandIfParallelMode(CreateCommandTag(parsetree));
 			break;
@@ -524,10 +523,6 @@ standard_ProcessUtility(Node *parsetree,
 			/* no event triggers for global objects */
 			PreventTransactionChain(isTopLevel, "CREATE TABLESPACE");
 			CreateTableSpace((CreateTableSpaceStmt *) parsetree);
-			break;
-
-		case T_CreateContViewStmt:
-			ExecCreateContViewStmt((CreateContViewStmt *) parsetree, queryString);
 			break;
 
 		case T_DropTableSpaceStmt:
@@ -1601,7 +1596,6 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_VIEW:
 		case OBJECT_MATVIEW:
 		case OBJECT_FOREIGN_TABLE:
-		case OBJECT_CONTVIEW:
 			RemoveRelations(stmt);
 			break;
 		default:
@@ -2110,9 +2104,6 @@ CreateCommandTag(Node *parsetree)
 				case OBJECT_VIEW:
 					tag = "DROP VIEW";
 					break;
-				case OBJECT_CONTVIEW:
-					tag = "DROP CONTINUOUS VIEW";
-					break;
 				case OBJECT_MATVIEW:
 					tag = "DROP MATERIALIZED VIEW";
 					break;
@@ -2384,10 +2375,6 @@ CreateCommandTag(Node *parsetree)
 
 		case T_ExplainStmt:
 			tag = "EXPLAIN";
-			break;
-
-		case T_CreateContViewStmt:
-			tag = "CREATE CONTINUOUS VIEW";
 			break;
 
 		case T_CreateTableAsStmt:
@@ -3166,11 +3153,6 @@ GetCommandLogLevel(Node *parsetree)
 
 			}
 			break;
-
-			/* PipelineDB */
-			case T_CreateContViewStmt:
-				lev = LOGSTMT_DDL;
-				break;
 
 		default:
 			elog(WARNING, "unrecognized node type: %d",

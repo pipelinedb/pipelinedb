@@ -45,9 +45,9 @@ SELECT * FROM test_int2_avg ORDER BY k;
 
 DROP STREAM int_stream_cqavg CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_int8_avg
-drop cascades to continuous view test_int4_avg
-drop cascades to continuous view test_int2_avg
+DETAIL:  drop cascades to view test_int8_avg
+drop cascades to view test_int4_avg
+drop cascades to view test_int2_avg
 -------------------------------------------------------------------------------
 -- Float averages
 CREATE STREAM float_stream_cqavg (k text, v float8);
@@ -89,8 +89,8 @@ SELECT k, round(avg::numeric, 5) FROM test_float4_avg ORDER BY k;
 
 DROP STREAM float_stream_cqavg CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view test_float8_avg
-drop cascades to continuous view test_float4_avg
+DETAIL:  drop cascades to view test_float8_avg
+drop cascades to view test_float4_avg
 -------------------------------------------------------------------------------
 -- Numeric averages
 CREATE STREAM numeric_stream_cqavg (k text, v numeric);
@@ -107,7 +107,7 @@ SELECT * FROM test_numeric_avg ORDER BY k;
 (3 rows)
 
 DROP STREAM numeric_stream_cqavg CASCADE;
-NOTICE:  drop cascades to continuous view test_numeric_avg
+NOTICE:  drop cascades to view test_numeric_avg
 -------------------------------------------------------------------------------
 -- Interval averages
 CREATE STREAM interval_stream_cqavg (k text, ts0 timestamp, ts1 timestamp);
@@ -132,4 +132,4 @@ SELECT * FROM test_interval_avg ORDER BY k;
 (2 rows)
 
 DROP STREAM interval_stream_cqavg CASCADE;
-NOTICE:  drop cascades to continuous view test_interval_avg
+NOTICE:  drop cascades to view test_interval_avg

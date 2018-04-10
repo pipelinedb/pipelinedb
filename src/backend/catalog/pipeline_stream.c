@@ -94,49 +94,24 @@ streams_to_meta(Relation pipeline_query)
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
-		char *querystring;
-		ListCell *lc;
-		List *parsetree_list;
-		Node *parsetree;
-		SelectStmt *sel;
-		Datum tmp;
-		bool isnull;
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		ContAnalyzeContext *context;
+		bool found;
 
-		tmp = PipelineSysCacheGetAttr(PIPELINEQUERYRELID, tup, Anum_pipeline_query_query, &isnull);
-		querystring = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
+		entry = (StreamTargetsEntry *) hash_search(targets, &row->streamrelid, HASH_ENTER, &found);
 
-		parsetree_list = pg_parse_query(querystring);
-		parsetree = (Node *) lfirst(parsetree_list->head);
-		sel = (SelectStmt *) parsetree;
-
-		context = MakeContAnalyzeContext(make_parsestate(NULL), sel, Worker);
-		collect_rels_and_streams((Node *) sel->fromClause, context);
-
-		foreach(lc, context->streams)
+		if (!found)
 		{
-			RangeVar *rv = (RangeVar *) lfirst(lc);
-			bool found;
-			Oid key;
+			HASHCTL colsctl;
 
-			key = RangeVarGetRelid(rv, NoLock, false);
-			entry = (StreamTargetsEntry *) hash_search(targets, &key, HASH_ENTER, &found);
+			MemSet(&colsctl, 0, sizeof(ctl));
+			colsctl.keysize = NAMEDATALEN;
+			colsctl.entrysize = sizeof(StreamColumnsEntry);
 
-			if (!found)
-			{
-				HASHCTL colsctl;
-
-				MemSet(&colsctl, 0, sizeof(ctl));
-				colsctl.keysize = NAMEDATALEN;
-				colsctl.entrysize = sizeof(StreamColumnsEntry);
-
-				entry->queries = NULL;
-			}
-
-			if (row->active)
-				entry->queries = bms_add_member(entry->queries, row->id);
+			entry->queries = NULL;
 		}
+
+		if (row->active)
+			entry->queries = bms_add_member(entry->queries, row->id);
 	}
 
 	heap_endscan(scandesc);
@@ -379,7 +354,7 @@ UpdatePipelineStreamCatalog(void)
 					ALLOCSET_DEFAULT_INITSIZE,
 					ALLOCSET_DEFAULT_MAXSIZE);
 
-	pipeline_query = heap_open(PipelineQueryRelationOid, AccessShareLock);
+	pipeline_query = heap_open(PipelineQueryRelationOid, NoLock);
 	pipeline_stream = heap_open(PipelineStreamRelationOid, RowExclusiveLock);
 
 	/*

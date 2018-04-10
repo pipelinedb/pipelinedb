@@ -176,9 +176,9 @@ SELECT n, array_sort(json_keys_array(json_object_agg)) FROM test_object_agg1 ORD
 
 DROP STREAM cqobjectagg_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_json_agg
-drop cascades to continuous view test_object_agg0
-drop cascades to continuous view test_object_agg1
+DETAIL:  drop cascades to view test_json_agg
+drop cascades to view test_object_agg0
+drop cascades to view test_object_agg1
 -- bytea_string_agg, string_agg
 CREATE STREAM cqobjectagg_stream (k text, v bytea);
 CREATE STREAM cqobjectagg_text_stream (k text, v text);
@@ -223,9 +223,9 @@ SELECT k, array_sort(regexp_split_to_array(string_agg, '@')) FROM test_string_ag
 (3 rows)
 
 DROP STREAM cqobjectagg_stream CASCADE;
-NOTICE:  drop cascades to continuous view test_bstring_agg
+NOTICE:  drop cascades to view test_bstring_agg
 DROP STREAM cqobjectagg_text_stream CASCADE;
-NOTICE:  drop cascades to continuous view test_string_agg
+NOTICE:  drop cascades to view test_string_agg
 -- array_agg
 CREATE STREAM cqobjectagg_stream (k text, v int);
 CREATE CONTINUOUS VIEW test_array_agg AS SELECT k::text, array_agg(v::integer) FROM cqobjectagg_stream GROUP BY k;
@@ -276,7 +276,7 @@ SELECT array_sort(array_agg) FROM test_array_agg;
 (1 row)
 
 DROP STREAM cqobjectagg_stream cASCADE;
-NOTICE:  drop cascades to continuous view test_array_agg
+NOTICE:  drop cascades to view test_array_agg
 -- json_object_int_sum
 CREATE STREAM cqobjectagg_stream (x int, payload text);
 CREATE CONTINUOUS VIEW jois AS SELECT x::integer, json_object_int_sum(payload::text), COUNT(*) FROM cqobjectagg_stream GROUP BY x;
@@ -301,7 +301,7 @@ SELECT * FROM jois ORDER BY x;
 (10 rows)
 
 DROP STREAM cqobjectagg_stream cASCADE;
-NOTICE:  drop cascades to continuous view jois
+NOTICE:  drop cascades to view jois
 -- array_agg_array
 CREATE STREAM cqobjectagg_stream (x int, y int);
 CREATE CONTINUOUS VIEW test_array_agg_array AS SELECT array_agg(ARRAY[x::int, y::int]) FROM cqobjectagg_stream;
@@ -321,7 +321,7 @@ SELECT * FROM test_array_agg_array;
 (1 row)
 
 DROP STREAM cqobjectagg_stream CASCADE;
-NOTICE:  drop cascades to continuous view test_array_agg_array
+NOTICE:  drop cascades to view test_array_agg_array
 -- jsonb_agg
 CREATE STREAM cqobjectagg_stream (key text, tval text, fval float8, ival integer, n text, v integer, t text);
 CREATE CONTINUOUS VIEW test_jsonb_agg AS SELECT key::text, jsonb_agg(tval::text) AS j0, jsonb_agg(fval::float8) AS j1, jsonb_agg(ival::integer) AS j2 FROM cqobjectagg_stream GROUP BY key;
@@ -426,8 +426,8 @@ SELECT n, array_sort(json_keys_array(jsonb_object_agg::json)) FROM test_jsonb_ob
 
 DROP STREAM cqobjectagg_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view test_jsonb_object_agg0
-drop cascades to continuous view test_jsonb_object_agg1
+DETAIL:  drop cascades to view test_jsonb_object_agg0
+drop cascades to view test_jsonb_object_agg1
 DROP FUNCTION array_sort(anyarray);
 DROP FUNCTION json_to_array(json);
 DROP FUNCTION json_keys_array(json);

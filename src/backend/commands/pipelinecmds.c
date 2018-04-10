@@ -16,8 +16,10 @@
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/reloptions.h"
+#include "access/tuptoaster.h"
 #include "access/xact.h"
 #include "catalog/binary_upgrade.h"
+#include "catalog/pg_rewrite.h"
 #include "commands/defrem.h"
 #include "commands/explain.h"
 #include "commands/pipelinecmds.h"
@@ -75,27 +77,11 @@
 /* guc params */
 int continuous_view_fillfactor;
 
-/* for binary upgrades */
-static Oid next_matrel_type = InvalidOid;
-static Oid next_matrel_array_type = InvalidOid;
-static Oid next_matrel_toast_type = InvalidOid;
-static Oid next_matrel_class = InvalidOid;
-static Oid next_matrel_toast_class = InvalidOid;
-static Oid next_matrel_toast_index_class = InvalidOid;
-
-static Oid next_seqrel_type = InvalidOid;
-static Oid next_seqrel_class = InvalidOid;
-
-static Oid next_pk_index_class = InvalidOid;
-static Oid next_lookup_index_class = InvalidOid;
-
-static Oid next_overlay_type = InvalidOid;
-static Oid next_overlay_array_type = InvalidOid;
-static Oid next_overlay_class = InvalidOid;
-
-static Oid next_osrel_type = InvalidOid;
-static Oid next_osrel_array_type = InvalidOid;
-static Oid next_osrel_class = InvalidOid;
+typedef struct OptionMapping
+{
+	char *option;
+	Oid *value;
+} OptionMapping;
 
 static void
 reset_next_oids()
@@ -108,57 +94,77 @@ reset_next_oids()
 	binary_upgrade_next_index_pg_class_oid = InvalidOid;
 }
 
+/*
+ * set_next_oids_from_options
+ */
 static void
-set_next_oids_for_matrel(void)
+set_next_oids_from_options(List *options, OptionMapping targets[], int len)
 {
-	reset_next_oids();
-	binary_upgrade_next_pg_type_oid = next_matrel_type;
-	binary_upgrade_next_array_pg_type_oid = next_matrel_array_type;
-	binary_upgrade_next_toast_pg_type_oid = next_matrel_toast_type;
+	int i;
 
-	binary_upgrade_next_heap_pg_class_oid = next_matrel_class;
-	binary_upgrade_next_toast_pg_class_oid = next_matrel_toast_class;
-	binary_upgrade_next_index_pg_class_oid = next_matrel_toast_index_class;
+	reset_next_oids();
+
+	for (i = 0; i < len; i++)
+	{
+		int target;
+		if (GetOptionAsInteger(options, targets[i].option, &target))
+			*targets[i].value = (Oid) target;
+	}
 }
 
 static void
-set_next_oids_for_seqrel(void)
+set_next_oids_for_seqrel(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_pg_type_oid = next_seqrel_type;
-	binary_upgrade_next_heap_pg_class_oid = next_seqrel_class;
+	OptionMapping option_map[] = {
+		{OPTION_SEQRELID, &binary_upgrade_next_heap_pg_class_oid},
+		{OPTION_SEQRELTYPE, &binary_upgrade_next_pg_type_oid}
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 static void
-set_next_oids_for_pk_index(void)
+set_next_oids_for_pk_index(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_index_pg_class_oid = next_pk_index_class;
+	OptionMapping option_map[] = {
+		{OPTION_PKINDID, &binary_upgrade_next_index_pg_class_oid}
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 static void
-set_next_oids_for_lookup_index(void)
+set_next_oids_for_lookup_index(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_index_pg_class_oid = next_lookup_index_class;
+	OptionMapping option_map[] = {
+		{OPTION_LOOKUPINDID, &binary_upgrade_next_index_pg_class_oid}
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 static void
-set_next_oids_for_overlay(void)
+set_next_oids_for_overlay(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_pg_type_oid = next_overlay_type;
-	binary_upgrade_next_array_pg_type_oid = next_overlay_array_type;
-	binary_upgrade_next_heap_pg_class_oid = next_overlay_class;
+	OptionMapping option_map[] = {
+		{OPTION_VIEWRELID, &binary_upgrade_next_heap_pg_class_oid},
+		{OPTION_VIEWTYPE, &binary_upgrade_next_pg_type_oid},
+		{OPTION_VIEWATYPE, &binary_upgrade_next_array_pg_type_oid},
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 static void
-set_next_oids_for_osrel(void)
+set_next_oids_for_osrel(List *options)
 {
-	reset_next_oids();
-	binary_upgrade_next_pg_type_oid = next_osrel_type;
-	binary_upgrade_next_array_pg_type_oid = next_osrel_array_type;
-	binary_upgrade_next_heap_pg_class_oid = next_osrel_class;
+	OptionMapping option_map[] = {
+		{OPTION_OSRELID, &binary_upgrade_next_heap_pg_class_oid},
+		{OPTION_OSRELTYPE, &binary_upgrade_next_pg_type_oid},
+		{OPTION_OSRELATYPE, &binary_upgrade_next_array_pg_type_oid},
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 /*
@@ -333,6 +339,45 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 	return index_oid;
 }
 
+/*
+ * get_rule_oid
+ *
+ * Retrieve the pg_rewrite row OID for the give view
+ */
+static Oid
+get_rule_oid(Oid viewoid)
+{
+	StringInfoData buf;
+	Oid result = InvalidOid;
+
+	initStringInfo(&buf);
+	appendStringInfo(&buf, "SELECT oid FROM pg_rewrite WHERE ev_class = %u AND rulename = '_RETURN';", viewoid);
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI manager");
+
+	if (SPI_execute(buf.data, false, 0) != SPI_OK_SELECT)
+		elog(ERROR, "SPI_execute failed: %s", buf.data);
+
+	PopActiveSnapshot();
+
+	if (SPI_processed)
+	{
+		SPITupleTable *tuptable = SPI_tuptable;
+		HeapTuple tuple = SPI_copytuple(tuptable->vals[0]);
+		char *s = SPI_getvalue(tuple, tuptable->tupdesc, 1);
+		Datum d = DirectFunctionCall1(oidin, (Datum) s);
+		result = DatumGetObjectId(d);
+	}
+
+	if (SPI_finish() != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed");
+
+	return result;
+}
+
 static void
 record_cv_dependencies(Oid cvoid, Oid matreloid, Oid osreloid, Oid seqreloid, Oid viewoid,
 		Oid indexoid, Oid pkey_idxoid, SelectStmt *stmt, Query *query)
@@ -341,16 +386,27 @@ record_cv_dependencies(Oid cvoid, Oid matreloid, Oid osreloid, Oid seqreloid, Oi
 	ObjectAddress dependent;
 	ListCell *lc;
 	ContAnalyzeContext cxt;
+	Oid ruleoid;
 
 	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
 
-	/* Record a dependency between matrel and view. */
+	/*
+	 * Record a dependency between matrel and view rule
+	 *
+	 * We do this instead of recording a dependency between the matrel and view directly
+	 * because this will result in a dependency cycle that confuses pg_dump. By using a
+	 * dependency between the rule and the matrel, we get the same cascading deletion effect.
+	 */
+	ruleoid = get_rule_oid(viewoid);
+	if (!OidIsValid(ruleoid))
+		elog(ERROR, "no rule found for view %u", viewoid);
+
 	dependent.classId = RelationRelationId;
 	dependent.objectId = matreloid;
 	dependent.objectSubId = 0;
 
-	referenced.classId = RelationRelationId;
-	referenced.objectId = viewoid;
+	referenced.classId = RewriteRelationId;
+	referenced.objectId = ruleoid;
 	referenced.objectSubId = 0;
 
 	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
@@ -375,20 +431,6 @@ record_cv_dependencies(Oid cvoid, Oid matreloid, Oid osreloid, Oid seqreloid, Oi
 
 		recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 	}
-
-	/*
-	 * Record a dependency between the view its pipeline_query entry so that when
-	 * the view is dropped the pipeline_query metadata cleanup hook is invoked.
-	 */
-	dependent.classId = PipelineQueryRelationOid;
-	dependent.objectId = cvoid;
-	dependent.objectSubId = 0;
-
-	referenced.classId = RelationRelationId;
-	referenced.objectId = viewoid;
-	referenced.objectSubId = 0;
-
-	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
 	/*
 	 * Record a dependency between the matrel and the group lookup index so that the
@@ -551,7 +593,7 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 			Oid type;
 			ListCell *clc;
 
-			if (!IsA(e->arg, String))
+			if (!IsA(e->arg, String) && !IsA(e->arg, TypeName))
 				elog(ERROR, "ttl_column must be expressed as a column name");
 
 			/*
@@ -560,13 +602,24 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 			foreach(clc, coldefs)
 			{
 				ColumnDef *def = (ColumnDef *) lfirst(clc);
+				char *name;
 
 				type = typenameTypeId(NULL, def->typeName);
 
-				if (pg_strcasecmp(def->colname, strVal(e->arg)) == 0 &&
+				if (IsA(e->arg, TypeName))
+				{
+					TypeName *t = (TypeName *) e->arg;
+					name = NameListToString(t->names);
+				}
+				else
+				{
+					name = strVal(e->arg);
+				}
+
+				if (pg_strcasecmp(def->colname, name) == 0 &&
 						(type == TIMESTAMPOID || type == TIMESTAMPTZOID))
 				{
-					*ttl_column = strVal(e->arg);
+					*ttl_column = name;
 					break;
 				}
 			}
@@ -598,13 +651,113 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 }
 
 /*
+ * set_next_oids_for_matrel
+ */
+static void
+set_next_oids_for_matrel(List *options)
+{
+	OptionMapping option_map[] = {
+		{OPTION_MATRELID, &binary_upgrade_next_heap_pg_class_oid},
+		{OPTION_MATRELTYPE, &binary_upgrade_next_pg_type_oid},
+		{OPTION_MATRELATYPE, &binary_upgrade_next_array_pg_type_oid},
+		{OPTION_MATRELTOASTRELID, &binary_upgrade_next_toast_pg_class_oid},
+		{OPTION_MATRELTOASTTYPE, &binary_upgrade_next_toast_pg_type_oid},
+		{OPTION_MATRELTOASTINDID, &binary_upgrade_next_index_pg_class_oid}
+	};
+
+	set_next_oids_from_options(options, option_map, lengthof(option_map));
+}
+
+/*
+ * set_option
+ */
+static List *
+set_option(List *options, char *option, Node *value)
+{
+	ListCell *lc;
+	DefElem *opt = NULL;
+
+	foreach(lc, options)
+	{
+		DefElem *def = (DefElem *) lfirst(lc);
+		if (pg_strcasecmp(def->defname, option) == 0)
+		{
+			opt = def;
+			break;
+		}
+	}
+
+	if (opt)
+		opt->arg = value;
+	else
+		options = lappend(options, makeDefElem(option, value));
+
+	return options;
+}
+
+/*
+ * add_options_for_binary_upgrade
+ *
+ * Add the OIDs necessary to support future binary upgrades if they aren't already present in the given options List
+ */
+static List *
+add_options_for_binary_upgrade(Oid viewrelid, Oid matrelid, Oid seqrelid, Oid osrelid, Oid pkindexid, Oid lookupindexid, int ttl, char *ttl_column, List *options)
+{
+	Oid type;
+	Relation matrel;
+
+	options = set_option(options, OPTION_VIEWRELID, (Node *) makeInteger(viewrelid));
+	type = get_rel_type_id(viewrelid);
+	options = set_option(options, OPTION_VIEWTYPE, (Node *) makeInteger(type));
+	options = set_option(options, OPTION_VIEWATYPE, (Node *) makeInteger(get_array_type(type)));
+
+
+	options = set_option(options, OPTION_MATRELID, (Node *) makeInteger(matrelid));
+	type = get_rel_type_id(matrelid);
+	options = set_option(options, OPTION_MATRELTYPE, (Node *) makeInteger(type));
+	options = set_option(options, OPTION_MATRELATYPE, (Node *) makeInteger(get_array_type(type)));
+
+	matrel = heap_open(matrelid, NoLock);
+
+	/* Not every matrel will have a toast relation */
+	if (OidIsValid(matrel->rd_rel->reltoastrelid))
+	{
+		options = set_option(options, OPTION_MATRELTOASTRELID, (Node *) makeInteger(matrel->rd_rel->reltoastrelid));
+		options = set_option(options, OPTION_MATRELTOASTTYPE, (Node *) makeInteger(get_rel_type_id(matrel->rd_rel->reltoastrelid)));
+		options = set_option(options, OPTION_MATRELTOASTINDID, (Node *) makeInteger(toast_get_valid_index(matrel->rd_rel->reltoastrelid, NoLock)));
+	}
+
+	heap_close(matrel, NoLock);
+
+	options = set_option(options, OPTION_SEQRELID, (Node *) makeInteger(seqrelid));
+	options = set_option(options, OPTION_SEQRELTYPE, (Node *) makeInteger(get_rel_type_id(seqrelid)));
+
+	options = set_option(options, OPTION_OSRELID, (Node *) makeInteger(osrelid));
+	type = get_rel_type_id(osrelid);
+	options = set_option(options, OPTION_OSRELTYPE, (Node *) makeInteger(type));
+	options = set_option(options, OPTION_OSRELATYPE, (Node *) makeInteger(get_array_type(type)));
+
+	options = set_option(options, OPTION_PKINDID, (Node *) makeInteger(pkindexid));
+
+	options = set_option(options, OPTION_LOOKUPINDID, (Node *) makeInteger(lookupindexid));
+
+	if (ttl > 0)
+	{
+		options = set_option(options, OPTION_TTL, (Node *) makeInteger(ttl));
+		options = set_option(options, OPTION_TTL_COLUMN, (Node *) makeString(ttl_column));
+	}
+
+	return options;
+}
+
+/*
  * ExecCreateContViewStmt
  *
  * Creates a table for backing the result of the continuous query,
  * and stores the query in a catalog table.
  */
 void
-ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
+ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *querystring)
 {
 	CreateStmt *create_stmt;
 	CreateSeqStmt *create_seq_stmt;
@@ -612,7 +765,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	Query *query;
 	RangeVar *matrel_name;
 	RangeVar *seqrel_name;
-	RangeVar *view;
 	List *tableElts = NIL;
 	ListCell *lc;
 	Oid matrelid = InvalidOid;
@@ -648,8 +800,11 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	AttrNumber ttl_attno = InvalidAttrNumber;
 	char *ttl_column = NULL;
 	double sf = 0;
-
-	view = stmt->into->rel;
+	char *tsname;
+	List *matrel_options = NIL;
+	DefElem *ff = NULL;
+	ContAnalyzeContext cxt;
+	Oid streamrelid;
 
 	check_relation_already_exists(view);
 
@@ -667,15 +822,15 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
 
-	RewriteFromClause((SelectStmt *) stmt->query);
+	RewriteFromClause((SelectStmt *) sel);
 
 	/* Apply any CQ storage options like sw, step_factor */
-	ApplyStorageOptions(stmt, &has_sw, &ttl, &ttl_column);
+	options = ApplyStorageOptions((SelectStmt *) sel, options, &has_sw, &ttl, &ttl_column);
 
-	ValidateParsedContQuery(stmt->into->rel, stmt->query, querystring);
+	ValidateParsedContQuery(view, sel, querystring);
 
 	/* Deparse query so that analyzer always see the same canonicalized SelectStmt */
-	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
+	cont_query = parse_analyze(copyObject(sel), querystring, NULL, 0);
 	cont_select_sql = deparse_query_def(cont_query);
 	select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
 
@@ -704,13 +859,13 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	}
 
 	tableElts = create_coldefs_from_tlist(query);
-	extract_ttl_params(&stmt->into->options, tableElts, has_sw, &ttl, &ttl_column);
+	extract_ttl_params(&options, tableElts, has_sw, &ttl, &ttl_column);
 
-	pk = GetContinuousViewOption(stmt->into->options, OPTION_PK);
+	pk = GetContinuousViewOption(options, OPTION_PK);
 	if (pk)
 	{
 		if (IsA(pk->arg, String))
-			stmt->into->options = list_delete(stmt->into->options, pk);
+			options = list_delete(options, pk);
 		else
 			elog(ERROR, "continuous view primary keys must be specified with a valid column name");
 
@@ -740,8 +895,16 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	pkey->contype = CONSTR_PRIMARY;
 	pk_coldef->constraints = list_make1(pkey);
 
-	if (!GetContinuousViewOption(stmt->into->options, OPTION_FILLFACTOR))
-		stmt->into->options = add_default_fillfactor(stmt->into->options);
+	ff = GetContinuousViewOption(options, OPTION_FILLFACTOR);
+	if (ff)
+	{
+		options = list_delete(options, ff);
+		matrel_options = lappend(matrel_options, ff);
+	}
+	else
+	{
+		matrel_options = add_default_fillfactor(matrel_options);
+	}
 
 	/*
 	 * Create the actual underlying materialization relation.
@@ -749,12 +912,14 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	create_stmt = makeNode(CreateStmt);
 	create_stmt->relation = matrel_name;
 	create_stmt->tableElts = tableElts;
-	create_stmt->tablespacename = stmt->into->tableSpaceName;
-	create_stmt->oncommit = stmt->into->onCommit;
-	create_stmt->options = stmt->into->options;
+	create_stmt->options = matrel_options;
+
+	if (GetOptionAsString(options, OPTION_TABLESPACE, &tsname))
+		create_stmt->tablespacename = tsname;
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_matrel();
+		set_next_oids_for_matrel(options);
+
 	address = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid, NULL);
 
 	matrelid = address.objectId;
@@ -773,7 +938,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		create_seq_stmt->sequence = seqrel_name;
 
 		if (IsBinaryUpgrade)
-			set_next_oids_for_seqrel();
+			set_next_oids_for_seqrel(options);
 		address = DefineSequence(create_seq_stmt);
 
 		seqrelid = address.objectId;
@@ -788,7 +953,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	}
 	else
 	{
-		ttl_attno = FindSWTimeColumnAttrNo(viewselect, matrelid, &ttl);
+		ttl_attno = FindSWTimeColumnAttrNo(viewselect, matrelid, &ttl, &ttl_column);
 		/*
 		 * has_sw will already be true if the sw storage parameter was set,
 		 * but a sliding-window can still be expressed as a WHERE predicate,
@@ -808,6 +973,12 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		}
 	}
 
+	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
+	collect_rels_and_streams((Node *) workerselect->fromClause, &cxt);
+
+	Assert(list_length(cxt.streams) == 1);
+	streamrelid = RangeVarGetRelid((RangeVar *) linitial(cxt.streams), NoLock, false);
+
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog relation. We don't have relid for
 	 * the continuous view yet, since we need this entry for the DefineView call below to succeed.
@@ -816,17 +987,16 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(InvalidOid, cont_query, matrelid, seqrelid, ttl, ttl_attno, &cvid);
+	pqoid = DefineContinuousView(InvalidOid, cont_query, streamrelid, matrelid, seqrelid, ttl, ttl_attno, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
-	view_stmt->options = lappend(view_stmt->options, makeDefElem("forcv", (Node *) makeInteger(1)));
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_overlay();
+		set_next_oids_for_overlay(options);
 
 	address = DefineView(view_stmt, cont_select_sql);
 
@@ -876,7 +1046,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	transformCreateStreamStmt(create_osrel);
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_osrel();
+		set_next_oids_for_osrel(options);
 	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_FOREIGN_TABLE, InvalidOid, NULL);
 
 	CreateForeignTable(create_osrel, address.objectId);
@@ -884,17 +1054,19 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	osrelid = address.objectId;
 
-	UpdateContViewRelIds(cvid, overlayid, osrelid);
+	UpdateContViewRelIds(cvid, overlayid, osrelid, options);
 	CommandCounterIncrement();
 
 	/* Create group look up index and record dependencies */
 	if (IsBinaryUpgrade)
-		set_next_oids_for_lookup_index();
+		set_next_oids_for_lookup_index(options);
+
 	select = TransformSelectStmtForContProcess(matrel_name, copyObject(select), NULL, sf, Combiner);
 	lookup_idx_oid = create_lookup_index(view, matrelid, matrel_name, select, has_sw);
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_pk_index();
+		set_next_oids_for_pk_index(options);
+
 	pkey_idx_oid = create_pkey_index(view, matrelid, matrel_name, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
 
 	UpdateContViewIndexIds(cvid, pkey_idx_oid, lookup_idx_oid);
@@ -902,6 +1074,10 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	record_cv_dependencies(pqoid, matrelid, osrelid, seqrelid, overlayid, lookup_idx_oid, pkey_idx_oid, workerselect, query);
 	allowSystemTableMods = saveAllowSystemTableMods;
+
+	options = lappend(options, makeDefElem(OPTION_ACTION, (Node *) makeString(ACTION_MATERIALIZE)));
+	options = add_options_for_binary_upgrade(overlayid, matrelid, seqrelid, osrelid, pkey_idx_oid, lookup_idx_oid, ttl, ttl_column, options);
+	StorePipelineQueryReloptions(overlayid, options);
 
 	/*
 	 * Run the combiner and worker queries through the planner, so that if something goes wrong
@@ -1068,34 +1244,6 @@ parse_outputfunc_args(List *options, List **args)
 }
 
 /*
- * set_next_oids_for_transform_osrel
- */
-static void
-set_next_oids_for_transform_osrel(List *options)
-{
-	int relid;
-	int typid;
-	int atypeid;
-
-	reset_next_oids();
-
-	if (!GetOptionAsInteger(options, OPTION_OSRELID, &relid))
-		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELID);
-
-	binary_upgrade_next_heap_pg_class_oid = (Oid) relid;
-
-	if (!GetOptionAsInteger(options, OPTION_OSRELTYPE, &typid))
-		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELTYPE);
-
-	binary_upgrade_next_pg_type_oid = (Oid) typid;
-
-	if (!GetOptionAsInteger(options, OPTION_OSRELATYPE, &atypeid))
-		elog(ERROR, "integer expected for option \"%s\"", OPTION_OSRELATYPE);
-
-	binary_upgrade_next_array_pg_type_oid = (Oid) atypeid;
-}
-
-/*
  * ExecCreateContTransformStmt
  */
 void
@@ -1111,6 +1259,8 @@ ExecCreateContTransformStmt(RangeVar *transform, Node *stmt, List *options, cons
 	Oid osrelid;
 	ViewStmt *vstmt;
 	List *args = NIL;
+	ContAnalyzeContext cxt;
+	Oid streamrelid;
 
 	check_relation_already_exists(transform);
 
@@ -1140,13 +1290,19 @@ ExecCreateContTransformStmt(RangeVar *transform, Node *stmt, List *options, cons
 	transformCreateStreamStmt(create_osrel);
 
 	if (IsBinaryUpgrade)
-		set_next_oids_for_transform_osrel(options);
+		set_next_oids_for_osrel(options);
 
 	address = DefineRelation((CreateStmt *) create_osrel, RELKIND_FOREIGN_TABLE, InvalidOid, NULL);
 	osrelid = address.objectId;
 	CommandCounterIncrement();
 
-	pqoid = DefineContinuousTransform(relid, query, relid, osrelid, options, &tgfnid);
+	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
+	collect_rels_and_streams((Node *) ((SelectStmt *) stmt)->fromClause, &cxt);
+
+	Assert(list_length(cxt.streams) == 1);
+	streamrelid = RangeVarGetRelid((RangeVar *) linitial(cxt.streams), NoLock, false);
+
+	pqoid = DefineContinuousTransform(relid, query, streamrelid, relid, osrelid, options, &tgfnid);
 	CommandCounterIncrement();
 
 	CreateForeignTable(create_osrel, address.objectId);
@@ -1177,7 +1333,7 @@ reconcile_pipeline_query(void)
 	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		if (row->type == PIPELINE_QUERY_TRANSFORM && !OidIsValid(get_rel_name(row->relid)))
+		if (!OidIsValid(get_rel_name(row->relid)))
 			simple_heap_delete(pipeline_query, &tup->t_self);
 	}
 
@@ -1225,115 +1381,9 @@ ReconcilePipelineObjects(void)
 
 	CommandCounterIncrement();
 
+	UpdatePipelineStreamCatalog();
+
+	CommandCounterIncrement();
+
 	PopActiveSnapshot();
-}
-
-
-/*
- * create_cq_set_next_oids_for_matrel
- */
-Datum
-create_cq_set_next_oids_for_matrel(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_matrel_class = PG_GETARG_OID(0);
-	next_matrel_type = PG_GETARG_OID(1);
-	next_matrel_array_type = PG_GETARG_OID(2);
-
-
-	/* Toast (if necessary) */
-	next_matrel_toast_class = PG_GETARG_OID(3);
-	next_matrel_toast_type = PG_GETARG_OID(4);
-	next_matrel_toast_index_class = PG_GETARG_OID(5);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cv_set_next_oids_for_seqrel
- */
-Datum
-create_cv_set_next_oids_for_seqrel(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_seqrel_class = PG_GETARG_OID(0);
-	next_seqrel_type = PG_GETARG_OID(1);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cv_set_next_oids_for_pk_index
- */
-Datum
-create_cv_set_next_oids_for_pk_index(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_pk_index_class = PG_GETARG_OID(0);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cv_set_next_oids_for_lookup_index
- */
-Datum
-create_cv_set_next_oids_for_lookup_index(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_lookup_index_class = PG_GETARG_OID(0);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cv_set_next_oids_for_overlay
- */
-Datum
-create_cv_set_next_oids_for_overlay(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_overlay_type = PG_GETARG_OID(0);
-	next_overlay_array_type = PG_GETARG_OID(1);
-	next_overlay_class = PG_GETARG_OID(2);
-
-	PG_RETURN_VOID();
-}
-
-/*
- * create_cq_set_next_oids_for_osrel
- */
-Datum
-create_cq_set_next_oids_for_osrel(PG_FUNCTION_ARGS)
-{
-	if (!IsBinaryUpgrade)
-		ereport(ERROR,
-				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-				 (errmsg("function can only be called when server is in binary upgrade mode"))));
-
-	next_osrel_type = PG_GETARG_OID(0);
-	next_osrel_array_type = PG_GETARG_OID(1);
-	next_osrel_class = PG_GETARG_OID(2);
-
-	PG_RETURN_VOID();
 }

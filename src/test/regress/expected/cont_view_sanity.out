@@ -118,14 +118,14 @@ SELECT * FROM test_null_group;
 
 DROP STREAM sanity_stream CASCADE;
 NOTICE:  drop cascades to 8 other objects
-DETAIL:  drop cascades to continuous view test_avg
-drop cascades to continuous view cv
-drop cascades to continuous view cv_weird_tl
-drop cascades to continuous view cv_no_grp
-drop cascades to continuous view cv_grp_expr
-drop cascades to continuous view cv_multi_grp
-drop cascades to continuous view cv_agg_expr
-drop cascades to continuous view test_null_group
+DETAIL:  drop cascades to view test_avg
+drop cascades to view cv
+drop cascades to view cv_weird_tl
+drop cascades to view cv_no_grp
+drop cascades to view cv_grp_expr
+drop cascades to view cv_multi_grp
+drop cascades to view cv_agg_expr
+drop cascades to view test_null_group
 -- Verify that transout/combinein functions are strict
 SELECT proname FROM
   (SELECT DISTINCT transoutfn::text FROM pipeline_combine) c

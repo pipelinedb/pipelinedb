@@ -748,7 +748,6 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 			case OBJECT_VIEW:
 			case OBJECT_MATVIEW:
 			case OBJECT_FOREIGN_TABLE:
-			case OBJECT_CONTVIEW:
 				address =
 					get_relation_by_qualified_name(objtype, objname,
 												   &relation, lockmode,
@@ -1161,13 +1160,6 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a table",
-								RelationGetRelationName(relation))));
-			break;
-		case OBJECT_CONTVIEW:
-			if (relation->rd_rel->relkind != RELKIND_CONTVIEW)
-				ereport(ERROR,
-						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						 errmsg("\"%s\" is not a continuous view",
 								RelationGetRelationName(relation))));
 			break;
 		case OBJECT_VIEW:
@@ -3140,21 +3132,6 @@ getObjectDescription(const ObjectAddress *object)
 				break;
 			}
 
-		case OCLASS_CONTINUOUS_QUERY:
-			{
-				HeapTuple	tup;
-
-				tup = SearchPipelineSysCache1(PIPELINEQUERYOID,
-									  ObjectIdGetDatum(object->objectId));
-				if (!HeapTupleIsValid(tup))
-					elog(ERROR, "cache lookup failed for pipeline_query %u",
-						 object->objectId);
-				appendStringInfo(&buffer, _("pipeline_query %s"),
-						get_rel_name(((Form_pipeline_query) GETSTRUCT(tup))->relid));
-				ReleaseSysCache(tup);
-				break;
-			}
-
 		default:
 			appendStringInfo(&buffer, "unrecognized object %u %u %d",
 							 object->classId,
@@ -3238,10 +3215,6 @@ getRelationDescription(StringInfo buffer, Oid relid)
 			break;
 		case RELKIND_FOREIGN_TABLE:
 			appendStringInfo(buffer, _("foreign table %s"),
-							 relname);
-			break;
-		case RELKIND_CONTVIEW:
-			appendStringInfo(buffer, _("continuous view %s"),
 							 relname);
 			break;
 		default:
@@ -3641,10 +3614,6 @@ getObjectTypeDescription(const ObjectAddress *object)
 			appendStringInfoString(&buffer, "transform");
 			break;
 
-		case OCLASS_CONTINUOUS_QUERY:
-			appendStringInfoString(&buffer, "continuous query");
-			break;
-
 		default:
 			appendStringInfo(&buffer, "unrecognized %u", object->classId);
 			break;
@@ -3693,9 +3662,6 @@ getRelationTypeDescription(StringInfo buffer, Oid relid, int32 objectSubId)
 			break;
 		case RELKIND_FOREIGN_TABLE:
 			appendStringInfoString(buffer, "foreign table");
-			break;
-		case RELKIND_CONTVIEW:
-			appendStringInfoString(buffer, "continuous view");
 			break;
 		default:
 			/* shouldn't get here */

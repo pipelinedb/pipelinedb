@@ -1417,8 +1417,7 @@ typedef enum ObjectType
 	OBJECT_TSTEMPLATE,
 	OBJECT_TYPE,
 	OBJECT_USER_MAPPING,
-	OBJECT_VIEW,
-	OBJECT_CONTVIEW
+	OBJECT_VIEW
 } ObjectType;
 
 /* ----------------------
@@ -3055,12 +3054,5 @@ typedef struct AlterTSConfigurationStmt
 	bool		replace;		/* if true - replace dictionary by another */
 	bool		missing_ok;		/* for DROP - skip error if missing? */
 } AlterTSConfigurationStmt;
-
-typedef struct CreateContViewStmt
-{
-	NodeTag		type;
-	IntoClause 	*into;
-	Node 		*query;
-} CreateContViewStmt;
 
 #endif   /* PARSENODES_H */

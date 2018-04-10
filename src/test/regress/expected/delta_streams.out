@@ -113,14 +113,14 @@ SELECT combine(p50) AS p50, combine(p99) AS p99 FROM delta9;
 
 DROP STREAM delta_stream CASCADE;
 NOTICE:  drop cascades to 10 other objects
-DETAIL:  drop cascades to continuous view delta_sw
-drop cascades to continuous view delta1
-drop cascades to continuous view delta2
-drop cascades to continuous view delta7
-drop cascades to continuous view delta3
-drop cascades to continuous view delta4
-drop cascades to continuous view delta5
-drop cascades to continuous view delta6
-drop cascades to continuous view delta8
-drop cascades to continuous view delta9
+DETAIL:  drop cascades to view delta_sw
+drop cascades to view delta1
+drop cascades to view delta2
+drop cascades to view delta7
+drop cascades to view delta3
+drop cascades to view delta4
+drop cascades to view delta5
+drop cascades to view delta6
+drop cascades to view delta8
+drop cascades to view delta9
 DROP TABLE delta_t;

@@ -111,8 +111,7 @@ ExecSecLabelStmt(SecLabelStmt *stmt)
 				relation->rd_rel->relkind != RELKIND_VIEW &&
 				relation->rd_rel->relkind != RELKIND_MATVIEW &&
 				relation->rd_rel->relkind != RELKIND_COMPOSITE_TYPE &&
-				relation->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
-				relation->rd_rel->relkind != RELKIND_CONTVIEW)
+				relation->rd_rel->relkind != RELKIND_FOREIGN_TABLE)
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a table, view, materialized view, composite type, or foreign table",

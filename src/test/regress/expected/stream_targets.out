@@ -29,6 +29,6 @@ SELECT * FROM test_stream_targets2;
 
 DROP STREAM test_stream_targets_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_stream_targets0
-drop cascades to continuous view test_stream_targets1
-drop cascades to continuous view test_stream_targets2
+DETAIL:  drop cascades to view test_stream_targets0
+drop cascades to view test_stream_targets1
+drop cascades to view test_stream_targets2

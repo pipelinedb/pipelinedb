@@ -393,75 +393,6 @@ UpdateRangeTableOfViewParse(Oid viewOid, Query *viewParse)
 	return viewParse;
 }
 
-static ObjectAddress
-DefineContVirtualRelation(RangeVar *relation, List *tlist)
-{
-	ObjectAddress address;
-	CreateStmt *createStmt = makeNode(CreateStmt);
-	List	   *attrList;
-	ListCell   *t;
-
-	/*
-	 * create a list of ColumnDef nodes based on the names and types of the
-	 * (non-junk) targetlist items from the view's SELECT list.
-	 */
-	attrList = NIL;
-	foreach(t, tlist)
-	{
-		TargetEntry *tle = lfirst(t);
-
-		if (!tle->resjunk)
-		{
-			ColumnDef  *def = makeNode(ColumnDef);
-
-			def->colname = pstrdup(tle->resname);
-			def->typeName = makeTypeNameFromOid(exprType((Node *) tle->expr),
-											 exprTypmod((Node *) tle->expr));
-			def->inhcount = 0;
-			def->is_local = true;
-			def->is_not_null = false;
-			def->is_from_type = false;
-			def->storage = 0;
-			def->raw_default = NULL;
-			def->cooked_default = NULL;
-			def->collClause = NULL;
-			def->collOid = exprCollation((Node *) tle->expr);
-			def->location = -1;
-			def->constraints = NIL;
-
-			attrList = lappend(attrList, def);
-		}
-	}
-
-	if (attrList == NIL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
-				 errmsg("continuous view must have at least one column")));
-
-
-	/*
-	 * now set the parameters for keys/inheritance etc. All of these are
-	 * uninteresting for views...
-	 */
-	createStmt->relation = relation;
-	createStmt->tableElts = attrList;
-	createStmt->inhRelations = NIL;
-	createStmt->constraints = NIL;
-	createStmt->options = NIL;
-	createStmt->oncommit = ONCOMMIT_NOOP;
-	createStmt->tablespacename = NULL;
-	createStmt->if_not_exists = false;
-
-	/*
-	 * finally create the relation (this will error out if there's an
-	 * existing view, so we don't need more code to complain if "replace"
-	 * is false).
-	 */
-	address = DefineRelation(createStmt, RELKIND_CONTVIEW, InvalidOid, NULL);
-	Assert(address.objectId != InvalidOid);
-	return address;
-}
-
 /*
  * DefineView
  *		Execute a CREATE VIEW command.
@@ -611,11 +542,8 @@ DefineView(ViewStmt *stmt, const char *queryString)
 	 * NOTE: if it already exists and replace is false, the xact will be
 	 * aborted.
 	 */
-	if (ViewStmtIsForContinuousView(stmt))
-		address = DefineContVirtualRelation(view, viewParse->targetList);
-	else
-		address = DefineVirtualRelation(view, viewParse->targetList,
-										stmt->replace, stmt->options);
+	address = DefineVirtualRelation(view, viewParse->targetList,
+									stmt->replace, stmt->options);
 
 	/*
 	 * The relation we have just created is not visible to any other commands

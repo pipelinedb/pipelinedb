@@ -203,12 +203,11 @@ class PipelineDB(object):
         """
         Create a continuous view
         """
+        kw['action'] = 'materialize'
         opts = ', '.join(['%s=%r' % (k, v) for k, v in kw.items()])
 
-        if kw:
-            result = self.execute('CREATE CONTINUOUS VIEW %s WITH (%s) AS %s' % (name, opts, stmt))
-        else:
-            result = self.execute('CREATE CONTINUOUS VIEW %s AS %s' % (name, stmt))
+        result = self.execute('CREATE VIEW %s WITH (%s) AS %s' % (name, opts, stmt))
+
         return result
 
     def create_ct(self, name, stmt, trigfn=''):

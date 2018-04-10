@@ -1714,12 +1714,6 @@ BeginCopyTo(Relation rel,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy from sequence \"%s\"",
 							RelationGetRelationName(rel))));
-		else if (rel->rd_rel->relkind == RELKIND_CONTVIEW)
-			ereport(ERROR,
-					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("cannot copy from continuous view \"%s\"",
-							RelationGetRelationName(rel)),
-					 errhint("Try the COPY (SELECT ...) TO variant.")));
 		else if (IsStream(RelationGetRelid(rel)))
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -2260,11 +2254,6 @@ CopyFrom(CopyState cstate)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to sequence \"%s\"",
-							RelationGetRelationName(cstate->rel))));
-		else if (cstate->rel->rd_rel->relkind == RELKIND_CONTVIEW)
-			ereport(ERROR,
-					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("cannot copy to continuous view \"%s\"",
 							RelationGetRelationName(cstate->rel))));
 		else
 			ereport(ERROR,

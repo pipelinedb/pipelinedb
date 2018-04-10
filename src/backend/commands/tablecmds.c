@@ -253,12 +253,6 @@ static const struct dropmsgstrings dropmsgstringarray[] = {
 		gettext_noop("foreign table \"%s\" does not exist, skipping"),
 		gettext_noop("\"%s\" is not a foreign table"),
 	gettext_noop("Use DROP FOREIGN TABLE to remove a foreign table.")},
-	{RELKIND_CONTVIEW,
-		ERRCODE_UNDEFINED_OBJECT,
-		gettext_noop("continuous view \"%s\" does not exist"),
-		gettext_noop("continuous view  \"%s\" does not exist, skipping"),
-		gettext_noop("\"%s\" is not a continuous view "),
-	gettext_noop("Use DROP CONTINUOUS VIEW to remove a continuous view.")},
 	{'\0', 0, NULL, NULL, NULL, NULL}
 };
 
@@ -559,7 +553,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	reloptions = transformRelOptions((Datum) 0, stmt->options, NULL, validnsps,
 									 true, false);
 
-	if (relkind == RELKIND_VIEW || relkind == RELKIND_CONTVIEW)
+	if (relkind == RELKIND_VIEW)
 		(void) view_reloptions(reloptions, true);
 	else
 		(void) heap_reloptions(relkind, reloptions, true);
@@ -863,10 +857,6 @@ RemoveRelations(DropStmt *drop)
 			relkind = RELKIND_FOREIGN_TABLE;
 			break;
 
-		case OBJECT_CONTVIEW:
-			relkind = RELKIND_CONTVIEW;
-			break;
-
 		default:
 			elog(ERROR, "unrecognized drop object type: %d",
 				 (int) drop->removeType);
@@ -883,7 +873,6 @@ RemoveRelations(DropStmt *drop)
 		Oid			relOid;
 		ObjectAddress obj;
 		struct DropRelationCallbackState state;
-		char save;
 
 		/*
 		 * These next few steps are a great deal like relation_openrv, but we
@@ -897,10 +886,6 @@ RemoveRelations(DropStmt *drop)
 		 */
 		AcceptInvalidationMessages();
 
-		save = relkind;
-		if (drop->removeType == OBJECT_CONTVIEW)
-			relkind = RELKIND_CONTVIEW;
-
 		/* Look up the appropriate relation using namespace search. */
 		state.relkind = relkind;
 		state.heapOid = InvalidOid;
@@ -913,18 +898,9 @@ RemoveRelations(DropStmt *drop)
 		/* Not there? */
 		if (!OidIsValid(relOid))
 		{
-			/*
-			 * We use a regular relkind of 'v' for continuous views' virtual relations
-			 * because that's what they are, which keeps things simple. However, we do
-			 * want a specific error message if this is a continuous view. This is also
-			 * the case for streams.
-			 */
 			DropErrorMsgNonExistent(rel, relkind, drop->missing_ok);
-			relkind = save;
 			continue;
 		}
-
-		relkind = save;
 
 		/* OK, we're ready to delete this one */
 		obj.classId = RelationRelationId;
@@ -2185,8 +2161,7 @@ renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 		relkind != RELKIND_MATVIEW &&
 		relkind != RELKIND_COMPOSITE_TYPE &&
 		relkind != RELKIND_INDEX &&
-		relkind != RELKIND_FOREIGN_TABLE &&
-		relkind != RELKIND_CONTVIEW)
+		relkind != RELKIND_FOREIGN_TABLE)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, view, materialized view, composite type, index, or foreign table",
@@ -2577,11 +2552,6 @@ RenameRelation(RenameStmt *stmt)
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("cannot rename materialization table \"%s\" for continuous view \"%s\"",
 						stmt->relation->relname, cv->relname)));
-	else if (stmt->renameType == OBJECT_CONTVIEW)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("cannot rename continuous view \"%s\"",
-						stmt->relation->relname)));
 
 	/*
 	 * Grab an exclusive lock on the target table, index, sequence, view,
@@ -4961,8 +4931,7 @@ ATExecAddColumn(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	 * have no storage.
 	 */
 	if (relkind != RELKIND_VIEW && relkind != RELKIND_COMPOSITE_TYPE
-		&& relkind != RELKIND_FOREIGN_TABLE && relkind != RELKIND_CONTVIEW
-		&& attribute.attnum > 0)
+		&& relkind != RELKIND_FOREIGN_TABLE && attribute.attnum > 0)
 	{
 		defval = (Expr *) build_column_default(rel, attribute.attnum);
 
@@ -5430,8 +5399,7 @@ ATPrepSetStatistics(Relation rel, const char *colName, Node *newValue, LOCKMODE 
 	if (rel->rd_rel->relkind != RELKIND_RELATION &&
 		rel->rd_rel->relkind != RELKIND_MATVIEW &&
 		rel->rd_rel->relkind != RELKIND_INDEX &&
-		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
-		rel->rd_rel->relkind != RELKIND_CONTVIEW)
+		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, materialized view, index, or foreign table",
@@ -8338,7 +8306,6 @@ ATExecAlterColumnType(AlteredTableInfo *tab, Relation rel,
 			case OCLASS_USER_MAPPING:
 			case OCLASS_DEFACL:
 			case OCLASS_EXTENSION:
-			case OCLASS_CONTINUOUS_QUERY:
 
 				/*
 				 * We don't expect any of these sorts of objects to depend on
@@ -8949,7 +8916,6 @@ ATExecChangeOwner(Oid relationOid, Oid newOwnerId, bool recursing, LOCKMODE lock
 		case RELKIND_VIEW:
 		case RELKIND_MATVIEW:
 		case RELKIND_FOREIGN_TABLE:
-		case RELKIND_CONTVIEW:
 			/* ok to change owner */
 			break;
 		case RELKIND_INDEX:
@@ -9414,7 +9380,6 @@ ATExecSetRelOptions(Relation rel, List *defList, AlterTableType operation,
 			(void) heap_reloptions(rel->rd_rel->relkind, newOptions, true);
 			break;
 		case RELKIND_VIEW:
-		case RELKIND_CONTVIEW:
 			(void) view_reloptions(newOptions, true);
 			break;
 		case RELKIND_INDEX:
@@ -9429,7 +9394,7 @@ ATExecSetRelOptions(Relation rel, List *defList, AlterTableType operation,
 	}
 
 	/* Special-case validation of view options */
-	if (rel->rd_rel->relkind == RELKIND_VIEW || rel->rd_rel->relkind == RELKIND_CONTVIEW)
+	if (rel->rd_rel->relkind == RELKIND_VIEW)
 	{
 		Query	   *view_query = get_view_query(rel);
 		List	   *view_options = untransformRelOptions(newOptions);
@@ -12059,8 +12024,7 @@ RangeVarCallbackForAlterRelation(const RangeVar *rv, Oid relid, Oid oldrelid,
 		relkind != RELKIND_VIEW &&
 		relkind != RELKIND_MATVIEW &&
 		relkind != RELKIND_SEQUENCE &&
-		relkind != RELKIND_FOREIGN_TABLE &&
-		relkind != RELKIND_CONTVIEW)
+		relkind != RELKIND_FOREIGN_TABLE)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, view, materialized view, sequence, or foreign table",

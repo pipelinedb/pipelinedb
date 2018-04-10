@@ -261,8 +261,7 @@ DefineQueryRewrite(char *rulename,
 	 */
 	if (event_relation->rd_rel->relkind != RELKIND_RELATION &&
 		event_relation->rd_rel->relkind != RELKIND_MATVIEW &&
-		event_relation->rd_rel->relkind != RELKIND_VIEW &&
-		event_relation->rd_rel->relkind != RELKIND_CONTVIEW)
+		event_relation->rd_rel->relkind != RELKIND_VIEW)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table or view",
@@ -420,8 +419,7 @@ DefineQueryRewrite(char *rulename,
 		 * participate in circular dependencies.)
 		 */
 		if (event_relation->rd_rel->relkind != RELKIND_VIEW &&
-			event_relation->rd_rel->relkind != RELKIND_MATVIEW &&
-			event_relation->rd_rel->relkind != RELKIND_CONTVIEW)
+			event_relation->rd_rel->relkind != RELKIND_MATVIEW)
 		{
 			HeapScanDesc scanDesc;
 			Snapshot	snapshot;
@@ -908,7 +906,7 @@ RangeVarCallbackForRenameRule(const RangeVar *rv, Oid relid, Oid oldrelid,
 	form = (Form_pg_class) GETSTRUCT(tuple);
 
 	/* only tables and views can have rules */
-	if (form->relkind != RELKIND_RELATION && form->relkind != RELKIND_VIEW && form->relkind != RELKIND_CONTVIEW)
+	if (form->relkind != RELKIND_RELATION && form->relkind != RELKIND_VIEW)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table or view", rv->relname)));

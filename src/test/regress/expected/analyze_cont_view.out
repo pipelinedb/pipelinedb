@@ -24,14 +24,14 @@ CREATE CONTINUOUS VIEW cqanalyze17 AS SELECT s.a, t0.id FROM analyze_cont_stream
 NOTICE:  consider creating an index on t0.id for improved stream-table join performance
 DROP STREAM analyze_cont_stream CASCADE;
 NOTICE:  drop cascades to 8 other objects
-DETAIL:  drop cascades to continuous view cqanalyze0
-drop cascades to continuous view cqanalyze1
-drop cascades to continuous view cqanalyze2
-drop cascades to continuous view cqanalyze3
-drop cascades to continuous view cqanalyze5
-drop cascades to continuous view cqanalyze6
-drop cascades to continuous view cqanalyze16
-drop cascades to continuous view cqanalyze17
+DETAIL:  drop cascades to view cqanalyze0
+drop cascades to view cqanalyze1
+drop cascades to view cqanalyze2
+drop cascades to view cqanalyze3
+drop cascades to view cqanalyze5
+drop cascades to view cqanalyze6
+drop cascades to view cqanalyze16
+drop cascades to view cqanalyze17
 -- Now let's verify our error handling and messages
 CREATE STREAM analyze_cont_stream (x integer, key text);
 -- Stream column doesn't exist
@@ -53,10 +53,10 @@ CREATE INDEX tnotice_idx ON tnotice(x);
 CREATE CONTINUOUS VIEW cvnotice3 AS SELECT s.x FROM analyze_cont_stream AS s, tnotice WHERE tnotice.x = s.x;
 DROP TABLE tnotice CASCADE;
 NOTICE:  drop cascades to 4 other objects
-DETAIL:  drop cascades to continuous view cvnotice0
-drop cascades to continuous view cvnotice1
-drop cascades to continuous view cvnotice2
-drop cascades to continuous view cvnotice3
+DETAIL:  drop cascades to view cvnotice0
+drop cascades to view cvnotice1
+drop cascades to view cvnotice2
+drop cascades to view cvnotice3
 -- Verify that we can't do wildcard selections in continuous queries
 CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT * from analyze_cont_stream;
 ERROR:  can't select "*" in continuous queries
@@ -100,8 +100,8 @@ LINE 1: ...amp() - interval '1 hour' AND arrival_timestamp > clock_time...
                                                              ^
 DROP STREAM analyze_cont_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to continuous view cqanalyze38
-drop cascades to continuous view cqanalyze39
+DETAIL:  drop cascades to view cqanalyze38
+drop cascades to view cqanalyze39
 CREATE STREAM analyze_cont_stream (g int, x int, y int, z text, a int);
 -- Hypothetical-set aggregates
 CREATE CONTINUOUS VIEW cqanalyze45 AS SELECT g, percent_rank(1 + 3, 2, substring('xxx', 1, 2)) WITHIN GROUP (ORDER BY x, y, z) + rank(4, 5, 'x') WITHIN GROUP (ORDER BY x, y, substring(z, 1, 2))  FROM analyze_cont_stream GROUP BY g;
@@ -123,11 +123,11 @@ CREATE CONTINUOUS VIEW cqanalyze48 AS SELECT cume_dist(2) WITHIN GROUP (ORDER BY
 CREATE CONTINUOUS VIEW cqanalyze49 AS SELECT percent_rank(2) WITHIN GROUP (ORDER BY x DESC), rank(2) WITHIN GROUP (ORDER BY x) FROM analyze_cont_stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
 DROP STREAM analyze_cont_stream CASCADE;
 NOTICE:  drop cascades to 5 other objects
-DETAIL:  drop cascades to continuous view cqanalyze45
-drop cascades to continuous view cqanalyze46
-drop cascades to continuous view cqanalyze47
-drop cascades to continuous view cqanalyze48
-drop cascades to continuous view cqanalyze49
+DETAIL:  drop cascades to view cqanalyze45
+drop cascades to view cqanalyze46
+drop cascades to view cqanalyze47
+drop cascades to view cqanalyze48
+drop cascades to view cqanalyze49
 -- Verify that we get an error if we try to create a CV that only selects from tables
 CREATE TABLE cqanalyze_table (id integer);
 CREATE CONTINUOUS VIEW error_not_created AS SELECT cqanalyze_table.id::integer FROM cqanalyze_table;
@@ -157,11 +157,11 @@ CREATE CONTINUOUS VIEW cqanalyze53 AS SELECT percentile_cont(0.1) WITHIN GROUP (
 CREATE CONTINUOUS VIEW funcs AS SELECT floor(x::float8), date_trunc('day', arrival_timestamp), COUNT(*) FROM analyze_cont_stream GROUP BY floor, date_trunc;
 DROP STREAM analyze_cont_stream CASCADE;
 NOTICE:  drop cascades to 5 other objects
-DETAIL:  drop cascades to continuous view cqanalyze50
-drop cascades to continuous view cqanalyze51
-drop cascades to continuous view cqanalyze52
-drop cascades to continuous view cqanalyze53
-drop cascades to continuous view funcs
+DETAIL:  drop cascades to view cqanalyze50
+drop cascades to view cqanalyze51
+drop cascades to view cqanalyze52
+drop cascades to view cqanalyze53
+drop cascades to view funcs
 DROP TABLE t0;
 CREATE STREAM analyze_cont_stream (id int, ts timestamp, sid int, x int);
 -- Regression
@@ -174,51 +174,43 @@ LINE 1: CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream0.sid::int...
 CREATE CONTINUOUS VIEW cqregress4 AS SELECT x FROM cqregress4;
 ERROR:  relation "cqregress4" does not exist
 CREATE CONTINUOUS VIEW cqregress5 AS SELECT count(DISTINCT x), percentile_cont(0.1) WITHIN GROUP (ORDER BY x) FROM analyze_cont_stream;
-\d+ cqregress5
-                  Continuous view "public.cqregress5"
-     Column      |       Type       | Modifiers | Storage | Description 
------------------+------------------+-----------+---------+-------------
- count           | bigint           |           | plain   | 
- percentile_cont | double precision |           | plain   | 
-View definition:
- SELECT count(DISTINCT x) AS count,
-    percentile_cont(0.1::double precision) WITHIN GROUP (ORDER BY (x::double precision)) AS percentile_cont
-   FROM analyze_cont_stream;
+SELECT pg_get_viewdef('cqregress5');
+                                                 pg_get_viewdef                                                  
+-----------------------------------------------------------------------------------------------------------------
+  SELECT count(DISTINCT x) AS count,                                                                            +
+     percentile_cont((0.1)::double precision) WITHIN GROUP (ORDER BY ((x)::double precision)) AS percentile_cont+
+    FROM analyze_cont_stream;
+(1 row)
 
 CREATE CONTINUOUS VIEW cqregress6 AS SELECT id, avg(x) FROM analyze_cont_stream GROUP BY id;
-\d+ cqregress6
-         Continuous view "public.cqregress6"
- Column |  Type   | Modifiers | Storage | Description 
---------+---------+-----------+---------+-------------
- id     | integer |           | plain   | 
- avg    | numeric |           | main    | 
-View definition:
- SELECT id,
-    avg(x) AS avg
-   FROM analyze_cont_stream
-  GROUP BY id;
+SELECT pg_get_viewdef('cqregress6');
+       pg_get_viewdef        
+-----------------------------
+  SELECT id,                +
+     avg(x) AS avg          +
+    FROM analyze_cont_stream+
+   GROUP BY id;
+(1 row)
 
 CREATE VIEW cqregress7 AS SELECT combine(avg) FROM cqregress6;
-\d+ cqregress7
-               View "public.cqregress7"
- Column  |  Type   | Modifiers | Storage | Description 
----------+---------+-----------+---------+-------------
- combine | numeric |           | main    | 
-View definition:
- SELECT combine(cqregress6.avg) AS combine
-   FROM cqregress6;
+SELECT pg_get_viewdef('cqregress7');
+               pg_get_viewdef               
+--------------------------------------------
+  SELECT combine(cqregress6.avg) AS combine+
+    FROM cqregress6;
+(1 row)
 
 CREATE VIEW cqregress8 WITH (action=transform) AS SELECT id FROM analyze_cont_stream;
 DROP STREAM analyze_cont_stream CASCADE;
 NOTICE:  drop cascades to 6 other objects
 DETAIL:  drop cascades to view cqregress8
-drop cascades to continuous view cqregress1
-drop cascades to continuous view cqregress2
-drop cascades to continuous view cqregress5
-drop cascades to continuous view cqregress6
+drop cascades to view cqregress1
+drop cascades to view cqregress2
+drop cascades to view cqregress5
+drop cascades to view cqregress6
 drop cascades to view cqregress7
 SELECT * FROM pipeline_query;
- id | type | relid | active | osrelid | matrelid | seqrelid | pkidxid | lookupidxid | step_factor | ttl | ttl_attno | tgfn | tgnargs | tgargs | query 
-----+------+-------+--------+---------+----------+----------+---------+-------------+-------------+-----+-----------+------+---------+--------+-------
+ id | type | relid | active | osrelid | streamrelid | matrelid | seqrelid | pkidxid | lookupidxid | step_factor | ttl | ttl_attno | tgfn | tgnargs | tgargs | query 
+----+------+-------+--------+---------+-------------+----------+----------+---------+-------------+-------------+-----+-----------+------+---------+--------+-------
 (0 rows)
 

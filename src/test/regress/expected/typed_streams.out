@@ -301,25 +301,25 @@ DROP SCHEMA test_typed_streams CASCADE;
 NOTICE:  drop cascades to 24 other objects
 DETAIL:  drop cascades to foreign table s0
 drop cascades to table t0
-drop cascades to continuous view v0
+drop cascades to view v0
 drop cascades to foreign table no_readers
 drop cascades to table t
-drop cascades to continuous view stj
-drop cascades to continuous view aliased
+drop cascades to view stj
+drop cascades to view aliased
 drop cascades to foreign table stj_stream
 drop cascades to table stj_t0
-drop cascades to continuous view stj0
-drop cascades to continuous view stj1
-drop cascades to continuous view stj2
-drop cascades to continuous view stj3
+drop cascades to view stj0
+drop cascades to view stj1
+drop cascades to view stj2
+drop cascades to view stj3
 drop cascades to table stj_t1
-drop cascades to continuous view stj4
+drop cascades to view stj4
 drop cascades to table stj_t2
-drop cascades to continuous view stj5
+drop cascades to view stj5
 drop cascades to table stj_t3
-drop cascades to continuous view stj6
+drop cascades to view stj6
 drop cascades to foreign table test_hs_stream
-drop cascades to continuous view test_percent0
-drop cascades to continuous view test_percent1
-drop cascades to continuous view test_percent2
-drop cascades to continuous view test_percent3
+drop cascades to view test_percent0
+drop cascades to view test_percent1
+drop cascades to view test_percent2
+drop cascades to view test_percent3

@@ -384,7 +384,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <defelt>  fdw_option
 
 %type <range> OptTempTableName
-%type <into>  into_clause create_as_target create_mv_target create_cv_target
+%type <into>  into_clause create_as_target create_mv_target
 
 %type <defelt>  createfunc_opt_item common_func_opt_item dostmt_opt_item
 %type <fun_param> func_arg func_arg_with_default table_func_column aggr_arg
@@ -2805,22 +2805,14 @@ copy_generic_opt_arg_list_item:
  *
  *****************************************************************************/
 
-CreateContViewStmt: CREATE CONTINUOUS VIEW create_cv_target AS SelectStmt
+CreateContViewStmt: CREATE CONTINUOUS VIEW qualified_name opt_reloptions AS SelectStmt
         {
-          CreateContViewStmt *n = makeNode(CreateContViewStmt);
-          n->into = $4;
-          n->query = $6;
+          ViewStmt *n = makeNode(ViewStmt);
+          n->view = $4;
+          n->query = $7;
+          n->options = $5;
+          n->options = lappend(n->options, makeDefElem(OPTION_ACTION, (Node *) makeString(ACTION_MATERIALIZE)));
           $$ = (Node *) n;
-        }
-    ;
-
-create_cv_target:
-    qualified_name opt_reloptions OptTableSpace
-        {
-          $$ = makeNode(IntoClause);
-          $$->rel = $1;
-          $$->options = $2;
-          $$->tableSpaceName = $3;
         }
     ;
     
@@ -5691,7 +5683,7 @@ DropStmt: DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 
 
 drop_type:  TABLE                 { $$ = OBJECT_TABLE; }
-      | CONTINUOUS VIEW           { $$ = OBJECT_CONTVIEW; }
+      | CONTINUOUS VIEW           { $$ = OBJECT_VIEW; }
       | STREAM                    { $$ = OBJECT_FOREIGN_TABLE; }
       | CONTINUOUS TRANSFORM      { $$ = OBJECT_VIEW; }
       | SEQUENCE                { $$ = OBJECT_SEQUENCE; }

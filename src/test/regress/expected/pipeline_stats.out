@@ -29,7 +29,7 @@ SELECT pg_sleep(2);
 SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 'combiner';
  output_rows | errors | cv_create | cv_drop 
 -------------+--------+-----------+---------
-           0 |      0 |         1 |       1
+           0 |      0 |         1 |       0
 (1 row)
 
 SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
@@ -49,7 +49,7 @@ SELECT pg_sleep(2);
 SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 'combiner';
  output_rows | errors | cv_create | cv_drop 
 -------------+--------+-----------+---------
-           2 |      0 |         3 |       1
+           2 |      0 |         3 |       0
 (1 row)
 
 SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
@@ -69,7 +69,7 @@ SELECT pg_sleep(2);
 SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 'combiner';
  output_rows | errors | cv_create | cv_drop 
 -------------+--------+-----------+---------
-           2 |      0 |         3 |       3
+           2 |      0 |         3 |       0
 (1 row)
 
 SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';

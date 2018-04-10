@@ -351,7 +351,7 @@ currtid_byreloid(PG_FUNCTION_ARGS)
 		aclcheck_error(aclresult, ACL_KIND_CLASS,
 					   RelationGetRelationName(rel));
 
-	if (rel->rd_rel->relkind == RELKIND_VIEW || rel->rd_rel->relkind == RELKIND_CONTVIEW)
+	if (rel->rd_rel->relkind == RELKIND_VIEW)
 		return currtid_for_view(rel, tid);
 
 	ItemPointerCopy(tid, result);
@@ -385,7 +385,7 @@ currtid_byrelname(PG_FUNCTION_ARGS)
 		aclcheck_error(aclresult, ACL_KIND_CLASS,
 					   RelationGetRelationName(rel));
 
-	if (rel->rd_rel->relkind == RELKIND_VIEW || rel->rd_rel->relkind == RELKIND_CONTVIEW)
+	if (rel->rd_rel->relkind == RELKIND_VIEW)
 		return currtid_for_view(rel, tid);
 
 	result = (ItemPointer) palloc(sizeof(ItemPointerData));

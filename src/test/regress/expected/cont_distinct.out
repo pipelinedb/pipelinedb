@@ -88,9 +88,9 @@ SELECT * FROM test_distinct_sw_count_small;
 
 DROP STREAM test_distinct_count_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_distinct_count
-drop cascades to continuous view test_distinct_sw_count
-drop cascades to continuous view test_distinct_sw_count_small
+DETAIL:  drop cascades to view test_distinct_count
+drop cascades to view test_distinct_sw_count
+drop cascades to view test_distinct_sw_count_small
 -- DISTINCT / DISTINCT ON
 CREATE STREAM test_distinct_stream (x int, y int, z int);
 CREATE CONTINUOUS VIEW test_distinct AS SELECT DISTINCT x::int, y::int - z::int FROM test_distinct_stream;
@@ -176,6 +176,6 @@ SELECT * FROM test_distinct_regress;
 
 DROP STREAM test_distinct_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_distinct
-drop cascades to continuous view test_distinct_on
-drop cascades to continuous view test_distinct_regress
+DETAIL:  drop cascades to view test_distinct
+drop cascades to view test_distinct_on
+drop cascades to view test_distinct_regress

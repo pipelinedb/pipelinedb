@@ -54,13 +54,6 @@ extern void ClearPipelineContext(void);
 #define MATREL_COMBINE "combine"
 #define MATREL_FINALIZE "finalize"
 
-#define OPTION_FILLFACTOR "fillfactor"
-#define OPTION_SLIDING_WINDOW "sw"
-#define OPTION_PK "pk"
-#define OPTION_STEP_FACTOR "step_factor"
-#define OPTION_TTL "ttl"
-#define OPTION_TTL_COLUMN "ttl_column"
-
 #define SW_TIMESTAMP_REF 65100
 #define IS_SW_TIMESTAMP_REF(var) (IsA((var), Var) && ((Var *) (var))->varno >= SW_TIMESTAMP_REF)
 
@@ -103,7 +96,7 @@ extern Query *GetContViewQuery(RangeVar *rv);
 extern Query *GetContWorkerQuery(RangeVar *rv);
 extern Query *GetContCombinerQuery(RangeVar *rv);
 
-extern AttrNumber FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrel, int *ttl);
+extern AttrNumber FindSWTimeColumnAttrNo(SelectStmt *viewselect, Oid matrel, int *ttl, char **ttl_column);
 extern AttrNumber FindTTLColumnAttrNo(char *colname, Oid matrelid);
 extern Node *GetSWExpr(RangeVar *rv);
 extern Node *GetTTLExpiredExpr(RangeVar *cv);
@@ -112,6 +105,7 @@ extern Interval *GetSWInterval(RangeVar *rv);
 extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
 
 extern void AnalyzeCreateViewForTransform(ViewStmt *stmt);
+extern void AnalyzeCreateContView(ViewStmt *stmt);
 extern Oid LookupOutputFunc(List *name);
 extern char *DeparseOutputFuncArgs(List *args);
 
@@ -120,7 +114,7 @@ extern bool GetOptionAsString(List *options, char *option, char **result);
 extern bool GetOptionAsInteger(List *options, char *option, int *result);
 extern void ApplySlidingWindow(SelectStmt *stmt, DefElem *max_age, int *ttl);
 extern int IntervalToEpoch(Interval *i);
-extern void ApplyStorageOptions(CreateContViewStmt *stmt, bool *has_max_age, int *ttl, char **ttl_column);
+extern List *ApplyStorageOptions(SelectStmt *select, List *options, bool *has_sw, int *ttl, char **ttl_column);
 
 /* Deparsing */
 extern char *deparse_query_def(Query *query);

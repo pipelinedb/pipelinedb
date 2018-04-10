@@ -73,16 +73,13 @@ SELECT * FROM test_set_agg4;
  {1,2,3,4} | {1,2,3,4}
 (1 row)
 
-\d+ test_set_agg4
-           Continuous view "public.test_set_agg4"
-  Column   |   Type    | Modifiers | Storage  | Description 
------------+-----------+-----------+----------+-------------
- array_agg | integer[] |           | extended | 
- set_agg   | integer[] |           | extended | 
-View definition:
- SELECT array_agg(DISTINCT x) AS array_agg,
-    array_agg(DISTINCT x) AS set_agg
-   FROM test_set_agg_stream;
+SELECT pg_get_viewdef('test_set_agg4');
+               pg_get_viewdef                
+---------------------------------------------
+  SELECT array_agg(DISTINCT x) AS array_agg,+
+     array_agg(DISTINCT x) AS set_agg       +
+    FROM test_set_agg_stream;
+(1 row)
 
 DROP CONTINUOUS VIEW test_set_agg4;
 -- Check for NULLs

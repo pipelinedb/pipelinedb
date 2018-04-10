@@ -68,9 +68,9 @@ SELECT * FROM stream_subselect_v4;
 
 DROP STREAM stream_subselect_stream CASCADE;
 NOTICE:  drop cascades to 5 other objects
-DETAIL:  drop cascades to continuous view stream_subselect_v0
-drop cascades to continuous view stream_subselect_v1
-drop cascades to continuous view stream_subselect_v2
-drop cascades to continuous view stream_subselect_v3
-drop cascades to continuous view stream_subselect_v4
+DETAIL:  drop cascades to view stream_subselect_v0
+drop cascades to view stream_subselect_v1
+drop cascades to view stream_subselect_v2
+drop cascades to view stream_subselect_v3
+drop cascades to view stream_subselect_v4
 DROP TABLE stream_subselect_t;

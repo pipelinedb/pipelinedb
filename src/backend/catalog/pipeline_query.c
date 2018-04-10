@@ -212,12 +212,53 @@ GetPipelineQueryTuple(RangeVar *name)
 }
 
 /*
+ * StorePipelineQueryReloptions
+ *
+ * Stores the given custom options in the pg_class catalog
+ */
+void
+StorePipelineQueryReloptions(Oid relid, List *options)
+{
+	Datum classopts;
+	HeapTuple classtup;
+	HeapTuple newtup;
+	Relation pgclass;
+	Datum class_values[Natts_pg_class];
+	bool class_null[Natts_pg_class];
+	bool class_repl[Natts_pg_class];
+
+	pgclass = heap_open(RelationRelationId, RowExclusiveLock);
+	classtup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(classtup))
+		elog(ERROR, "cache lookup failed for OID %u", relid);
+
+	classopts = transformRelOptions((Datum) 0, options, NULL, NULL, false, false);
+	view_reloptions(classopts, false);
+
+	MemSet(class_values, 0, sizeof(class_values));
+	MemSet(class_null, 0, sizeof(class_null));
+	MemSet(class_repl, 0, sizeof(class_repl));
+
+	class_values[Anum_pg_class_reloptions - 1] = classopts;
+	class_repl[Anum_pg_class_reloptions - 1] = true;
+
+	newtup = heap_modify_tuple(classtup, RelationGetDescr(pgclass), class_values, class_null, class_repl);
+	simple_heap_update(pgclass, &newtup->t_self, newtup);
+	CatalogUpdateIndexes(pgclass, newtup);
+
+	heap_freetuple(newtup);
+	heap_close(pgclass, NoLock);
+	ReleaseSysCache(classtup);
+}
+
+/*
  * DefineContinuousView
  *
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int ttl,
+DefineContinuousView(Oid relid, Query *query, Oid streamrelid, Oid matrelid, Oid seqrelid, int ttl,
 		AttrNumber ttl_attno, Oid *pq_id)
 {
 	Relation pipeline_query;
@@ -249,6 +290,7 @@ DefineContinuousView(Oid relid, Query *query, Oid matrelid, Oid seqrelid, int tt
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
+	values[Anum_pipeline_query_streamrelid - 1] = ObjectIdGetDatum(streamrelid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(matrelid);
 	values[Anum_pipeline_query_seqrelid - 1] = ObjectIdGetDatum(seqrelid);
 	values[Anum_pipeline_query_ttl - 1] = Int32GetDatum(ttl);
@@ -310,7 +352,7 @@ UpdateContViewIndexIds(Oid cvid, Oid pkindid, Oid lookupindid)
 }
 
 void
-UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid)
+UpdateContViewRelIds(Oid cvid, Oid cvrelid, Oid osrelid, List *options)
 {
 	Relation pipeline_query = heap_open(PipelineQueryRelationOid, RowExclusiveLock);
 	HeapTuple tup = SearchPipelineSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(cvid));
@@ -542,6 +584,32 @@ RelIdIsForMatRel(Oid relid, Oid *id)
 }
 
 /*
+ * RelIdIsForContView
+ *
+ * * Returns true if the given oid represents a continuous view
+ */
+bool
+RelIdIsForContView(Oid relid)
+{
+	HeapTuple tup;
+	bool result = false;
+	Form_pipeline_query row;
+
+	tup = SearchPipelineSysCache1(PIPELINEQUERYRELID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tup))
+		return false;
+
+	row = (Form_pipeline_query) GETSTRUCT(tup);
+	if (row->type == PIPELINE_QUERY_VIEW)
+		result = true;
+
+	ReleaseSysCache(tup);
+
+	return result;
+}
+
+/*
  * IsSWContView
  */
 bool
@@ -766,35 +834,6 @@ GetContinuousQueryIds(void)
 	return get_cont_query_ids(0);
 }
 
-/*
- * RemovePipelineQueryById
- *
- * Remove a row from pipeline_query along with its associated transition state
- */
-void
-RemovePipelineQueryById(Oid oid)
-{
-	Relation pipeline_query;
-	HeapTuple tuple;
-
-	pipeline_query = heap_open(PipelineQueryRelationOid, ExclusiveLock);
-
-	tuple = SearchPipelineSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for continuous view with OID %u", oid);
-
-	simple_heap_delete(pipeline_query, &tuple->t_self);
-
-	ReleaseSysCache(tuple);
-
-	CommandCounterIncrement();
-	UpdatePipelineStreamCatalog();
-
-	pgstat_report_create_drop_cv(false);
-
-	heap_close(pipeline_query, NoLock);
-}
-
 Oid
 GetContQueryId(RangeVar *name)
 {
@@ -812,49 +851,8 @@ GetContQueryId(RangeVar *name)
 	return row_id;
 }
 
-/*
- * store_pipeline_query_reloptions
- *
- * Stores the given custom options in the pg_class catalog
- */
-static void
-store_pipeline_query_reloptions(Oid relid, List *options)
-{
-	Datum classopts;
-	HeapTuple classtup;
-	HeapTuple newtup;
-	Relation pgclass;
-	Datum class_values[Natts_pg_class];
-	bool class_null[Natts_pg_class];
-	bool class_repl[Natts_pg_class];
-
-	pgclass = heap_open(RelationRelationId, RowExclusiveLock);
-	classtup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(classtup))
-		elog(ERROR, "cache lookup failed for OID %u", relid);
-
-	classopts = transformRelOptions((Datum) 0, options, NULL, NULL, false, false);
-	view_reloptions(classopts, false);
-
-	MemSet(class_values, 0, sizeof(class_values));
-	MemSet(class_null, 0, sizeof(class_null));
-	MemSet(class_repl, 0, sizeof(class_repl));
-
-	class_values[Anum_pg_class_reloptions - 1] = classopts;
-	class_repl[Anum_pg_class_reloptions - 1] = true;
-
-	newtup = heap_modify_tuple(classtup, RelationGetDescr(pgclass), class_values, class_null, class_repl);
-	simple_heap_update(pgclass, &newtup->t_self, newtup);
-	CatalogUpdateIndexes(pgclass, newtup);
-
-	heap_freetuple(newtup);
-	heap_close(pgclass, NoLock);
-	ReleaseSysCache(classtup);
-}
-
 Oid
-DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid)
+DefineContinuousTransform(Oid relid, Query *query, Oid streamrelid, Oid typoid, Oid osrelid, List *options, Oid *ptgfnid)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -890,6 +888,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List
 	values[Anum_pipeline_query_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_query_active - 1] = BoolGetDatum(continuous_queries_enabled);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_str);
+	values[Anum_pipeline_query_streamrelid - 1] = ObjectIdGetDatum(streamrelid);
 	values[Anum_pipeline_query_matrelid - 1] = ObjectIdGetDatum(typoid); /* HACK(usmanm): So matrel index works */
 	values[Anum_pipeline_query_osrelid - 1] = ObjectIdGetDatum(osrelid);
 	values[Anum_pipeline_query_pkidxid - 1] = ObjectIdGetDatum(InvalidOid);
@@ -951,7 +950,7 @@ DefineContinuousTransform(Oid relid, Query *query, Oid typoid, Oid osrelid, List
 
 	CommandCounterIncrement();
 
-	store_pipeline_query_reloptions(relid, options);
+	StorePipelineQueryReloptions(relid, options);
 
 	return result;
 }

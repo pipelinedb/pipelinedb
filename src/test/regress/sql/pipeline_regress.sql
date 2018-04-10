@@ -187,8 +187,8 @@ CREATE CONTINUOUS VIEW sw_ts_expr2 AS
   WHERE minute(arrival_timestamp) > clock_timestamp() - interval '5 minute'
   GROUP BY minute(arrival_timestamp);
 
-\d+ sw_ts_expr1
-\d+ sw_ts_expr2
+SELECT pg_get_viewdef('sw_ts_expr1');
+SELECT pg_get_viewdef('sw_ts_expr2');
 
 INSERT INTO sw_ts_expr_s (x) VALUES (1), (1);
 INSERT INTO sw_ts_expr_s (x) VALUES (1), (1);
@@ -199,7 +199,7 @@ SELECT count FROM sw_ts_expr2;
 CREATE CONTINUOUS VIEW unknown_type_cv AS SELECT x, 'a' FROM sw_ts_expr_s;
 CREATE CONTINUOUS VIEW unknown_type_cv AS SELECT x, 'a'::text FROM sw_ts_expr_s;
 
-\d+ unknown_type_cv
+SELECT pg_get_viewdef('unknown_type_cv');
 
 DROP CONTINUOUS VIEW unknown_type_cv;
 

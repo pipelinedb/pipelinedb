@@ -176,18 +176,18 @@ SELECT * FROM test_dense_rank2;
 
 DROP STREAM test_hs_stream CASCADE;
 NOTICE:  drop cascades to 15 other objects
-DETAIL:  drop cascades to continuous view test_rank0
-drop cascades to continuous view test_rank1
-drop cascades to continuous view test_rank2
-drop cascades to continuous view test_rank3
-drop cascades to continuous view test_percent0
-drop cascades to continuous view test_percent1
-drop cascades to continuous view test_percent2
-drop cascades to continuous view test_percent3
-drop cascades to continuous view test_cume_dist0
-drop cascades to continuous view test_cume_dist1
-drop cascades to continuous view test_cume_dist2
-drop cascades to continuous view test_cume_dist3
-drop cascades to continuous view test_dense_rank0
-drop cascades to continuous view test_dense_rank1
-drop cascades to continuous view test_dense_rank2
+DETAIL:  drop cascades to view test_rank0
+drop cascades to view test_rank1
+drop cascades to view test_rank2
+drop cascades to view test_rank3
+drop cascades to view test_percent0
+drop cascades to view test_percent1
+drop cascades to view test_percent2
+drop cascades to view test_percent3
+drop cascades to view test_cume_dist0
+drop cascades to view test_cume_dist1
+drop cascades to view test_cume_dist2
+drop cascades to view test_cume_dist3
+drop cascades to view test_dense_rank0
+drop cascades to view test_dense_rank1
+drop cascades to view test_dense_rank2

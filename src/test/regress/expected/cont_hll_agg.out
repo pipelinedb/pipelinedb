@@ -210,9 +210,9 @@ SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg0;
 
 DROP STREAM test_hll_agg_stream CASCADE;
 NOTICE:  drop cascades to 6 other objects
-DETAIL:  drop cascades to continuous view test_hll_agg0
-drop cascades to continuous view test_hll_agg1
-drop cascades to continuous view test_hll_agg2
-drop cascades to continuous view test_sw_hll_agg0
-drop cascades to continuous view test_sw_hll_agg1
-drop cascades to continuous view test_sw_hll_agg2
+DETAIL:  drop cascades to view test_hll_agg0
+drop cascades to view test_hll_agg1
+drop cascades to view test_hll_agg2
+drop cascades to view test_sw_hll_agg0
+drop cascades to view test_sw_hll_agg1
+drop cascades to view test_sw_hll_agg2

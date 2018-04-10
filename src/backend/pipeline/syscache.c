@@ -87,16 +87,6 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		2048
 	},
-	{"pipeline_query", "pipeline_query_oid_index",
-		1,
-		{
-			ObjectIdAttributeNumber,
-			0,
-			0,
-			0
-		},
-		2048
-	},
 	{"pipeline_stream", "pipeline_stream_relid_index",
 		1,
 		{

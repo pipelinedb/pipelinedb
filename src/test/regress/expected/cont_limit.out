@@ -48,4 +48,4 @@ SELECT * FROM cqlimit_mrel ORDER BY x;
 (21 rows)
 
 DROP STREAM cqlimit_stream CASCADE;
-NOTICE:  drop cascades to continuous view cqlimit
+NOTICE:  drop cascades to view cqlimit

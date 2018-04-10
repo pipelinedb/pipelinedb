@@ -77,6 +77,6 @@ SELECT * FROM test_sw_pc2;
 
 DROP STREAM test_sw_os_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to continuous view test_sw_pc0
-drop cascades to continuous view test_sw_pc1
-drop cascades to continuous view test_sw_pc2
+DETAIL:  drop cascades to view test_sw_pc0
+drop cascades to view test_sw_pc1
+drop cascades to view test_sw_pc2

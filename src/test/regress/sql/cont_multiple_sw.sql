@@ -19,7 +19,7 @@ CREATE VIEW msw1 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw
 
 -- Verify that we can use sw on views that read from SW CVs
 CREATE VIEW msw1_ma AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
-\d+ msw1_ma;
+SELECT pg_get_viewdef('msw1_ma');
 
 CREATE VIEW msw2 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
 
@@ -74,11 +74,11 @@ SELECT
   arrival_timestamp AS sw_time
 FROM msw_stream
 WHERE arrival_timestamp > clock_timestamp() - INTERVAL '10 minute';
-\d+ msw5
+SELECT pg_get_viewdef('msw5');
 
 
 CREATE VIEW msw7 AS SELECT * FROM msw5;
-\d+ msw7
+SELECT pg_get_viewdef('msw7');
 SELECT * FROM msw7;
 
 DROP CONTINUOUS VIEW msw5 CASCADE;

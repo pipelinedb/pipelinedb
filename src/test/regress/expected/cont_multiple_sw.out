@@ -6,8 +6,8 @@ WHERE x > 10 GROUP BY x;
 CREATE VIEW msw1 AS SELECT combine(count) AS count FROM msw0;
 -- View depends on CV
 DROP CONTINUOUS VIEW msw0;
-ERROR:  cannot drop continuous view msw0 because other objects depend on it
-DETAIL:  view msw1 depends on continuous view msw0
+ERROR:  cannot drop view msw0 because other objects depend on it
+DETAIL:  view msw1 depends on view msw0
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW msw0 CASCADE;
 NOTICE:  drop cascades to view msw1
@@ -16,16 +16,13 @@ WHERE arrival_timestamp > clock_timestamp() - interval '10 second' GROUP BY x;
 CREATE VIEW msw1 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
 -- Verify that we can use sw on views that read from SW CVs
 CREATE VIEW msw1_ma AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
-\d+ msw1_ma;
-                View "public.msw1_ma"
- Column |  Type   | Modifiers | Storage | Description 
---------+---------+-----------+---------+-------------
- count  | bigint  |           | plain   | 
- avg    | numeric |           | main    | 
-View definition:
- SELECT combine(msw0.count) AS count,
-    combine(msw0.avg) AS avg
-   FROM msw0;
+SELECT pg_get_viewdef('msw1_ma');
+            pg_get_viewdef             
+---------------------------------------
+  SELECT combine(msw0.count) AS count,+
+     combine(msw0.avg) AS avg         +
+    FROM msw0;
+(1 row)
 
 CREATE VIEW msw2 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
 INSERT INTO msw_stream (x) SELECT generate_series(1, 100) AS x;
@@ -470,25 +467,21 @@ SELECT
   arrival_timestamp AS sw_time
 FROM msw_stream
 WHERE arrival_timestamp > clock_timestamp() - INTERVAL '10 minute';
-\d+ msw5
-                     Continuous view "public.msw5"
- Column  |           Type           | Modifiers | Storage | Description 
----------+--------------------------+-----------+---------+-------------
- sw_time | timestamp with time zone |           | plain   | 
-View definition:
- SELECT arrival_timestamp AS sw_time
-   FROM msw_stream
-  WHERE arrival_timestamp > (clock_timestamp() - '00:10:00'::interval);
+SELECT pg_get_viewdef('msw5');
+                              pg_get_viewdef                               
+---------------------------------------------------------------------------
+  SELECT arrival_timestamp AS sw_time                                     +
+    FROM msw_stream                                                       +
+   WHERE (arrival_timestamp > (clock_timestamp() - '00:10:00'::interval));
+(1 row)
 
 CREATE VIEW msw7 AS SELECT * FROM msw5;
-\d+ msw7
-                           View "public.msw7"
- Column  |           Type           | Modifiers | Storage | Description 
----------+--------------------------+-----------+---------+-------------
- sw_time | timestamp with time zone |           | plain   | 
-View definition:
- SELECT msw5.sw_time
-   FROM msw5;
+SELECT pg_get_viewdef('msw7');
+    pg_get_viewdef    
+----------------------
+  SELECT msw5.sw_time+
+    FROM msw5;
+(1 row)
 
 SELECT * FROM msw7;
  sw_time 

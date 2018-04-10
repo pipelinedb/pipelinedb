@@ -36,7 +36,7 @@ INSERT INTO test_set_agg_stream (x) VALUES (1), (2), (3);
 INSERT INTO test_set_agg_stream (x) VALUES (1), (2), (4);
 
 SELECT * FROM test_set_agg4;
-\d+ test_set_agg4
+SELECT pg_get_viewdef('test_set_agg4');
 DROP CONTINUOUS VIEW test_set_agg4;
 
 -- Check for NULLs

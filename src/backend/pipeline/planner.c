@@ -50,6 +50,13 @@
 
 ProcessUtility_hook_type SaveUtilityHook = NULL;
 
+typedef enum Action
+{
+	NONE,
+	TRANSFORM,
+	MATERIALIZE
+} Action;
+
 /*
  * get_combiner_join_rel
  *
@@ -705,10 +712,10 @@ validate_stream_constraints(CreateStmt *stmt)
 }
 
 /*
- * has_transform_action
+ * get_cont_query_action
  */
-static bool
-has_transform_action(List *options)
+static Action
+get_cont_query_action(List *options)
 {
 	ListCell *lc;
 	foreach(lc, options)
@@ -735,10 +742,15 @@ has_transform_action(List *options)
 
 			Assert(v);
 			if (pg_strcasecmp(strVal(v), ACTION_TRANSFORM) == 0)
-				return true;
+				return TRANSFORM;
+			else if (pg_strcasecmp(strVal(v), ACTION_MATERIALIZE) == 0)
+				return MATERIALIZE;
+			else
+				elog(ERROR, "invalid action \"%s\"", strVal(v));
 		}
 	}
-	return false;
+
+	return NONE;
 }
 
 /*
@@ -760,26 +772,28 @@ PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext c
 		if (IsA(parsetree, ViewStmt) && IsA(((ViewStmt *) parsetree)->query, SelectStmt))
 		{
 			ViewStmt *stmt = (ViewStmt *) parsetree;
-			/*
-			 * If it's a VIEW with action=transform, we're creating a transform
-			 */
-			if (has_transform_action(stmt->options))
+			Action action;
+
+			action = get_cont_query_action(stmt->options);
+
+			if (action != NONE)
 			{
 				PipelineContextSetIsDDL();
 				ddl_lock = AcquirePipelineDDLLock();
+			}
 
+			if (action == TRANSFORM)
+			{
 				AnalyzeCreateViewForTransform(stmt);
 				ExecCreateContTransformStmt(stmt->view, stmt->query, stmt->options, sql);
 				goto done;
 			}
-		}
-		else if (IsA(parsetree, CreateContViewStmt))
-		{
-			/*
-			 * Indicate to the analyzer/planner hooks that we're executing a CREATE CONTINUOUS statement
-			 */
-			PipelineContextSetIsDDL();
-			ddl_lock = AcquirePipelineDDLLock();
+			else if (action == MATERIALIZE)
+			{
+				AnalyzeCreateContView(stmt);
+				ExecCreateContViewStmt(stmt->view, stmt->query, stmt->options, sql);
+				goto done;
+			}
 		}
 		else if (IsA(parsetree, IndexStmt))
 		{
@@ -861,6 +875,21 @@ PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext c
 					}
 				}
 			}
+			else if (stmt->relkind == OBJECT_VIEW && IsAContinuousView(stmt->relation))
+			{
+				/*
+				 * Note that continuous views can be renamed and their schemas may be altered, but neither
+				 * of those operations is encoded as an AlterTableStmt so we need not handle them here.
+				 */
+				elog(ERROR, "continuous views cannot be modified");
+			}
+		}
+		else if (IsA(parsetree, CreateTrigStmt))
+		{
+			CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
+
+			if (IsAContinuousView(stmt->relation))
+				elog(ERROR, "continuous views do not support triggers");
 		}
 
 		if (SaveUtilityHook != NULL)
@@ -869,6 +898,13 @@ PipelineProcessUtility(Node *parsetree, const char *sql, ProcessUtilityContext c
 			standard_ProcessUtility(parsetree, sql, context, params, dest, tag);
 
 done:
+
+		/*
+		 * We may have dropped a PipelineDB object, so we reconcile our own catalog tables
+		 * to ensure any orphaned entries are removed in this transaction.
+		 */
+		if (IsA(parsetree, DropStmt))
+			ReconcilePipelineObjects();
 
 		if (exec_lock)
 			ReleaseContExecutionLock(exec_lock);
@@ -886,13 +922,6 @@ done:
 			Oid relid = RangeVarGetRelid(stmt->base.relation, NoLock, false);
 			CreatePipelineStreamEntry(stmt, relid);
 		}
-
-		/*
-		 * We may have dropped a PipelineDB object, so we reconcile our own catalog tables
-		 * to ensure any orphaned entries are removed in this transaction.
-		 */
-		if (IsA(parsetree, DropStmt))
-			ReconcilePipelineObjects();
 
 		/*
 		 * Clear analyzer/planner context flags

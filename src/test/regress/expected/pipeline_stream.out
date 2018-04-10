@@ -130,7 +130,7 @@ SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
 
 DROP STREAM stream1;
 DROP STREAM stream0 CASCADE;
-NOTICE:  drop cascades to continuous view ps4
+NOTICE:  drop cascades to view ps4
 SELECT schema, name, queries FROM pipeline_streams() ORDER BY name;
  schema | name | queries 
 --------+------+---------

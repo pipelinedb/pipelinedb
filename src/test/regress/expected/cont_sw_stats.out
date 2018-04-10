@@ -187,27 +187,27 @@ SELECT * FROM test_sw_stats_float4_stddev_pop;
 
 DROP STREAM sw_stats_stream CASCADE;
 NOTICE:  drop cascades to 24 other objects
-DETAIL:  drop cascades to continuous view test_sw_stats_int8_var_samp
-drop cascades to continuous view test_sw_stats_int4_var_samp
-drop cascades to continuous view test_sw_stats_int2_var_samp
-drop cascades to continuous view test_sw_stats_numeric_var_samp
-drop cascades to continuous view test_sw_stats_float8_var_samp
-drop cascades to continuous view test_sw_stats_float4_var_samp
-drop cascades to continuous view test_sw_stats_int8_var_pop
-drop cascades to continuous view test_sw_stats_int4_var_pop
-drop cascades to continuous view test_sw_stats_int2_var_pop
-drop cascades to continuous view test_sw_stats_numeric_var_pop
-drop cascades to continuous view test_sw_stats_float8_var_pop
-drop cascades to continuous view test_sw_stats_float4_var_pop
-drop cascades to continuous view test_sw_stats_int8_stddev_samp
-drop cascades to continuous view test_sw_stats_int4_stddev_samp
-drop cascades to continuous view test_sw_stats_int2_stddev_samp
-drop cascades to continuous view test_sw_stats_numeric_stddev_samp
-drop cascades to continuous view test_sw_stats_float8_stddev_samp
-drop cascades to continuous view test_sw_stats_float4_stddev_samp
-drop cascades to continuous view test_sw_stats_int8_stddev_pop
-drop cascades to continuous view test_sw_stats_int4_stddev_pop
-drop cascades to continuous view test_sw_stats_int2_stddev_pop
-drop cascades to continuous view test_sw_stats_numeric_stddev_pop
-drop cascades to continuous view test_sw_stats_float8_stddev_pop
-drop cascades to continuous view test_sw_stats_float4_stddev_pop
+DETAIL:  drop cascades to view test_sw_stats_int8_var_samp
+drop cascades to view test_sw_stats_int4_var_samp
+drop cascades to view test_sw_stats_int2_var_samp
+drop cascades to view test_sw_stats_numeric_var_samp
+drop cascades to view test_sw_stats_float8_var_samp
+drop cascades to view test_sw_stats_float4_var_samp
+drop cascades to view test_sw_stats_int8_var_pop
+drop cascades to view test_sw_stats_int4_var_pop
+drop cascades to view test_sw_stats_int2_var_pop
+drop cascades to view test_sw_stats_numeric_var_pop
+drop cascades to view test_sw_stats_float8_var_pop
+drop cascades to view test_sw_stats_float4_var_pop
+drop cascades to view test_sw_stats_int8_stddev_samp
+drop cascades to view test_sw_stats_int4_stddev_samp
+drop cascades to view test_sw_stats_int2_stddev_samp
+drop cascades to view test_sw_stats_numeric_stddev_samp
+drop cascades to view test_sw_stats_float8_stddev_samp
+drop cascades to view test_sw_stats_float4_stddev_samp
+drop cascades to view test_sw_stats_int8_stddev_pop
+drop cascades to view test_sw_stats_int4_stddev_pop
+drop cascades to view test_sw_stats_int2_stddev_pop
+drop cascades to view test_sw_stats_numeric_stddev_pop
+drop cascades to view test_sw_stats_float8_stddev_pop
+drop cascades to view test_sw_stats_float4_stddev_pop
