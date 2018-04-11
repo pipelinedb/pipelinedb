@@ -232,6 +232,9 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 	while ((entry = (StreamTargetsEntry *) hash_seq_search(&scan)) != NULL)
 	{
 		Bitmapset *queries = entry->queries;
+		Bitmapset *current;
+		Datum raw;
+		bytea *bytes;
 		Size targetssize;
 		bytea *targetsbytes;
 		HeapTuple tup;
@@ -239,6 +242,7 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		bool nulls[Natts_pipeline_stream];
 		bool replaces[Natts_pipeline_stream];
 		HeapTuple newtup;
+		bool isnull;
 
 		MemSet(nulls, false, Natts_pipeline_stream);
 		MemSet(replaces, false, sizeof(replaces));
@@ -254,16 +258,35 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		else
 			nulls[Anum_pipeline_stream_queries - 1] = true;
 
-		replaces[Anum_pipeline_stream_queries - 1] = true;
-
 		tup = SearchPipelineSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(entry->relid));
 		if (!HeapTupleIsValid(tup))
 			continue;
 
-		newtup = heap_modify_tuple(tup, pipeline_stream->rd_att, values, nulls, replaces);
+		raw = PipelineSysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
 
-		simple_heap_update(pipeline_stream, &newtup->t_self, newtup);
-		CatalogUpdateIndexes(pipeline_stream, newtup);
+		if (!isnull)
+		{
+			int nbytes;
+			int nwords;
+
+			bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(raw));
+			nbytes = VARSIZE(bytes) - VARHDRSZ;
+			nwords = nbytes / sizeof(bitmapword);
+
+			current = palloc0(BITMAPSET_SIZE(nwords));
+			current->nwords = nwords;
+
+			memcpy(current->words, VARDATA(bytes), nbytes);
+		}
+
+		/* If the queries changed, replace the value */
+		if (isnull || !bms_equal(current, queries))
+		{
+			replaces[Anum_pipeline_stream_queries - 1] = true;
+			newtup = heap_modify_tuple(tup, pipeline_stream->rd_att, values, nulls, replaces);
+			simple_heap_update(pipeline_stream, &newtup->t_self, newtup);
+			CatalogUpdateIndexes(pipeline_stream, newtup);
+		}
 
 		ReleaseSysCache(tup);
 
