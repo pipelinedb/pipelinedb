@@ -14,6 +14,7 @@
 #include "access/xact.h"
 #include "miscadmin.h"
 #include "pipeline/ipc/microbatch.h"
+#include "pipeline/ipc/pzmq.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/scheduler.h"
 #include "utils/memutils.h"

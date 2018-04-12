@@ -15,6 +15,7 @@
 #include "nodes/execnodes.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
+#include "pipeline/executor.h"
 #include "pipeline/ipc/microbatch.h"
 #include "utils/rel.h"
 
