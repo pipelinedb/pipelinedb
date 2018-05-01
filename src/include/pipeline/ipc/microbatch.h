@@ -125,4 +125,6 @@ extern void microbatch_add_acks(microbatch_t *mb, List *acks);
 extern void microbatch_send_to_worker(microbatch_t *mb, int worker_id);
 extern void microbatch_send_to_combiner(microbatch_t *mb, int combiner_id);
 
+extern void microbatch_ipc_init(void);
+
 #endif

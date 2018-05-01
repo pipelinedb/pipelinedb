@@ -75,6 +75,15 @@ MicrobatchAckShmemInit(void)
 	}
 }
 
+void
+microbatch_ipc_init(void)
+{
+	pzmq_init(MAX_MICROBATCH_SIZE,
+			continuous_query_ipc_hwm,
+			continuous_query_num_workers + continuous_query_num_combiners,
+			!IsContQueryProcess());
+}
+
 microbatch_ack_t *
 microbatch_ack_new(StreamInsertLevel level)
 {

@@ -15,7 +15,7 @@
 
 extern char *socket_dir;
 
-extern void pzmq_init(void);
+extern void pzmq_init(int max_msg_size, int hwm, int num_destinations, bool enqueue);
 extern void pzmq_destroy(void);
 
 extern void pzmq_bind(uint64 id);

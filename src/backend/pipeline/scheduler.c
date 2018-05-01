@@ -26,7 +26,7 @@
 #include "pgstat.h"
 #include "pipeline/executor.h"
 #include "pipeline/scheduler.h"
-#include "pipeline/ipc/pzmq.h"
+#include "pipeline/ipc/microbatch.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/reaper.h"
 #include "postmaster/fork_process.h"
@@ -390,7 +390,7 @@ cont_bgworker_main(Datum arg)
 	elog(LOG, "pipelinedb process \"%s\" running with pid %d", GetContQueryProcName(proc), MyProcPid);
 
 	pgstat_init_cqstat(MyProcStatCQEntry, 0, MyProcPid);
-	pzmq_init();
+	microbatch_ipc_init();
 	pzmq_bind(MyContQueryProc->pzmq_id);
 
 	set_nice_priority();
