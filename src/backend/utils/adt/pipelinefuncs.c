@@ -1000,7 +1000,7 @@ pipeline_flush(PG_FUNCTION_ARGS)
 	microbatch_t *mb = microbatch_new(FlushTuple, NULL, NULL);
 	bool success;
 
-	pzmq_init();
+	microbatch_ipc_init();
 
 	microbatch_add_ack(mb, ack);
 

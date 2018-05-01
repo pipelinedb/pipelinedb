@@ -522,7 +522,7 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	}
 
 	if (!IsContQueryProcess())
-		pzmq_init();
+		microbatch_ipc_init();
 }
 
 /*

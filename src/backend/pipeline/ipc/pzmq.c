@@ -13,8 +13,6 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
-#include "pipeline/scheduler.h"
-#include "pipeline/ipc/microbatch.h"
 #include "pipeline/ipc/pzmq.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
@@ -35,6 +33,9 @@ typedef struct pzmq_state_t
 	MemoryContext mem_cxt;
 	pzmq_socket_t *me;
 	HTAB *dests;
+	int max_msg_size;
+	int hwm;
+	bool enqueue;
 } pzmq_state_t;
 
 char *socket_dir = NULL;
@@ -42,7 +43,7 @@ char *socket_dir = NULL;
 static pzmq_state_t *zmq_state = NULL;
 
 void
-pzmq_init(void)
+pzmq_init(int max_msg_size, int hwm, int num_destinations, bool enqueue)
 {
 	MemoryContext old;
 	MemoryContext cxt;
@@ -70,10 +71,11 @@ pzmq_init(void)
 	ctl.entrysize = sizeof(pzmq_socket_t);
 	ctl.hcxt = zs->mem_cxt;
 	ctl.hash = tag_hash;
-	zs->dests = hash_create("pzmq dests HTAB", continuous_query_num_workers + continuous_query_num_combiners + 8,
-			&ctl, HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
-
+	zs->dests = hash_create("pzmq dests HTAB", num_destinations + 8, &ctl, HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
 	zs->zmq_cxt = zmq_ctx_new();
+	zs->max_msg_size = max_msg_size;
+	zs->hwm = hwm;
+	zs->enqueue = enqueue;
 
 	MemoryContextSwitchTo(old);
 
@@ -132,7 +134,7 @@ pzmq_bind(uint64 id)
 	sprintf(zsock->addr, PZMQ_SOCKNAME_STR, socket_dir, id);
 	zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PULL);
 
-	optval = continuous_query_ipc_hwm;
+	optval = zmq_state->hwm;
 	if (zmq_setsockopt(zsock->sock, ZMQ_RCVHWM, &optval, sizeof(int)) != 0)
 		elog(WARNING, "pzmq_bind failed to set rcvhwm: %s", zmq_strerror(errno));
 
@@ -170,23 +172,25 @@ pzmq_connect(uint64 id)
 		sprintf(zsock->addr, PZMQ_SOCKNAME_STR, socket_dir, id);
 		zsock->sock = zmq_socket(zmq_state->zmq_cxt, ZMQ_PUSH);
 
-		optval = continuous_query_ipc_hwm;
+		optval = zmq_state->hwm;
 		if (zmq_setsockopt(zsock->sock, ZMQ_SNDHWM, &optval, sizeof(int)) != 0)
 			elog(WARNING, "pzmq_connect failed to set sndhwm: %s", zmq_strerror(errno));
 
-
-		if (!IsContQueryProcess())
+		if (zmq_state->enqueue)
 		{
+			/* Enqueue messages immediately, even if the connection isn't ready yet */
 			optval = 1;
 			if (zmq_setsockopt(zsock->sock, ZMQ_IMMEDIATE, &optval, sizeof(int)) != 0)
 				elog(WARNING, "pzmq_connect failed to set immediate: %s", zmq_strerror(errno));
 
+			/* Leave messages in memory until they're consumed */
 			optval = -1;
 			if (zmq_setsockopt(zsock->sock, ZMQ_LINGER, &optval, sizeof(int)) != 0)
 				elog(WARNING, "pzmq_connect failed to set linger: %s", zmq_strerror(errno));
 		}
 		else
 		{
+			/* We're a CQ process, don't attempt to send messages if the connection isn't ready yet */
 			optval = 0;
 			if (zmq_setsockopt(zsock->sock, ZMQ_LINGER, &optval, sizeof(int)) != 0)
 				elog(WARNING, "pzmq_connect failed to set linger: %s", zmq_strerror(errno));
@@ -260,7 +264,7 @@ pzmq_recv(int *len, int timeout)
 		return NULL;
 	}
 
-	Assert(ret <= MAX_MICROBATCH_SIZE);
+	Assert(ret <= zmq_state->max_msg_size);
 	Assert(ret == zmq_msg_size(&msg));
 
 	*len = ret;
@@ -278,11 +282,10 @@ pzmq_send(uint64 id, char *msg, int len, bool wait)
 	bool found;
 	int ret;
 
-	Assert(len <= MAX_MICROBATCH_SIZE);
-
 	if (!zmq_state)
 		elog(ERROR, "pzmq is not initialized");
 
+	Assert(len <= zmq_state->max_msg_size);
 	zsock = (pzmq_socket_t *) hash_search(zmq_state->dests, &id, HASH_ENTER, &found);
 
 	if (!found)
