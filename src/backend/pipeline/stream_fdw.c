@@ -31,7 +31,6 @@
 #include "parser/parsetree.h"
 #include "pgstat.h"
 #include "pipeline/analyzer.h"
-#include "pipeline/executor.h"
 #include "pipeline/scheduler.h"
 #include "pipeline/ipc/pzmq.h"
 #include "pipeline/ipc/reader.h"

@@ -27,7 +27,6 @@
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/ipc/reader.h"
 #include "pipeline/miscutils.h"
-#include "pipeline/stream.h"
 #include "pipeline/syscache.h"
 #include "tcop/tcopprot.h"
 #include "utils/lsyscache.h"

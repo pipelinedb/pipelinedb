@@ -19,7 +19,6 @@
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
 #include "pipeline/combiner_receiver.h"
-#include "pipeline/executor.h"
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"

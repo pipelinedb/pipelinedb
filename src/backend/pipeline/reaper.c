@@ -25,7 +25,6 @@
 #include "optimizer/cost.h"
 #include "optimizer/planner.h"
 #include "parser/parse_expr.h"
-#include "pipeline/analyzer.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/matrel.h"
 #include "pipeline/reaper.h"

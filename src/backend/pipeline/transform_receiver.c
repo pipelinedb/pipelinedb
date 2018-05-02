@@ -22,7 +22,6 @@
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
 #include "pipeline/transform_receiver.h"
-#include "pipeline/executor.h"
 #include "pipeline/matrel.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
