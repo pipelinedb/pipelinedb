@@ -18,7 +18,6 @@
 #include "nodes/pg_list.h"
 #include "pipeline/scheduler.h"
 #include "pipeline/miscutils.h"
-#include "pipeline/stream.h"
 #include "port/atomics.h"
 
 #define MAX_MICROBATCH_SIZE (continuous_query_batch_mem * 1024)
@@ -47,6 +46,14 @@ typedef struct microbatch_ack_t
 	/* Total number of tuples sent to combiners */
 	pg_atomic_uint32 num_ctups;
 } microbatch_ack_t;
+
+typedef enum
+{
+	STREAM_INSERT_ASYNCHRONOUS,
+	STREAM_INSERT_SYNCHRONOUS_RECEIVE,
+	STREAM_INSERT_SYNCHRONOUS_COMMIT,
+	STREAM_INSERT_FLUSH /* internal */
+} StreamInsertLevel;
 
 extern microbatch_ack_t *microbatch_ack_new(StreamInsertLevel level);
 extern void microbatch_ack_free(microbatch_ack_t *ack);

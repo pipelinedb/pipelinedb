@@ -24,11 +24,12 @@
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "pgstat.h"
-#include "pipeline/executor.h"
+
+#include "pipeline/ipc/pzmq.h"
 #include "pipeline/scheduler.h"
 #include "pipeline/ipc/microbatch.h"
 #include "pipeline/miscutils.h"
-#include "pipeline/reaper.h"
+
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
 #include "storage/ipc.h"

@@ -17,6 +17,7 @@
 #include "pipeline/ipc/pzmq.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/scheduler.h"
+#include "utils/hsearch.h"
 #include "utils/memutils.h"
 
 static char *
