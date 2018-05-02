@@ -12,6 +12,7 @@
 #ifndef CONT_ANALYZE_H
 #define CONT_ANALYZE_H
 
+#include "datatype/timestamp.h"
 #include "parser/analyze.h"
 #include "parser/parse_node.h"
 #include "pipeline/scheduler.h"

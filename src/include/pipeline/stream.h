@@ -21,14 +21,6 @@
 #include "utils/relcache.h"
 #include "utils/timestamp.h"
 
-typedef enum
-{
-	STREAM_INSERT_ASYNCHRONOUS,
-	STREAM_INSERT_SYNCHRONOUS_RECEIVE,
-	STREAM_INSERT_SYNCHRONOUS_COMMIT,
-	STREAM_INSERT_FLUSH /* internal */
-} StreamInsertLevel;
-
 /*
  * Hooks that can feed raw data to COPY when we need more flexibility than a simple file descriptor.
  */
