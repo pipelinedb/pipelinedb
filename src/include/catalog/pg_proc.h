@@ -5941,6 +5941,20 @@ DESCR("jsonb array aggregation combination function");
 DATA(insert OID = 4497 (jsonb_object_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ _null_ jsonb_object_agg_combine _null_ _null_ _null_ ));
 DESCR("jsonb object aggregation combination function");
 
+/* binary upgrade support */
+DATA(insert OID = 4498 ( create_cq_set_next_oids_for_matrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 6 0 2278 "26 26 26 26 26 26" _null_ _null_ _null_ _null_ _null_ create_cq_set_next_oids_for_matrel _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4499 ( create_cv_set_next_oids_for_seqrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 2 0 2278 "26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_seqrel _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4500 ( create_cv_set_next_oids_for_pk_index PGNSP PGUID  12 1 0 0 0 f f f f t f v 1 0 2278 "26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_pk_index _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4501 ( create_cv_set_next_oids_for_lookup_index PGNSP PGUID  12 1 0 0 0 f f f f t f v 1 0 2278 "26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_lookup_index _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4502 ( create_cv_set_next_oids_for_overlay PGNSP PGUID  12 1 0 0 0 f f f f t f v 3 0 2278 "26 26 26" _null_ _null_ _null_ _null_ _null_ create_cv_set_next_oids_for_overlay _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+DATA(insert OID = 4503 ( create_cq_set_next_oids_for_osrel PGNSP PGUID  12 1 0 0 0 f f f f t f v 3 0 2278 "26 26 26" _null_ _null_ _null_ _null_ _null_ create_cq_set_next_oids_for_osrel _null_ _null_ _null_ ));
+DESCR("for use by pipeline-upgrade");
+
 DATA(insert OID = 4504 ( bloom_union PGNSP PGUID 12 1 0 2276 0 f f f f f f i 1 0 5030 "2276" "{2276}" "{v}" _null_ _null_ _null_ bloom_union _null_ _null_ _null_ ));
 DESCR("bloom filter union");
 DATA(insert OID = 4505 ( bloom_intersection PGNSP PGUID 12 1 0 2276 0 f f f f f f i 1 0 5030 "2276" "{2276}" "{v}" _null_ _null_ _null_ bloom_intersection _null_ _null_ _null_ ));
