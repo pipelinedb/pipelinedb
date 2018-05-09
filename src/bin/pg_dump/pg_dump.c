@@ -259,6 +259,10 @@ static char *get_synchronized_snapshot(Archive *fout);
 static PGresult *ExecuteSqlQueryForSingleRow(Archive *fout, char *query);
 static void setupDumpWorker(Archive *AHX);
 
+#define RELKIND_STREAM '$'
+#define RELKIND_CONTVIEW 'C'
+#define RELKIND_CONTTRANSFORM 'X'
+
 /*
  * is_matrel
  *
@@ -352,7 +356,7 @@ is_output_stream(Archive *fout, TableInfo *ti)
 	PGresult *res;
 	bool result = false;
 
-	if (ti->relkind != RELKIND_FOREIGN_TABLE)
+	if (ti->relkind != RELKIND_FOREIGN_TABLE && ti->relkind != RELKIND_STREAM)
 		return false;
 
 	appendPQExpBuffer(ps, "SELECT osrelid FROM pipeline_query WHERE osrelid = %d", ti->dobj.catId.oid);
@@ -362,6 +366,292 @@ is_output_stream(Archive *fout, TableInfo *ti)
 		result = true;
 
 	return result;
+}
+
+/*
+ * binary_upgrade_set_oids_for_create_cv
+ */
+static bool
+binary_upgrade_set_oids_for_create_cv(Archive *fout, PQExpBuffer upgrade_buffer,
+		char *cv_namespace, char *cv_name)
+{
+	PQExpBuffer q = createPQExpBuffer();
+	PGresult *res;
+	Oid matrel_class;
+	Oid matrel_type;
+	Oid matrel_arraytype;
+	Oid seqrel_class;
+	Oid seqrel_type;
+	Oid pk_index_class;
+	Oid lookup_index_class;
+	Oid toast_class;
+	Oid toast_type;
+	Oid toast_index_class;
+	Oid overlay_class;
+	Oid overlay_type;
+	Oid overlay_arraytype;
+	Oid osrel_class;
+	Oid osrel_type;
+	Oid osrel_arraytype;
+
+	appendPQExpBuffer(q,
+		"SELECT matrel.oid AS matrel_class, matrel.reltype AS matrel_type, matrel_type.typarray AS matrel_arraytype, "
+		"cv.oid AS overlay_class, cv.reltype AS overlay_type, overlay_type.typarray AS overlay_arraytype, "
+		"osrel.oid AS osrel_class, osrel.reltype AS osrel_type, osrel_type.typarray AS osrel_arraytype, "
+		"COALESCE(seqrel.oid, 0) AS seqrel_class, COALESCE(seqrel.reltype, 0) AS seqrel_type, "
+		"COALESCE(pk_index.indexrelid, 0) AS pk_index_class, COALESCE(lookup_index.indexrelid, 0) AS lookup_index_class, "
+		"COALESCE(toast.oid, 0) AS toast_class, COALESCE(toast.reltype, 0) AS toast_type, COALESCE(toast_index.indexrelid, 0) AS toast_index "
+		"FROM pg_class matrel JOIN pipeline_query pq ON matrel.oid = pq.matrelid "
+		"JOIN pg_namespace nsp ON nsp.oid = matrel.relnamespace "
+		"JOIN pg_class cv ON cv.oid = pq.relid "
+		"JOIN pg_class osrel ON osrel.oid = pq.osrelid "
+		"JOIN pg_type matrel_type ON matrel_type.oid = matrel.reltype "
+		"JOIN pg_type overlay_type ON overlay_type.oid = cv.reltype "
+		"JOIN pg_type osrel_type ON osrel_type.oid = osrel.reltype "
+		"JOIN pg_index pk_index ON (pk_index.indisprimary = true AND pk_index.indrelid = matrel.oid) "
+		"LEFT JOIN pg_index lookup_index ON (lookup_index.indrelid = matrel.oid AND lookup_index.indexprs IS NOT NULL AND lookup_index.indexprs::text LIKE '%%:funcid 437%%')"
+		"LEFT JOIN pg_class seqrel ON seqrel.oid = pq.seqrelid "
+		"LEFT JOIN pg_class toast ON toast.oid = matrel.reltoastrelid "
+		"LEFT JOIN pg_index toast_index ON (toast.oid = toast_index.indrelid AND toast_index.indisvalid)"
+		"WHERE nsp.nspname = '%s' AND cv.relname = '%s';", cv_namespace, cv_name);
+
+	res = ExecuteSqlQueryForSingleRow(fout, q->data);
+
+	matrel_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "matrel_class")));
+	matrel_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "matrel_type")));
+	matrel_arraytype = atooid(PQgetvalue(res, 0, PQfnumber(res, "matrel_arraytype")));
+	seqrel_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "seqrel_class")));
+	seqrel_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "seqrel_type")));
+	pk_index_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "pk_index_class")));
+	lookup_index_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "lookup_index_class")));
+	toast_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "toast_class")));
+	toast_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "toast_type")));
+	toast_index_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "toast_index")));
+	overlay_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "overlay_class")));
+	overlay_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "overlay_type")));
+	overlay_arraytype = atooid(PQgetvalue(res, 0, PQfnumber(res, "overlay_arraytype")));
+	osrel_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "osrel_class")));
+	osrel_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "osrel_type")));
+	osrel_arraytype = atooid(PQgetvalue(res, 0, PQfnumber(res, "osrel_arraytype")));
+
+	appendPQExpBuffer(upgrade_buffer,
+			"SELECT create_cq_set_next_oids_for_matrel("
+			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid, "
+			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid);\n",
+			matrel_class, matrel_type, matrel_arraytype, toast_class, toast_type, toast_index_class);
+
+	appendPQExpBuffer(upgrade_buffer,
+			"SELECT create_cv_set_next_oids_for_seqrel("
+			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid);\n", seqrel_class, seqrel_type);
+
+	appendPQExpBuffer(upgrade_buffer,
+			"SELECT create_cv_set_next_oids_for_pk_index('%u'::pg_catalog.oid);\n", pk_index_class);
+
+	appendPQExpBuffer(upgrade_buffer,
+			"SELECT create_cv_set_next_oids_for_lookup_index('%u'::pg_catalog.oid);\n", lookup_index_class);
+
+	appendPQExpBuffer(upgrade_buffer,
+			"SELECT create_cv_set_next_oids_for_overlay("
+			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid);\n", overlay_class, overlay_type, overlay_arraytype);
+
+	appendPQExpBuffer(upgrade_buffer,
+			"SELECT create_cq_set_next_oids_for_osrel("
+			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid);\n", osrel_class, osrel_type, osrel_arraytype);
+
+	return false;
+}
+
+/*
+ * dumpContinuousView
+ *
+ * Dump a CREATE CONTINUOUS VIEW statement
+ */
+static void
+dumpContinuousView(Archive *fout, TableInfo *ti, PQExpBuffer delq)
+{
+	PQExpBuffer q = createPQExpBuffer();
+	PQExpBuffer pq = createPQExpBuffer();
+	PGresult *res;
+	char *qdef;
+	char *seqrel = NULL;
+	char *last;
+	bool called;
+
+	appendPQExpBuffer(pq, "SELECT query FROM pipeline_views() WHERE schema = '%s' AND name = '%s'",
+			ti->dobj.namespace->dobj.name, ti->dobj.name);
+	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
+	qdef = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "query")));
+
+	// if it's legacy! but we only call this if relkind == 'C' so aren't we good?
+	if (fout->dopt->binary_upgrade)
+		binary_upgrade_set_oids_for_create_cv(fout, q, ti->dobj.namespace->dobj.name, ti->dobj.name);
+
+	appendPQExpBuffer(q, "CREATE CONTINUOUS VIEW %s.%s AS %s;\n\n", ti->dobj.namespace->dobj.name, ti->dobj.name, qdef);
+
+	/* Get the name of the seqrel */
+	resetPQExpBuffer(pq);
+	appendPQExpBuffer(pq, "SELECT c.relname AS seqrel FROM pipeline_query pq JOIN pg_class c "
+			"ON pq.seqrelid = c.oid WHERE pq.relid = %d", ti->dobj.catId.oid);
+
+	res = ExecuteSqlQuery(fout, pq->data, PGRES_TUPLES_OK);
+	if (PQntuples(res) == 1)
+	{
+		seqrel = PQgetvalue(res, 0, PQfnumber(res, "seqrel"));
+
+		/* Get the current value so we can set it immediately after creating the CV */
+		resetPQExpBuffer(pq);
+		appendPQExpBuffer(pq, "SELECT last_value, is_called FROM %s", seqrel);
+		res = ExecuteSqlQueryForSingleRow(fout, pq->data);
+		last = PQgetvalue(res, 0, 0);
+		called = (strcmp(PQgetvalue(res, 0, 1), "t") == 0);
+
+		if (!fout->dopt->binary_upgrade)
+		{
+			/* Now set it right after creating the CV */
+			appendPQExpBufferStr(q, "SELECT pg_catalog.setval(");
+			appendStringLiteralAH(q, fmtId(seqrel), fout);
+			appendPQExpBuffer(q, ", %s, %s);\n\n",
+								last, (called ? "true" : "false"));
+		}
+	}
+
+	appendPQExpBuffer(q, "SET continuous_query_materialization_table_updatable = on;\n\n");
+
+	ArchiveEntry(fout, ti->dobj.catId, ti->dobj.dumpId,
+			ti->dobj.name,
+			ti->dobj.namespace->dobj.name,
+			ti->reltablespace,
+			ti->rolname,
+			   false,
+				 "CONTINUOUS VIEW",
+				 SECTION_PRE_DATA,
+				 q->data, delq->data, NULL,
+				 NULL, 0,
+				 NULL, NULL);
+
+	destroyPQExpBuffer(q);
+	destroyPQExpBuffer(pq);
+}
+
+/*
+ * binary_upgrade_set_oids_for_create_ct
+ */
+static bool
+binary_upgrade_set_oids_for_create_ct(Archive *fout, PQExpBuffer upgrade_buffer,
+		char *ct_namespace, char *ct_name)
+{
+	PQExpBuffer q = createPQExpBuffer();
+	PGresult *res;
+	Oid matrel_class;
+	Oid matrel_type;
+	Oid matrel_arraytype;
+	Oid toast_class;
+	Oid toast_type;
+	Oid toast_index_class;
+	Oid osrel_class;
+	Oid osrel_type;
+	Oid osrel_arraytype;
+
+	appendPQExpBuffer(q,
+		"SELECT matrel.oid AS matrel_class, matrel.reltype AS matrel_type, matrel_type.typarray AS matrel_arraytype, "
+		"osrel.oid AS osrel_class, osrel.reltype AS osrel_type, osrel_type.typarray AS osrel_arraytype, "
+		"COALESCE(toast.oid, 0) AS toast_class, COALESCE(toast.reltype, 0) AS toast_type, COALESCE(toast_index.indexrelid, 0) AS toast_index "
+		"FROM pg_class matrel JOIN pipeline_query pq ON matrel.oid = pq.matrelid "
+		"JOIN pg_namespace nsp ON nsp.oid = matrel.relnamespace "
+		"JOIN pg_class ct ON ct.oid = pq.relid "
+		"JOIN pg_class osrel ON osrel.oid = pq.osrelid "
+		"JOIN pg_type matrel_type ON matrel_type.oid = matrel.reltype "
+		"JOIN pg_type overlay_type ON overlay_type.oid = ct.reltype "
+		"JOIN pg_type osrel_type ON osrel_type.oid = osrel.reltype "
+		"LEFT JOIN pg_class toast ON toast.oid = matrel.reltoastrelid "
+		"LEFT JOIN pg_index toast_index ON (toast.oid = toast_index.indrelid AND toast_index.indisvalid)"
+		"WHERE nsp.nspname = '%s' AND ct.relname = '%s';", ct_namespace, ct_name);
+
+	res = ExecuteSqlQueryForSingleRow(fout, q->data);
+
+	matrel_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "matrel_class")));
+	matrel_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "matrel_type")));
+	matrel_arraytype = atooid(PQgetvalue(res, 0, PQfnumber(res, "matrel_arraytype")));
+	toast_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "toast_class")));
+	toast_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "toast_type")));
+	toast_index_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "toast_index")));
+	osrel_class = atooid(PQgetvalue(res, 0, PQfnumber(res, "osrel_class")));
+	osrel_type = atooid(PQgetvalue(res, 0, PQfnumber(res, "osrel_type")));
+	osrel_arraytype = atooid(PQgetvalue(res, 0, PQfnumber(res, "osrel_arraytype")));
+
+	appendPQExpBuffer(upgrade_buffer,
+			"SELECT create_cq_set_next_oids_for_matrel("
+			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid, "
+			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid);\n",
+			matrel_class, matrel_type, matrel_arraytype, toast_class, toast_type, toast_index_class);
+
+	appendPQExpBuffer(upgrade_buffer,
+			"SELECT create_cq_set_next_oids_for_osrel("
+			"'%u'::pg_catalog.oid, '%u'::pg_catalog.oid, '%u'::pg_catalog.oid);\n", osrel_class, osrel_type, osrel_arraytype);
+
+	return false;
+}
+
+/*
+ * dumpContinuousTransform
+ *
+ * Dump a CREATE CONTINUOUS TRANSFORM statement
+ */
+static void
+dumpContinuousTransform(Archive *fout, TableInfo *ti, PQExpBuffer delq)
+{
+	PQExpBuffer q = createPQExpBuffer();
+	PQExpBuffer pq = createPQExpBuffer();
+	PGresult *res;
+	int i;
+	char *qdef;
+	char *tgfn;
+	char *tgargs;
+
+	if (fout->dopt->binary_upgrade)
+		binary_upgrade_set_oids_for_create_ct(fout, q, ti->dobj.namespace->dobj.name, ti->dobj.name);
+
+	appendPQExpBuffer(pq, "SELECT tgfn, query FROM pipeline_transforms() WHERE schema = '%s' AND name = '%s'",
+			ti->dobj.namespace->dobj.name, ti->dobj.name);
+	res = ExecuteSqlQueryForSingleRow(fout, pq->data);
+	qdef = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "query")));
+	tgfn = pg_strdup(PQgetvalue(res, 0, PQfnumber(res, "tgfn")));
+
+	resetPQExpBuffer(pq);
+	appendPQExpBuffer(pq, "SELECT unnest(tgargs) FROM pipeline_transforms() WHERE schema = '%s' AND name = '%s'",
+			ti->dobj.namespace->dobj.name, ti->dobj.name);
+	res = ExecuteSqlQuery(fout, pq->data, PGRES_TUPLES_OK);
+	resetPQExpBuffer(pq);
+	for (i = 0; i < PQntuples(res); i++)
+	{
+		if (i == 0)
+			appendPQExpBuffer(pq, "'%s'", PQgetvalue(res, i, PQfnumber(res, "unnest")));
+		else
+			appendPQExpBuffer(pq, ", '%s'", PQgetvalue(res, i, PQfnumber(res, "unnest")));
+	}
+	tgargs = pstrdup(pq->data);
+
+	appendPQExpBuffer(q, "CREATE CONTINUOUS TRANSFORM %s.%s AS %s", ti->dobj.namespace->dobj.name, ti->dobj.name, qdef);
+
+	if (strlen(tgfn) > 0)
+		appendPQExpBuffer(q, " THEN EXECUTE PROCEDURE %s(%s)", tgfn, tgargs);
+
+	appendPQExpBuffer(q, ";\n\n");
+
+	ArchiveEntry(fout, ti->dobj.catId, ti->dobj.dumpId,
+			ti->dobj.name,
+			ti->dobj.namespace->dobj.name,
+			ti->reltablespace,
+			ti->rolname,
+			   false,
+				 "CONTINUOUS TRANSFORM",
+				 SECTION_PRE_DATA,
+				 q->data, delq->data, NULL,
+				 NULL, 0,
+				 NULL, NULL);
+
+	destroyPQExpBuffer(q);
+	destroyPQExpBuffer(pq);
 }
 
 int
@@ -1320,9 +1610,10 @@ expand_table_name_patterns(Archive *fout,
 						  "SELECT c.oid"
 						  "\nFROM pg_catalog.pg_class c"
 		"\n     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace"
-					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c')\n",
+					 "\nWHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c')\n",
 						  RELKIND_RELATION, RELKIND_SEQUENCE, RELKIND_VIEW,
-						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE);
+						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
+							RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM, RELKIND_STREAM);
 		processSQLNamePattern(GetConnection(fout), query, cell->val, true,
 							  false, "n.nspname", "c.relname", NULL,
 							  "pg_catalog.pg_table_is_visible(c.oid)");
@@ -1973,6 +2264,12 @@ dumpTableData(Archive *fout, TableDataInfo *tdinfo)
 	DataDumperPtr dumpFn;
 	char	   *copyStmt;
 
+	/*
+	 * Streams don't contain any data
+	 */
+	if (tbinfo->relkind == RELKIND_STREAM)
+		return;
+
 	if (!dopt->dump_inserts)
 	{
 		/* Dump/restore using COPY */
@@ -2092,7 +2389,12 @@ makeTableDataInfo(DumpOptions *dopt, TableInfo *tbinfo, bool oids)
 	/* Skip FOREIGN TABLEs (no data to dump) */
 	if (tbinfo->relkind == RELKIND_FOREIGN_TABLE)
 		return;
-
+	if (tbinfo->relkind == RELKIND_CONTVIEW)
+		return;
+	if (tbinfo->relkind == RELKIND_CONTTRANSFORM)
+		return;
+	if (tbinfo->relkind == RELKIND_STREAM)
+		return;
 	/* Don't dump data in unlogged tables, if so requested */
 	if (tbinfo->relpersistence == RELPERSISTENCE_UNLOGGED &&
 		dopt->no_unlogged_table_data)
@@ -4798,13 +5100,14 @@ getTables(Archive *fout, int *numTables)
 						  "d.objsubid = 0 AND "
 						  "d.refclassid = c.tableoid AND d.deptype = 'a') "
 					   "LEFT JOIN pg_class tc ON (c.reltoastrelid = tc.oid) "
-				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c') "
+				   "WHERE c.relkind in ('%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c', '%c') "
 						  "ORDER BY c.oid",
 						  username_subquery,
 						  RELKIND_SEQUENCE,
 						  RELKIND_RELATION, RELKIND_SEQUENCE,
 						  RELKIND_VIEW, RELKIND_COMPOSITE_TYPE,
-						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE);
+						  RELKIND_MATVIEW, RELKIND_FOREIGN_TABLE,
+							RELKIND_CONTVIEW, RELKIND_CONTVIEW, RELKIND_CONTTRANSFORM, RELKIND_STREAM);
 	}
 	else if (fout->remoteVersion >= 90400)
 	{
@@ -6162,7 +6465,8 @@ getRules(Archive *fout, int *numRules)
 			 * table.
 			 */
 			if ((ruleinfo[i].ruletable->relkind == RELKIND_VIEW ||
-				 ruleinfo[i].ruletable->relkind == RELKIND_MATVIEW) &&
+				 ruleinfo[i].ruletable->relkind == RELKIND_MATVIEW ||
+				 ruleinfo[i].ruletable->relkind == RELKIND_CONTVIEW) &&
 				ruleinfo[i].ev_type == '1' && ruleinfo[i].is_instead)
 			{
 				addObjectDependency(&ruleinfo[i].ruletable->dobj,
@@ -13215,7 +13519,8 @@ dumpForeignServer(Archive *fout, ForeignServerInfo *srvinfo)
 		return;
 
 	/* This is created at initdb time */
-	if (strcmp(srvinfo->dobj.name, "pipelinedb") == 0)
+	if (strcmp(srvinfo->dobj.name, "pipelinedb") == 0 ||
+			strcmp(srvinfo->dobj.name, "pipeline_streams") == 0)
 		return;
 
 	q = createPQExpBuffer();
@@ -14055,6 +14360,21 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 				srvname = NULL;
 				ftoptions = NULL;
 				break;
+			case (RELKIND_CONTVIEW):
+				reltypename = "CONTINUOUS VIEW";
+				srvname = NULL;
+				ftoptions = NULL;
+				break;
+			case (RELKIND_STREAM):
+				reltypename = "STREAM";
+				srvname = NULL;
+				ftoptions = NULL;
+				break;
+			case (RELKIND_CONTTRANSFORM):
+				reltypename = "CONTINUOUS TRANSFORM";
+				srvname = NULL;
+				ftoptions = NULL;
+				break;
 			default:
 				reltypename = "TABLE";
 				srvname = NULL;
@@ -14079,6 +14399,18 @@ dumpTableSchema(Archive *fout, TableInfo *tbinfo)
 
 		appendPQExpBuffer(labelq, "%s %s", reltypename,
 						  fmtId(tbinfo->dobj.name));
+
+		if (tbinfo->relkind == RELKIND_CONTVIEW)
+		{
+			dumpContinuousView(fout, tbinfo, delq);
+			return;
+		}
+
+		if (tbinfo->relkind == RELKIND_CONTTRANSFORM)
+		{
+			dumpContinuousTransform(fout, tbinfo, delq);
+			return;
+		}
 
 		if (dopt->binary_upgrade)
 			binary_upgrade_set_pg_class_oids(fout, q,

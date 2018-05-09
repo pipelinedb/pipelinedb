@@ -94,6 +94,28 @@ reset_next_oids()
 	binary_upgrade_next_index_pg_class_oid = InvalidOid;
 }
 
+/* for binary upgrades */
+static Oid next_matrel_type = InvalidOid;
+static Oid next_matrel_array_type = InvalidOid;
+static Oid next_matrel_toast_type = InvalidOid;
+static Oid next_matrel_class = InvalidOid;
+static Oid next_matrel_toast_class = InvalidOid;
+static Oid next_matrel_toast_index_class = InvalidOid;
+
+static Oid next_seqrel_type = InvalidOid;
+static Oid next_seqrel_class = InvalidOid;
+
+static Oid next_pk_index_class = InvalidOid;
+static Oid next_lookup_index_class = InvalidOid;
+
+static Oid next_overlay_type = InvalidOid;
+static Oid next_overlay_array_type = InvalidOid;
+static Oid next_overlay_class = InvalidOid;
+
+static Oid next_osrel_type = InvalidOid;
+static Oid next_osrel_array_type = InvalidOid;
+static Oid next_osrel_class = InvalidOid;
+
 /*
  * set_next_oids_from_options
  */
@@ -112,59 +134,136 @@ set_next_oids_from_options(List *options, OptionMapping targets[], int len)
 	}
 }
 
+/*
+ * set_next_oids_for_matrel
+ */
+static void
+set_next_oids_for_matrel(List *options)
+{
+	if (OidIsValid(next_matrel_class))
+	{
+		reset_next_oids();
+		binary_upgrade_next_pg_type_oid = next_matrel_type;
+		binary_upgrade_next_array_pg_type_oid = next_matrel_array_type;
+		binary_upgrade_next_toast_pg_type_oid = next_matrel_toast_type;
+
+		binary_upgrade_next_heap_pg_class_oid = next_matrel_class;
+		binary_upgrade_next_toast_pg_class_oid = next_matrel_toast_class;
+		binary_upgrade_next_index_pg_class_oid = next_matrel_toast_index_class;
+	}
+	else
+	{
+		OptionMapping option_map[] = {
+			{OPTION_MATRELID, &binary_upgrade_next_heap_pg_class_oid},
+			{OPTION_MATRELTYPE, &binary_upgrade_next_pg_type_oid},
+			{OPTION_MATRELATYPE, &binary_upgrade_next_array_pg_type_oid},
+			{OPTION_MATRELTOASTRELID, &binary_upgrade_next_toast_pg_class_oid},
+			{OPTION_MATRELTOASTTYPE, &binary_upgrade_next_toast_pg_type_oid},
+			{OPTION_MATRELTOASTINDID, &binary_upgrade_next_index_pg_class_oid}
+		};
+
+		set_next_oids_from_options(options, option_map, lengthof(option_map));
+	}
+}
+
 static void
 set_next_oids_for_seqrel(List *options)
 {
-	OptionMapping option_map[] = {
-		{OPTION_SEQRELID, &binary_upgrade_next_heap_pg_class_oid},
-		{OPTION_SEQRELTYPE, &binary_upgrade_next_pg_type_oid}
-	};
+	if (OidIsValid(next_seqrel_class))
+	{
+		reset_next_oids();
+		binary_upgrade_next_pg_type_oid = next_seqrel_type;
+		binary_upgrade_next_heap_pg_class_oid = next_seqrel_class;
+	}
+	else
+	{
+		OptionMapping option_map[] = {
+			{OPTION_SEQRELID, &binary_upgrade_next_heap_pg_class_oid},
+			{OPTION_SEQRELTYPE, &binary_upgrade_next_pg_type_oid}
+		};
 
-	set_next_oids_from_options(options, option_map, lengthof(option_map));
+		set_next_oids_from_options(options, option_map, lengthof(option_map));
+	}
 }
 
 static void
 set_next_oids_for_pk_index(List *options)
 {
-	OptionMapping option_map[] = {
-		{OPTION_PKINDID, &binary_upgrade_next_index_pg_class_oid}
-	};
+	if (OidIsValid(next_pk_index_class))
+	{
+		reset_next_oids();
+		binary_upgrade_next_index_pg_class_oid = next_pk_index_class;
+	}
+	else
+	{
+		OptionMapping option_map[] = {
+			{OPTION_PKINDID, &binary_upgrade_next_index_pg_class_oid}
+		};
 
-	set_next_oids_from_options(options, option_map, lengthof(option_map));
+		set_next_oids_from_options(options, option_map, lengthof(option_map));
+	}
 }
 
 static void
 set_next_oids_for_lookup_index(List *options)
 {
-	OptionMapping option_map[] = {
-		{OPTION_LOOKUPINDID, &binary_upgrade_next_index_pg_class_oid}
-	};
+	if (OidIsValid(next_lookup_index_class))
+	{
+		reset_next_oids();
+		binary_upgrade_next_index_pg_class_oid = next_lookup_index_class;
+	}
+	else
+	{
+		OptionMapping option_map[] = {
+			{OPTION_LOOKUPINDID, &binary_upgrade_next_index_pg_class_oid}
+		};
 
-	set_next_oids_from_options(options, option_map, lengthof(option_map));
+		set_next_oids_from_options(options, option_map, lengthof(option_map));
+	}
 }
 
 static void
 set_next_oids_for_overlay(List *options)
 {
-	OptionMapping option_map[] = {
-		{OPTION_VIEWRELID, &binary_upgrade_next_heap_pg_class_oid},
-		{OPTION_VIEWTYPE, &binary_upgrade_next_pg_type_oid},
-		{OPTION_VIEWATYPE, &binary_upgrade_next_array_pg_type_oid},
-	};
+	if (OidIsValid(next_overlay_class))
+	{
+		reset_next_oids();
+		binary_upgrade_next_pg_type_oid = next_overlay_type;
+		binary_upgrade_next_array_pg_type_oid = next_overlay_array_type;
+		binary_upgrade_next_heap_pg_class_oid = next_overlay_class;
+	}
+	else
+	{
+		OptionMapping option_map[] = {
+			{OPTION_VIEWRELID, &binary_upgrade_next_heap_pg_class_oid},
+			{OPTION_VIEWTYPE, &binary_upgrade_next_pg_type_oid},
+			{OPTION_VIEWATYPE, &binary_upgrade_next_array_pg_type_oid},
+		};
 
-	set_next_oids_from_options(options, option_map, lengthof(option_map));
+		set_next_oids_from_options(options, option_map, lengthof(option_map));
+	}
 }
 
 static void
 set_next_oids_for_osrel(List *options)
 {
-	OptionMapping option_map[] = {
-		{OPTION_OSRELID, &binary_upgrade_next_heap_pg_class_oid},
-		{OPTION_OSRELTYPE, &binary_upgrade_next_pg_type_oid},
-		{OPTION_OSRELATYPE, &binary_upgrade_next_array_pg_type_oid},
-	};
+	if (OidIsValid(next_osrel_class))
+	{
+		reset_next_oids();
+		binary_upgrade_next_pg_type_oid = next_osrel_type;
+		binary_upgrade_next_array_pg_type_oid = next_osrel_array_type;
+		binary_upgrade_next_heap_pg_class_oid = next_osrel_class;
+	}
+	else
+	{
+		OptionMapping option_map[] = {
+			{OPTION_OSRELID, &binary_upgrade_next_heap_pg_class_oid},
+			{OPTION_OSRELTYPE, &binary_upgrade_next_pg_type_oid},
+			{OPTION_OSRELATYPE, &binary_upgrade_next_array_pg_type_oid},
+		};
 
-	set_next_oids_from_options(options, option_map, lengthof(option_map));
+		set_next_oids_from_options(options, option_map, lengthof(option_map));
+	}
 }
 
 /*
@@ -648,24 +747,6 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 
 	*options = list_delete(*options, opt_ttl);
 	*options = list_delete(*options, opt_ttl_col);
-}
-
-/*
- * set_next_oids_for_matrel
- */
-static void
-set_next_oids_for_matrel(List *options)
-{
-	OptionMapping option_map[] = {
-		{OPTION_MATRELID, &binary_upgrade_next_heap_pg_class_oid},
-		{OPTION_MATRELTYPE, &binary_upgrade_next_pg_type_oid},
-		{OPTION_MATRELATYPE, &binary_upgrade_next_array_pg_type_oid},
-		{OPTION_MATRELTOASTRELID, &binary_upgrade_next_toast_pg_class_oid},
-		{OPTION_MATRELTOASTTYPE, &binary_upgrade_next_toast_pg_type_oid},
-		{OPTION_MATRELTOASTINDID, &binary_upgrade_next_index_pg_class_oid}
-	};
-
-	set_next_oids_from_options(options, option_map, lengthof(option_map));
 }
 
 /*
@@ -1386,4 +1467,113 @@ ReconcilePipelineObjects(void)
 	CommandCounterIncrement();
 
 	PopActiveSnapshot();
+}
+
+/*
+ * create_cq_set_next_oids_for_matrel
+ */
+Datum
+create_cq_set_next_oids_for_matrel(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_matrel_class = PG_GETARG_OID(0);
+	next_matrel_type = PG_GETARG_OID(1);
+	next_matrel_array_type = PG_GETARG_OID(2);
+
+
+	/* Toast (if necessary) */
+	next_matrel_toast_class = PG_GETARG_OID(3);
+	next_matrel_toast_type = PG_GETARG_OID(4);
+	next_matrel_toast_index_class = PG_GETARG_OID(5);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cv_set_next_oids_for_seqrel
+ */
+Datum
+create_cv_set_next_oids_for_seqrel(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_seqrel_class = PG_GETARG_OID(0);
+	next_seqrel_type = PG_GETARG_OID(1);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cv_set_next_oids_for_pk_index
+ */
+Datum
+create_cv_set_next_oids_for_pk_index(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_pk_index_class = PG_GETARG_OID(0);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cv_set_next_oids_for_lookup_index
+ */
+Datum
+create_cv_set_next_oids_for_lookup_index(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_lookup_index_class = PG_GETARG_OID(0);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cv_set_next_oids_for_overlay
+ */
+Datum
+create_cv_set_next_oids_for_overlay(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_overlay_type = PG_GETARG_OID(0);
+	next_overlay_array_type = PG_GETARG_OID(1);
+	next_overlay_class = PG_GETARG_OID(2);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * create_cq_set_next_oids_for_osrel
+ */
+Datum
+create_cq_set_next_oids_for_osrel(PG_FUNCTION_ARGS)
+{
+	if (!IsBinaryUpgrade)
+		ereport(ERROR,
+				(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+				 (errmsg("function can only be called when server is in binary upgrade mode"))));
+
+	next_osrel_type = PG_GETARG_OID(0);
+	next_osrel_array_type = PG_GETARG_OID(1);
+	next_osrel_class = PG_GETARG_OID(2);
+
+	PG_RETURN_VOID();
 }
