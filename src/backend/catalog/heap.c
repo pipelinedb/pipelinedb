@@ -1181,19 +1181,7 @@ heap_create_with_catalog(const char *relname,
 	 * during initdb). We do not create them where the use of a relation as
 	 * such is an implementation detail: toast tables, sequences and indexes.
 	 */
-
-	/*
-	 * PipelineDB note: this predicate previously would return false if
-	 * IsUnderPostmaster was false, so as not to needlessly create array
-	 * types while under bootstrap mode. This made loading builtin extensions
-	 * tricky, as they must run under bootstrap mode in order to be globally
-	 * available to all databases. The worst thing that can happen here is
-	 * that a type created under bootstrap mode could unintentionally have
-	 * an array type created for it. This seems harmless, as it would only
-	 * prevent someone from manually creating a type with a name having the
-	 * underscore prefix that implicitly created array types use.
-	 */
-	if (!IsBinaryUpgrade && (relkind == RELKIND_RELATION ||
+	if (IsUnderPostmaster && (relkind == RELKIND_RELATION ||
 							  relkind == RELKIND_VIEW ||
 							  relkind == RELKIND_MATVIEW ||
 							  relkind == RELKIND_FOREIGN_TABLE ||
