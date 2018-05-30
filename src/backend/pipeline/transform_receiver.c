@@ -152,7 +152,10 @@ align_tuple(TransformReceiver *t, HeapTuple tup, TupleTableSlot *slot, TupleDesc
 
 	for (i = 0; i < osrel->natts; i++)
 	{
-		values[i] = slot_getattr(slot, t->osrel_attrs[i], &nulls[i]);
+		if (AttributeNumberIsValid(t->osrel_attrs[i]))
+			values[i] = slot_getattr(slot, t->osrel_attrs[i], &nulls[i]);
+		else
+			nulls[i] = true;
 	}
 
 
