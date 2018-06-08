@@ -38,6 +38,8 @@
 
 static ResourceOwner WorkerResOwner = NULL;
 
+char *worker_plan = NULL;
+
 typedef struct {
 	ContQueryState base;
 	DestReceiver *dest;
@@ -348,6 +350,8 @@ ContinuousQueryWorkerMain(void)
 					/* initialize the plan for execution within this xact */
 					init_plan(state);
 					set_cont_executor(state->query_desc->planstate, cont_exec);
+
+					worker_plan = nodeToString(state->query_desc->planstate->plan);
 
 					ExecutePlan((EState *) estate, state->query_desc->planstate, state->query_desc->operation,
 							true, 0, ForwardScanDirection, state->dest);
