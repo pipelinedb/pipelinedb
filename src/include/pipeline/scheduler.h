@@ -70,7 +70,7 @@ typedef struct ContQueryRunParams
 	int max_wait;
 } ContQueryRunParams;
 
-extern char *worker_plan;
+extern Node *worker_plan;
 
 /* per proc structures */
 extern ContQueryProc *MyContQueryProc;
