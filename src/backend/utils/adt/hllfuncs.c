@@ -186,11 +186,7 @@ hll_union_agg_trans(PG_FUNCTION_ARGS)
 	{
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 		incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
-
-		if (IsContQueryProcess())
-			state = HLLUnion(state, incoming);
-		else
-			state = HLLUnionAdd(state, incoming);
+		state = HLLUnionAdd(state, incoming);
 	}
 
 	MemoryContextSwitchTo(old);
