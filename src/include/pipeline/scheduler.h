@@ -14,6 +14,7 @@
 #define CONT_SCHEDULER_H
 
 #include "storage/latch.h"
+#include "nodes/nodes.h"
 #include "port/atomics.h"
 #include "postmaster/bgworker.h"
 #include "storage/dsm.h"
