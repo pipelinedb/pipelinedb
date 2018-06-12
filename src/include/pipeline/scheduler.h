@@ -13,6 +13,7 @@
 #ifndef CONT_SCHEDULER_H
 #define CONT_SCHEDULER_H
 
+#include "nodes/nodes.h"
 #include "storage/latch.h"
 #include "port/atomics.h"
 #include "postmaster/bgworker.h"
