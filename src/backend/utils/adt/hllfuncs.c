@@ -22,6 +22,7 @@
 #include "pipeline/miscutils.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
+#include "utils/bytea.h"
 #include "utils/datum.h"
 #include "utils/hllfuncs.h"
 #include "utils/typcache.h"
@@ -155,6 +156,8 @@ hll_agg_transp(PG_FUNCTION_ARGS)
  *
  * 	returns the union of the transition state and the given HLL
  */
+char *state_hll;
+char *incoming_hll;
 Datum
 hll_union_agg_trans(PG_FUNCTION_ARGS)
 {
@@ -187,11 +190,17 @@ hll_union_agg_trans(PG_FUNCTION_ARGS)
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 		incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
 
+		state_hll = (char *) DirectFunctionCall1(byteaout, (Datum) state);
+		incoming_hll = (char *) DirectFunctionCall1(byteaout, (Datum) incoming);
+
 		if (IsContQueryProcess())
 			state = HLLUnion(state, incoming);
 		else
 			state = HLLUnionAdd(state, incoming);
 	}
+
+	state_hll = NULL;
+	incoming_hll = NULL;
 
 	MemoryContextSwitchTo(old);
 

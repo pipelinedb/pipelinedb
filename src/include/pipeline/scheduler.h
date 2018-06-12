@@ -72,6 +72,8 @@ typedef struct ContQueryRunParams
 } ContQueryRunParams;
 
 extern Node *worker_plan;
+extern char *state_hll;
+extern char *incoming_hll;
 
 /* per proc structures */
 extern ContQueryProc *MyContQueryProc;
