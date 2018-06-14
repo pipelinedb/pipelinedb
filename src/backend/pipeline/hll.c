@@ -484,7 +484,11 @@ hll_sparse_add_internal(HyperLogLog *hll, int m, uint8 leading, int *result, boo
 	 * we never need to perform this reallocation.
 	 */
 	if (realloc)
+	{
+		if (!MemoryContextContains(CurrentMemoryContext, hll))
+			hll = HLLCopy(hll);
 		hll = repalloc(hll, HLLSize(hll) + 3);
+	}
 
   /*
    * Step 1:
@@ -781,7 +785,7 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 }
 
 static HyperLogLog *
-hll_explicit_to_sparse(HyperLogLog *hll)
+hll_explicit_to_sparse_or_dense(HyperLogLog *hll)
 {
 	uint8 *pos, *end;
 	int m = 1 << hll->p;
@@ -818,10 +822,21 @@ hll_explicit_to_sparse(HyperLogLog *hll)
 		 * Pass the realloc flag as false, so we don't needlessly keep on reallocating
 		 * on each addition
 		 */
-		sparse = hll_sparse_add_internal(sparse, HLL_EXPLICIT_GET_REGISTER(pos),
-				HLL_EXPLICIT_GET_NUM_LEADING(pos), &result, false);
+		if (HLL_IS_SPARSE(sparse))
+		{
+			sparse = hll_sparse_add_internal(sparse, HLL_EXPLICIT_GET_REGISTER(pos),
+					HLL_EXPLICIT_GET_NUM_LEADING(pos), &result, false);
+		}
+		else if (HLL_IS_DENSE(sparse))
+		{
+			sparse = hll_dense_add_internal(sparse, HLL_EXPLICIT_GET_REGISTER(pos),
+					HLL_EXPLICIT_GET_NUM_LEADING(pos), &result);
+		}
+
 		pos += HLL_EXPLICIT_ENTRY_SIZE;
 	}
+
+	SET_VARSIZE(sparse, HLLSize(sparse));
 
 	return sparse;
 }
@@ -838,8 +853,11 @@ hll_explicit_add_internal(HyperLogLog *hll, int reg, uint8 leading, int *result)
 
 	if (HLL_EXPLICIT_GET_NUM_REGISTERS(hll) >= HLL_MAX_EXPLICIT_REGISTERS)
 	{
-		hll = hll_explicit_to_sparse(hll);
-		return hll_sparse_add_internal(hll, reg, leading, result, true);
+		hll = hll_explicit_to_sparse_or_dense(hll);
+		if (HLL_IS_SPARSE(hll))
+			return hll_sparse_add_internal(hll, reg, leading, result, true);
+		else
+			return hll_dense_add_internal(hll, reg, leading, result);
 	}
 
 	/*
@@ -1477,7 +1495,7 @@ HLLUnpack(HyperLogLog *initial)
 		return initial;
 
 	if (HLL_IS_EXPLICIT(initial))
-		initial = hll_explicit_to_sparse(initial);
+		initial = hll_explicit_to_sparse_or_dense(initial);
 	if (HLL_IS_SPARSE(initial))
 		initial = hll_sparse_to_dense(initial);
 
