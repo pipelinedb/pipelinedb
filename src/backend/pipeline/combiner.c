@@ -139,6 +139,7 @@ typedef struct
 	SWOutputState *sw;
 
 	List *acks;
+	CombinerSyncFollower *follower;
 } ContQueryCombinerState;
 
 /*
@@ -1401,6 +1402,9 @@ sync_combine(ContQueryCombinerState *state)
 	if (state->output_stream_proj)
 		state->output_stream_proj->pi_exprContext = estate->es_per_tuple_exprcontext;
 
+	if (state->follower)
+		state->follower->begin(state->follower);
+
 	foreach_tuple(slot, state->combined)
 	{
 		HeapTupleEntry update = NULL;
@@ -1451,6 +1455,9 @@ sync_combine(ContQueryCombinerState *state)
 
 			ntups_updated++;
 			nbytes_updated += HEAPTUPLESIZE + slot->tts_tuple->t_len;
+
+			if (state->follower)
+				state->follower->update(state->follower, ri->ri_RelationDesc, update->tuple, tup);
 		}
 		else
 		{
@@ -1472,6 +1479,9 @@ sync_combine(ContQueryCombinerState *state)
 
 			ntups_inserted++;
 			nbytes_inserted += HEAPTUPLESIZE + slot->tts_tuple->t_len;
+
+			if (state->follower)
+				state->follower->insert(state->follower, ri->ri_RelationDesc, tup);
 		}
 
 		/*
@@ -1522,6 +1532,13 @@ sync_combine(ContQueryCombinerState *state)
 	heap_close(matrel, RowExclusiveLock);
 
 	FreeExecutorState(estate);
+
+	/*
+	 * These writes are very likely to succeed at this point. Any failed syncs within this
+	 * transaction will be aborted separately, so if we have a follower tell it to commit.
+	 */
+	if (state->follower)
+		state->follower->commit(state->follower);
 }
 
 /*
@@ -1559,6 +1576,9 @@ sync_all(ContExecutor *cont_exec)
 		{
 			EmitErrorReport();
 			FlushErrorState();
+
+			if (state->follower)
+				state->follower->abort(state->follower);
 
 			AbortCurrentTransaction();
 			StartTransactionCommand();
@@ -1661,6 +1681,10 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 	memcpy(&state->base, base, sizeof(ContQueryState));
 	pfree(base);
 	base = (ContQueryState *) state;
+
+	/* Extensions may subscribe to combiner sync output */
+	if (CreateCombinerSyncFollowerHook)
+		state->follower = CreateCombinerSyncFollowerHook(base->query);
 
 	state->plan_cache_cxt = AllocSetContextCreate(base->state_cxt, "CombinerQueryPlanCacheCxt",
 			ALLOCSET_DEFAULT_MINSIZE,

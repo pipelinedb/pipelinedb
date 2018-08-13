@@ -34,6 +34,7 @@
 
 CombinerReceiveFunc CombinerReceiveHook = NULL;
 CombinerFlushFunc CombinerFlushHook = NULL;
+CreateCombinerSyncFollowerFunc CreateCombinerSyncFollowerHook = NULL;
 
 typedef struct
 {

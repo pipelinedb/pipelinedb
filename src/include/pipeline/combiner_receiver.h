@@ -21,6 +21,24 @@ extern CombinerReceiveFunc CombinerReceiveHook;
 typedef void (*CombinerFlushFunc) (void);
 extern CombinerFlushFunc CombinerFlushHook;
 
+typedef struct CombinerSyncFollower CombinerSyncFollower;
+
+/*
+ * Interface that allows extensions to subscribe to the output of combiner syncs
+ */
+typedef struct CombinerSyncFollower
+{
+	void (*begin) (CombinerSyncFollower *c);
+	void (*commit) (CombinerSyncFollower *c);
+	void (*abort) (CombinerSyncFollower *c);
+	void (*insert) (CombinerSyncFollower *c, Relation rel, HeapTuple tup);
+	void (*update) (CombinerSyncFollower *c, Relation rel, HeapTuple otup, HeapTuple ntup);
+	void *state;
+} CombinerSyncFollower;
+
+typedef  CombinerSyncFollower *(*CreateCombinerSyncFollowerFunc) (ContQuery *cq);
+extern CreateCombinerSyncFollowerFunc CreateCombinerSyncFollowerHook;
+
 extern DestReceiver *CreateCombinerDestReceiver(void);
 extern void SetCombinerDestReceiverParams(DestReceiver *self, ContExecutor *cont_exec, ContQuery *query);
 extern void SetCombinerDestReceiverHashFunc(DestReceiver *self, FuncExpr *hash);
