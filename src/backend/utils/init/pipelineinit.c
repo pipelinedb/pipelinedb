@@ -43,9 +43,10 @@ void
 PipelineInstallHooks()
 {
 	InitPipelineSysCache();
-	SaveUtilityHook = ProcessUtility_hook;
-	ProcessUtility_hook = PipelineProcessUtility;
 
-	SavePostParseAnalyzeHook = post_parse_analyze_hook;
-	post_parse_analyze_hook = PostParseAnalyzeHook;
+	if (ProcessUtility_hook == NULL)
+		ProcessUtility_hook = PipelineProcessUtility;
+
+	if (post_parse_analyze_hook == NULL)
+		post_parse_analyze_hook = PostParseAnalyzeHook;
 }
