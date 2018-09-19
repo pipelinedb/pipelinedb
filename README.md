@@ -1,6 +1,5 @@
 # PipelineDB
 
-![Build Status](https://img.shields.io/circleci/token/db1a70c164cd6d96544d8eb38b279c48dea24709/project/pipelinedb/pipelinedb/master.svg?style=flat-square)
 [![Release](https://img.shields.io/github/release/pipelinedb/pipelinedb.svg?style=flat-square)](https://github.com/pipelinedb/pipelinedb/releases)
 [![License](https://img.shields.io/:license-GPLv3-blue.svg?style=flat-square)](https://github.com/pipelinedb/pipelinedb/blob/master/LICENSE)
 [![Gitter chat](https://img.shields.io/badge/gitter-join%20chat-brightgreen.svg?style=flat-square)](https://gitter.im/pipelinedb/pipelinedb)
