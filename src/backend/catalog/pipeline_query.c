@@ -656,13 +656,21 @@ GetContQueryForId(Oid id)
 	Datum tmp;
 	bool isnull;
 	Query *query;
+	char *relname;
 
 	if (!HeapTupleIsValid(tup))
 		return NULL;
 
-	cq = palloc0(sizeof(ContQuery));
 	row = (Form_pipeline_query) GETSTRUCT(tup);
+	relname = get_rel_name(row->relid);
 
+	if (relname == NULL)
+	{
+		ReleaseSysCache(tup);
+		return NULL;
+	}
+
+	cq = palloc0(sizeof(ContQuery));
 	cq->id = id;
 	cq->oid = HeapTupleGetOid(tup);
 
