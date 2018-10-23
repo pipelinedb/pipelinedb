@@ -1,8 +1,8 @@
-CREATE STREAM test_set_agg_stream (x int, y float8, z numeric, t text);
-CREATE CONTINUOUS VIEW test_set_agg0 AS SELECT array_length(set_agg(x::integer), 1), exact_count_distinct(x) FROM test_set_agg_stream;
-CREATE CONTINUOUS VIEW test_set_agg1 AS SELECT array_length(set_agg(y::float8), 1), exact_count_distinct(y) FROM test_set_agg_stream;
-CREATE CONTINUOUS VIEW test_set_agg2 AS SELECT array_length(set_agg(z::numeric), 1), exact_count_distinct(z) FROM test_set_agg_stream;
-CREATE CONTINUOUS VIEW test_set_agg3 AS SELECT array_length(set_agg(t::text), 1), exact_count_distinct(t) FROM test_set_agg_stream;
+CREATE FOREIGN TABLE test_set_agg_stream (x int, y float8, z numeric, t text) SERVER pipelinedb;
+CREATE VIEW test_set_agg0 AS SELECT array_length(set_agg(x::integer), 1), exact_count_distinct(x) FROM test_set_agg_stream;
+CREATE VIEW test_set_agg1 AS SELECT array_length(set_agg(y::float8), 1), exact_count_distinct(y) FROM test_set_agg_stream;
+CREATE VIEW test_set_agg2 AS SELECT array_length(set_agg(z::numeric), 1), exact_count_distinct(z) FROM test_set_agg_stream;
+CREATE VIEW test_set_agg3 AS SELECT array_length(set_agg(t::text), 1), exact_count_distinct(t) FROM test_set_agg_stream;
 INSERT INTO test_set_agg_stream (x, y, z, t)
 	SELECT x, x::float8 + 0.1 AS y, x::numeric AS z, x::text AS t FROM generate_series(1, 1000) AS x;
 INSERT INTO test_set_agg_stream (x, y, z, t)
@@ -60,11 +60,11 @@ SELECT * FROM test_set_agg3;
 -- Composite types not supported yet
 SELECT (set_agg((1, 1)));
 ERROR:  composite types are not supported by set_agg
-DROP CONTINUOUS VIEW test_set_agg0;
-DROP CONTINUOUS VIEW test_set_agg1;
-DROP CONTINUOUS VIEW test_set_agg2;
-DROP CONTINUOUS VIEW test_set_agg3;
-CREATE CONTINUOUS VIEW test_set_agg4 AS SELECT array_agg(DISTINCT x::int), set_agg(x::int) FROM test_set_agg_stream;
+DROP VIEW test_set_agg0;
+DROP VIEW test_set_agg1;
+DROP VIEW test_set_agg2;
+DROP VIEW test_set_agg3;
+CREATE VIEW test_set_agg4 AS SELECT array_agg(DISTINCT x::int), set_agg(x::int) FROM test_set_agg_stream;
 INSERT INTO test_set_agg_stream (x) VALUES (1), (2), (3);
 INSERT INTO test_set_agg_stream (x) VALUES (1), (2), (4);
 SELECT * FROM test_set_agg4;
@@ -74,16 +74,16 @@ SELECT * FROM test_set_agg4;
 (1 row)
 
 SELECT pg_get_viewdef('test_set_agg4');
-               pg_get_viewdef                
----------------------------------------------
-  SELECT array_agg(DISTINCT x) AS array_agg,+
-     array_agg(DISTINCT x) AS set_agg       +
-    FROM test_set_agg_stream;
+                                                                    pg_get_viewdef                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT pipelinedb.finalize('public.set_agg'::text, '{pg_catalog.anynonarray}'::text[], test_set_agg4_mrel.array_agg, NULL::integer[]) AS array_agg,+
+     pipelinedb.finalize('public.set_agg'::text, '{pg_catalog.anynonarray}'::text[], test_set_agg4_mrel.set_agg, NULL::integer[]) AS set_agg         +
+    FROM ONLY test_set_agg4_mrel;
 (1 row)
 
-DROP CONTINUOUS VIEW test_set_agg4;
+DROP VIEW test_set_agg4;
 -- Check for NULLs
-CREATE CONTINUOUS VIEW test_set_agg5 AS SELECT set_agg(t) FROM test_set_agg_stream;
+CREATE VIEW test_set_agg5 AS SELECT set_agg(t) FROM test_set_agg_stream;
 INSERT INTO test_set_agg_stream (t) VALUES ('a'), (1), (NULL);
 INSERT INTO test_set_agg_stream (t) VALUES ('a'), (1), (NULL);
 SELECT * FROM test_set_agg5;
@@ -92,8 +92,8 @@ SELECT * FROM test_set_agg5;
  {a,1,NULL}
 (1 row)
 
-DROP CONTINUOUS VIEW test_set_agg5;
-CREATE CONTINUOUS VIEW test_set_agg6 AS SELECT x, set_agg(t) FROM test_set_agg_stream GROUP BY x;
+DROP VIEW test_set_agg5;
+CREATE VIEW test_set_agg6 AS SELECT x, set_agg(t) FROM test_set_agg_stream GROUP BY x;
 INSERT INTO test_set_agg_stream (x, t) VALUES (0, 'x'), (0, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'), (0, 'z');
 INSERT INTO test_set_agg_stream (x, t) VALUES (0, 'x'), (1, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'), (2, 'z'), (0, '0000000000000000'), (3, '000000000000000');
 SELECT x, unnest(set_agg) FROM test_set_agg6 ORDER BY x, unnest;
@@ -108,28 +108,9 @@ SELECT x, unnest(set_agg) FROM test_set_agg6 ORDER BY x, unnest;
  3 | 000000000000000
 (7 rows)
 
-SELECT x, unnest(combine(set_agg)) FROM test_set_agg6 GROUP BY x ORDER BY x, unnest;
- x |              unnest              
----+----------------------------------
- 0 | 0000000000000000
- 0 | x
- 0 | yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
- 0 | z
- 1 | yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
- 2 | z
- 3 | 000000000000000
-(7 rows)
-
-SELECT unnest(combine(set_agg)) FROM test_set_agg6 ORDER BY unnest;
-              unnest              
-----------------------------------
- 000000000000000
- 0000000000000000
- x
- yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
- z
-(5 rows)
-
+-- Disabled until #93
+-- SELECT x, unnest(combine(set_agg)) FROM test_set_agg6 GROUP BY x ORDER BY x, unnest;
+-- SELECT unnest(combine(set_agg)) FROM test_set_agg6 ORDER BY unnest;
 INSERT INTO test_set_agg_stream (x, t) VALUES (0, 'x'), (0, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'), (0, 'z');
 INSERT INTO test_set_agg_stream (x, t) VALUES (0, 'x'), (1, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'), (2, 'z'), (0, '0000000000000000'), (3, '000000000000000');
 SELECT x, unnest(set_agg) FROM test_set_agg6 ORDER BY x, unnest;
@@ -144,27 +125,8 @@ SELECT x, unnest(set_agg) FROM test_set_agg6 ORDER BY x, unnest;
  3 | 000000000000000
 (7 rows)
 
-SELECT x, unnest(combine(set_agg)) FROM test_set_agg6 GROUP BY x ORDER BY x, unnest;
- x |              unnest              
----+----------------------------------
- 0 | 0000000000000000
- 0 | x
- 0 | yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
- 0 | z
- 1 | yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
- 2 | z
- 3 | 000000000000000
-(7 rows)
-
-SELECT unnest(combine(set_agg)) FROM test_set_agg6 ORDER BY unnest;
-              unnest              
-----------------------------------
- 000000000000000
- 0000000000000000
- x
- yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
- z
-(5 rows)
-
-DROP CONTINUOUS VIEW test_set_agg6;
-DROP STREAM test_set_agg_stream CASCADE;
+-- Disabled until #93
+-- SELECT x, unnest(combine(set_agg)) FROM test_set_agg6 GROUP BY x ORDER BY x, unnest;
+-- SELECT unnest(combine(set_agg)) FROM test_set_agg6 ORDER BY unnest;
+DROP VIEW test_set_agg6;
+DROP FOREIGN TABLE test_set_agg_stream CASCADE;

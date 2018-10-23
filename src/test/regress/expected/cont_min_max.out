@@ -1,8 +1,8 @@
-CREATE STREAM stream_cqminmax (
+CREATE FOREIGN TABLE stream_cqminmax (
   key text, i8 int8, i4 int4, i2 int2, o oid, f8 float8, f4 float4,
   d date, t time, tz timetz, m money, ts timestamp, tstz timestamptz,
-  ts0 timestamp, ts1 timestamp, txt text, n numeric, a int[]);
-CREATE CONTINUOUS VIEW test_min_max AS SELECT
+  ts0 timestamp, ts1 timestamp, txt text, n numeric, a int[]) SERVER pipelinedb;
+CREATE VIEW test_min_max AS SELECT
 key::text,
 min(i8::int8) AS i8min, max(i8) AS i8max,
 min(i4::int4) AS i4min, max(i4) AS i4max,
@@ -69,6 +69,5 @@ SELECT key, intervalmax, txtmin, txtmax, nmin, nmax, amin, amax FROM test_min_ma
  y   | @ 366 days  | fourth row | third row  | -0.00000000041 | 1.00000000042 | {-10}    | {-1,0,1}
 (2 rows)
 
-DROP CONTINUOUS VIEW stream_cqminmax CASCADE;
-ERROR:  "stream_cqminmax" is not a view
-HINT:  Use DROP FOREIGN TABLE to remove a foreign table.
+DROP FOREIGN TABLE stream_cqminmax CASCADE;
+NOTICE:  drop cascades to view test_min_max

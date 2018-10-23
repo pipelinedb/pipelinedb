@@ -1,52 +1,52 @@
-SELECT hash_group(0::int, 0::int, 0::int, 0::int);
+SELECT pipelinedb.hash_group(0::int, 0::int, 0::int, 0::int);
  hash_group  
 -------------
  -1056984358
 (1 row)
 
-SELECT hash_group('0'::text, '2015-02-01'::timestamp, 1.2);
+SELECT pipelinedb.hash_group('0'::text, '2015-02-01'::timestamp, 1.2);
  hash_group 
 ------------
  1396182515
 (1 row)
 
-SELECT hash_group(null::text);
+SELECT pipelinedb.hash_group(null::text);
  hash_group  
 -------------
  -1640531527
 (1 row)
 
-SELECT hash_group(null::text, null::text);
+SELECT pipelinedb.hash_group(null::text, null::text);
  hash_group 
 ------------
  -845889570
 (1 row)
 
-SELECT hash_group(1::int8, 2::int4);
+SELECT pipelinedb.hash_group(1::int8, 2::int4);
  hash_group 
 ------------
   990882385
 (1 row)
 
-SELECT hash_group(1::int4, 2::int8);
+SELECT pipelinedb.hash_group(1::int4, 2::int8);
  hash_group 
 ------------
   990882385
 (1 row)
 
-SELECT hash_group(0::int2, null::int2);
+SELECT pipelinedb.hash_group(0::int2, null::int2);
  hash_group  
 -------------
  -1296721861
 (1 row)
 
-SELECT hash_group(null::int2, null::int2);
+SELECT pipelinedb.hash_group(null::int2, null::int2);
  hash_group 
 ------------
  -845889570
 (1 row)
 
-SELECT date_trunc('second', '2015-01-01'::timestamp) + i * interval '1 second' AS ts, ls_hash_group(date_trunc('second', '2015-01-01'::timestamp) + i * interval '1 second', 0::int4) AS key
+SELECT date_trunc('second', '2015-01-01'::timestamp) + i * interval '1 second' AS ts, pipelinedb.ls_hash_group(date_trunc('second', '2015-01-01'::timestamp) + i * interval '1 second', 0::int4) AS key
 FROM generate_series(1, 100) AS i ORDER BY key;
             ts            |         key          
 --------------------------+----------------------
@@ -153,47 +153,47 @@ FROM generate_series(1, 100) AS i ORDER BY key;
 (100 rows)
 
 -- Ensure that hash index is created and cannot be dropped
-CREATE STREAM hash_group_stream (x int, y timestamptz);
-CREATE CONTINUOUS VIEW hash_group AS SELECT x::int, COUNT(*) FROM hash_group_stream GROUP BY x;
-CREATE CONTINUOUS VIEW ls_hash_group1 AS SELECT x::int, minute(y::timestamptz), COUNT(*) FROM hash_group_stream WHERE ( arrival_timestamp > clock_timestamp() - interval '5 hour' ) GROUP BY x, minute;
-CREATE CONTINUOUS VIEW ls_hash_group2 AS SELECT x::int, y::timestamptz, COUNT(*) FROM hash_group_stream GROUP BY x, y;
+CREATE FOREIGN TABLE hash_group_stream (x int, y timestamptz) SERVER pipelinedb;
+CREATE VIEW hash_group AS SELECT x::int, COUNT(*) FROM hash_group_stream GROUP BY x;
+CREATE VIEW ls_hash_group1 AS SELECT x::int, minute(y::timestamptz), COUNT(*) FROM hash_group_stream WHERE ( arrival_timestamp > clock_timestamp() - interval '5 hour' ) GROUP BY x, minute;
+CREATE VIEW ls_hash_group2 AS SELECT x::int, y::timestamptz, COUNT(*) FROM hash_group_stream GROUP BY x, y;
 \d+ hash_group_mrel;
-                   Table "public.hash_group_mrel"
- Column |  Type   | Modifiers | Storage | Stats target | Description 
---------+---------+-----------+---------+--------------+-------------
- x      | integer |           | plain   |              | 
- count  | bigint  |           | plain   |              | 
- $pk    | bigint  | not null  | plain   |              | 
+                              Table "public.hash_group_mrel"
+ Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+--------+---------+-----------+----------+---------+---------+--------------+-------------
+ x      | integer |           |          |         | plain   |              | 
+ count  | bigint  |           |          |         | plain   |              | 
+ $pk    | bigint  |           | not null |         | plain   |              | 
 Indexes:
     "hash_group_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "hash_group_mrel_expr_idx" btree (hash_group(x))
+    "hash_group_mrel_expr_idx" btree (pipelinedb.hash_group(x))
 Options: fillfactor=50
 
 \d+ ls_hash_group1_mrel;
-                               Table "public.ls_hash_group1_mrel"
-      Column       |           Type           | Modifiers | Storage | Stats target | Description 
--------------------+--------------------------+-----------+---------+--------------+-------------
- arrival_timestamp | timestamp with time zone |           | plain   |              | 
- x                 | integer                  |           | plain   |              | 
- minute            | timestamp with time zone |           | plain   |              | 
- count             | bigint                   |           | plain   |              | 
- $pk               | bigint                   | not null  | plain   |              | 
+                                          Table "public.ls_hash_group1_mrel"
+      Column       |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+---------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           |          |         | plain   |              | 
+ x                 | integer                  |           |          |         | plain   |              | 
+ minute            | timestamp with time zone |           |          |         | plain   |              | 
+ count             | bigint                   |           |          |         | plain   |              | 
+ $pk               | bigint                   |           | not null |         | plain   |              | 
 Indexes:
     "ls_hash_group1_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "ls_hash_group1_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, x, minute))
+    "ls_hash_group1_mrel_expr_idx" btree (pipelinedb.ls_hash_group(arrival_timestamp, x, minute))
 Options: fillfactor=50
 
 \d+ ls_hash_group2_mrel;
-                          Table "public.ls_hash_group2_mrel"
- Column |           Type           | Modifiers | Storage | Stats target | Description 
---------+--------------------------+-----------+---------+--------------+-------------
- x      | integer                  |           | plain   |              | 
- y      | timestamp with time zone |           | plain   |              | 
- count  | bigint                   |           | plain   |              | 
- $pk    | bigint                   | not null  | plain   |              | 
+                                    Table "public.ls_hash_group2_mrel"
+ Column |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
+--------+--------------------------+-----------+----------+---------+---------+--------------+-------------
+ x      | integer                  |           |          |         | plain   |              | 
+ y      | timestamp with time zone |           |          |         | plain   |              | 
+ count  | bigint                   |           |          |         | plain   |              | 
+ $pk    | bigint                   |           | not null |         | plain   |              | 
 Indexes:
     "ls_hash_group2_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "ls_hash_group2_mrel_expr_idx" btree (ls_hash_group(x, y))
+    "ls_hash_group2_mrel_expr_idx" btree (pipelinedb.ls_hash_group(x, y))
 Options: fillfactor=50
 
 DROP INDEX hash_group_mrel_expr_idx;
@@ -205,7 +205,7 @@ HINT:  You can drop table ls_hash_group1_mrel instead.
 DROP INDEX ls_hash_group2_mrel_expr_idx;
 ERROR:  cannot drop index ls_hash_group2_mrel_expr_idx because table ls_hash_group2_mrel requires it
 HINT:  You can drop table ls_hash_group2_mrel instead.
-DROP STREAM hash_group_stream CASCADE;
+DROP FOREIGN TABLE hash_group_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to view hash_group
 drop cascades to view ls_hash_group1

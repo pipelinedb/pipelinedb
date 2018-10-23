@@ -1,5 +1,5 @@
-CREATE STREAM cont_matrel_stream (x int);
-CREATE CONTINUOUS VIEW cont_matrel AS SELECT COUNT(*) FROM cont_matrel_stream;
+CREATE FOREIGN TABLE cont_matrel_stream (x int) SERVER pipelinedb;
+CREATE VIEW cont_matrel AS SELECT COUNT(*) FROM cont_matrel_stream;
 INSERT INTO cont_matrel_stream (x) VALUES (1);
 SELECT * FROM cont_matrel;
  count 
@@ -9,14 +9,14 @@ SELECT * FROM cont_matrel;
 
 INSERT INTO cont_matrel_mrel (count) VALUES (1);
 ERROR:  cannot change materialization table "cont_matrel_mrel" of continuous view "cont_matrel"
-HINT:  Toggle the "continuous_query_materialization_table_updatable" parameter to change this behavior.
+HINT:  Toggle the "pipelinedb.matrels_writable" parameter to change this behavior.
 UPDATE cont_matrel_mrel SET count = 2;
 ERROR:  cannot change materialization table "cont_matrel_mrel" of continuous view "cont_matrel"
-HINT:  Toggle the "continuous_query_materialization_table_updatable" parameter to change this behavior.
+HINT:  Toggle the "pipelinedb.matrels_writable" parameter to change this behavior.
 DELETE FROM cont_matrel_mrel;
 ERROR:  cannot change materialization table "cont_matrel_mrel" of continuous view "cont_matrel"
-HINT:  Toggle the "continuous_query_materialization_table_updatable" parameter to change this behavior.
-SET continuous_query_materialization_table_updatable TO ON;
+HINT:  Toggle the "pipelinedb.matrels_writable" parameter to change this behavior.
+SET pipelinedb.matrels_writable TO ON;
 UPDATE cont_matrel_mrel SET count = 2;
 SELECT * FROM cont_matrel;
  count 
@@ -44,7 +44,7 @@ SELECT * FROM cont_matrel;
      1
 (1 row)
 
-SELECT truncate_continuous_view('cont_matrel');
+SELECT pipelinedb.truncate_continuous_view('cont_matrel');
  truncate_continuous_view 
 --------------------------
  
@@ -67,5 +67,5 @@ SELECT * FROM cont_matrel;
      6
 (1 row)
 
-DROP CONTINUOUS VIEW cont_matrel;
-DROP STREAM cont_matrel_stream CASCADE;
+DROP VIEW cont_matrel;
+DROP FOREIGN TABLE cont_matrel_stream CASCADE;

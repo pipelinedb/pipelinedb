@@ -1,6 +1,6 @@
-CREATE STREAM os_stream (x int, y int, z int);
-CREATE CONTINUOUS VIEW os0 AS SELECT COUNT(*) FROM os_stream;
-CREATE CONTINUOUS VIEW os0_output AS SELECT (old).count AS old_count, (new).count AS new_count FROM output_of('os0');
+CREATE FOREIGN TABLE os_stream (x int, y int, z int) SERVER pipelinedb;
+CREATE VIEW os0 AS SELECT COUNT(*) FROM os_stream;
+CREATE VIEW os0_output AS SELECT (old).count AS old_count, (new).count AS new_count FROM output_of('os0');
 INSERT INTO os_stream (x) VALUES (0);
 SELECT * FROM os0_output ORDER BY old_count, new_count;
  old_count | new_count 
@@ -36,15 +36,15 @@ SELECT * FROM os0_output ORDER BY old_count, new_count;
 (4 rows)
 
 -- We shouldn't be able to drop this because os0_output depends on it now
-DROP CONTINUOUS VIEW os0;
+DROP VIEW os0;
 ERROR:  cannot drop view os0 because other objects depend on it
 DETAIL:  view os0_output depends on foreign table os0_osrel
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-DROP CONTINUOUS VIEW os0_output;
-DROP CONTINUOUS VIEW os0;
-CREATE CONTINUOUS VIEW os1 AS SELECT abs(x::integer) AS g, COUNT(*), sum(x)
+DROP VIEW os0_output;
+DROP VIEW os0;
+CREATE VIEW os1 AS SELECT abs(x::integer) AS g, COUNT(*), sum(x)
 FROM os_stream GROUP BY g;
-CREATE CONTINUOUS VIEW os1_output AS SELECT
+CREATE VIEW os1_output AS SELECT
   (new).g,
   (old).count AS old_count, (new).count AS new_count,
   (old).sum AS old_sum, (new).sum AS new_sum
@@ -124,13 +124,13 @@ SELECT * FROM os1_output ORDER BY g, old_count, new_count, old_sum, new_sum;
  40 |           |         1 |         |      40
 (8 rows)
 
-DROP CONTINUOUS VIEW os1 CASCADE;
+DROP VIEW os1 CASCADE;
 NOTICE:  drop cascades to view os1_output
 -- Verify SW ticking into output streams
-CREATE CONTINUOUS VIEW os2 WITH (sw = '10 seconds') AS
+CREATE VIEW os2 WITH (sw = '10 seconds') AS
 SELECT x::integer, COUNT(*)
 FROM os_stream GROUP BY x;
-CREATE CONTINUOUS VIEW os2_output AS SELECT
+CREATE VIEW os2_output AS SELECT
   arrival_timestamp,
   CASE WHEN old IS NULL THEN (new).x ELSE (old).x END AS x,
   old, new
@@ -179,52 +179,53 @@ SELECT x, old, new FROM os2_output ORDER BY x, old, new;
  3 |       | (3,1)
 (8 rows)
 
-DROP CONTINUOUS VIEW os2 CASCADE;
+DROP VIEW os2 CASCADE;
 NOTICE:  drop cascades to view os2_output
 -- Stream-table joins on output streams
 CREATE TABLE os_t0 (x integer, y integer);
 INSERT INTO os_t0 (x, y) VALUES (0, 42);
-CREATE CONTINUOUS VIEW os3 AS SELECT x::integer, COUNT(*)
+CREATE VIEW os3 AS SELECT x::integer, COUNT(*)
 FROM os_stream GROUP BY x;
-CREATE CONTINUOUS VIEW os3_output AS SELECT
+CREATE VIEW os3_output AS SELECT
   CASE WHEN (old) IS NULL THEN (new).x ELSE (old).x END AS x,
   new, t.y
   FROM output_of('os3') JOIN os_t0 t ON x = t.x;
 NOTICE:  consider creating an index on t.x for improved stream-table join performance
 INSERT INTO os_stream (x) VALUES (0);
 SELECT x, new, y FROM os3_output ORDER BY x, new, y;
- x |   new   | y  
----+---------+----
- 0 | (0,1,1) | 42
+ x |  new  | y  
+---+-------+----
+ 0 | (0,1) | 42
 (1 row)
 
 INSERT INTO os_stream (x) VALUES (0);
 SELECT x, new, y FROM os3_output ORDER BY x, new, y;
- x |   new   | y  
----+---------+----
- 0 | (0,1,1) | 42
- 0 | (0,2,1) | 42
+ x |  new  | y  
+---+-------+----
+ 0 | (0,1) | 42
+ 0 | (0,2) | 42
 (2 rows)
 
 INSERT INTO os_stream (x) VALUES (0);
 SELECT x, new, y FROM os3_output ORDER BY x, new, y;
- x |   new   | y  
----+---------+----
- 0 | (0,1,1) | 42
- 0 | (0,2,1) | 42
- 0 | (0,3,1) | 42
+ x |  new  | y  
+---+-------+----
+ 0 | (0,1) | 42
+ 0 | (0,2) | 42
+ 0 | (0,3) | 42
 (3 rows)
 
 DROP TABLE os_t0;
 ERROR:  cannot drop table os_t0 because other objects depend on it
 DETAIL:  view os3_output depends on table os_t0
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-DROP CONTINUOUS VIEW os3 CASCADE;
+DROP VIEW os3 CASCADE;
 NOTICE:  drop cascades to view os3_output
+DROP TABLE os_t0;
 -- Final functions should be applied to output stream tuples where necessary
-CREATE CONTINUOUS VIEW os3 AS SELECT x::integer, avg(y::integer), count(distinct z::integer)
+CREATE VIEW os3 AS SELECT x::integer, avg(y::integer), count(distinct z::integer)
 FROM os_stream GROUP BY x;
-CREATE CONTINUOUS VIEW os3_output AS SELECT
+CREATE VIEW os3_output AS SELECT
   arrival_timestamp,
   CASE WHEN old IS NULL THEN (new).x ELSE (old).x END AS x,
   old, new
@@ -263,11 +264,11 @@ SELECT x, old, new FROM os3_output ORDER BY x, old, new;
  1 |                          | (1,8.0000000000000000,1)
 (4 rows)
 
-DROP CONTINUOUS VIEW os3 CASCADE;
+DROP VIEW os3 CASCADE;
 NOTICE:  drop cascades to view os3_output
 -- Verify that transforms write to output streams
 CREATE VIEW os_xform WITH (action=transform) AS SELECT x, y FROM os_stream;
-CREATE CONTINUOUS VIEW os4 AS SELECT x, y FROM output_of('os_xform');
+CREATE VIEW os4 AS SELECT x, y FROM output_of('os_xform');
 INSERT INTO os_stream (x, y) VALUES (7, 7);
 INSERT INTO os_stream (x, y) VALUES (8, 8);
 INSERT INTO os_stream (x, y) VALUES (9, 9);
@@ -279,18 +280,18 @@ SELECT * FROM os4 ORDER BY x;
  9 | 9
 (3 rows)
 
-DROP STREAM os_stream CASCADE;
+DROP FOREIGN TABLE os_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view os_xform
 drop cascades to view os4
-CREATE STREAM os_stream (x integer, y numeric);
-CREATE CONTINUOUS VIEW os5 AS
+CREATE FOREIGN TABLE os_stream (x integer, y numeric) SERVER pipelinedb;
+CREATE VIEW os5 AS
 SELECT x,
   abs(sum(y) - sum(y)) AS abs,
 	count(*),
   avg(y) AS avg
 FROM os_stream GROUP BY x;
-CREATE CONTINUOUS VIEW os6 AS
+CREATE VIEW os6 AS
 SELECT
   (new).x % 2 AS g,
   combine((delta).avg) AS avg
@@ -321,16 +322,16 @@ SELECT combine(avg) FROM os6;
  50.5000000000000000
 (1 row)
 
-DROP STREAM os_stream CASCADE;
+DROP FOREIGN TABLE os_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view os5
 drop cascades to view os6
-CREATE STREAM os_stream (ts timestamp, x text, y float);
-CREATE CONTINUOUS VIEW os7 WITH (sw = '5 minutes') AS
-  SELECT x, second(ts), y, count(*)
+CREATE FOREIGN TABLE os_stream (ts timestamp, x text, y float) SERVER pipelinedb;
+CREATE VIEW os7 WITH (sw = '5 minutes') AS
+  SELECT x, date_trunc('second', ts) AS second, y, count(*)
 FROM os_stream
 GROUP BY second, y, x;
-CREATE CONTINUOUS VIEW os8 AS SELECT (new).x, (new).y FROM output_of('os7');
+CREATE VIEW os8 AS SELECT (new).x, (new).y FROM output_of('os7');
 BEGIN;
 INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
 INSERT INTO os_stream (ts, x, y) VALUES (now(), 'text!', 42.42);
@@ -349,7 +350,30 @@ SELECT x, y FROM os8 ORDER BY x, y;
  text! | 42.42
 (2 rows)
 
-DROP STREAM os_stream CASCADE;
-NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to view os7
+-- Verify that complex projections are properly performed on output stream tuples
+CREATE VIEW os9 AS SELECT x, avg(y), count(distinct y), avg(y) + count(distinct y) + 100 AS expr FROM os_stream GROUP BY x;
+CREATE VIEW os10 AS SELECT (new).x, (new).expr FROM output_of('os9');
+INSERT INTO os_stream (x, y) VALUES (0, 1.5);
+INSERT INTO os_stream (x, y) VALUES (1, 2.5);
+INSERT INTO os_stream (x, y) VALUES (0, 3.5);
+SELECT * FROM os9 ORDER BY x;
+ x | avg | count | expr  
+---+-----+-------+-------
+ 0 | 2.5 |     2 | 104.5
+ 1 | 2.5 |     1 | 103.5
+(2 rows)
+
+SELECT * FROM os10 ORDER BY x, expr;
+ x | expr  
+---+-------
+ 0 | 102.5
+ 0 | 104.5
+ 1 | 103.5
+(3 rows)
+
+DROP FOREIGN TABLE os_stream CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to view os9
+drop cascades to view os10
+drop cascades to view os7
 drop cascades to view os8

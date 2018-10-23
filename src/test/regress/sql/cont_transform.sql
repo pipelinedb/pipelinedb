@@ -1,8 +1,8 @@
-CREATE STREAM ct_stream0 (x int);
-CREATE STREAM ct_stream1 (x int);
+CREATE FOREIGN TABLE ct_stream0 (x int) SERVER pipelinedb;
+CREATE FOREIGN TABLE ct_stream1 (x int) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW ct0 AS SELECT x::int, count(*) FROM ct_stream0 GROUP BY x;
-CREATE VIEW ct1 WITH (action=transform, outputfunc=pipeline_stream_insert('ct_stream0')) AS SELECT x::int % 4 AS x FROM ct_stream1 WHERE x > 10 AND x < 50;
+CREATE VIEW ct0 AS SELECT x::int, count(*) FROM ct_stream0 GROUP BY x;
+CREATE VIEW ct1 WITH (action=transform, outputfunc=pipelinedb.insert_into_stream('ct_stream0')) AS SELECT x::int % 4 AS x FROM ct_stream1 WHERE x > 10 AND x < 50;
 
 CREATE TABLE ct2 (x int);
 CREATE OR REPLACE FUNCTION ct_tg()
@@ -24,19 +24,19 @@ SELECT * FROM ct2 ORDER BY x;
 DROP FUNCTION ct_tg() CASCADE;
 DROP TABLE ct2;
 DROP VIEW ct1;
-DROP CONTINUOUS VIEW ct0;
-DROP STREAM ct_stream0;
-DROP STREAM ct_stream1;
+DROP VIEW ct0;
+DROP FOREIGN TABLE ct_stream0;
+DROP FOREIGN TABLE ct_stream1;
 
 -- Stream-table JOIN
 CREATE TABLE ct_t (x integer, s text);
 INSERT INTO ct_t (x, s) VALUES (0, 'zero');
 INSERT INTO ct_t (x, s) VALUES (1, 'one');
 
-CREATE STREAM ct_s0 (x text);
-CREATE STREAM ct_s1 (x int);
-CREATE CONTINUOUS VIEW ct_v AS SELECT x::text FROM ct_s0;
-CREATE VIEW ct WITH (action=transform, outputfunc=pipeline_stream_insert('ct_s0')) AS
+CREATE FOREIGN TABLE ct_s0 (x text) SERVER pipelinedb;
+CREATE FOREIGN TABLE ct_s1 (x int) SERVER pipelinedb;
+CREATE VIEW ct_v AS SELECT x::text FROM ct_s0;
+CREATE VIEW ct WITH (action=transform, outputfunc=pipelinedb.insert_into_stream('ct_s0')) AS
   SELECT t.s AS x FROM ct_s1 s JOIN ct_t t on t.x = s.x::integer;
 
 INSERT INTO ct_s1 (x) VALUES (0), (1);
@@ -45,25 +45,25 @@ INSERT INTO ct_s1 (x) VALUES (0), (2);
 SELECT * FROM ct_v ORDER BY x;
 
 DROP VIEW ct;
-DROP CONTINUOUS VIEW ct_v;
+DROP VIEW ct_v;
 DROP TABLE ct_t;
-DROP STREAM ct_s1;
-DROP STREAM ct_s0;
+DROP FOREIGN TABLE ct_s1;
+DROP FOREIGN TABLE ct_s0;
 
-CREATE STREAM ct_s (x int, y text);
+CREATE FOREIGN TABLE ct_s (x int, y text) SERVER pipelinedb;
 
-CREATE VIEW ct_invalid WITH (action=transform, outputfunc=pipeline_stream_insert('ct_s')) AS SELECT y, x FROM ct_s;
-CREATE VIEW ct_invalid WITH (action=transform, outputfunc=pipeline_stream_insert('ct_s')) AS SELECT x, x AS y FROM ct_s;
-CREATE VIEW ct_valid WITH (action=transform, outputfunc=pipeline_stream_insert('ct_s')) AS SELECT x, 'a'::text FROM ct_s;
+CREATE VIEW ct_invalid WITH (action=transform, outputfunc=pipelinedb.insert_into_stream('ct_s')) AS SELECT y, x FROM ct_s;
+CREATE VIEW ct_invalid WITH (action=transform, outputfunc=pipelinedb.insert_into_stream('ct_s')) AS SELECT x, x AS y FROM ct_s;
+CREATE VIEW ct_valid WITH (action=transform, outputfunc=pipelinedb.insert_into_stream('ct_s')) AS SELECT x, 'a'::text FROM ct_s;
 
-DROP STREAM ct_s CASCADE;
+DROP FOREIGN TABLE ct_s CASCADE;
 
-CREATE STREAM ct_s0 (x int);
-CREATE STREAM ct_s1 (x int);
+CREATE FOREIGN TABLE ct_s0 (x int) SERVER pipelinedb;
+CREATE FOREIGN TABLE ct_s1 (x int) SERVER pipelinedb;
 
-CREATE VIEW ct_t WITH (action=transform, outputfunc=pipeline_stream_insert('ct_s1')) AS SELECT x % 4 AS x FROM ct_s0;
-CREATE CONTINUOUS VIEW ct_v0 AS SELECT x FROM ct_s1;
-CREATE CONTINUOUS VIEW ct_v1 AS SELECT x FROM output_of('ct_t');
+CREATE VIEW ct_t WITH (action=transform, outputfunc=pipelinedb.insert_into_stream('ct_s1')) AS SELECT x % 4 AS x FROM ct_s0;
+CREATE VIEW ct_v0 AS SELECT x FROM ct_s1;
+CREATE VIEW ct_v1 AS SELECT x FROM output_of('ct_t');
 
 INSERT INTO ct_s0 SELECT generate_series(1, 10) x;
 
@@ -72,10 +72,10 @@ SELECT * FROM ct_v1;
 
 CREATE VIEW ct_ostream WITH (action=transform) AS SELECT 1 AS a, 2 AS b, 3 AS c, x + 42 AS d FROM ct_s1;
 
-DROP STREAM ct_s0 CASCADE;
-DROP STREAM ct_s1 CASCADE;
+DROP FOREIGN TABLE ct_s0 CASCADE;
+DROP FOREIGN TABLE ct_s1 CASCADE;
 
-CREATE STREAM fanout (x integer);
+CREATE FOREIGN TABLE fanout (x integer) SERVER pipelinedb;
 
 CREATE VIEW fanout0 WITH (action=transform) AS SELECT generate_series(1, 2) FROM fanout;
 CREATE VIEW fanout1 WITH (action=transform) AS SELECT generate_series(1, 2) FROM output_of('fanout0');
@@ -89,7 +89,7 @@ CREATE VIEW fanout8 WITH (action=transform) AS SELECT generate_series(1, 2) FROM
 CREATE VIEW fanout9 WITH (action=transform) AS SELECT generate_series(1, 2) FROM output_of('fanout8');
 CREATE VIEW fanout10 WITH (action=transform) AS SELECT generate_series(1, 2) FROM output_of('fanout9');
 
-CREATE CONTINUOUS VIEW fanout11 AS SELECT count(*) FROM output_of('fanout10');
+CREATE VIEW fanout11 AS SELECT count(*) FROM output_of('fanout10');
 
 INSERT INTO fanout (x) VALUES (0);
 
@@ -103,12 +103,12 @@ INSERT INTO fanout (x) VALUES (0);
 
 SELECT * FROM fanout11;
 
-DROP STREAM fanout CASCADE;
+DROP FOREIGN TABLE fanout CASCADE;
 
-CREATE STREAM ct_a (n int);
-CREATE STREAM ct_b (n int);
+CREATE FOREIGN TABLE ct_a (n int) SERVER pipelinedb;
+CREATE FOREIGN TABLE ct_b (n int) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW ct_stream_insert0 AS SELECT n FROM ct_b;
+CREATE VIEW ct_stream_insert0 AS SELECT n FROM ct_b;
 
 CREATE SCHEMA test_cont_transform;
 
@@ -131,5 +131,5 @@ SELECT count(*) FROM ct_stream_insert0;
 
 DROP FUNCTION test_cont_transform.insert_into_b() CASCADE;
 DROP SCHEMA test_cont_transform;
-DROP STREAM ct_b CASCADE;
-DROP STREAM ct_a;
+DROP FOREIGN TABLE ct_b CASCADE;
+DROP FOREIGN TABLE ct_a;

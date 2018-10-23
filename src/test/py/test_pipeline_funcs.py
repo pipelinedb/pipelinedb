@@ -29,10 +29,10 @@ def test_combine_table(pipeline, clean_db):
 
   time.sleep(2)
 
-  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' %
+  conn = psycopg2.connect('dbname=postgres user=%s host=localhost port=%s' %
                           (getpass.getuser(), pipeline.port))
   cur = conn.cursor()
-  cur.execute("SELECT pipeline_combine_table('combine_table', 'tmprel')")
+  cur.execute("SELECT pipelinedb.combine_table('combine_table', 'tmprel')")
   conn.commit()
   conn.close()
 
@@ -56,18 +56,19 @@ def test_combine_table_no_groups(pipeline, clean_db):
   pipeline.insert('s', ('x',), values)
 
   pipeline.execute('SELECT * INTO tmprel FROM no_groups_mrel')
-  pipeline.execute("SELECT pipeline_combine_table('no_groups', 'tmprel')")
+  pipeline.execute("SELECT pipelinedb.combine_table('no_groups', 'tmprel')")
 
-  rows = list(pipeline.execute('SELECT count FROM no_groups'))
+  rows = pipeline.execute('SELECT count FROM no_groups')
   assert len(rows) == 1
-  assert len(rows[0]) == 1
+  assert len(rows[0]) == 2
   assert rows[0][0] == 2000
 
 
 def test_pipeline_flush(pipeline, clean_db):
-  pipeline.execute('SET stream_insert_level=async')
+  pipeline.execute('SET pipelinedb.stream_insert_level=async')
   pipeline.create_stream('s', x='int')
-  pipeline.create_cv('flush', 'SELECT x, pg_sleep(0.01) FROM s')
+
+  pipeline.create_cv('flush', 'SELECT x, cq_sleep(0.01) FROM s')
 
   values = [(i,) for i in xrange(1000)]
   start = time.time()
@@ -77,7 +78,7 @@ def test_pipeline_flush(pipeline, clean_db):
   pipeline.insert('s', ('x',), values)
   insert_end = time.time()
 
-  pipeline.execute('SELECT pipeline_flush()')
+  pipeline.execute('SELECT pipelinedb.flush()')
   flush_end = time.time()
 
   assert insert_end - start < 0.1
@@ -86,4 +87,4 @@ def test_pipeline_flush(pipeline, clean_db):
   row = list(pipeline.execute('SELECT count(*) FROM flush'))[0]
   assert row[0] == 1000
 
-  pipeline.execute('SET stream_insert_level=sync_commit')
+  pipeline.execute('SET pipelinedb.stream_insert_level=sync_commit')

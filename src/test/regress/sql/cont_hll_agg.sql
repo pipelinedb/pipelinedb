@@ -1,15 +1,15 @@
-CREATE STREAM test_hll_agg_stream (x int, y text, k text);
+CREATE FOREIGN TABLE test_hll_agg_stream (x int, y text, k text) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW test_hll_agg0 AS SELECT k::text, hll_agg(x::integer) FROM test_hll_agg_stream GROUP BY k;
-CREATE CONTINUOUS VIEW test_hll_agg1 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(y::text)) FROM test_hll_agg_stream GROUP BY k;
+CREATE VIEW test_hll_agg0 AS SELECT k::text, hll_agg(x::integer) FROM test_hll_agg_stream GROUP BY k;
+CREATE VIEW test_hll_agg1 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(y::text)) FROM test_hll_agg_stream GROUP BY k;
 
-CREATE CONTINUOUS VIEW test_hll_agg2 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(substring(y::text, 1, 1))) FROM test_hll_agg_stream GROUP BY k;
+CREATE VIEW test_hll_agg2 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(substring(y::text, 1, 1))) FROM test_hll_agg_stream GROUP BY k;
 
-CREATE CONTINUOUS VIEW test_sw_hll_agg0 AS SELECT k::text, hll_print(hll_agg(x::integer)) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour') GROUP BY k;
+CREATE VIEW test_sw_hll_agg0 AS SELECT k::text, hll_print(hll_agg(x::integer)) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour') GROUP BY k;
 
-CREATE CONTINUOUS VIEW test_sw_hll_agg1 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(y::text)) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour')  GROUP BY k;
+CREATE VIEW test_sw_hll_agg1 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(y::text)) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour')  GROUP BY k;
 
-CREATE CONTINUOUS VIEW test_sw_hll_agg2 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(substring(y::text, 1, 1))) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour')  GROUP BY k;
+CREATE VIEW test_sw_hll_agg2 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(substring(y::text, 1, 1))) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour')  GROUP BY k;
 
 INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 0, '0');
 INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 1, '100');
@@ -116,11 +116,11 @@ INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 0, '0'), ('1', 1, '100'),
 SELECT k, hll_print(hll_agg) FROM test_hll_agg0 ORDER BY k;
 SELECT * FROM test_hll_agg1 ORDER BY k;
 SELECT * FROM test_hll_agg2 ORDER BY k;
+
 SELECT * FROM test_sw_hll_agg0 ORDER BY k;
 SELECT * FROM test_sw_hll_agg1 ORDER BY k;
 SELECT * FROM test_sw_hll_agg2 ORDER BY k;
-
 SELECT hll_print(combine(hll_agg)) FROM test_hll_agg0;
 SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg0;
 
-DROP STREAM test_hll_agg_stream CASCADE;
+DROP FOREIGN TABLE test_hll_agg_stream CASCADE;

@@ -17,7 +17,7 @@ def test_create_drop_continuous_view(pipeline, clean_db):
   pipeline.create_cv('cv1', 'SELECT id::integer FROM stream0')
   pipeline.create_cv('cv2', 'SELECT id::integer FROM stream0')
 
-  result = pipeline.execute('SELECT * FROM pipeline_views()')
+  result = pipeline.execute('SELECT name FROM pipelinedb.get_views()')
   names = [r['name'] for r in result]
 
   assert sorted(names) == ['cv0', 'cv1', 'cv2']
@@ -26,7 +26,7 @@ def test_create_drop_continuous_view(pipeline, clean_db):
   pipeline.drop_cv('cv1')
   pipeline.drop_cv('cv2')
 
-  result = pipeline.execute('SELECT * FROM pipeline_views()')
+  result = pipeline.execute('SELECT name FROM pipelinedb.get_views()')
   names = [r['name'] for r in result]
 
   assert len(names) == 0
@@ -38,13 +38,13 @@ def test_simple_insert(pipeline, clean_db):
   """
   pipeline.create_stream('stream0', key='int')
   pipeline.create_cv('cv',
-                     'SELECT key::integer, COUNT(*) FROM stream0 GROUP BY key')
+             'SELECT key::integer, COUNT(*) FROM stream0 GROUP BY key')
 
   rows = [(n % 10,) for n in range(1000)]
 
   pipeline.insert('stream0', ('key',), rows)
 
-  result = list(pipeline.execute('SELECT * FROM cv ORDER BY key'))
+  result = list(pipeline.execute('SELECT key, count FROM cv ORDER BY key'))
 
   assert len(result) == 10
   for i, row in enumerate(result):
@@ -59,7 +59,7 @@ def test_multiple(pipeline, clean_db):
   pipeline.create_stream('stream0', n='numeric', s='text', unused='int')
   pipeline.create_cv('cv0', 'SELECT n::numeric FROM stream0 WHERE n > 10.00001')
   pipeline.create_cv('cv1',
-                     'SELECT s::text FROM stream0 WHERE s LIKE \'%%this%%\'')
+             'SELECT s::text FROM stream0 WHERE s LIKE \'%%this%%\'')
 
   rows = [(float(n + 10), 'this', 100) for n in range(1000)]
   for n in range(10):
@@ -80,7 +80,7 @@ def test_combine(pipeline, clean_db):
   """
   pipeline.create_stream('stream0', key='text', unused='int')
   pipeline.create_cv('combine',
-                     'SELECT key::text, COUNT(*) FROM stream0 GROUP BY key')
+             'SELECT key::text, COUNT(*) FROM stream0 GROUP BY key')
 
   rows = []
   for n in range(100):
@@ -91,7 +91,7 @@ def test_combine(pipeline, clean_db):
   pipeline.insert('stream0', ('key', 'unused'), rows)
 
   total = 0
-  result = pipeline.execute('SELECT * FROM combine')
+  result = pipeline.execute('SELECT count FROM combine')
   for row in result:
     total += row['count']
 
@@ -100,17 +100,17 @@ def test_combine(pipeline, clean_db):
 
 def test_multiple_stmts(pipeline, clean_db):
   pipeline.create_stream('stream0', unused='int')
-  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s'
-                          % (getpass.getuser(), pipeline.port))
+  conn = psycopg2.connect('dbname=postgres user=%s host=localhost port=%s'
+              % (getpass.getuser(), pipeline.port))
   db = conn.cursor()
-  db.execute('CREATE CONTINUOUS VIEW test_multiple AS '
-             'SELECT COUNT(*) FROM stream0; SELECT 1;')
+  db.execute('CREATE VIEW test_multiple AS '
+         'SELECT COUNT(*) FROM stream0; SELECT 1;')
   conn.commit()
   conn.close()
 
   pipeline.insert('stream0', ('unused',), [(1,)] * 100)
 
-  result = list(pipeline.execute('SELECT * FROM test_multiple'))
+  result = list(pipeline.execute('SELECT count FROM test_multiple'))
   assert len(result) == 1
   assert result[0]['count'] == 100
 
@@ -118,15 +118,14 @@ def test_multiple_stmts(pipeline, clean_db):
 def test_uniqueness(pipeline, clean_db):
   pipeline.create_stream('stream0', x='int')
   pipeline.create_cv('uniqueness',
-                     'SELECT x::int, count(*) FROM stream0 GROUP BY x')
+             'SELECT x::int, count(*) FROM stream0 GROUP BY x')
 
   for i in range(10):
     rows = [((10000 * i) + j,) for j in xrange(10000)]
     pipeline.insert('stream0', ('x',), rows)
 
-  count = pipeline.execute('SELECT count(*) FROM uniqueness').first()['count']
-  distinct_count = pipeline.execute(
-    'SELECT count(DISTINCT x) FROM uniqueness').first()['count']
+  count = pipeline.execute('SELECT count(*) FROM uniqueness')[0][0]
+  distinct_count = pipeline.execute('SELECT count(DISTINCT x) FROM uniqueness')[0][0]
 
   assert count == distinct_count
 
@@ -134,7 +133,7 @@ def test_uniqueness(pipeline, clean_db):
 def test_concurrent_inserts(pipeline, clean_db):
   pipeline.create_stream('stream0', x='int')
   pipeline.create_cv('concurrent_inserts0',
-                     'SELECT x::int, count(*) FROM stream0 GROUP BY x')
+             'SELECT x::int, count(*) FROM stream0 GROUP BY x')
   pipeline.create_cv('concurrent_inserts1', 'SELECT count(*) FROM stream0')
 
   num_threads = 4
@@ -142,18 +141,18 @@ def test_concurrent_inserts(pipeline, clean_db):
   inserted = [0] * num_threads
 
   def insert(i):
-    conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s'
-                            % (getpass.getuser(), pipeline.port))
+    conn = psycopg2.connect('dbname=postgres user=%s host=localhost port=%s'
+                % (getpass.getuser(), pipeline.port))
     cur = conn.cursor()
     while not stop:
       cur.execute('INSERT INTO stream0 (x) '
-                  'SELECT x % 100 FROM generate_series(1, 2000) AS x')
+            'SELECT x % 100 FROM generate_series(1, 2000) AS x')
       conn.commit()
       inserted[i] += 2000
     conn.close()
 
   threads = [threading.Thread(target=insert, args=(i,))
-             for i in range(num_threads)]
+         for i in range(num_threads)]
   map(lambda t: t.start(), threads)
 
   time.sleep(60)
@@ -163,19 +162,17 @@ def test_concurrent_inserts(pipeline, clean_db):
 
   time.sleep(5)
 
-  total = (pipeline.execute('SELECT sum(count) FROM concurrent_inserts0')
-           .first()['sum'])
+  total = pipeline.execute('SELECT sum(count) FROM concurrent_inserts0')[0]['sum']
   assert total == sum(inserted)
 
-  total = (pipeline.execute('SELECT count FROM concurrent_inserts1')
-           .first()['count'])
+  total = pipeline.execute('SELECT count FROM concurrent_inserts1')[0]['count']
   assert total == sum(inserted)
 
 @async_insert
 def test_concurrent_copy(pipeline, clean_db):
   pipeline.create_stream('stream0', x='int')
   pipeline.create_cv('concurrent_copy0',
-                     'SELECT x::int, count(*) FROM stream0 GROUP BY x')
+             'SELECT x::int, count(*) FROM stream0 GROUP BY x')
   pipeline.create_cv('concurrent_copy1', 'SELECT count(*) FROM stream0')
 
   tmp_file = os.path.join(tempfile.gettempdir(), 'tmp.copy')
@@ -187,8 +184,8 @@ def test_concurrent_copy(pipeline, clean_db):
   inserted = [0] * num_threads
 
   def insert(i):
-    conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s'
-                            % (getpass.getuser(), pipeline.port))
+    conn = psycopg2.connect('dbname=postgres user=%s host=localhost port=%s'
+                % (getpass.getuser(), pipeline.port))
     cur = conn.cursor()
     while not stop:
       cur.execute("COPY stream0 (x) FROM '%s'" % tmp_file)
@@ -197,7 +194,7 @@ def test_concurrent_copy(pipeline, clean_db):
     conn.close()
 
   threads = [threading.Thread(target=insert, args=(i,))
-             for i in range(num_threads)]
+         for i in range(num_threads)]
   map(lambda t: t.start(), threads)
 
   time.sleep(60)
@@ -207,10 +204,8 @@ def test_concurrent_copy(pipeline, clean_db):
 
   time.sleep(5)
 
-  total = (pipeline.execute('SELECT sum(count) FROM concurrent_copy0')
-           .first()['sum'])
+  total = pipeline.execute('SELECT sum(count) FROM concurrent_copy0')[0][0]
   assert total == sum(inserted)
 
-  total = (pipeline.execute('SELECT count FROM concurrent_copy1')
-           .first()['count'])
+  total = pipeline.execute('SELECT count FROM concurrent_copy1')[0][0]
   assert total == sum(inserted)

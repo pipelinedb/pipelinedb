@@ -1,6 +1,6 @@
-CREATE STREAM cont_idx_stream (x int, y int);
+CREATE FOREIGN TABLE cont_idx_stream (x int, y int) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW test_cont_index0 AS SELECT x::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x;
+CREATE VIEW test_cont_index0 AS SELECT x::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x;
 
 CREATE INDEX test_ci_idx0 ON test_cont_index0 (x);
 \d+ test_cont_index0_mrel
@@ -11,9 +11,9 @@ CREATE INDEX test_ci_idx1 ON test_cont_index0 (avg);
 CREATE INDEX test_ci_idx2 ON test_cont_index0 (x, avg);
 \d+ test_cont_index0_mrel
 
-DROP CONTINUOUS VIEW test_cont_index0;
+DROP VIEW test_cont_index0;
 
-CREATE CONTINUOUS VIEW test_cont_index1 WITH (sw = '1 hour') AS SELECT x::integer, y::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x, y;
+CREATE VIEW test_cont_index1 WITH (sw = '1 hour') AS SELECT x::integer, y::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x, y;
 
 CREATE INDEX test_ci_idx0 ON test_cont_index1 (x);
 \d+ test_cont_index1_mrel
@@ -27,6 +27,6 @@ CREATE INDEX test_ci_idx2 ON test_cont_index1 (x, avg);
 CREATE INDEX test_ci_idx3 ON test_cont_index1 (x, y);
 \d+ test_cont_index1_mrel
 
-DROP CONTINUOUS VIEW test_cont_index1;
+DROP VIEW test_cont_index1;
 
-DROP STREAM cont_idx_stream CASCADE;
+DROP FOREIGN TABLE cont_idx_stream CASCADE;

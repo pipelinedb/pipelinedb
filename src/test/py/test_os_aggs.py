@@ -30,8 +30,8 @@ def test_percentile_cont_agg(pipeline, clean_db):
   actual = pipeline.execute(query % 'test_percentile_cont')
   result = pipeline.execute('SELECT * FROM test_cq_percentile_cont')
 
-  actual = actual.first()['percentile_cont']
-  result = result.first()['percentile_cont']
+  actual = actual[0]['percentile_cont']
+  result = result[0]['percentile_cont']
 
   assert len(actual) == len(result)
   assert result == sorted(result)

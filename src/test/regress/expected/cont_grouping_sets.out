@@ -1,104 +1,104 @@
-CREATE STREAM test_gs_stream (x int, y int, z int);
-CREATE CONTINUOUS VIEW test_gs0 AS SELECT x::integer, y::integer, COUNT(*) FROM test_gs_stream
+CREATE FOREIGN TABLE test_gs_stream (x int, y int, z int) SERVER pipelinedb;
+CREATE VIEW test_gs0 AS SELECT x::integer, y::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY CUBE (x, y);
-SELECT pipeline_get_worker_querydef('test_gs0');
- pipeline_get_worker_querydef 
-------------------------------
-  SELECT x,                  +
-     y,                      +
-     count(*) AS count       +
-    FROM test_gs_stream      +
+SELECT pipelinedb.get_worker_querydef('test_gs0');
+  get_worker_querydef   
+------------------------
+  SELECT x,            +
+     y,                +
+     count(*) AS count +
+    FROM test_gs_stream+
    GROUP BY CUBE(x, y)
 (1 row)
 
-SELECT pipeline_get_combiner_querydef('test_gs0');
- pipeline_get_combiner_querydef 
---------------------------------
-  SELECT x,                    +
-     y,                        +
-     combine(count) AS count   +
-    FROM test_gs0_mrel         +
+SELECT pipelinedb.get_combiner_querydef('test_gs0');
+    get_combiner_querydef    
+-----------------------------
+  SELECT x,                 +
+     y,                     +
+     combine(count) AS count+
+    FROM test_gs0_mrel      +
    GROUP BY x, y
 (1 row)
 
-SELECT pipeline_get_overlay_viewdef('test_gs0');
- pipeline_get_overlay_viewdef 
-------------------------------
-  SELECT test_gs0_mrel.x,    +
-     test_gs0_mrel.y,        +
-     test_gs0_mrel.count     +
+SELECT pg_get_viewdef('test_gs0');
+       pg_get_viewdef        
+-----------------------------
+  SELECT test_gs0_mrel.x,   +
+     test_gs0_mrel.y,       +
+     test_gs0_mrel.count    +
     FROM ONLY test_gs0_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW test_gs1 AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
+CREATE VIEW test_gs1 AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY GROUPING SETS (x), (x, y), (x, y, z), (x, z);
-SELECT pipeline_get_worker_querydef('test_gs1');
- pipeline_get_worker_querydef 
-------------------------------
-  SELECT x,                  +
-     y,                      +
-     z,                      +
-     count(*) AS count       +
-    FROM test_gs_stream      +
+SELECT pipelinedb.get_worker_querydef('test_gs1');
+  get_worker_querydef   
+------------------------
+  SELECT x,            +
+     y,                +
+     z,                +
+     count(*) AS count +
+    FROM test_gs_stream+
    GROUP BY x, y, z
 (1 row)
 
-SELECT pipeline_get_combiner_querydef('test_gs1');
- pipeline_get_combiner_querydef 
---------------------------------
-  SELECT x,                    +
-     y,                        +
-     z,                        +
-     combine(count) AS count   +
-    FROM test_gs1_mrel         +
+SELECT pipelinedb.get_combiner_querydef('test_gs1');
+    get_combiner_querydef    
+-----------------------------
+  SELECT x,                 +
+     y,                     +
+     z,                     +
+     combine(count) AS count+
+    FROM test_gs1_mrel      +
    GROUP BY x, y, z
 (1 row)
 
-SELECT pipeline_get_overlay_viewdef('test_gs1');
- pipeline_get_overlay_viewdef 
-------------------------------
-  SELECT test_gs1_mrel.x,    +
-     test_gs1_mrel.y,        +
-     test_gs1_mrel.z,        +
-     test_gs1_mrel.count     +
+SELECT pg_get_viewdef('test_gs1');
+       pg_get_viewdef        
+-----------------------------
+  SELECT test_gs1_mrel.x,   +
+     test_gs1_mrel.y,       +
+     test_gs1_mrel.z,       +
+     test_gs1_mrel.count    +
     FROM ONLY test_gs1_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW test_gs2 AS SELECT x::integer, y::integer, COUNT(*) FROM test_gs_stream
+CREATE VIEW test_gs2 AS SELECT x::integer, y::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY GROUPING SETS (x), (x, y);
-SELECT pipeline_get_worker_querydef('test_gs2');
- pipeline_get_worker_querydef 
-------------------------------
-  SELECT x,                  +
-     y,                      +
-     count(*) AS count       +
-    FROM test_gs_stream      +
+SELECT pipelinedb.get_worker_querydef('test_gs2');
+  get_worker_querydef   
+------------------------
+  SELECT x,            +
+     y,                +
+     count(*) AS count +
+    FROM test_gs_stream+
    GROUP BY x, y
 (1 row)
 
-SELECT pipeline_get_combiner_querydef('test_gs2');
- pipeline_get_combiner_querydef 
---------------------------------
-  SELECT x,                    +
-     y,                        +
-     combine(count) AS count   +
-    FROM test_gs2_mrel         +
+SELECT pipelinedb.get_combiner_querydef('test_gs2');
+    get_combiner_querydef    
+-----------------------------
+  SELECT x,                 +
+     y,                     +
+     combine(count) AS count+
+    FROM test_gs2_mrel      +
    GROUP BY x, y
 (1 row)
 
-SELECT pipeline_get_overlay_viewdef('test_gs2');
- pipeline_get_overlay_viewdef 
-------------------------------
-  SELECT test_gs2_mrel.x,    +
-     test_gs2_mrel.y,        +
-     test_gs2_mrel.count     +
+SELECT pg_get_viewdef('test_gs2');
+       pg_get_viewdef        
+-----------------------------
+  SELECT test_gs2_mrel.x,   +
+     test_gs2_mrel.y,       +
+     test_gs2_mrel.count    +
     FROM ONLY test_gs2_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW test_gs3 WITH (sw = '5 seconds') AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
+CREATE VIEW test_gs3 WITH (sw = '5 seconds') AS SELECT x::integer, y::integer, z::integer, COUNT(*) FROM test_gs_stream
 	GROUP BY GROUPING SETS (x, y, z);
-SELECT pipeline_get_worker_querydef('test_gs3');
-                                  pipeline_get_worker_querydef                                  
+SELECT pipelinedb.get_worker_querydef('test_gs3');
+                                      get_worker_querydef                                       
 ------------------------------------------------------------------------------------------------
   SELECT date_round(arrival_timestamp, '@ 1 sec'::interval) AS arrival_timestamp,              +
      x,                                                                                        +
@@ -110,8 +110,8 @@ SELECT pipeline_get_worker_querydef('test_gs3');
    GROUP BY GROUPING SETS ((x), (y), (z)), (date_round(arrival_timestamp, '@ 1 sec'::interval))
 (1 row)
 
-SELECT pipeline_get_combiner_querydef('test_gs3');
-    pipeline_get_combiner_querydef     
+SELECT pipelinedb.get_combiner_querydef('test_gs3');
+         get_combiner_querydef         
 ---------------------------------------
   SELECT arrival_timestamp,           +
      x,                               +
@@ -122,13 +122,13 @@ SELECT pipeline_get_combiner_querydef('test_gs3');
    GROUP BY x, y, z, arrival_timestamp
 (1 row)
 
-SELECT pipeline_get_overlay_viewdef('test_gs3');
-                              pipeline_get_overlay_viewdef                              
+SELECT pg_get_viewdef('test_gs3');
+                                     pg_get_viewdef                                     
 ----------------------------------------------------------------------------------------
   SELECT test_gs3_mrel.x,                                                              +
      test_gs3_mrel.y,                                                                  +
      test_gs3_mrel.z,                                                                  +
-     combine(test_gs3_mrel.count) AS count                                             +
+     sw_combine(test_gs3_mrel.count) AS count                                          +
     FROM ONLY test_gs3_mrel                                                            +
    WHERE (test_gs3_mrel.arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval))+
    GROUP BY test_gs3_mrel.x, test_gs3_mrel.y, test_gs3_mrel.z;
@@ -1793,8 +1793,8 @@ SELECT * FROM test_gs3 ORDER BY x, y, z;
 ---+---+---+-------
 (0 rows)
 
-DROP CONTINUOUS VIEW test_gs0;
-DROP CONTINUOUS VIEW test_gs1;
-DROP CONTINUOUS VIEW test_gs2;
-DROP CONTINUOUS VIEW test_gs3;
-DROP STREAM test_gs_stream CASCADE;
+DROP VIEW test_gs0;
+DROP VIEW test_gs1;
+DROP VIEW test_gs2;
+DROP VIEW test_gs3;
+DROP FOREIGN TABLE test_gs_stream CASCADE;

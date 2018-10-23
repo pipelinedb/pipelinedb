@@ -29,10 +29,10 @@ def test_concurrent_add_drop(pipeline, clean_db):
   def add_drop(prefix):
     # Don't share the connection object with the insert thread because we want
     # these queries to happen in parallel.
-    conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' %
-                            (getpass.getuser(), pipeline.port))
-    add = 'CREATE CONTINUOUS VIEW %s AS ' + q
-    drop = 'DROP CONTINUOUS VIEW %s'
+    conn = psycopg2.connect('dbname=postgres user=%s host=localhost port=%s' %
+                (getpass.getuser(), pipeline.port))
+    add = 'CREATE VIEW %s AS ' + q
+    drop = 'DROP VIEW %s'
     cur = conn.cursor()
     cvs = []
     while True:
@@ -58,8 +58,8 @@ def test_concurrent_add_drop(pipeline, clean_db):
     conn.close()
 
   threads = [threading.Thread(target=insert),
-             threading.Thread(target=add_drop, args=('cv1_',)),
-             threading.Thread(target=add_drop, args=('cv2_',))]
+         threading.Thread(target=add_drop, args=('cv1_',)),
+         threading.Thread(target=add_drop, args=('cv2_',))]
 
   map(lambda t: t.start(), threads)
 
@@ -68,12 +68,11 @@ def test_concurrent_add_drop(pipeline, clean_db):
 
   map(lambda t: t.join(), threads)
 
-  views = list(pipeline.execute('SELECT name FROM pipeline_views()'))
-  mrels = list(pipeline.execute(
-    "SELECT relname FROM pg_class WHERE relname LIKE 'cv%%_mrel'"))
+  views = pipeline.execute('SELECT name FROM pipelinedb.get_views()')
+  mrels = pipeline.execute("SELECT relname FROM pg_class WHERE relname LIKE 'cv%%_mrel'")
   assert len(views) == len(mrels)
 
-  counts = list(pipeline.execute('SELECT * FROM cv'))
+  counts = pipeline.execute('SELECT * FROM cv')
   assert len(counts) == 10000
   for r in counts:
     assert r['count'] == num_inserted[0]

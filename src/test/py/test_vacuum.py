@@ -29,7 +29,7 @@ def test_concurrent_vacuum_full(pipeline, clean_db):
   # vacuuming.
   time.sleep(20)
 
-  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' %
+  conn = psycopg2.connect('dbname=postgres user=%s host=localhost port=%s' %
                           (getpass.getuser(), pipeline.port))
   conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
   cur = conn.cursor()

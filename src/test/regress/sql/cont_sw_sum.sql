@@ -1,10 +1,10 @@
 -------------------------------------------------------------------------------
 -- Integer sums
-CREATE STREAM int_stream_cqswsum (k text, v int8);
+CREATE FOREIGN TABLE int_stream_cqswsum (k text, v int8) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW test_sw_int8_sum AS SELECT k::text, SUM(v::int8) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
-CREATE CONTINUOUS VIEW test_sw_int4_sum AS SELECT k::text, SUM(v::int4) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
-CREATE CONTINUOUS VIEW test_sw_int2_sum AS SELECT k::text, SUM(v::int2) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
+CREATE VIEW test_sw_int8_sum AS SELECT k::text, SUM(v::int8) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
+CREATE VIEW test_sw_int4_sum AS SELECT k::text, SUM(v::int4) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
+CREATE VIEW test_sw_int2_sum AS SELECT k::text, SUM(v::int2) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 
 INSERT INTO int_stream_cqswsum (k, v) VALUES ('x', 10), ('x', 10), ('x', 10);
 INSERT INTO int_stream_cqswsum (k, v) VALUES ('y', 10), ('y', 10), ('y', 10);
@@ -22,14 +22,14 @@ SELECT * FROM test_sw_int8_sum ORDER BY k;
 SELECT * FROM test_sw_int4_sum ORDER BY k;
 SELECT * FROM test_sw_int2_sum ORDER BY k;
 
-DROP STREAM int_stream_cqswsum CASCADE;
+DROP FOREIGN TABLE int_stream_cqswsum CASCADE;
 
 -------------------------------------------------------------------------------
 -- Float sums
-CREATE STREAM float_stream_cqswsum (k text, v float8);
+CREATE FOREIGN TABLE float_stream_cqswsum (k text, v float8) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW test_sw_float8_sum AS SELECT k::text, SUM(v::float8) FROM float_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
-CREATE CONTINUOUS VIEW test_sw_float4_sum AS SELECT k::text, SUM(v::float4) FROM float_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
+CREATE VIEW test_sw_float8_sum AS SELECT k::text, SUM(v::float8) FROM float_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
+CREATE VIEW test_sw_float4_sum AS SELECT k::text, SUM(v::float4) FROM float_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 
 INSERT INTO float_stream_cqswsum (k, v) VALUES ('x', 10.2), ('x', 1.2), ('x', 0.000001);
 INSERT INTO float_stream_cqswsum (k, v) VALUES ('y', -10.3), ('y', 1.2e6), ('y', '100.4');
@@ -45,13 +45,13 @@ INSERT INTO float_stream_cqswsum (k, v) VALUES ('y', -10.3), ('y', 1.2e6), ('y',
 SELECT * FROM test_sw_float8_sum ORDER BY k;
 SELECT * FROM test_sw_float4_sum ORDER BY k;
 
-DROP STREAM float_stream_cqswsum CASCADE;
+DROP FOREIGN TABLE float_stream_cqswsum CASCADE;
 
 -------------------------------------------------------------------------------
 -- Cash sums
-CREATE STREAM cash_stream_cqswsum (k text, v money);
+CREATE FOREIGN TABLE cash_stream_cqswsum (k text, v money) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW test_sw_cash_sum AS SELECT k::text, SUM(v::money) FROM cash_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
+CREATE VIEW test_sw_cash_sum AS SELECT k::text, SUM(v::money) FROM cash_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 
 INSERT INTO cash_stream_cqswsum (k, v) VALUES ('x', 10.2), ('x', 1.2), ('x', 0.10);
 INSERT INTO cash_stream_cqswsum (k, v) VALUES ('y', -10), ('y', 10), ('y', 0);
@@ -65,13 +65,13 @@ INSERT INTO cash_stream_cqswsum (k, v) VALUES ('y', '0.01');
 
 SELECT * FROM test_sw_cash_sum ORDER BY k;
 
-DROP STREAM cash_stream_cqswsum CASCADE;
+DROP FOREIGN TABLE cash_stream_cqswsum CASCADE;
 
 -------------------------------------------------------------------------------
 -- Numeric sums
-CREATE STREAM numeric_stream_cqswsum (k text, v numeric);
+CREATE FOREIGN TABLE numeric_stream_cqswsum (k text, v numeric) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW test_sw_numeric_sum AS SELECT k::text, SUM(v::numeric) FROM numeric_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
+CREATE VIEW test_sw_numeric_sum AS SELECT k::text, SUM(v::numeric) FROM numeric_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 
 INSERT INTO numeric_stream_cqswsum (k, v) VALUES ('x', 10.0002), ('x', 0.0001), ('x', -0.10);
 INSERT INTO numeric_stream_cqswsum (k, v) VALUES ('y', 1.004e5), ('y', 0.4), ('y', 0);
@@ -85,13 +85,13 @@ INSERT INTO numeric_stream_cqswsum (k, v) VALUES ('y', '-00000000000000000000000
 
 SELECT * FROM test_sw_numeric_sum ORDER BY k;
 
-DROP STREAM numeric_stream_cqswsum CASCADE;
+DROP FOREIGN TABLE numeric_stream_cqswsum CASCADE;
 
 -------------------------------------------------------------------------------
 -- Interval sum
-CREATE STREAM interval_stream_cqswsum (k text, ts0 timestamp, ts1 timestamp);
+CREATE FOREIGN TABLE interval_stream_cqswsum (k text, ts0 timestamp, ts1 timestamp) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW test_sw_interval_sum AS SELECT k::text, SUM(ts1::timestamp - ts0::timestamp) FROM interval_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
+CREATE VIEW test_sw_interval_sum AS SELECT k::text, SUM(ts1::timestamp - ts0::timestamp) FROM interval_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;
 
 INSERT INTO interval_stream_cqswsum (k, ts0, ts1) VALUES ('x', '2014-01-01', '2014-01-02'), ('x', '2014-01-01', '2014-02-01');
 INSERT INTO interval_stream_cqswsum (k, ts0, ts1) VALUES ('x', '2014-01-01', '2014-01-02'), ('x', '2014-01-01', '2014-02-01');
@@ -105,4 +105,4 @@ INSERT INTO interval_stream_cqswsum (k, ts0, ts1) VALUES ('y', '2014-01-01', '20
 
 SELECT * FROM test_sw_interval_sum ORDER BY k;
 
-DROP STREAM interval_stream_cqswsum CASCADE;
+DROP FOREIGN TABLE interval_stream_cqswsum CASCADE;

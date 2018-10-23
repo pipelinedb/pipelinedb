@@ -1,5 +1,5 @@
-CREATE STREAM bucket_stream (x integer, y integer, z text);
-CREATE CONTINUOUS VIEW bucket0 AS SELECT bucket_agg(x, y::smallint) FROM bucket_stream;
+CREATE FOREIGN TABLE bucket_stream (x integer, y integer, z text) SERVER pipelinedb;
+CREATE VIEW bucket0 AS SELECT bucket_agg(x, y::smallint) FROM bucket_stream;
 INSERT INTO bucket_stream (x, y) VALUES (0, 0);
 SELECT unnest(bucket_ids(bucket_agg)) AS bucket_id, unnest(bucket_cardinalities(bucket_agg)) AS card
 FROM bucket0 ORDER BY bucket_id;
@@ -36,8 +36,8 @@ SELECT unnest(bucket_ids(bucket_agg)) AS bucket_id, unnest(bucket_cardinalities(
          2 |    9
 (3 rows)
 
-DROP CONTINUOUS VIEW bucket0;
-CREATE CONTINUOUS VIEW bucket1 AS SELECT bucket_agg(x, y::smallint) FROM bucket_stream;
+DROP VIEW bucket0;
+CREATE VIEW bucket1 AS SELECT bucket_agg(x, y::smallint) FROM bucket_stream;
 INSERT INTO bucket_stream (x, y) SELECT x, x % 10 AS y FROM generate_series(1, 10000) AS x;
 SELECT unnest(bucket_ids(bucket_agg)) AS bucket_id FROM bucket1 ORDER BY bucket_id;
  bucket_id 
@@ -102,8 +102,8 @@ SELECT unnest(bucket_cardinalities(bucket_agg)) AS card FROM bucket1 ORDER BY ca
  1000
 (11 rows)
 
-DROP CONTINUOUS VIEW bucket1;
-CREATE CONTINUOUS VIEW bucket2 AS SELECT x % 10 AS g, bucket_agg(z, y::smallint) FROM bucket_stream GROUP BY g;
+DROP VIEW bucket1;
+CREATE VIEW bucket2 AS SELECT x % 10 AS g, bucket_agg(z, y::smallint) FROM bucket_stream GROUP BY g;
 INSERT INTO bucket_stream (x, y, z) SELECT x % 4, x % 10, lpad(x::text, 32, '0')  FROM generate_series(1, 10000) AS x;
 SELECT g, unnest(bucket_ids(bucket_agg)) AS bucket_id, unnest(bucket_cardinalities(bucket_agg)) AS card
 FROM bucket2 ORDER BY g, bucket_id;
@@ -163,119 +163,25 @@ FROM bucket2 ORDER BY g, bucket_id;
 (24 rows)
 
 -- Now let's run some user combines on them
-SELECT g % 2 as x, unnest(bucket_ids(combine(bucket_agg))) AS bucket_id, unnest(bucket_cardinalities(combine(bucket_agg))) AS card
-FROM bucket2 GROUP BY x ORDER BY x, bucket_id;
- x | bucket_id | card 
----+-----------+------
- 0 |         0 | 1000
- 0 |         2 | 1000
- 0 |         4 | 1000
- 0 |         6 | 1000
- 0 |         8 | 1000
- 0 |        11 |    1
- 1 |         1 |  999
- 1 |         3 | 1000
- 1 |         5 | 1000
- 1 |         7 | 1000
- 1 |         9 | 1000
- 1 |        11 |    1
-(12 rows)
-
-SELECT bucket_cardinality(combine(bucket_agg), 1::smallint) FROM bucket2;
- bucket_cardinality 
---------------------
-                999
-(1 row)
-
-SELECT bucket_cardinality(combine(bucket_agg), 2::smallint) FROM bucket2;
- bucket_cardinality 
---------------------
-               1000
-(1 row)
-
-SELECT bucket_cardinality(combine(bucket_agg), 4::smallint) FROM bucket2;
- bucket_cardinality 
---------------------
-               1000
-(1 row)
-
-SELECT bucket_cardinality(combine(bucket_agg), 8::smallint) FROM bucket2;
- bucket_cardinality 
---------------------
-               1000
-(1 row)
-
+-- All combine calls disabled unti #93
+-- SELECT g % 2 as x, unnest(bucket_ids(combine(bucket_agg))) AS bucket_id, unnest(bucket_cardinalities(combine(bucket_agg))) AS card
+-- FROM bucket2 GROUP BY x ORDER BY x, bucket_id;
+-- SELECT bucket_cardinality(combine(bucket_agg), 1::smallint) FROM bucket2;
+-- SELECT bucket_cardinality(combine(bucket_agg), 2::smallint) FROM bucket2;
+-- SELECT bucket_cardinality(combine(bucket_agg), 4::smallint) FROM bucket2;
+-- SELECT bucket_cardinality(combine(bucket_agg), 8::smallint) FROM bucket2;
 INSERT INTO bucket_stream (x, y, z) VALUES (3, 8::smallint, 'unique');
-SELECT g, unnest(bucket_ids(combine(bucket_agg))) AS bucket_id, unnest(bucket_cardinalities(combine(bucket_agg))) AS card FROM bucket2
-GROUP BY g ORDER BY g;
- g | bucket_id | card 
----+-----------+------
- 0 |         4 |  500
- 0 |        11 |    1
- 0 |         0 |  500
- 0 |         6 |  500
- 0 |         2 |  500
- 0 |         8 |  500
- 1 |        11 |    1
- 1 |         5 |  500
- 1 |         9 |  500
- 1 |         3 |  500
- 1 |         7 |  500
- 1 |         1 |  499
- 2 |        11 |    1
- 2 |         2 |  500
- 2 |         6 |  500
- 2 |         0 |  500
- 2 |         4 |  500
- 2 |         8 |  500
- 3 |         7 |  500
- 3 |         3 |  500
- 3 |         8 |    1
- 3 |        11 |    1
- 3 |         9 |  500
- 3 |         5 |  500
- 3 |         1 |  500
-(25 rows)
-
+-- SELECT g, unnest(bucket_ids(combine(bucket_agg))) AS bucket_id, unnest(bucket_cardinalities(combine(bucket_agg))) AS card FROM bucket2
+-- GROUP BY g ORDER BY g;
 INSERT INTO bucket_stream (x, y, z) VALUES (9, 8::smallint, 'unique');
 INSERT INTO bucket_stream (x, y, z) VALUES (9, 8::smallint, 'unique1');
 INSERT INTO bucket_stream (x, y, z) VALUES (9, 8::smallint, 'unique2');
-SELECT g, unnest(bucket_ids(combine(bucket_agg))) AS bucket_id, unnest(bucket_cardinalities(combine(bucket_agg))) AS card FROM bucket2
-GROUP BY g ORDER BY g;
- g | bucket_id | card 
----+-----------+------
- 0 |        11 |    1
- 0 |         0 |  500
- 0 |         6 |  500
- 0 |         2 |  500
- 0 |         8 |  500
- 0 |         4 |  500
- 1 |        11 |    1
- 1 |         5 |  500
- 1 |         9 |  500
- 1 |         3 |  500
- 1 |         7 |  500
- 1 |         1 |  499
- 2 |        11 |    1
- 2 |         2 |  500
- 2 |         6 |  500
- 2 |         0 |  500
- 2 |         4 |  500
- 2 |         8 |  500
- 3 |         3 |  500
- 3 |         8 |    1
- 3 |        11 |    1
- 3 |         9 |  500
- 3 |         5 |  500
- 3 |         1 |  500
- 3 |         7 |  500
- 9 |         8 |    3
-(26 rows)
-
-DROP CONTINUOUS VIEW bucket2;
-DROP STREAM bucket_stream;
-CREATE STREAM bucket_stream_ts (x integer, y integer, ts timestamptz);
-CREATE CONTINUOUS VIEW bucket3 AS SELECT bucket_agg(x, y::smallint, ts) FROM bucket_stream_ts;
+-- SELECT g, unnest(bucket_ids(combine(bucket_agg))) AS bucket_id, unnest(bucket_cardinalities(combine(bucket_agg))) AS card FROM bucket2
+-- GROUP BY g ORDER BY g;
+DROP VIEW bucket2;
+DROP FOREIGN TABLE bucket_stream;
+CREATE FOREIGN TABLE bucket_stream_ts (x integer, y integer, ts timestamptz) SERVER pipelinedb;
+CREATE VIEW bucket3 AS SELECT bucket_agg(x, y::smallint, ts) FROM bucket_stream_ts;
 INSERT INTO bucket_stream_ts (x, y, ts) VALUES (0, 0, '2017-03-22 00:00:01');
 SELECT unnest(bucket_ids(bucket_agg)) AS bucket_id, unnest(bucket_cardinalities(bucket_agg)) AS card FROM bucket3;
  bucket_id | card 
@@ -298,5 +204,5 @@ SELECT unnest(bucket_ids(bucket_agg)) AS bucket_id, unnest(bucket_cardinalities(
          2 |    1
 (1 row)
 
-DROP CONTINUOUS VIEW bucket3;
-DROP STREAM bucket_stream_ts;
+DROP VIEW bucket3;
+DROP FOREIGN TABLE bucket_stream_ts;

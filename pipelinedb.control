@@ -1,0 +1,5 @@
+# PipelineDB extension
+comment = 'PipelineDB'
+default_version = '1.0.0'
+module_pathname = '$libdir/pipelinedb'
+relocatable = true

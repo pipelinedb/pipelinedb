@@ -4,7 +4,7 @@
  *
  *  Writes to streams using the extended protocol for testing
 
- * Copyright (c) 2013-2015, PipelineDB
+ * Copyright (c) 2018, PipelineDB, Inc.
  *
  *-------------------------------------------------------------------------
  */

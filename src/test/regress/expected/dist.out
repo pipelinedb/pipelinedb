@@ -1,0 +1,84 @@
+SELECT dist_quantile(dist_agg(x), 0.50) FROM generate_series(1, 1000) AS x;
+ dist_quantile 
+---------------
+         500.5
+(1 row)
+
+SELECT dist_quantile(dist_agg(x), 0.10) FROM generate_series(1, 1000) AS x;
+ dist_quantile 
+---------------
+         100.5
+(1 row)
+
+SELECT dist_quantile(dist_agg(x), 0.05) FROM generate_series(1, 1000) AS x;
+ dist_quantile 
+---------------
+          50.5
+(1 row)
+
+SELECT dist_quantile(dist_agg(x), 0.90) FROM generate_series(1, 1000) AS x;
+ dist_quantile 
+---------------
+         900.5
+(1 row)
+
+SELECT dist_quantile(dist_agg(x), 0.99) FROM generate_series(1, 1000) AS x;
+ dist_quantile 
+---------------
+         990.5
+(1 row)
+
+SELECT dist_cdf(dist_agg(x), 1) FROM generate_series(1, 1000) AS x;
+ dist_cdf 
+----------
+        0
+(1 row)
+
+SELECT dist_cdf(dist_agg(x), 5) FROM generate_series(1, 1000) AS x;
+ dist_cdf 
+----------
+   0.0045
+(1 row)
+
+SELECT dist_cdf(dist_agg(x), 10) FROM generate_series(1, 1000) AS x;
+ dist_cdf 
+----------
+   0.0095
+(1 row)
+
+SELECT dist_cdf(dist_agg(x), 500) FROM generate_series(1, 1000) AS x;
+ dist_cdf 
+----------
+   0.4995
+(1 row)
+
+SELECT dist_cdf(dist_agg(x), 999) FROM generate_series(1, 1000) AS x;
+ dist_cdf 
+----------
+   0.9985
+(1 row)
+
+SELECT dist_cdf(dist_agg(x), 1000) FROM generate_series(1, 1000) AS x;
+ dist_cdf 
+----------
+        1
+(1 row)
+
+SELECT dist_cdf(dist_agg(x), 2000) FROM generate_series(1, 1000) AS x;
+ dist_cdf 
+----------
+        1
+(1 row)
+
+SELECT dist_quantile(dist_add(dist_agg(x), 10000), 0.99) FROM generate_series(1, 1000) AS x;
+ dist_quantile 
+---------------
+        991.49
+(1 row)
+
+SELECT dist_cdf(dist_add(dist_agg(x), 10000), 2000) FROM generate_series(1, 1000) AS x;
+     dist_cdf      
+-------------------
+ 0.998224084547826
+(1 row)
+

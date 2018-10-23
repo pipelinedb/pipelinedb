@@ -1,5 +1,5 @@
-CREATE STREAM sw_vacuum_stream (key text);
-CREATE CONTINUOUS VIEW sw_vacuum AS SELECT key, COUNT(*) FROM sw_vacuum_stream WHERE arrival_timestamp > clock_timestamp() - interval '3 second' GROUP BY key;
+CREATE FOREIGN TABLE sw_vacuum_stream (key text) SERVER pipelinedb;
+CREATE VIEW sw_vacuum AS SELECT key, COUNT(*) FROM sw_vacuum_stream WHERE arrival_timestamp > clock_timestamp() - interval '3 second' GROUP BY key;
 INSERT INTO sw_vacuum_stream (key) VALUES ('a'), ('b'), ('c');
 INSERT INTO sw_vacuum_stream (key) VALUES ('a'), ('b'), ('c');
 SELECT pg_sleep(1);
@@ -40,7 +40,7 @@ SELECT pg_sleep(3);
  
 (1 row)
 
-SELECT 0 * ttl_expire('sw_vacuum');
+SELECT 0 * pipelinedb.ttl_expire('sw_vacuum');
  ?column? 
 ----------
         0
@@ -86,7 +86,7 @@ SELECT DISTINCT key FROM sw_vacuum_mrel ORDER BY key;
  c
 (3 rows)
 
-SELECT 0 * ttl_expire('sw_vacuum');
+SELECT 0 * pipelinedb.ttl_expire('sw_vacuum');
  ?column? 
 ----------
         0
@@ -114,7 +114,7 @@ SELECT pg_sleep(3);
  
 (1 row)
 
-SELECT 0 * ttl_expire('sw_vacuum');
+SELECT 0 * pipelinedb.ttl_expire('sw_vacuum');
  ?column? 
 ----------
         0
@@ -130,4 +130,5 @@ SELECT key, SUM(count) FROM sw_vacuum_mrel GROUP BY key ORDER BY key;
 -----+-----
 (0 rows)
 
-DROP CONTINUOUS VIEW sw_vacuum;
+DROP FOREIGN TABLE sw_vacuum_stream CASCADE;
+NOTICE:  drop cascades to view sw_vacuum

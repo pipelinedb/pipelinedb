@@ -1,8 +1,8 @@
-CREATE STREAM test_distinct_count_stream (x int, y int, z int);
+CREATE FOREIGN TABLE test_distinct_count_stream (x int, y int, z int) SERVER pipelinedb;
 -- COUNT(DISTINCT ...)
-CREATE CONTINUOUS VIEW test_distinct_count AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream;
-CREATE CONTINUOUS VIEW test_distinct_sw_count AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream WHERE (arrival_timestamp > clock_timestamp() - interval '10 seconds');
-CREATE CONTINUOUS VIEW test_distinct_sw_count_small AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 second');;
+CREATE VIEW test_distinct_count AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream;
+CREATE VIEW test_distinct_sw_count AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream WHERE (arrival_timestamp > clock_timestamp() - interval '10 seconds');
+CREATE VIEW test_distinct_sw_count_small AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 second');;
 INSERT INTO test_distinct_count_stream (x, y, z) VALUES (1, 1, '1'), (1, 1, '1'), (4, 4, '4'), (7, 7, '7'), (0, 0, '0'), (2, 2, '2'), (4, 4, '4'), (8, 8, '8'), (8, 8, '8'), (7, 7, '7'), (9, 9, '9'), (6, 6, '6'), (2, 2, '2'), (6, 6, '6'), (5, 5, '5'), (3, 3, '3'), (9, 9, '9'), (0, 0, '0'), (5, 5, '5'), (3, 3, '3');
 INSERT INTO test_distinct_count_stream (z, y, x) VALUES ('1', 1, 1);
 INSERT INTO test_distinct_count_stream (z, y, x) VALUES ('9', 9, 9);
@@ -47,14 +47,20 @@ SELECT * FROM test_distinct_count;
 (1 row)
 
 \d+ test_distinct_count_mrel;
-               Table "public.test_distinct_count_mrel"
- Column |  Type  | Modifiers | Storage  | Stats target | Description 
---------+--------+-----------+----------+--------------+-------------
- count  | hll    |           | extended |              | 
- $pk    | bigint | not null  | plain    |              | 
+                         Table "public.test_distinct_count_mrel"
+ Column |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+--------+-----------+----------+---------+----------+--------------+-------------
+ count  | bytea  |           |          |         | extended |              | 
+ $pk    | bigint |           | not null |         | plain    |              | 
 Indexes:
     "test_distinct_count_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
+
+SELECT * FROM test_distinct_count;
+ count 
+-------
+    10
+(1 row)
 
 SELECT * FROM test_distinct_sw_count;
  count 
@@ -63,15 +69,15 @@ SELECT * FROM test_distinct_sw_count;
 (1 row)
 
 \d+ test_distinct_sw_count_mrel;
-                            Table "public.test_distinct_sw_count_mrel"
-      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+----------+--------------+-------------
- arrival_timestamp | timestamp with time zone |           | plain    |              | 
- count             | hll                      |           | extended |              | 
- $pk               | bigint                   | not null  | plain    |              | 
+                                      Table "public.test_distinct_sw_count_mrel"
+      Column       |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           |          |         | plain    |              | 
+ count             | bytea                    |           |          |         | extended |              | 
+ $pk               | bigint                   |           | not null |         | plain    |              | 
 Indexes:
     "test_distinct_sw_count_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "test_distinct_sw_count_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp))
+    "test_distinct_sw_count_mrel_expr_idx" btree (pipelinedb.ls_hash_group(arrival_timestamp))
 Options: fillfactor=50
 
 SELECT pg_sleep(1);
@@ -80,21 +86,27 @@ SELECT pg_sleep(1);
  
 (1 row)
 
+SELECT * FROM test_distinct_count;
+ count 
+-------
+    10
+(1 row)
+
 SELECT * FROM test_distinct_sw_count_small;
  count 
 -------
      0
 (1 row)
 
-DROP STREAM test_distinct_count_stream CASCADE;
+DROP FOREIGN TABLE test_distinct_count_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to view test_distinct_count
 drop cascades to view test_distinct_sw_count
 drop cascades to view test_distinct_sw_count_small
 -- DISTINCT / DISTINCT ON
-CREATE STREAM test_distinct_stream (x int, y int, z int);
-CREATE CONTINUOUS VIEW test_distinct AS SELECT DISTINCT x::int, y::int - z::int FROM test_distinct_stream;
-CREATE CONTINUOUS VIEW test_distinct_on AS SELECT DISTINCT ON (x::int, y::int - z::int) x::int, y::int, z::int FROM test_distinct_stream;
+CREATE FOREIGN TABLE test_distinct_stream (x int, y int, z int) SERVER pipelinedb;;
+CREATE VIEW test_distinct AS SELECT DISTINCT x::int, y::int - z::int FROM test_distinct_stream;
+CREATE VIEW test_distinct_on AS SELECT DISTINCT ON (x::int, y::int - z::int) x::int, y::int, z::int FROM test_distinct_stream;
 INSERT INTO test_distinct_stream (x, y, z) VALUES (1, 1, '1'), (1, 1, '1'), (4, 4, '4'), (7, 7, '7'), (0, 0, '0'), (2, 2, '2'), (4, 4, '4'), (8, 8, '8'), (8, 8, '8'), (7, 7, '7'), (9, 9, '9'), (6, 6, '6'), (2, 2, '2'), (6, 6, '6'), (5, 5, '5'), (3, 3, '3'), (9, 9, '9'), (0, 0, '0'), (5, 5, '5'), (3, 3, '3');
 INSERT INTO test_distinct_stream (z, y, x) VALUES ('1', 1, 1);
 INSERT INTO test_distinct_stream (z, y, x) VALUES ('9', 9, 9);
@@ -164,7 +176,7 @@ SELECT * FROM test_distinct_on ORDER BY x;
    |   |  
 (11 rows)
 
-CREATE CONTINUOUS VIEW test_distinct_regress AS SELECT DISTINCT x::int, y::int FROM test_distinct_stream;
+CREATE VIEW test_distinct_regress AS SELECT DISTINCT x::int, y::int FROM test_distinct_stream;
 INSERT INTO test_distinct_stream (x) VALUES (1);
 INSERT INTO test_distinct_stream (y) VALUES (1);
 SELECT * FROM test_distinct_regress;
@@ -174,8 +186,35 @@ SELECT * FROM test_distinct_regress;
    | 1
 (2 rows)
 
-DROP STREAM test_distinct_stream CASCADE;
+DROP FOREIGN TABLE test_distinct_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to view test_distinct
 drop cascades to view test_distinct_on
 drop cascades to view test_distinct_regress
+-- exact_count_distinct
+CREATE FOREIGN TABLE ecd_s (x integer, y integer) SERVER pipelinedb;
+CREATE VIEW ecd0 AS SELECT x, exact_count_distinct(y) FROM ecd_s GROUP BY x;
+INSERT INTO ecd_s (x, y) VALUES (0, 0);
+INSERT INTO ecd_s (x, y) VALUES (0, 1);
+INSERT INTO ecd_s (x, y) VALUES (0, 2);
+INSERT INTO ecd_s (x, y) VALUES (0, 2);
+INSERT INTO ecd_s (x, y) VALUES (0, 2);
+INSERT INTO ecd_s (x, y) VALUES (1, 2);
+INSERT INTO ecd_s (x, y) VALUES (1, 2);
+INSERT INTO ecd_s (x, y) VALUES (1, 4);
+INSERT INTO ecd_s (x, y) VALUES (1, 4);
+SELECT * FROM ecd0 ORDER BY x;
+ x | exact_count_distinct 
+---+----------------------
+ 0 |                    3
+ 1 |                    2
+(2 rows)
+
+SELECT combine(exact_count_distinct) FROM ecd0;
+ combine 
+---------
+       4
+(1 row)
+
+DROP FOREIGN TABLE ecd_s CASCADE;
+NOTICE:  drop cascades to view ecd0
