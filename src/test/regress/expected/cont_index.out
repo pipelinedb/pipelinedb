@@ -1,125 +1,125 @@
-CREATE STREAM cont_idx_stream (x int, y int);
-CREATE CONTINUOUS VIEW test_cont_index0 AS SELECT x::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x;
+CREATE FOREIGN TABLE cont_idx_stream (x int, y int) SERVER pipelinedb;
+CREATE VIEW test_cont_index0 AS SELECT x::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x;
 CREATE INDEX test_ci_idx0 ON test_cont_index0 (x);
 \d+ test_cont_index0_mrel
-                 Table "public.test_cont_index0_mrel"
- Column |   Type   | Modifiers | Storage  | Stats target | Description 
---------+----------+-----------+----------+--------------+-------------
- x      | integer  |           | plain    |              | 
- count  | bigint   |           | plain    |              | 
- avg    | bigint[] |           | extended |              | 
- $pk    | bigint   | not null  | plain    |              | 
+                            Table "public.test_cont_index0_mrel"
+ Column |   Type   | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+----------+-----------+----------+---------+----------+--------------+-------------
+ x      | integer  |           |          |         | plain    |              | 
+ count  | bigint   |           |          |         | plain    |              | 
+ avg    | bigint[] |           |          |         | extended |              | 
+ $pk    | bigint   |           | not null |         | plain    |              | 
 Indexes:
     "test_cont_index0_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_ci_idx0" btree (x)
-    "test_cont_index0_mrel_expr_idx" btree (hash_group(x))
+    "test_cont_index0_mrel_expr_idx" btree (pipelinedb.hash_group(x))
 Options: fillfactor=50
 
 CREATE INDEX test_ci_idx1 ON test_cont_index0 (avg);
 \d+ test_cont_index0_mrel
-                 Table "public.test_cont_index0_mrel"
- Column |   Type   | Modifiers | Storage  | Stats target | Description 
---------+----------+-----------+----------+--------------+-------------
- x      | integer  |           | plain    |              | 
- count  | bigint   |           | plain    |              | 
- avg    | bigint[] |           | extended |              | 
- $pk    | bigint   | not null  | plain    |              | 
+                            Table "public.test_cont_index0_mrel"
+ Column |   Type   | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+----------+-----------+----------+---------+----------+--------------+-------------
+ x      | integer  |           |          |         | plain    |              | 
+ count  | bigint   |           |          |         | plain    |              | 
+ avg    | bigint[] |           |          |         | extended |              | 
+ $pk    | bigint   |           | not null |         | plain    |              | 
 Indexes:
     "test_cont_index0_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_ci_idx0" btree (x)
-    "test_ci_idx1" btree (int8_avg(avg))
-    "test_cont_index0_mrel_expr_idx" btree (hash_group(x))
+    "test_ci_idx1" btree (avg)
+    "test_cont_index0_mrel_expr_idx" btree (pipelinedb.hash_group(x))
 Options: fillfactor=50
 
 CREATE INDEX test_ci_idx2 ON test_cont_index0 (x, avg);
 \d+ test_cont_index0_mrel
-                 Table "public.test_cont_index0_mrel"
- Column |   Type   | Modifiers | Storage  | Stats target | Description 
---------+----------+-----------+----------+--------------+-------------
- x      | integer  |           | plain    |              | 
- count  | bigint   |           | plain    |              | 
- avg    | bigint[] |           | extended |              | 
- $pk    | bigint   | not null  | plain    |              | 
+                            Table "public.test_cont_index0_mrel"
+ Column |   Type   | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+----------+-----------+----------+---------+----------+--------------+-------------
+ x      | integer  |           |          |         | plain    |              | 
+ count  | bigint   |           |          |         | plain    |              | 
+ avg    | bigint[] |           |          |         | extended |              | 
+ $pk    | bigint   |           | not null |         | plain    |              | 
 Indexes:
     "test_cont_index0_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_ci_idx0" btree (x)
-    "test_ci_idx1" btree (int8_avg(avg))
-    "test_ci_idx2" btree (x, int8_avg(avg))
-    "test_cont_index0_mrel_expr_idx" btree (hash_group(x))
+    "test_ci_idx1" btree (avg)
+    "test_ci_idx2" btree (x, avg)
+    "test_cont_index0_mrel_expr_idx" btree (pipelinedb.hash_group(x))
 Options: fillfactor=50
 
-DROP CONTINUOUS VIEW test_cont_index0;
-CREATE CONTINUOUS VIEW test_cont_index1 WITH (sw = '1 hour') AS SELECT x::integer, y::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x, y;
+DROP VIEW test_cont_index0;
+CREATE VIEW test_cont_index1 WITH (sw = '1 hour') AS SELECT x::integer, y::integer, COUNT(*), AVG(x) FROM cont_idx_stream GROUP BY x, y;
 CREATE INDEX test_ci_idx0 ON test_cont_index1 (x);
 \d+ test_cont_index1_mrel
-                               Table "public.test_cont_index1_mrel"
-      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+----------+--------------+-------------
- arrival_timestamp | timestamp with time zone |           | plain    |              | 
- x                 | integer                  |           | plain    |              | 
- y                 | integer                  |           | plain    |              | 
- count             | bigint                   |           | plain    |              | 
- avg               | bigint[]                 |           | extended |              | 
- $pk               | bigint                   | not null  | plain    |              | 
+                                         Table "public.test_cont_index1_mrel"
+      Column       |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           |          |         | plain    |              | 
+ x                 | integer                  |           |          |         | plain    |              | 
+ y                 | integer                  |           |          |         | plain    |              | 
+ count             | bigint                   |           |          |         | plain    |              | 
+ avg               | bigint[]                 |           |          |         | extended |              | 
+ $pk               | bigint                   |           | not null |         | plain    |              | 
 Indexes:
     "test_cont_index1_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_ci_idx0" btree (x)
-    "test_cont_index1_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, x, y))
+    "test_cont_index1_mrel_expr_idx" btree (pipelinedb.ls_hash_group(arrival_timestamp, x, y))
 Options: fillfactor=50
 
 CREATE INDEX test_ci_idx1 ON test_cont_index1 (avg);
 ERROR:  sliding-window aggregate columns cannot be indexed
 \d+ test_cont_index1_mrel
-                               Table "public.test_cont_index1_mrel"
-      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+----------+--------------+-------------
- arrival_timestamp | timestamp with time zone |           | plain    |              | 
- x                 | integer                  |           | plain    |              | 
- y                 | integer                  |           | plain    |              | 
- count             | bigint                   |           | plain    |              | 
- avg               | bigint[]                 |           | extended |              | 
- $pk               | bigint                   | not null  | plain    |              | 
+                                         Table "public.test_cont_index1_mrel"
+      Column       |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           |          |         | plain    |              | 
+ x                 | integer                  |           |          |         | plain    |              | 
+ y                 | integer                  |           |          |         | plain    |              | 
+ count             | bigint                   |           |          |         | plain    |              | 
+ avg               | bigint[]                 |           |          |         | extended |              | 
+ $pk               | bigint                   |           | not null |         | plain    |              | 
 Indexes:
     "test_cont_index1_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_ci_idx0" btree (x)
-    "test_cont_index1_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, x, y))
+    "test_cont_index1_mrel_expr_idx" btree (pipelinedb.ls_hash_group(arrival_timestamp, x, y))
 Options: fillfactor=50
 
 CREATE INDEX test_ci_idx2 ON test_cont_index1 (x, avg);
 ERROR:  sliding-window aggregate columns cannot be indexed
 \d+ test_cont_index1_mrel
-                               Table "public.test_cont_index1_mrel"
-      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+----------+--------------+-------------
- arrival_timestamp | timestamp with time zone |           | plain    |              | 
- x                 | integer                  |           | plain    |              | 
- y                 | integer                  |           | plain    |              | 
- count             | bigint                   |           | plain    |              | 
- avg               | bigint[]                 |           | extended |              | 
- $pk               | bigint                   | not null  | plain    |              | 
+                                         Table "public.test_cont_index1_mrel"
+      Column       |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           |          |         | plain    |              | 
+ x                 | integer                  |           |          |         | plain    |              | 
+ y                 | integer                  |           |          |         | plain    |              | 
+ count             | bigint                   |           |          |         | plain    |              | 
+ avg               | bigint[]                 |           |          |         | extended |              | 
+ $pk               | bigint                   |           | not null |         | plain    |              | 
 Indexes:
     "test_cont_index1_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_ci_idx0" btree (x)
-    "test_cont_index1_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, x, y))
+    "test_cont_index1_mrel_expr_idx" btree (pipelinedb.ls_hash_group(arrival_timestamp, x, y))
 Options: fillfactor=50
 
 CREATE INDEX test_ci_idx3 ON test_cont_index1 (x, y);
 \d+ test_cont_index1_mrel
-                               Table "public.test_cont_index1_mrel"
-      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+----------+--------------+-------------
- arrival_timestamp | timestamp with time zone |           | plain    |              | 
- x                 | integer                  |           | plain    |              | 
- y                 | integer                  |           | plain    |              | 
- count             | bigint                   |           | plain    |              | 
- avg               | bigint[]                 |           | extended |              | 
- $pk               | bigint                   | not null  | plain    |              | 
+                                         Table "public.test_cont_index1_mrel"
+      Column       |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           |          |         | plain    |              | 
+ x                 | integer                  |           |          |         | plain    |              | 
+ y                 | integer                  |           |          |         | plain    |              | 
+ count             | bigint                   |           |          |         | plain    |              | 
+ avg               | bigint[]                 |           |          |         | extended |              | 
+ $pk               | bigint                   |           | not null |         | plain    |              | 
 Indexes:
     "test_cont_index1_mrel_pkey" PRIMARY KEY, btree ("$pk")
     "test_ci_idx0" btree (x)
     "test_ci_idx3" btree (x, y)
-    "test_cont_index1_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, x, y))
+    "test_cont_index1_mrel_expr_idx" btree (pipelinedb.ls_hash_group(arrival_timestamp, x, y))
 Options: fillfactor=50
 
-DROP CONTINUOUS VIEW test_cont_index1;
-DROP STREAM cont_idx_stream CASCADE;
+DROP VIEW test_cont_index1;
+DROP FOREIGN TABLE cont_idx_stream CASCADE;

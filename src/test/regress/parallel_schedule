@@ -1,193 +1,70 @@
-# ----------
-# src/test/regress/parallel_schedule
+# 
+# Parallel group of tests
 #
-# By convention, we put no more than twenty tests in any one parallel group;
-# this limits the number of connections needed to run the tests.
-# ----------
-
-# run tablespace by itself, and first, because it forces a checkpoint;
-# we'd prefer not to have checkpoints later in the tests because that
-# interferes with crash-recovery testing.
-test: tablespace
-
-# ----------
-# The first group of parallel tests
-# ----------
-test: boolean char name varchar text int2 int4 int8 oid float4 float8 bit numeric txid uuid enum money rangetypes pg_lsn regproc
-
-# Depends on things setup during char, varchar and text
-test: strings
-# Depends on int2, int4, int8, float4, float8
-test: numerology
-
-# ----------
-# The second group of parallel tests
-# ----------
-test: point lseg line box path polygon circle date time timetz timestamp timestamptz interval abstime reltime tinterval inet macaddr tstypes comments
-
-# ----------
-# Another group of parallel tests
-# geometry depends on point, lseg, box, path, polygon and circle
-# horology depends on interval, timetz, timestamp, timestamptz, reltime and abstime
-# ----------
-test: geometry horology regex oidjoins type_sanity opr_sanity
-
-# ----------
-# These four each depend on the previous one
-# ----------
-test: insert
-test: insert_conflict
-test: create_function_1
-test: create_type
-test: create_table
-test: create_function_2
-
-# ----------
-# Load huge amounts of data
-# We should split the data files into single files and then
-# execute two copy tests parallel, to check that copy itself
-# is concurrent safe.
-# ----------
-test: copy copyselect
-
-# ----------
-# More groups of parallel tests
-# ----------
-test: create_misc create_operator
-# These depend on the above two
-test: create_index create_view
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: create_aggregate create_function_3 create_cast constraints triggers inherit create_table_like typed_table vacuum drop_if_exists updatable_views rolenames roleattributes
-
-# ----------
-# sanity_check does a vacuum, affecting the sort order of SELECT *
-# results. So it should not run parallel to other tests.
-# ----------
-test: sanity_check
-
-# ----------
-# Believe it or not, select creates a table, subsequent
-# tests need.
-# ----------
-test: errors
-test: select
-ignore: random
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: select_into select_distinct select_distinct_on select_implicit select_having subselect union case join aggregates transactions random portals arrays btree_index hash_index update namespace prepared_xacts delete
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: brin gin gist spgist privileges security_label collate matview lock replica_identity rowsecurity object_address tablesample groupingsets
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: alter_generic misc psql async
-
-# rules cannot run concurrently with any test that creates a view
-test: rules
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: select_views portals_p2 foreign_key cluster dependency guc bitmapops combocid tsearch tsdicts foreign_data window xmlmap functional_deps advisory_lock json jsonb json_encoding indirect_toast equivclass
-# ----------
-# Another group of parallel tests
-# NB: temp.sql does a reconnect which transiently uses 2 connections,
-# so keep this parallel group to at most 19 tests
-# ----------
-test: plancache limit plpgsql copy2 temp domain rangefuncs prepare without_oid conversion truncate alter_table sequence polymorphism rowtypes returning largeobject with xml
-
-# event triggers cannot run concurrently with any test that runs DDL
-test: event_trigger
-
-# run stats by itself because its delay may be insufficient under heavy load
-test: stats
-
-# ----------
-# Another group of parallel tests
-# ----------
 test: pipeline_stream
 
-# ----------
-# Another group of parallel tests
-# ----------
-test: sw_expiration ttl_expiration
+# 
+# Parallel group of tests
+#
+test: cont_limit cont_transform cont_view_sanity cont_sum cont_avg cont_count
 
-# ----------
-# Another group of parallel tests
-# ----------
-test: create_cont_view cont_view_sanity
+# 
+# Parallel group of tests
+#
+test: stream_targets date_round stream_insert_subselect stream_exprs prepared_stream_insert cont_view_namespace
 
-# ----------
-# Another group of parallel tests
-# XXX(loadzero) - taken out of above group due to #1473
-# ----------
+# 
+# Parallel group of tests
+#
+test: cont_bool_agg cont_min_max cont_regr cont_pk matrel_constraints cont_json_agg
+
+#
+# Parallel group of tests
+#
+# This test can be sensitive to expected failures in other tests, so we give it its own group
+test: user_combine
+
+#
+# Parallel group of tests
+#
+test: cont_sw_avg cont_stats_agg cont_array_agg cont_set_agg cont_distinct cont_hll_agg hll
+
+#
+# Parallel group of tests
+#
+test: cont_hs_agg cont_os_agg typed_streams bloom cont_complex_types topk cont_topk_agg
+
+#
+# Parallel group of tests
+#
+test: dist cont_dist_agg freq cont_freq_agg keyed_min_max first_values bucket_agg output_streams
+
+#
+# Parallel group of tests
+#
+test: delta_streams stream_table_join cont_activate cont_subselect hash_group
+
+#
+# Parallel group of tests
+#
+test: ttl_expiration sw_expiration
+
+#
+# Parallel group of tests
+#
 test: analyze_cont_view
 
-# ----------
-# Another group of parallel tests
-# ----------
-test: cont_sum cont_sw_sum cont_avg cont_sw_avg cont_count
+#
+# Parallel group of tests
+#
+test: cont_stats cont_sw_sum cont_sw_bool_agg cont_sw_min_max cont_sw_regr cont_sw_stats
 
-# ----------
-# Another group of parallel tests
-# ----------
-test: cont_bool_agg cont_min_max cont_object_agg cont_regr cont_stats
+#
+# Parallel group of tests
+#
+test: cont_sw_count cont_object_agg cont_sw_hs_agg cont_sw_os_agg create_cont_view
 
-# ----------
-# Another group of parallel tests
-# ----------
-test: cont_sw_bool_agg cont_sw_min_max cont_sw_object_agg cont_sw_regr cont_sw_stats
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: cont_hs_agg cont_sw_hs_agg cont_distinct cont_hll_agg cont_os_agg cont_sw_os_agg cont_sw_count
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: stream_table_join user_combine cont_limit cont_alter stream_targets hash_group date_round stream_insert_subselect
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: stream_exprs prepared_stream_insert cont_view_tablespace typed_streams cont_subselect
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: cont_view_namespace cont_complex_types cont_multiple_sw keyed_min_max
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: create_combinable_agg pipeline_regress cont_fss_agg cont_matrel cont_set_agg cont_index first_values cont_grouping_sets
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: cont_activate output_streams delta_streams
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: cont_pk matrel_constraints
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: pipeline_stats cont_transform
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: bloom fss tdigest hll cmsketch bucket_agg
+#
+# Parallel group of tests
+#
+test: cont_alter cont_sw_object_agg pipeline_regress cont_grouping_sets cont_matrel cont_index

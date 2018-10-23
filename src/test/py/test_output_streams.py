@@ -30,14 +30,14 @@ def test_output_tree(pipeline, clean_db):
 
   pipeline.insert('root', ('x',), [(x % 100,) for x in range(10000)])
 
-  names = [r[0] for r in pipeline.execute('SELECT name FROM pipeline_views() ORDER BY name DESC')]
+  names = [r[0] for r in pipeline.execute('SELECT name FROM pipelinedb.get_views() ORDER BY name DESC')]
   assert len(names) == 15
 
   # Verify all values propagated to each node in the tree
   for name in names:
     rows = pipeline.execute('SELECT x, max(count) FROM %s GROUP BY x' % name)
     for row in rows:
-      x, count = row
+      x, count = (row['x'], row['max'])
       assert count == 100
 
   pipeline.insert('root', ('x',), [(x % 100,) for x in range(10000)])
@@ -46,7 +46,7 @@ def test_output_tree(pipeline, clean_db):
   for name in names:
     rows = pipeline.execute('SELECT x, max(count) FROM %s GROUP BY x' % name)
     for row in rows:
-      x, count = row
+      x, count = (row['x'], row['max'])
       assert count == 200
 
   # Drop these in reverse dependency order to prevent deadlocks
@@ -73,14 +73,14 @@ def test_concurrent_sw_ticking(pipeline, clean_db):
     pipeline.create_cv(output_name, q)
     output_names.append(output_name)
 
-  names = [r[0] for r in pipeline.execute('SELECT name FROM pipeline_views() ORDER BY name DESC')]
+  names = [r[0] for r in pipeline.execute('SELECT name FROM pipelinedb.get_views() ORDER BY name DESC')]
   assert len(names) == 2 * 10
 
   pipeline.insert('stream0', ('x',), [(x % 100,) for x in range(10000)])
   time.sleep(25)
 
   for name in output_names:
-    rows = list(pipeline.execute('SELECT COUNT(DISTINCT x) FROM %s' % name))
+    rows = pipeline.execute('SELECT COUNT(DISTINCT x) FROM %s' % name)
     assert rows[0][0] == 100
 
     for x in range(100):
@@ -100,16 +100,16 @@ def test_transforms(pipeline, clean_db):
   """
   pipeline.create_stream('stream0', x='int')
   pipeline.create_cv('sw', 'SELECT x::integer, COUNT(*) FROM stream0 GROUP BY x',
-                     sw='5 seconds')
+             sw='5 seconds')
 
   # Write a row to a stream each time a row goes out of window
   q = 'SELECT (old).x FROM sw_osrel WHERE old IS NOT NULL AND new IS NULL'
   pipeline.create_stream('oow_stream', x='integer')
-  pipeline.create_ct('ct', q, "pipeline_stream_insert('oow_stream')")
+  pipeline.create_ct('ct', q, "pipelinedb.insert_into_stream('oow_stream')")
   pipeline.create_cv('ct_recv', 'SELECT x FROM oow_stream')
 
   pipeline.insert('stream0', ('x',), [(x % 100,) for x in range(10000)])
   time.sleep(7)
 
-  rows = list(pipeline.execute('SELECT * FROM ct_recv'))
+  rows = pipeline.execute('SELECT * FROM ct_recv')
   assert len(rows) == 100

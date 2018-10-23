@@ -25,12 +25,12 @@ def test_distinct(pipeline, clean_db):
   q = """
   SELECT DISTINCT ON (x::int, y::int - z::int) x::int, y::int FROM table0
   """
-  expected = list(pipeline.execute(q))
+  expected = pipeline.execute(q)
   expected = len(expected)
 
   assert expected < 2000
 
-  result = pipeline.execute('SELECT COUNT(*) FROM test_distinct').first()
+  result = pipeline.execute('SELECT COUNT(*) FROM test_distinct')[0]
 
   assert expected == result['count']
 

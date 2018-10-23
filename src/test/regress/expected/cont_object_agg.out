@@ -73,9 +73,9 @@ CREATE FUNCTION
     END;
   $BODY$
 LANGUAGE plpgsql;
-CREATE STREAM cqobjectagg_stream (key text, tval text, fval float8, ival integer, n text, v integer, t text);
+CREATE FOREIGN TABLE cqobjectagg_stream (key text, tval text, fval float8, ival integer, n text, v integer, t text) SERVER pipelinedb;
 -- json_agg
-CREATE CONTINUOUS VIEW test_json_agg AS SELECT key::text, json_agg(tval::text) AS j0, json_agg(fval::float8) AS j1, json_agg(ival::integer) AS j2 FROM cqobjectagg_stream GROUP BY key;
+CREATE VIEW test_json_agg AS SELECT key::text, json_agg(tval::text) AS j0, json_agg(fval::float8) AS j1, json_agg(ival::integer) AS j2 FROM cqobjectagg_stream GROUP BY key;
 INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('x', 'text', 0.01, 42), ('x', 'more text', 0.01, 42), ('x', 'blaahhhh', 0.01, 42);
 INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('y', '4.2', 1.01, 42), ('z', '\"quoted\"', 2.01, 42), ('x', '', 0.01, 42), ('z', '2', '3', '4');
 SELECT key, array_sort(json_to_array(j0)) FROM test_json_agg ORDER BY key;
@@ -128,8 +128,8 @@ SELECT key, array_sort(json_to_array(j2)) FROM test_json_agg ORDER BY key;
 (3 rows)
 
 -- json_object_agg
-CREATE CONTINUOUS VIEW test_object_agg0 AS SELECT n, json_object_agg(n::text, v::integer) FROM cqobjectagg_stream GROUP BY n;
-CREATE CONTINUOUS VIEW test_object_agg1 AS SELECT n, json_object_agg(n::text, t::text) FROM cqobjectagg_stream GROUP BY n;
+CREATE VIEW test_object_agg0 AS SELECT n, json_object_agg(n::text, v::integer) FROM cqobjectagg_stream GROUP BY n;
+CREATE VIEW test_object_agg1 AS SELECT n, json_object_agg(n::text, t::text) FROM cqobjectagg_stream GROUP BY n;
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 1, '1');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 2, '2');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k1', 3, '3');
@@ -174,16 +174,16 @@ SELECT n, array_sort(json_keys_array(json_object_agg)) FROM test_object_agg1 ORD
  k3 | {k3,k3}
 (4 rows)
 
-DROP STREAM cqobjectagg_stream CASCADE;
+DROP FOREIGN TABLE cqobjectagg_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to view test_json_agg
-drop cascades to view test_object_agg0
+DETAIL:  drop cascades to view test_object_agg0
 drop cascades to view test_object_agg1
+drop cascades to view test_json_agg
 -- bytea_string_agg, string_agg
-CREATE STREAM cqobjectagg_stream (k text, v bytea);
-CREATE STREAM cqobjectagg_text_stream (k text, v text);
-CREATE CONTINUOUS VIEW test_bstring_agg AS SELECT k::text, string_agg(v::bytea, '@') FROM cqobjectagg_stream GROUP by k;
-CREATE CONTINUOUS VIEW test_string_agg AS SELECT k::text, string_agg(v::text, '@') FROM cqobjectagg_text_stream GROUP by k;
+CREATE FOREIGN TABLE cqobjectagg_stream (k text, v bytea) SERVER pipelinedb;
+CREATE FOREIGN TABLE cqobjectagg_text_stream (k text, v text) SERVER pipelinedb;
+CREATE VIEW test_bstring_agg AS SELECT k::text, string_agg(v::bytea, '@') FROM cqobjectagg_stream GROUP by k;
+CREATE VIEW test_string_agg AS SELECT k::text, string_agg(v::text, '@') FROM cqobjectagg_text_stream GROUP by k;
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('x', 'val0'), ('x', 'val1');
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('y', 'val0'), ('y', 'val1');
 INSERT INTO cqobjectagg_text_stream (k, v) VALUES ('x', 'val0'), ('x', 'val1');
@@ -222,23 +222,23 @@ SELECT k, array_sort(regexp_split_to_array(string_agg, '@')) FROM test_string_ag
  z | {val4}
 (3 rows)
 
-DROP STREAM cqobjectagg_stream CASCADE;
+DROP FOREIGN TABLE cqobjectagg_stream CASCADE;
 NOTICE:  drop cascades to view test_bstring_agg
-DROP STREAM cqobjectagg_text_stream CASCADE;
+DROP FOREIGN TABLE cqobjectagg_text_stream CASCADE;
 NOTICE:  drop cascades to view test_string_agg
 -- array_agg
-CREATE STREAM cqobjectagg_stream (k text, v int);
-CREATE CONTINUOUS VIEW test_array_agg AS SELECT k::text, array_agg(v::integer) FROM cqobjectagg_stream GROUP BY k;
+CREATE FOREIGN TABLE cqobjectagg_stream (k text, v int) SERVER pipelinedb;
+CREATE VIEW test_array_agg AS SELECT k::text, array_agg(v::integer) FROM cqobjectagg_stream GROUP BY k;
 \d+ test_array_agg_mrel
-                   Table "public.test_array_agg_mrel"
-  Column   |  Type  | Modifiers | Storage  | Stats target | Description 
------------+--------+-----------+----------+--------------+-------------
- k         | text   |           | extended |              | 
- array_agg | bytea  |           | extended |              | 
- $pk       | bigint | not null  | plain    |              | 
+                             Table "public.test_array_agg_mrel"
+  Column   |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+-----------+--------+-----------+----------+---------+----------+--------------+-------------
+ k         | text   |           |          |         | extended |              | 
+ array_agg | bytea  |           |          |         | extended |              | 
+ $pk       | bigint |           | not null |         | plain    |              | 
 Indexes:
     "test_array_agg_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "test_array_agg_mrel_expr_idx" btree (hash_group(k))
+    "test_array_agg_mrel_expr_idx" btree (pipelinedb.hash_group(k))
 Options: fillfactor=50
 
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('x', 0), ('x', 1), ('x', 2), ('x', 3);
@@ -259,8 +259,8 @@ SELECT k, array_sort(array_agg) FROM test_array_agg ORDER BY k;
  z | {10,20}
 (3 rows)
 
-DROP CONTINUOUS VIEW test_array_agg;
-CREATE CONTINUOUS VIEW test_array_agg AS SELECT array_agg(k::text) FROM cqobjectagg_stream;
+DROP VIEW test_array_agg;
+CREATE VIEW test_array_agg AS SELECT array_agg(k::text) FROM cqobjectagg_stream;
 INSERT INTO cqobjectagg_stream (k) VALUES ('hello'), ('world');
 SELECT pg_sleep(0.1);
  pg_sleep 
@@ -275,11 +275,11 @@ SELECT array_sort(array_agg) FROM test_array_agg;
  {cat,hello,lol,world}
 (1 row)
 
-DROP STREAM cqobjectagg_stream cASCADE;
+DROP FOREIGN TABLE cqobjectagg_stream cASCADE;
 NOTICE:  drop cascades to view test_array_agg
 -- json_object_int_sum
-CREATE STREAM cqobjectagg_stream (x int, payload text);
-CREATE CONTINUOUS VIEW jois AS SELECT x::integer, json_object_int_sum(payload::text), COUNT(*) FROM cqobjectagg_stream GROUP BY x;
+CREATE FOREIGN TABLE cqobjectagg_stream (x int, payload text) SERVER pipelinedb;
+CREATE VIEW jois AS SELECT x::integer, json_object_int_sum(payload::text), COUNT(*) FROM cqobjectagg_stream GROUP BY x;
 INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
 INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
 INSERT INTO cqobjectagg_stream (x, payload) SELECT x % 10 AS x, '{ "k' || x::text || '": ' || x::integer || ' }' AS payload FROM generate_series(1, 100) AS x;
@@ -300,11 +300,11 @@ SELECT * FROM jois ORDER BY x;
  9 | { "k39": 195, "k19": 95, "k89": 445, "k49": 245, "k69": 345, "k79": 395, "k29": 145, "k99": 495, "k9": 45, "k59": 295 }    |    50
 (10 rows)
 
-DROP STREAM cqobjectagg_stream cASCADE;
+DROP FOREIGN TABLE cqobjectagg_stream cASCADE;
 NOTICE:  drop cascades to view jois
 -- array_agg_array
-CREATE STREAM cqobjectagg_stream (x int, y int);
-CREATE CONTINUOUS VIEW test_array_agg_array AS SELECT array_agg(ARRAY[x::int, y::int]) FROM cqobjectagg_stream;
+CREATE FOREIGN TABLE cqobjectagg_stream (x int, y int) SERVER pipelinedb;
+CREATE VIEW test_array_agg_array AS SELECT array_agg(ARRAY[x::int, y::int]) FROM cqobjectagg_stream;
 INSERT INTO cqobjectagg_stream (x, y) VALUES (1, 11);
 INSERT INTO cqobjectagg_stream (x, y) VALUES (2, 12);
 SELECT pg_sleep(0.1);
@@ -320,11 +320,11 @@ SELECT * FROM test_array_agg_array;
  {{1,11},{2,12},{3,13}}
 (1 row)
 
-DROP STREAM cqobjectagg_stream CASCADE;
+DROP FOREIGN TABLE cqobjectagg_stream CASCADE;
 NOTICE:  drop cascades to view test_array_agg_array
 -- jsonb_agg
-CREATE STREAM cqobjectagg_stream (key text, tval text, fval float8, ival integer, n text, v integer, t text);
-CREATE CONTINUOUS VIEW test_jsonb_agg AS SELECT key::text, jsonb_agg(tval::text) AS j0, jsonb_agg(fval::float8) AS j1, jsonb_agg(ival::integer) AS j2 FROM cqobjectagg_stream GROUP BY key;
+CREATE FOREIGN TABLE cqobjectagg_stream (key text, tval text, fval float8, ival integer, n text, v integer, t text) SERVER pipelinedb;
+CREATE VIEW test_jsonb_agg AS SELECT key::text, jsonb_agg(tval::text) AS j0, jsonb_agg(fval::float8) AS j1, jsonb_agg(ival::integer) AS j2 FROM cqobjectagg_stream GROUP BY key;
 INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('x', 'text', 0.01, 42), ('x', 'more text', 0.01, 42), ('x', 'blaahhhh', 0.01, 42);
 INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('y', '4.2', 1.01, 42), ('z', '\"quoted\"', 2.01, 42), ('x', '', 0.01, 42), ('z', '2', '3', '4');
 SELECT key, array_sort(json_to_array(j0::json)) FROM test_jsonb_agg ORDER BY key;
@@ -376,10 +376,10 @@ SELECT key, array_sort(json_to_array(j2::json)) FROM test_jsonb_agg ORDER BY key
  z   | {4,42,42}
 (3 rows)
 
-DROP CONTINUOUS VIEW test_jsonb_agg;
+DROP VIEW test_jsonb_agg;
 -- jsonb_object_agg
-CREATE CONTINUOUS VIEW test_jsonb_object_agg0 AS SELECT n, jsonb_object_agg(n::text, v::integer) FROM cqobjectagg_stream GROUP BY n;
-CREATE CONTINUOUS VIEW test_jsonb_object_agg1 AS SELECT n, jsonb_object_agg(n::text, t::text) FROM cqobjectagg_stream GROUP BY n;
+CREATE VIEW test_jsonb_object_agg0 AS SELECT n, jsonb_object_agg(n::text, v::integer) FROM cqobjectagg_stream GROUP BY n;
+CREATE VIEW test_jsonb_object_agg1 AS SELECT n, jsonb_object_agg(n::text, t::text) FROM cqobjectagg_stream GROUP BY n;
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 1, '1');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 2, '2');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k1', 3, '3');
@@ -424,7 +424,7 @@ SELECT n, array_sort(json_keys_array(jsonb_object_agg::json)) FROM test_jsonb_ob
  k3 | {k3}
 (4 rows)
 
-DROP STREAM cqobjectagg_stream CASCADE;
+DROP FOREIGN TABLE cqobjectagg_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view test_jsonb_object_agg0
 drop cascades to view test_jsonb_object_agg1

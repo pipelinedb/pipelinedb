@@ -1,0 +1,255 @@
+CREATE FOREIGN TABLE cont_dist_agg_stream (x integer) SERVER pipelinedb;
+CREATE VIEW test_dist_agg0 AS
+  SELECT x % 10 AS g, dist_agg(x)
+ FROM cont_dist_agg_stream
+GROUP BY g;
+CREATE VIEW test_dist_agg1 AS
+  SELECT x % 10 AS g, dist_agg(x)
+ FROM cont_dist_agg_stream
+GROUP BY g;
+INSERT INTO cont_dist_agg_stream (x) SELECT x FROM generate_series(1, 1000) x;
+SELECT g, dist_cdf(dist_agg, 50) FROM test_dist_agg0 ORDER BY g;
+ g | dist_cdf 
+---+----------
+ 0 |    0.045
+ 1 |    0.054
+ 2 |    0.053
+ 3 |    0.052
+ 4 |    0.051
+ 5 |     0.05
+ 6 |    0.049
+ 7 |    0.048
+ 8 |    0.047
+ 9 |    0.046
+(10 rows)
+
+SELECT g, dist_cdf(dist_agg, 500) FROM test_dist_agg0 ORDER BY g;
+ g | dist_cdf 
+---+----------
+ 0 |    0.495
+ 1 |    0.504
+ 2 |    0.503
+ 3 |    0.502
+ 4 |    0.501
+ 5 |      0.5
+ 6 |    0.499
+ 7 |    0.498
+ 8 |    0.497
+ 9 |    0.496
+(10 rows)
+
+SELECT g, dist_cdf(dist_agg, 10) FROM test_dist_agg1 ORDER BY g;
+ g | dist_cdf 
+---+----------
+ 0 |        0
+ 1 |    0.014
+ 2 |    0.013
+ 3 |    0.012
+ 4 |    0.011
+ 5 |     0.01
+ 6 |    0.008
+ 7 |    0.006
+ 8 |    0.004
+ 9 |    0.002
+(10 rows)
+
+SELECT g, dist_cdf(dist_agg, 900) FROM test_dist_agg1 ORDER BY g;
+ g | dist_cdf 
+---+----------
+ 0 |    0.895
+ 1 |    0.904
+ 2 |    0.903
+ 3 |    0.902
+ 4 |    0.901
+ 5 |      0.9
+ 6 |    0.899
+ 7 |    0.898
+ 8 |    0.897
+ 9 |    0.896
+(10 rows)
+
+SELECT g, dist_quantile(dist_agg, 0.1) FROM test_dist_agg0 ORDER BY g;
+ g | dist_quantile 
+---+---------------
+ 0 |           105
+ 1 |            96
+ 2 |            97
+ 3 |            98
+ 4 |            99
+ 5 |           100
+ 6 |           101
+ 7 |           102
+ 8 |           103
+ 9 |           104
+(10 rows)
+
+SELECT g, dist_quantile(dist_agg, 0.25) FROM test_dist_agg0 ORDER BY g;
+ g | dist_quantile 
+---+---------------
+ 0 |           255
+ 1 |           246
+ 2 |           247
+ 3 |           248
+ 4 |           249
+ 5 |           250
+ 6 |           251
+ 7 |           252
+ 8 |           253
+ 9 |           254
+(10 rows)
+
+SELECT g, dist_quantile(dist_agg, 0.50) FROM test_dist_agg1 ORDER BY g;
+ g | dist_quantile 
+---+---------------
+ 0 |           505
+ 1 |           496
+ 2 |           497
+ 3 |           498
+ 4 |           499
+ 5 |           500
+ 6 |           501
+ 7 |           502
+ 8 |           503
+ 9 |           504
+(10 rows)
+
+SELECT g, dist_quantile(dist_agg, 0.99) FROM test_dist_agg1 ORDER BY g;
+ g | dist_quantile 
+---+---------------
+ 0 |           995
+ 1 |           986
+ 2 |           987
+ 3 |           988
+ 4 |           989
+ 5 |           990
+ 6 |           991
+ 7 |           992
+ 8 |           993
+ 9 |           994
+(10 rows)
+
+INSERT INTO cont_dist_agg_stream (x) SELECT x FROM generate_series(1000, 5000) x;
+SELECT g, dist_cdf(dist_agg, 50) FROM test_dist_agg0 ORDER BY g;
+ g |      dist_cdf       
+---+---------------------
+ 0 | 0.00898203592814371
+ 1 |              0.0108
+ 2 |              0.0106
+ 3 |              0.0104
+ 4 |              0.0102
+ 5 |                0.01
+ 6 |              0.0098
+ 7 |              0.0096
+ 8 |              0.0094
+ 9 |              0.0092
+(10 rows)
+
+SELECT g, dist_cdf(dist_agg, 500) FROM test_dist_agg0 ORDER BY g;
+ g |      dist_cdf      
+---+--------------------
+ 0 | 0.0988023952095808
+ 1 |             0.1008
+ 2 |             0.1006
+ 3 |             0.1004
+ 4 |             0.1002
+ 5 |                0.1
+ 6 |             0.0998
+ 7 |             0.0996
+ 8 |             0.0994
+ 9 |             0.0992
+(10 rows)
+
+SELECT g, dist_cdf(dist_agg, 10) FROM test_dist_agg1 ORDER BY g;
+ g | dist_cdf 
+---+----------
+ 0 |        0
+ 1 |   0.0028
+ 2 |   0.0026
+ 3 |   0.0024
+ 4 |   0.0022
+ 5 |    0.002
+ 6 |   0.0016
+ 7 |   0.0012
+ 8 |   0.0008
+ 9 |   0.0004
+(10 rows)
+
+SELECT g, dist_cdf(dist_agg, 900) FROM test_dist_agg1 ORDER BY g;
+ g |     dist_cdf      
+---+-------------------
+ 0 | 0.178642714570858
+ 1 |            0.1808
+ 2 |            0.1806
+ 3 |            0.1804
+ 4 |            0.1802
+ 5 |              0.18
+ 6 |            0.1798
+ 7 |            0.1796
+ 8 |            0.1794
+ 9 |            0.1792
+(10 rows)
+
+SELECT g, dist_quantile(dist_agg, 0.1) FROM test_dist_agg0 ORDER BY g;
+ g | dist_quantile 
+---+---------------
+ 0 |           506
+ 1 |           496
+ 2 |           497
+ 3 |           498
+ 4 |           499
+ 5 |           500
+ 6 |           501
+ 7 |           502
+ 8 |           503
+ 9 |           504
+(10 rows)
+
+SELECT g, dist_quantile(dist_agg, 0.25) FROM test_dist_agg0 ORDER BY g;
+ g | dist_quantile 
+---+---------------
+ 0 |        1247.5
+ 1 |          1246
+ 2 |          1247
+ 3 |          1248
+ 4 |          1249
+ 5 |          1250
+ 6 |          1251
+ 7 |          1252
+ 8 |          1253
+ 9 |          1254
+(10 rows)
+
+SELECT g, dist_quantile(dist_agg, 0.50) FROM test_dist_agg1 ORDER BY g;
+ g | dist_quantile 
+---+---------------
+ 0 |          2500
+ 1 |          2496
+ 2 |          2497
+ 3 |          2498
+ 4 |          2499
+ 5 |          2500
+ 6 |          2501
+ 7 |          2502
+ 8 |          2503
+ 9 |          2504
+(10 rows)
+
+SELECT g, dist_quantile(dist_agg, 0.99) FROM test_dist_agg1 ORDER BY g;
+ g | dist_quantile 
+---+---------------
+ 0 |        4954.9
+ 1 |          4946
+ 2 |          4947
+ 3 |          4948
+ 4 |          4949
+ 5 |          4950
+ 6 |          4951
+ 7 |          4952
+ 8 |          4953
+ 9 |          4954
+(10 rows)
+
+DROP FOREIGN TABLE cont_dist_agg_stream CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view test_dist_agg0
+drop cascades to view test_dist_agg1

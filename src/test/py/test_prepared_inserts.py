@@ -12,10 +12,10 @@ def test_prepared_inserts(pipeline, clean_db):
   """
   pipeline.create_stream('stream0', x='int', y='float8')
 
-  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
+  conn = psycopg2.connect('dbname=postgres user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
   db = conn.cursor()
-  db.execute('CREATE CONTINUOUS VIEW test_prepared0 AS SELECT x::integer, COUNT(*), sum(y::integer) FROM stream0 GROUP BY x')
-  db.execute('CREATE CONTINUOUS VIEW test_prepared1 AS SELECT x::integer, COUNT(*), sum(y::float8) FROM stream0 GROUP BY x')
+  db.execute('CREATE VIEW test_prepared0 AS SELECT x::integer, COUNT(*), sum(y::integer) FROM stream0 GROUP BY x')
+  db.execute('CREATE VIEW test_prepared1 AS SELECT x::integer, COUNT(*), sum(y::float8) FROM stream0 GROUP BY x')
   conn.commit()
 
   db.execute('PREPARE ins AS INSERT INTO stream0 (x, y) VALUES ($1, $2)')
@@ -28,14 +28,14 @@ def test_prepared_inserts(pipeline, clean_db):
 
   conn.commit()
 
-  result = list(pipeline.execute('SELECT * FROM test_prepared0 ORDER BY x'))
+  result = pipeline.execute('SELECT * FROM test_prepared0 ORDER BY x')
 
   assert len(result) == 100
 
   for n in range(100):
     assert result[n]['count'] == 100
 
-  result = list(pipeline.execute('SELECT * FROM test_prepared1 ORDER BY x'))
+  result = pipeline.execute('SELECT * FROM test_prepared1 ORDER BY x')
 
   assert len(result) == 100
 
@@ -57,14 +57,14 @@ def test_prepared_extended(pipeline, clean_db):
   pipeline.create_cv('test_prepared_extended', q)
 
   # This will insert 1000 via a paramaterized insert, and 1000 via unparamaterized insert
-  cmd = ['./extended', 'pipeline', str(pipeline.port), 'extended_stream', '1000']
+  cmd = ['./extended', 'postgres', str(pipeline.port), 'extended_stream', '1000']
 
   stdout, stderr = subprocess.Popen(cmd).communicate()
 
   assert stdout is None
   assert stderr is None
 
-  rows = list(pipeline.execute('SELECT x, y, z FROM test_prepared_extended'))
+  rows = pipeline.execute('SELECT x, y, z FROM test_prepared_extended')
   assert len(rows) == 1
 
   result = rows[0]

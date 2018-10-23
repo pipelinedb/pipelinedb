@@ -1,7 +1,8 @@
-# Local binaries
-/pg_regress
+log/
+results/
+expected/pipelinedb.out
+sql/pipelinedb.sql
+regression.diffs
+regression.out
 
-# Generated subdirectories
-/tmp_check/
-/results/
-/log/
+

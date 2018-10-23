@@ -1,7 +1,7 @@
-CREATE STREAM test_uc_stream (k text, x int, s text, y int);
+CREATE FOREIGN TABLE test_uc_stream (k text, x int, s text, y int) SERVER pipelinedb;
 
 -- Verify some validation
-CREATE CONTINUOUS VIEW test_uc_validation AS SELECT k::text, avg(x::integer) FROM test_uc_stream GROUP BY k;
+CREATE VIEW test_uc_validation AS SELECT k::text, avg(x::integer) FROM test_uc_stream GROUP BY k;
 CREATE TABLE test_uc_table (v numeric);
 INSERT INTO test_uc_table (v) VALUES (0), (1), (2);
 
@@ -19,250 +19,497 @@ SELECT combine(k) FROM test_uc_validation;
 SELECT combine(nothere) FROM test_uc_validation;
 
 DROP TABLE test_uc_table;
-DROP CONTINUOUS VIEW test_uc_validation;
+DROP VIEW test_uc_validation;
 
-CREATE CONTINUOUS VIEW test_uc0 AS SELECT
-s::text,
-avg(x::numeric),
-sum(y::int),
-json_object_agg(x, y),
-array_agg(x),
-max(x),
-min(y),
-string_agg(substring(s, 1, 1), ' :: ')
-FROM test_uc_stream GROUP BY s;
+CREATE VIEW test_uc0 AS
+  SELECT x % 10 AS g,
+    avg(x::numeric)  AS numeric_avg,
+    avg(x::int8)  AS int8_avg,
+    avg(x::float8)  AS float8_avg,
+    sum(x::numeric)  AS numeric_sum,
+    sum(x::int8)  AS int8_sum,
+    sum(x::float4)  AS float4_sum
+  FROM test_uc_stream
+GROUP BY g;
 
-CREATE CONTINUOUS VIEW test_uc1 AS SELECT
-s::text,
-dense_rank('20') WITHIN GROUP (ORDER BY s) AS expr0,
-regr_r2(x::integer, y::integer) AS expr1
-FROM test_uc_stream GROUP BY s;
+INSERT INTO test_uc_stream (x) SELECT generate_series(1, 1000) AS x;
+INSERT INTO test_uc_stream (x) SELECT 0 FROM generate_series(1, 1000);
 
-CREATE STREAM test_uc_systat_stream (t timestamptz, queue_length int);
-CREATE CONTINUOUS VIEW test_uc2 AS
-SELECT date_trunc('minute', t::timestamptz) AS minute,
-         avg(queue_length::integer) AS load_avg
-    FROM test_uc_systat_stream
-WHERE arrival_timestamp > (clock_timestamp() - interval '1 hour')
-GROUP BY minute;
+SELECT * FROM test_uc0 ORDER BY g;
 
-CREATE VIEW test_uc2_view AS
-SELECT minute, combine(load_avg) OVER (ORDER BY minute DESC ROWS 4 PRECEDING) AS load_avg
-  FROM test_uc2;
+SELECT combine(numeric_avg), avg(numeric_avg),
+  combine(int8_avg),
+  combine(float8_avg),
+  combine(numeric_sum),
+  combine(int8_sum),
+  combine(float4_sum), sum(float4_sum)
+FROM test_uc0;
 
-INSERT INTO test_uc_stream (x, y, s) VALUES (0, 0, '0');
-INSERT INTO test_uc_stream (x, y, s) VALUES (1, 100, '1');
-INSERT INTO test_uc_stream (x, y, s) VALUES (2, 200, '2');
-INSERT INTO test_uc_stream (x, y, s) VALUES (3, 300, '3');
-INSERT INTO test_uc_stream (x, y, s) VALUES (4, 400, '4');
-INSERT INTO test_uc_stream (x, y, s) VALUES (5, 500, '5');
-INSERT INTO test_uc_stream (x, y, s) VALUES (6, 600, '6');
-INSERT INTO test_uc_stream (x, y, s) VALUES (7, 700, '7');
-INSERT INTO test_uc_stream (x, y, s) VALUES (8, 800, '8');
-INSERT INTO test_uc_stream (x, y, s) VALUES (9, 900, '9');
-INSERT INTO test_uc_stream (x, y, s) VALUES (10, 1000, '10');
-INSERT INTO test_uc_stream (x, y, s) VALUES (11, 1100, '11');
-INSERT INTO test_uc_stream (x, y, s) VALUES (12, 1200, '12');
-INSERT INTO test_uc_stream (x, y, s) VALUES (13, 1300, '13');
-INSERT INTO test_uc_stream (x, y, s) VALUES (14, 1400, '14');
-INSERT INTO test_uc_stream (x, y, s) VALUES (15, 1500, '15');
-INSERT INTO test_uc_stream (x, y, s) VALUES (16, 1600, '16');
-INSERT INTO test_uc_stream (x, y, s) VALUES (17, 1700, '17');
-INSERT INTO test_uc_stream (x, y, s) VALUES (18, 1800, '18');
-INSERT INTO test_uc_stream (x, y, s) VALUES (19, 1900, '19');
-INSERT INTO test_uc_stream (x, y, s) VALUES (20, 2000, '20');
-INSERT INTO test_uc_stream (x, y, s) VALUES (21, 2100, '21');
-INSERT INTO test_uc_stream (x, y, s) VALUES (22, 2200, '22');
-INSERT INTO test_uc_stream (x, y, s) VALUES (23, 2300, '23');
-INSERT INTO test_uc_stream (x, y, s) VALUES (24, 2400, '24');
-INSERT INTO test_uc_stream (x, y, s) VALUES (25, 2500, '25');
-INSERT INTO test_uc_stream (x, y, s) VALUES (26, 2600, '26');
-INSERT INTO test_uc_stream (x, y, s) VALUES (27, 2700, '27');
-INSERT INTO test_uc_stream (x, y, s) VALUES (28, 2800, '28');
-INSERT INTO test_uc_stream (x, y, s) VALUES (29, 2900, '29');
-INSERT INTO test_uc_stream (x, y, s) VALUES (30, 3000, '30');
-INSERT INTO test_uc_stream (x, y, s) VALUES (31, 3100, '31');
-INSERT INTO test_uc_stream (x, y, s) VALUES (32, 3200, '32');
-INSERT INTO test_uc_stream (x, y, s) VALUES (33, 3300, '33');
-INSERT INTO test_uc_stream (x, y, s) VALUES (34, 3400, '34');
-INSERT INTO test_uc_stream (x, y, s) VALUES (35, 3500, '35');
-INSERT INTO test_uc_stream (x, y, s) VALUES (36, 3600, '36');
-INSERT INTO test_uc_stream (x, y, s) VALUES (37, 3700, '37');
-INSERT INTO test_uc_stream (x, y, s) VALUES (38, 3800, '38');
-INSERT INTO test_uc_stream (x, y, s) VALUES (39, 3900, '39');
-INSERT INTO test_uc_stream (x, y, s) VALUES (40, 4000, '40');
-INSERT INTO test_uc_stream (x, y, s) VALUES (41, 4100, '41');
-INSERT INTO test_uc_stream (x, y, s) VALUES (42, 4200, '42');
-INSERT INTO test_uc_stream (x, y, s) VALUES (43, 4300, '43');
-INSERT INTO test_uc_stream (x, y, s) VALUES (44, 4400, '44');
-INSERT INTO test_uc_stream (x, y, s) VALUES (45, 4500, '45');
-INSERT INTO test_uc_stream (x, y, s) VALUES (46, 4600, '46');
-INSERT INTO test_uc_stream (x, y, s) VALUES (47, 4700, '47');
-INSERT INTO test_uc_stream (x, y, s) VALUES (48, 4800, '48');
-INSERT INTO test_uc_stream (x, y, s) VALUES (49, 4900, '49');
-INSERT INTO test_uc_stream (x, y, s) VALUES (50, 5000, '0');
-INSERT INTO test_uc_stream (x, y, s) VALUES (51, 5100, '1');
-INSERT INTO test_uc_stream (x, y, s) VALUES (52, 5200, '2');
-INSERT INTO test_uc_stream (x, y, s) VALUES (53, 5300, '3');
-INSERT INTO test_uc_stream (x, y, s) VALUES (54, 5400, '4');
-INSERT INTO test_uc_stream (x, y, s) VALUES (55, 5500, '5');
-INSERT INTO test_uc_stream (x, y, s) VALUES (56, 5600, '6');
-INSERT INTO test_uc_stream (x, y, s) VALUES (57, 5700, '7');
-INSERT INTO test_uc_stream (x, y, s) VALUES (58, 5800, '8');
-INSERT INTO test_uc_stream (x, y, s) VALUES (59, 5900, '9');
-INSERT INTO test_uc_stream (x, y, s) VALUES (60, 6000, '10');
-INSERT INTO test_uc_stream (x, y, s) VALUES (61, 6100, '11');
-INSERT INTO test_uc_stream (x, y, s) VALUES (62, 6200, '12');
-INSERT INTO test_uc_stream (x, y, s) VALUES (63, 6300, '13');
-INSERT INTO test_uc_stream (x, y, s) VALUES (64, 6400, '14');
-INSERT INTO test_uc_stream (x, y, s) VALUES (65, 6500, '15');
-INSERT INTO test_uc_stream (x, y, s) VALUES (66, 6600, '16');
-INSERT INTO test_uc_stream (x, y, s) VALUES (67, 6700, '17');
-INSERT INTO test_uc_stream (x, y, s) VALUES (68, 6800, '18');
-INSERT INTO test_uc_stream (x, y, s) VALUES (69, 6900, '19');
-INSERT INTO test_uc_stream (x, y, s) VALUES (70, 7000, '20');
-INSERT INTO test_uc_stream (x, y, s) VALUES (71, 7100, '21');
-INSERT INTO test_uc_stream (x, y, s) VALUES (72, 7200, '22');
-INSERT INTO test_uc_stream (x, y, s) VALUES (73, 7300, '23');
-INSERT INTO test_uc_stream (x, y, s) VALUES (74, 7400, '24');
-INSERT INTO test_uc_stream (x, y, s) VALUES (75, 7500, '25');
-INSERT INTO test_uc_stream (x, y, s) VALUES (76, 7600, '26');
-INSERT INTO test_uc_stream (x, y, s) VALUES (77, 7700, '27');
-INSERT INTO test_uc_stream (x, y, s) VALUES (78, 7800, '28');
-INSERT INTO test_uc_stream (x, y, s) VALUES (79, 7900, '29');
-INSERT INTO test_uc_stream (x, y, s) VALUES (80, 8000, '30');
-INSERT INTO test_uc_stream (x, y, s) VALUES (81, 8100, '31');
-INSERT INTO test_uc_stream (x, y, s) VALUES (82, 8200, '32');
-INSERT INTO test_uc_stream (x, y, s) VALUES (83, 8300, '33');
-INSERT INTO test_uc_stream (x, y, s) VALUES (84, 8400, '34');
-INSERT INTO test_uc_stream (x, y, s) VALUES (85, 8500, '35');
-INSERT INTO test_uc_stream (x, y, s) VALUES (86, 8600, '36');
-INSERT INTO test_uc_stream (x, y, s) VALUES (87, 8700, '37');
-INSERT INTO test_uc_stream (x, y, s) VALUES (88, 8800, '38');
-INSERT INTO test_uc_stream (x, y, s) VALUES (89, 8900, '39');
-INSERT INTO test_uc_stream (x, y, s) VALUES (90, 9000, '40');
-INSERT INTO test_uc_stream (x, y, s) VALUES (91, 9100, '41');
-INSERT INTO test_uc_stream (x, y, s) VALUES (92, 9200, '42');
-INSERT INTO test_uc_stream (x, y, s) VALUES (93, 9300, '43');
-INSERT INTO test_uc_stream (x, y, s) VALUES (94, 9400, '44');
-INSERT INTO test_uc_stream (x, y, s) VALUES (95, 9500, '45');
-INSERT INTO test_uc_stream (x, y, s) VALUES (96, 9600, '46');
-INSERT INTO test_uc_stream (x, y, s) VALUES (97, 9700, '47');
-INSERT INTO test_uc_stream (x, y, s) VALUES (98, 9800, '48');
-INSERT INTO test_uc_stream (x, y, s) VALUES (99, 9900, '49');
+SELECT g % 2 AS x,
+  combine(numeric_avg),
+  combine(int8_avg),
+  combine(float8_avg),
+  combine(numeric_sum),
+  combine(int8_sum),
+  combine(float4_sum)
+FROM test_uc0
+GROUP BY x ORDER BY x;
 
-INSERT INTO test_uc_stream (x, y, s) VALUES (100, 1000, '0'), (101, 1010, '1'), (102, 1020, '2'), (103, 1030, '3'), (104, 1040, '4'), (105, 1050, '5'), (106, 1060, '6'), (107, 1070, '7'), (108, 1080, '8'), (109, 1090, '9'), (110, 1100, '10'), (111, 1110, '11'), (112, 1120, '12'), (113, 1130, '13'), (114, 1140, '14'), (115, 1150, '15'), (116, 1160, '16'), (117, 1170, '17'), (118, 1180, '18'), (119, 1190, '19'), (120, 1200, '20'), (121, 1210, '21'), (122, 1220, '22'), (123, 1230, '23'), (124, 1240, '24'), (125, 1250, '25'), (126, 1260, '26'), (127, 1270, '27'), (128, 1280, '28'), (129, 1290, '29'), (130, 1300, '30'), (131, 1310, '31'), (132, 1320, '32'), (133, 1330, '33'), (134, 1340, '34'), (135, 1350, '35'), (136, 1360, '36'), (137, 1370, '37'), (138, 1380, '38'), (139, 1390, '39'), (140, 1400, '40'), (141, 1410, '41'), (142, 1420, '42'), (143, 1430, '43'), (144, 1440, '44'), (145, 1450, '45'), (146, 1460, '46'), (147, 1470, '47'), (148, 1480, '48'), (149, 1490, '49'), (150, 1500, '0'), (151, 1510, '1'), (152, 1520, '2'), (153, 1530, '3'), (154, 1540, '4'), (155, 1550, '5'), (156, 1560, '6'), (157, 1570, '7'), (158, 1580, '8'), (159, 1590, '9'), (160, 1600, '10'), (161, 1610, '11'), (162, 1620, '12'), (163, 1630, '13'), (164, 1640, '14'), (165, 1650, '15'), (166, 1660, '16'), (167, 1670, '17'), (168, 1680, '18'), (169, 1690, '19'), (170, 1700, '20'), (171, 1710, '21'), (172, 1720, '22'), (173, 1730, '23'), (174, 1740, '24'), (175, 1750, '25'), (176, 1760, '26'), (177, 1770, '27'), (178, 1780, '28'), (179, 1790, '29'), (180, 1800, '30'), (181, 1810, '31'), (182, 1820, '32'), (183, 1830, '33'), (184, 1840, '34'), (185, 1850, '35'), (186, 1860, '36'), (187, 1870, '37'), (188, 1880, '38'), (189, 1890, '39'), (190, 1900, '40'), (191, 1910, '41'), (192, 1920, '42'), (193, 1930, '43'), (194, 1940, '44'), (195, 1950, '45'), (196, 1960, '46'), (197, 1970, '47'), (198, 1980, '48'), (199, 1990, '49');
+SELECT combine(numeric_avg) + combine(numeric_sum) FROM test_uc0;
 
-INSERT INTO test_uc_systat_stream (t, queue_length) VALUES ('2015-03-25T07:52:52Z', 1),
-('2015-03-25T07:53:53Z', 1),
-('2015-03-25T07:54:53Z', 2),
-('2015-03-25T07:55:54Z', 2),
-('2015-03-25T07:56:54Z', 3),
-('2015-03-25T07:57:54Z', 4);
+CREATE TABLE test_uc_table AS SELECT generate_series(1, 5) AS x;
 
--- Verify that table-wide combines work
-SELECT combine(avg) FROM test_uc0;
-SELECT combine(sum) FROM test_uc0;
-SELECT combine(max) FROM test_uc0;
-SELECT combine(min) FROM test_uc0;
+SELECT g % 2 AS y,
+  combine(numeric_avg), avg(numeric_avg),
+  combine(int8_avg),
+  combine(float8_avg),
+  combine(numeric_sum),
+  combine(int8_sum),
+  combine(float4_sum), sum(float4_sum)
+FROM test_uc0 v JOIN test_uc_table t ON v.g = t.x
+GROUP BY y ORDER BY y;
 
--- Verify the lengths for these since the ordering is nondeterministic and they're really long
-SELECT json_object_keys(combine(json_object_agg)) AS k FROM test_uc0 ORDER BY k;
-SELECT array_length(combine(array_agg), 1) FROM test_uc0;
-SELECT length(combine(string_agg)) FROM test_uc0;
+DROP TABLE test_uc_table;
+DROP FOREIGN TABLE test_uc_stream CASCADE;
 
--- Verify that subsets of rows are combined properly
-SELECT s, combine(avg) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
-SELECT s, combine(sum) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
-SELECT s, combine(max) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
-SELECT s, combine(min) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
+-- User combines for all supported aggregate signatures
 
--- Verify the lengths for these since the ordering is nondeterministic and they're really long
-SELECT s, json_object_keys(combine(json_object_agg)) AS k FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s, k;
-SELECT array_length(combine(array_agg), 1) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
-SELECT length(combine(string_agg)) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
+-- bloom_agg
+CREATE FOREIGN TABLE bloom_s (x integer) SERVER pipelinedb;
+CREATE VIEW bloom0 AS SELECT x % 10 AS g, bloom_agg(x) FROM bloom_s GROUP BY g;
 
--- Verify that table-wide combines work
-SELECT combine(expr0) FROM test_uc1;
-SELECT combine(expr1) FROM test_uc1;
+INSERT INTO bloom_s (x) SELECT generate_series(1, 1000) AS x;
 
--- Verify that subsets of rows are combined properly
-SELECT s, combine(expr0) FROM test_uc1 WHERE s < '25' GROUP BY s ORDER BY s;
-SELECT s, combine(expr1) FROM test_uc1 WHERE s < '25' GROUP BY s ORDER BY s;
+SELECT bloom_cardinality(bloom_agg) FROM bloom0 ORDER BY g;
+SELECT bloom_cardinality(combine(bloom_agg)) FROM bloom0;
 
--- Verify that combines work with CV-CV joins
-SELECT combine(avg),
-combine(sum),
-combine(max),
-combine(min),
-combine(expr0),
-combine(expr1)
-FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s;
+DROP FOREIGN TABLE bloom_s CASCADE;
 
--- Verify that combines work with subsets of CV-CV joins
-SELECT v0.s,
-combine(avg),
-combine(sum),
-combine(max),
-combine(min),
-combine(expr0),
-combine(expr1)
-FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s WHERE v0.s IN ('0', '1', '2') AND v1.s IN ('0', '1', '2')
-GROUP BY v0.s;
+-- avg
+CREATE FOREIGN TABLE avg_s (x integer) SERVER pipelinedb;
 
-CREATE TABLE test_uc_table1 (x integer, y integer, s text);
+-- numeric
+CREATE VIEW avg0 AS SELECT x % 4 AS g , avg(x::numeric) FROM avg_s GROUP BY g;
 
-INSERT INTO test_uc_table1 (x, y, s) VALUES (100, 1000, '0'), (101, 1010, '1'), (102, 1020, '2'), (103, 1030, '3'), (104, 1040, '4'), (105, 1050, '5'), (106, 1060, '6'), (107, 1070, '7'), (108, 1080, '8'), (109, 1090, '9'), (110, 1100, '10'), (111, 1110, '11'), (112, 1120, '12'), (113, 1130, '13'), (114, 1140, '14'), (115, 1150, '15'), (116, 1160, '16'), (117, 1170, '17'), (118, 1180, '18'), (119, 1190, '19'), (120, 1200, '20'), (121, 1210, '21'), (122, 1220, '22'), (123, 1230, '23'), (124, 1240, '24'), (125, 1250, '25'), (126, 1260, '26'), (127, 1270, '27'), (128, 1280, '28'), (129, 1290, '29'), (130, 1300, '30'), (131, 1310, '31'), (132, 1320, '32'), (133, 1330, '33'), (134, 1340, '34'), (135, 1350, '35'), (136, 1360, '36'), (137, 1370, '37'), (138, 1380, '38'), (139, 1390, '39'), (140, 1400, '40'), (141, 1410, '41'), (142, 1420, '42'), (143, 1430, '43'), (144, 1440, '44'), (145, 1450, '45'), (146, 1460, '46'), (147, 1470, '47'), (148, 1480, '48'), (149, 1490, '49');
+-- int8
+CREATE VIEW avg1 AS SELECT x % 4 AS g , avg(x::int8) FROM avg_s GROUP BY g;
 
--- Verify that combines work on CV-table joins
-SELECT combine(avg),
-combine(sum),
-combine(max),
-combine(min),
-combine(expr0),
-combine(expr1),
-sum(x),
-sum(y)
-FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s JOIN test_uc_table1 t0 ON v0.s = t0.s;
+-- int4
+CREATE VIEW avg2 AS SELECT x % 4 AS g , avg(x::int4) FROM avg_s GROUP BY g;
 
--- Verify that combines work on subsets of CV-table joins
-SELECT v0.s, combine(expr0), combine(avg) FROM test_uc0 v0
-JOIN test_uc1 v1 ON v0.s = v1.s JOIN test_uc_table1 t0 ON v0.s = t0.s
-WHERE v0.s > '25' GROUP BY v0.s ORDER BY v0.s;
+-- int2
+CREATE VIEW avg3 AS SELECT x % 4 AS g , avg(x::int2) FROM avg_s GROUP BY g;
 
--- Verify that views containing combines can be created on top of continuous views
-SELECT * FROM test_uc2 ORDER BY minute;
-SELECT * FROM test_uc2_view ORDER BY minute;
+-- float8
+CREATE VIEW avg4 AS SELECT x % 4 AS g , avg(x::float8) FROM avg_s GROUP BY g;
 
-DROP CONTINUOUS VIEW test_uc0;
-DROP CONTINUOUS VIEW test_uc1;
-DROP TABLE test_uc_table1;
-DROP VIEW test_uc2_view;
-DROP CONTINUOUS VIEW test_uc2;
+-- float4
+CREATE VIEW avg5 AS SELECT x % 4 AS g , avg(x::float4) FROM avg_s GROUP BY g;
 
-CREATE STREAM sysstat (t timestamptz, queue_length float);
-CREATE CONTINUOUS VIEW over_1m AS
-SELECT date_trunc('minute', t::timestamptz) AS minute, avg(queue_length::float) AS load_avg
-FROM sysstat
-WHERE arrival_timestamp > clock_timestamp() - interval '1 hour'
-GROUP BY minute;
+-- interval
+CREATE VIEW avg6 AS SELECT x % 4 AS g , avg(x * interval '1 second') FROM avg_s GROUP BY g;
 
-CREATE VIEW over_5m AS
-SELECT first_value(minute) OVER w AS minute, combine(load_avg) OVER w AS load_avg
-FROM over_1m
-WINDOW w AS (ORDER BY minute DESC ROWS 4 PRECEDING);
+INSERT INTO avg_s (x) SELECT generate_series(1, 1000) x;
 
-\d+ over_5m;
+SELECT combine(avg) FROM avg0;
+SELECT combine(avg) FROM avg1;
+SELECT combine(avg) FROM avg2;
+SELECT combine(avg) FROM avg3;
+SELECT combine(avg) FROM avg4;
+SELECT combine(avg) FROM avg5;
+SELECT combine(avg) FROM avg6;
 
-DROP VIEW over_5m;
-DROP CONTINUOUS VIEW over_1m;
+DROP FOREIGN TABLE avg_s CASCADE;
 
-CREATE CONTINUOUS VIEW test_uc3 AS SELECT x, avg(x::numeric), count(distinct s) FROM test_uc_stream GROUP BY x;
-INSERT INTO test_uc_stream (x, y, s) SELECT x % 20, x % 10, (x % 5)::text AS s FROM generate_series(1, 100) AS x;
-SELECT combine(avg) + combine(avg) + combine(avg), combine(avg), combine(avg), combine(count), combine(count) FROM test_uc3;
-SELECT combine(avg) + combine(avg) + combine(avg), combine(avg), combine(avg), combine(count), combine(count) FROM test_uc3 GROUP BY x ORDER BY x;
-DROP CONTINUOUS VIEW test_uc3;
+-- sum
+CREATE FOREIGN TABLE sum_s (x integer) SERVER pipelinedb;
 
-DROP STREAM test_uc_stream CASCADE;
-DROP STREAM test_uc_systat_stream CASCADE;
-DROP STREAM sysstat CASCADE;
+-- numeric
+CREATE VIEW sum0 AS SELECT x % 4 AS g , sum(x::numeric) FROM sum_s GROUP BY g;
+
+-- int8
+CREATE VIEW sum1 AS SELECT x % 4 AS g , sum(x::int8) FROM sum_s GROUP BY g;
+
+-- int4
+CREATE VIEW sum2 AS SELECT x % 4 AS g , sum(x::int4) FROM sum_s GROUP BY g;
+
+-- int2
+CREATE VIEW sum3 AS SELECT x % 4 AS g , sum((x % 10)::int2) FROM sum_s GROUP BY g;
+
+-- float8
+CREATE VIEW sum4 AS SELECT x % 4 AS g , sum(x::float8) FROM sum_s GROUP BY g;
+
+-- float4
+CREATE VIEW sum5 AS SELECT x % 4 AS g , sum(x::float4) FROM sum_s GROUP BY g;
+
+-- interval
+CREATE VIEW sum6 AS SELECT x % 4 AS g , sum(x * interval '1 second') FROM sum_s GROUP BY g;
+
+-- money
+CREATE VIEW sum7 AS SELECT x % 4 AS g , sum(x::money) FROM sum_s GROUP BY g;
+
+INSERT INTO sum_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT combine(sum) FROM sum0;
+SELECT combine(sum) FROM sum1;
+SELECT combine(sum) FROM sum2;
+SELECT combine(sum) FROM sum3;
+SELECT combine(sum) FROM sum4;
+SELECT combine(sum) FROM sum5;
+SELECT combine(sum) FROM sum6;
+SELECT combine(sum) FROM sum7;
+
+DROP FOREIGN TABLE sum_s CASCADE;
+
+-- bucket_agg
+CREATE FOREIGN TABLE bucket_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW bucket0 AS SELECT x % 10 AS g, bucket_agg(x, (x % 2)::int2) FROM bucket_s GROUP BY g;
+CREATE VIEW bucket1 AS SELECT x % 10 AS g, bucket_agg(x, (x % 2)::int2, arrival_timestamp) FROM bucket_s GROUP BY g;
+
+INSERT INTO bucket_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT unnest(bucket_ids(combine(bucket_agg))) AS id, bucket_cardinalities(combine(bucket_agg)) FROM bucket0 ORDER BY id;
+SELECT unnest(bucket_ids(combine(bucket_agg))) AS id, bucket_cardinalities(combine(bucket_agg)) FROM bucket1 ORDER BY id;
+
+DROP FOREIGN TABLE bucket_s CASCADE;
+
+-- json_agg, json_object_agg
+CREATE FOREIGN TABLE json_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW json0 AS SELECT x % 10 AS g, json_agg(x) FROM json_s GROUP BY g;
+CREATE VIEW json1 AS SELECT x % 10 AS g, json_object_agg(x, x) FROM json_s GROUP BY g;
+
+INSERT INTO json_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT json_array_length(combine(json_agg)) FROM json0;
+SELECT count(*) FROM (SELECT json_each(combine(json_object_agg)) FROM json1) _;
+
+DROP FOREIGN TABLE json_s CASCADE;
+
+-- jsonb_agg, jsonb_object_agg
+CREATE FOREIGN TABLE jsonb_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW jsonb0 AS SELECT x % 10 AS g, jsonb_agg(x) FROM jsonb_s GROUP BY g;
+CREATE VIEW jsonb1 AS SELECT x % 10 AS g, jsonb_object_agg(x, x) FROM jsonb_s GROUP BY g;
+
+INSERT INTO jsonb_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT jsonb_array_length(combine(jsonb_agg)) FROM jsonb0;
+SELECT count(*) FROM (SELECT jsonb_each(combine(jsonb_object_agg)) FROM jsonb1) _;
+
+DROP FOREIGN TABLE jsonb_s CASCADE;
+
+-- binary regression aggregates
+CREATE FOREIGN TABLE regr_s (x integer) SERVER pipelinedb;
+
+-- corr
+CREATE VIEW regr0 AS SELECT x % 2 AS g, corr(x, x + 1) FROM regr_s GROUP BY g;
+
+-- covar_pop
+CREATE VIEW regr1 AS SELECT x % 2 AS g, covar_pop(x, x + 1) FROM regr_s GROUP BY g;
+
+-- covar_samp
+CREATE VIEW regr2 AS SELECT x % 2 AS g, covar_samp(x, x + 1) FROM regr_s GROUP BY g;
+
+-- regr_avgx
+CREATE VIEW regr3 AS SELECT x % 2 AS g, regr_avgx(x, x + 1) FROM regr_s GROUP BY g;
+
+-- regr_avgy
+CREATE VIEW regr4 AS SELECT x % 2 AS g, regr_avgy(x, x + 1) FROM regr_s GROUP BY g;
+
+-- regr_count
+CREATE VIEW regr5 AS SELECT x % 2 AS g, regr_count(x, x + 1) FROM regr_s GROUP BY g;
+
+-- regr_intercept
+CREATE VIEW regr6 AS SELECT x % 2 AS g, regr_intercept(x, x + 1) FROM regr_s GROUP BY g;
+
+-- regr_r2
+CREATE VIEW regr7 AS SELECT x % 2 AS g, regr_r2(x, x + 1) FROM regr_s GROUP BY g;
+
+-- regr_slope
+CREATE VIEW regr8 AS SELECT x % 2 AS g, regr_slope(x, x + 1) FROM regr_s GROUP BY g;
+
+-- regr_sxx
+CREATE VIEW regr9 AS SELECT x % 2 AS g, regr_sxx(x, x + 1), regr_sxy(x, x + 1), regr_syy(x, x + 1) FROM regr_s GROUP BY g;
+
+-- stddev (stddev_samp)
+CREATE VIEW regr10 AS SELECT
+  x % 2 AS g,
+  stddev(x::int8) AS int8_stddev,
+  stddev(x::int4) AS int4_stddev,
+  stddev(x::int2) AS int2_stddev,
+  stddev(x::float8) AS float8_stddev,
+  stddev(x::float4) AS float4_stddev,
+  stddev(x::numeric) AS numeric_stddev,
+  stddev_samp(x::int8) AS int8_stddev_samp,
+  stddev_samp(x::int4) AS int4_stddev_samp,
+  stddev_samp(x::int2) AS int2_stddev_samp,
+  stddev_samp(x::float8) AS float8_stddev_samp,
+  stddev_samp(x::float4) AS float4_stddev_samp,
+  stddev_samp(x::numeric) AS numeric_stddev_samp
+FROM regr_s GROUP BY g;
+
+-- stddev_pop
+CREATE VIEW regr11 AS SELECT
+  x % 2 AS g,
+  stddev_pop(x::int8) AS int8_stddev,
+  stddev_pop(x::int4) AS int4_stddev,
+  stddev_pop(x::int2) AS int2_stddev,
+  stddev_pop(x::float8) AS float8_stddev,
+  stddev_pop(x::float4) AS float4_stddev,
+  stddev_pop(x::numeric) AS numeric_stddev
+FROM regr_s GROUP BY g;
+
+-- var_pop
+CREATE VIEW regr12 AS SELECT
+  x % 2 AS g,
+  var_pop(x::int8) AS int8_var_pop,
+  var_pop(x::int4) AS int4_var_pop,
+  var_pop(x::int2) AS int2_var_pop,
+  var_pop(x::float8) AS float8_var_pop,
+  var_pop(x::float4) AS float4_var_pop,
+  var_pop(x::numeric) AS numeric_var_pop
+FROM regr_s GROUP BY g;
+
+-- var_samp
+CREATE VIEW regr13 AS SELECT
+  x % 2 AS g,
+  var_samp(x::int8) AS int8_var_samp,
+  var_samp(x::int4) AS int4_var_samp,
+  var_samp(x::int2) AS int2_var_samp,
+  var_samp(x::float8) AS float8_var_samp,
+  var_samp(x::float4) AS float4_var_samp,
+  var_samp(x::numeric) AS numeric_var_samp,
+  variance(x::int8) AS int8_variance,
+  variance(x::int4) AS int4_variance,
+  variance(x::int2) AS int2_variance,
+  variance(x::float8) AS float8_variance,
+  variance(x::float4) AS float4_variance,
+  variance(x::numeric) AS numeric_variance
+FROM regr_s GROUP BY g;
+
+INSERT INTO regr_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT combine(corr) FROM regr0;
+SELECT combine(covar_pop) FROM regr1;
+SELECT combine(covar_samp) FROM regr2;
+SELECT combine(regr_avgx) FROM regr3;
+SELECT combine(regr_avgy) FROM regr4;
+SELECT combine(regr_count) FROM regr5;
+SELECT combine(regr_intercept) FROM regr6;
+SELECT combine(regr_r2) FROM regr7;
+SELECT combine(regr_slope) FROM regr8;
+SELECT combine(regr_sxx), combine(regr_sxy), combine(regr_syy) FROM regr9;
+
+SELECT
+ combine(int8_stddev),
+ combine(int4_stddev),
+ combine(int2_stddev),
+ combine(float8_stddev),
+ combine(float4_stddev),
+ combine(numeric_stddev),
+ combine(int8_stddev_samp),
+ combine(int4_stddev_samp),
+ combine(int2_stddev_samp),
+ combine(float8_stddev_samp),
+ combine(float4_stddev_samp),
+ combine(numeric_stddev_samp)
+FROM regr10;
+
+SELECT
+ combine(int8_stddev),
+ combine(int4_stddev),
+ combine(int2_stddev),
+ combine(float8_stddev),
+ combine(float4_stddev),
+ combine(numeric_stddev)
+FROM regr11;
+
+SELECT
+ combine(int8_var_pop),
+ combine(int4_var_pop),
+ combine(int2_var_pop),
+ combine(float8_var_pop),
+ combine(float4_var_pop),
+ combine(numeric_var_pop)
+FROM regr12;
+
+SELECT
+ combine(int8_var_samp),
+ combine(int4_var_samp),
+ combine(int2_var_samp),
+ combine(float8_var_samp),
+ combine(float4_var_samp),
+ combine(numeric_var_samp),
+ combine(int8_variance),
+ combine(int4_variance),
+ combine(int2_variance),
+ combine(float8_variance),
+ combine(float4_variance),
+ combine(numeric_variance)
+FROM regr13;
+
+DROP FOREIGN TABLE regr_s CASCADE;
+
+-- combinable_cume_dist
+CREATE FOREIGN TABLE cume_dist_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW cume_dist0 AS SELECT
+ x % 10 AS g,
+ cume_dist(2) WITHIN GROUP (ORDER BY x) AS cd0,
+ cume_dist(3, 3) WITHIN GROUP (ORDER BY x, x) AS cd1,
+ cume_dist(4, 4, 4) WITHIN GROUP (ORDER BY x, x, x) AS cd2
+FROM cume_dist_s GROUP BY g;
+
+INSERT INTO cume_dist_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT combine(cd0), combine(cd1), combine(cd2) FROM cume_dist0;
+
+DROP FOREIGN TABLE cume_dist_s CASCADE;
+
+-- combinable_dense_rank, combinable_rank, combinable_percent_rank
+CREATE FOREIGN TABLE dense_rank_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW dense_rank0 AS SELECT
+ x % 10 AS g,
+ dense_rank(5) WITHIN GROUP (ORDER BY x) AS d0,
+ dense_rank(5, 5) WITHIN GROUP (ORDER BY x, x) AS d1,
+ dense_rank(5, 5, 5) WITHIN GROUP (ORDER BY x, x, x) AS d2
+FROM dense_rank_s GROUP BY g;
+
+CREATE VIEW rank0 AS SELECT
+ x % 10 AS g,
+ rank(5) WITHIN GROUP (ORDER BY x) AS d0,
+ rank(5, 5) WITHIN GROUP (ORDER BY x, x) AS d1,
+ rank(5, 5, 5) WITHIN GROUP (ORDER BY x, x, x) AS d2
+FROM dense_rank_s GROUP BY g;
+
+CREATE VIEW rank1 AS SELECT
+ x % 10 AS g,
+ percent_rank(5) WITHIN GROUP (ORDER BY x) AS d0,
+ percent_rank(5, 5) WITHIN GROUP (ORDER BY x, x) AS d1,
+ percent_rank(5, 5, 5) WITHIN GROUP (ORDER BY x, x, x) AS d2
+FROM dense_rank_s GROUP BY g;
+
+INSERT INTO dense_rank_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT combine(d0), combine(d1), combine(d2) FROM dense_rank0;
+SELECT combine(d0), combine(d1), combine(d2) FROM rank0;
+SELECT combine(d0), combine(d1), combine(d2) FROM rank1;
+
+DROP FOREIGN TABLE dense_rank_s CASCADE;
+
+-- combinable_percentile_cont
+CREATE FOREIGN TABLE percentile_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW percentile0 AS SELECT
+ x % 10 AS g,
+ percentile_cont(0.90) WITHIN GROUP (ORDER BY x),
+ percentile_cont(ARRAY[0.90, 0.95, 0.99]) WITHIN GROUP (ORDER BY x) AS multi
+FROM percentile_s GROUP BY g;
+
+INSERT INTO percentile_s (x) SELECT generate_series(1, 1000) x;
+
+-- tdigest results can vary due to  nondeterministic combine order, so we allow a margin of error here
+SELECT round(combine(percentile_cont)) - 900 < 2 FROM percentile0;
+SELECT round(unnest(combine((multi)))) - unnest('{900,950,990}'::int[]) < 2 FROM percentile0;
+
+DROP FOREIGN TABLE percentile_s CASCADE;
+
+-- dist_agg
+CREATE FOREIGN TABLE dist_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW dist0 AS SELECT
+ x % 10 AS g,
+ dist_agg(x) AS d0,
+ dist_agg(x, 1) AS d1
+FROM dist_s GROUP BY g;
+
+INSERT INTO dist_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT round(dist_cdf(combine(d0), 600)), round(dist_quantile(combine(d1), 0.99)) FROM dist0;
+
+DROP FOREIGN TABLE dist_s CASCADE;
+
+-- freq_agg
+CREATE FOREIGN TABLE freq_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW freq0 AS SELECT x % 10 AS g, freq_agg(x) FROM freq_s GROUP BY g;
+
+INSERT INTO freq_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT freq_total(combine(freq_agg)) FROM freq0;
+SELECT freq_total(combine(freq_agg)) FROM freq0 WHERE g % 2 = 0;
+
+DROP FOREIGN TABLE freq_s CASCADE;
+
+-- hll_agg, hll_count_distinct
+CREATE FOREIGN TABLE hll_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW hll0 AS SELECT x % 10 AS g, hll_agg(x) FROM hll_s GROUP BY g;
+CREATE VIEW hll1 AS SELECT x % 10 AS g, count(DISTINCT x) FROM hll_s GROUP BY g;
+
+INSERT INTO hll_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT hll_cardinality(combine(hll_agg)) FROM hll0;
+SELECT combine(count) FROM hll1;
+
+DROP FOREIGN TABLE hll_s CASCADE;
+
+-- topk_agg, topk_agg_weighted
+CREATE FOREIGN TABLE topk_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW topk0 AS SELECT
+ x % 10 AS g,
+ topk_agg(x, 10) AS topk,
+ topk_agg(x, 10, 1) as topkw
+FROM topk_s GROUP BY g;
+
+INSERT INTO topk_s (x) SELECT generate_series(1, 1000) x;
+INSERT INTO topk_s (x) SELECT 1 FROM generate_series(1, 1000);
+
+SELECT
+ topk_freqs(combine(topk)), topk_freqs(combine(topkw))
+FROM topk0;
+
+DROP FOREIGN TABLE topk_s CASCADE;
+
+-- keyed_min/max
+CREATE FOREIGN TABLE keyed_s (x integer, y integer) SERVER pipelinedb;
+
+CREATE VIEW keyed0 AS SELECT
+ x % 10 AS g,
+ keyed_min(x, y),
+ keyed_max(x, y)
+FROM keyed_s GROUP BY g;
+
+INSERT INTO keyed_s (x, y) SELECT x, 10 * x FROM generate_series(1, 1000) x;
+
+SELECT combine(keyed_min), combine(keyed_max) FROM keyed0;
+
+DROP FOREIGN TABLE keyed_s CASCADE;
+
+-- combine in HAVING clause
+CREATE FOREIGN TABLE having_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW having0 AS SELECT x % 10 AS g, count(distinct x), sum(x) FROM having_s GROUP BY g;
+
+INSERT INTO having_s (x) SELECT generate_series(1, 1000) x;
+
+SELECT g % 4 AS x, combine(count) AS count, combine(sum) AS sum
+ FROM having0 GROUP BY x HAVING combine(count) - combine(sum) >= -99800 ORDER BY x;
+
+CREATE TABLE having_t AS SELECT generate_series(1, 5) x;
+
+-- HAVING referencing both table and CV aggregates
+SELECT
+ t.x % 4 AS g,
+ sum(t.x)
+FROM having0 h
+JOIN having_t t ON h.g = t.x
+GROUP BY t.x
+HAVING combine(h.count) + 1 > 100 ORDER BY g;
+
+DROP FOREIGN TABLE having_s CASCADE;
+DROP TABLE having_t;

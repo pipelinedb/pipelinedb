@@ -1,5 +1,5 @@
-CREATE STREAM cont_alter_stream (x int);
-CREATE CONTINUOUS VIEW test_cont_alter AS SELECT x::int FROM cont_alter_stream;
+CREATE FOREIGN TABLE cont_alter_stream (x int) SERVER pipelinedb;
+CREATE VIEW test_cont_alter AS SELECT x::int FROM cont_alter_stream;
 ALTER VIEW test_cont_alter RENAME TO lolcat;
 ALTER TABLE test_cont_alter_mrel RENAME TO lolcat;
 ERROR:  cannot rename materialization table "test_cont_alter_mrel" for continuous view "lolcat"
@@ -9,5 +9,5 @@ ALTER TABLE test_cont_alter_mrel DROP COLUMN x;
 ERROR:  cannot drop table test_cont_alter_mrel column x because other objects depend on it
 DETAIL:  view lolcat depends on table test_cont_alter_mrel column x
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-DROP STREAM cont_alter_stream CASCADE;
+DROP FOREIGN TABLE cont_alter_stream CASCADE;
 NOTICE:  drop cascades to view lolcat

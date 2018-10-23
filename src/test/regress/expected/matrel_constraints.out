@@ -1,5 +1,5 @@
-CREATE STREAM mc_s0 (x integer, y integer);
-CREATE CONTINUOUS VIEW mc_v0 AS SELECT x, sum(y), count(*) FROM mc_s0 GROUP BY x;
+CREATE FOREIGN TABLE mc_s0 (x integer, y integer) SERVER pipelinedb;
+CREATE VIEW mc_v0 AS SELECT x, sum(y), count(*) FROM mc_s0 GROUP BY x;
 ALTER TABLE mc_v0_mrel ADD CONSTRAINT chk0 CHECK (x > 5);
 ALTER TABLE mc_v0_mrel ADD CONSTRAINT chk1 CHECK (count < 3);
 ALTER TABLE mc_v0_mrel ADD CONSTRAINT chk2 CHECK (sum < 3);
@@ -27,5 +27,5 @@ SELECT * FROM mc_v0 ORDER BY x;
  10 |   2 |     2
 (5 rows)
 
-DROP STREAM mc_s0 CASCADE; 
+DROP FOREIGN TABLE mc_s0 CASCADE; 
 NOTICE:  drop cascades to view mc_v0

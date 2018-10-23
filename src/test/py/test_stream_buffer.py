@@ -9,15 +9,14 @@ def test_stream_buffer(pipeline, clean_db):
   """
   pipeline.create_stream('stream1', x='int', string='text')
   pipeline.create_stream('stream2', x='int', string='text')
-
   pipeline.create_cv('test_sbuf_1',
-                     'SELECT x::int FROM stream1')
+             'SELECT x::int FROM stream1')
   pipeline.create_cv('test_sbuf_2',
-                     'SELECT x::int, pg_sleep(0.002) FROM stream1')
+             'SELECT x::int, cq_sleep(0.002) FROM stream1')
   pipeline.create_cv('test_sbuf_3',
-                     'SELECT x::int FROM stream2')
+             'SELECT x::int FROM stream2')
   pipeline.create_cv('test_sbuf_4',
-                     'SELECT x::int, pg_sleep(0.002) FROM stream2')
+             'SELECT x::int, cq_sleep(0.002) FROM stream2')
 
   num_per_batch = 5000
   num_batches = 6
@@ -31,7 +30,7 @@ def test_stream_buffer(pipeline, clean_db):
       pipeline.insert(stream, ('x', 'string'), values)
 
   threads = [threading.Thread(target=insert, args=('stream1', )),
-             threading.Thread(target=insert, args=('stream2', ))]
+         threading.Thread(target=insert, args=('stream2', ))]
 
   map(lambda t: t.start(), threads)
   map(lambda t: t.join(), threads)
@@ -40,9 +39,9 @@ def test_stream_buffer(pipeline, clean_db):
   pipeline.insert('stream2', ('x', 'string'), values)
 
   q = 'SELECT COUNT(*) FROM test_sbuf_%d'
-  r1 = pipeline.execute(q % 1).first()[0]
-  r2 = pipeline.execute(q % 2).first()[0]
-  r3 = pipeline.execute(q % 3).first()[0]
-  r4 = pipeline.execute(q % 4).first()[0]
+  r1 = pipeline.execute(q % 1)[0][0]
+  r2 = pipeline.execute(q % 2)[0][0]
+  r3 = pipeline.execute(q % 3)[0][0]
+  r4 = pipeline.execute(q % 4)[0][0]
 
   assert r1 == r2 == r3 == r4 == num_batches * num_per_batch

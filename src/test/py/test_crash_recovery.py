@@ -9,8 +9,8 @@ import time
 
 def _get_pids(grep_str):
   try:
-    out = check_output('ps aux | grep "pipeline" | grep "%s"' % grep_str,
-                       shell=True).split('\n')
+    out = check_output('ps aux | grep "postgres" | grep "%s"' % grep_str,
+               shell=True).split('\n')
   except CalledProcessError:
     return []
   out = filter(lambda s: len(s), out)
@@ -41,17 +41,17 @@ def _kill(pid):
 
 
 def get_worker_pids():
-  return _get_pids('worker[0-9] \[pipeline\]')
+  return _get_pids('worker[0-9] \[postgres\]')
 
 def get_combiner_pids():
-  return _get_pids('combiner[0-9] \[pipeline\]')
+  return _get_pids('combiner[0-9] \[postgres\]')
 
 def kill_worker():
-  return _kill(_get_pid('worker[0-9] \[pipeline\]'))
+  return _kill(_get_pid('worker[0-9] \[postgres\]'))
 
 
 def kill_combiner():
-  return _kill(_get_pid('combiner[0-9] \[pipeline\]'))
+  return _kill(_get_pid('combiner[0-9] \[postgres\]'))
 
 
 def test_simple_crash(pipeline, clean_db):
@@ -64,7 +64,7 @@ def test_simple_crash(pipeline, clean_db):
 
   pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
-  result = pipeline.execute('SELECT * FROM test_simple_crash').first()
+  result = pipeline.execute('SELECT * FROM test_simple_crash')[0]
   assert result['count'] == 2
 
   # This batch can potentially get lost.
@@ -74,7 +74,7 @@ def test_simple_crash(pipeline, clean_db):
 
   pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
-  result = pipeline.execute('SELECT * FROM test_simple_crash').first()
+  result = pipeline.execute('SELECT * FROM test_simple_crash')[0]
   assert result['count'] in [4, 6]
 
   # This batch can potentially get lost.
@@ -84,7 +84,7 @@ def test_simple_crash(pipeline, clean_db):
 
   pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
-  result = pipeline.execute('SELECT * FROM test_simple_crash').first()
+  result = pipeline.execute('SELECT * FROM test_simple_crash')[0]
   assert result['count'] in [6, 8, 10]
 
   # To ensure that all remaining events in ZMQ queues have been consumed
@@ -105,10 +105,10 @@ def test_concurrent_crash(pipeline, clean_db):
 
   def insert():
     while True:
-        pipeline.insert('stream0', ['x'], vals)
-        desc[1] += batch_size
-        if desc[2]:
-          break
+      pipeline.insert('stream0', ['x'], vals)
+      desc[1] += batch_size
+      if desc[2]:
+        break
 
   def kill():
     for _ in xrange(30):
@@ -122,14 +122,14 @@ def test_concurrent_crash(pipeline, clean_db):
     desc[2] = True
 
   threads = [threading.Thread(target=insert),
-             threading.Thread(target=kill)]
+         threading.Thread(target=kill)]
   map(lambda t: t.start(), threads)
   map(lambda t: t.join(), threads)
 
   num_killed = desc[0]
   num_inserted = desc[1]
 
-  result = pipeline.execute('SELECT count FROM test_concurrent_crash').first()
+  result = pipeline.execute('SELECT count FROM test_concurrent_crash')[0]
 
   assert num_killed > 0
   assert result['count'] <= num_inserted
@@ -146,7 +146,7 @@ def test_restart_recovery(pipeline, clean_db):
 
   pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
-  result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
+  result = pipeline.execute('SELECT * FROM test_restart_recovery')[0]
   assert result['count'] == 2
 
   # Need to sleep here, otherwise on restart the materialization table is
@@ -157,12 +157,12 @@ def test_restart_recovery(pipeline, clean_db):
   pipeline.stop()
   pipeline.run()
 
-  result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
+  result = pipeline.execute('SELECT * FROM test_restart_recovery')[0]
   assert result['count'] == 2
 
   pipeline.insert('stream0', ['x'], [(1,), (1,)])
 
-  result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
+  result = pipeline.execute('SELECT * FROM test_restart_recovery')[0]
   assert result['count'] == 4
 
 
@@ -193,7 +193,7 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
   backend_pid = 0
 
   while not result and attempts < 10:
-    result = pipeline.execute("""SELECT pid, query FROM pg_stat_activity WHERE lower(query) LIKE '%%pg_sleep%%'""").first()
+    result = pipeline.execute("""SELECT pid, query FROM pg_stat_activity WHERE lower(query) LIKE '%%pg_sleep%%'""")[0]
     time.sleep(1)
     attempts += 1
 
@@ -207,7 +207,7 @@ def test_postmaster_worker_recovery(pipeline, clean_db):
 
   while attempts < 20:
     try:
-      pipeline.conn = pipeline.engine.connect()
+      pipeline.execute('SELECT 1')
       break
     except:
       time.sleep(1)

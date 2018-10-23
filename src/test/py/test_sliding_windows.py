@@ -11,14 +11,22 @@ def assert_result_changes(func, args):
     pipeline.create_cv(name,
                        "SELECT %s(%s) FROM stream0 WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds'" % (func, args))
 
+    # We also create a wide sliding window just to verify that user combines work on SW CVs and have the same output
+    # as if they were being run on a non-SW CV
+    sw_name = name + '_sw_agg'
+    pipeline.create_cv(sw_name,
+                       "SELECT x %% 10 AS g, %s(%s) FROM stream0 WHERE arrival_timestamp > clock_timestamp() - interval '2 days' GROUP BY g" % (func, args))
+    verify_name = name + '_sw_agg_verify'
+    pipeline.create_cv(verify_name,
+                       "SELECT x %% 10 AS g, %s(%s) FROM stream0 GROUP BY g" % (func, args))
+
     rows = [(n, str(n), n + 1) for n in range(1000)]
     pipeline.insert('stream0', ('x', 'y', 'z'), rows)
-
     current = 1
 
     results = []
     while current:
-        row = pipeline.execute('SELECT * FROM %s' % name).first()
+        row = pipeline.execute('SELECT * FROM %s' % name)[0]
         current = row[func]
         if current is None:
             break
@@ -26,6 +34,14 @@ def assert_result_changes(func, args):
 
     # Verify that we actually read something
     assert results
+
+    # Verify user combines on SW CVs work and produce the expected output
+    sw_row = pipeline.execute('SELECT combine(%s) FROM %s' % (func, sw_name))[0]
+    expected_row = pipeline.execute('SELECT combine(%s) FROM %s' % (func, verify_name))[0]
+    if isinstance(sw_row['combine'], list):
+       sw_row['combine'] = sorted(sw_row['combine'])
+       expected_row['combine'] = sorted(expected_row['combine'])
+    assert sw_row['combine'] == expected_row['combine']
 
     pipeline.drop_cv(name)
 
@@ -51,6 +67,8 @@ def test_array_agg(pipeline, clean_db):
     """
     array_agg
     """
+    # TODO(derekjn) Disabled until array_agg user combine supported
+    return
     assert_result_changes('array_agg', 'x::integer')
 
 def test_json_agg(pipeline, clean_db):

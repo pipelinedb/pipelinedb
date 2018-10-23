@@ -4,7 +4,7 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 def test_multiple_databases(pipeline, clean_db):
-  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
+  conn = psycopg2.connect('dbname=postgres user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
   conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
 
   cur = conn.cursor()
@@ -23,8 +23,9 @@ def test_multiple_databases(pipeline, clean_db):
   # Create same CV in the other database, make sure its created and write different data to it.
   tmp_conn = psycopg2.connect('dbname=tmp_pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
   cur = tmp_conn.cursor()
-  cur.execute('CREATE STREAM dbstream (x int)')
-  cur.execute('CREATE CONTINUOUS VIEW test_multiple_databases AS %s' % q)
+  cur.execute('CREATE EXTENSION pipelinedb')
+  cur.execute('CREATE FOREIGN TABLE dbstream (x int) SERVER pipelinedb')
+  cur.execute('CREATE VIEW test_multiple_databases AS %s' % q)
   tmp_conn.commit()
   cur.execute('INSERT INTO dbstream (x) VALUES %s' % ', '.join(map(lambda x: '(%d)' % x, range(1, 11, 2))))
   cur.execute('SELECT * FROM test_multiple_databases')

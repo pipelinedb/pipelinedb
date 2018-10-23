@@ -11,13 +11,13 @@ def test_multiple_insert(pipeline, clean_db):
 
   pipeline.create_cv('cv0', 'SELECT count(*) FROM stream1')
   pipeline.create_cv('cv1', 'SELECT count(*) FROM stream2')
-  pipeline.create_ct('ct1', 'SELECT x::int FROM stream0 WHERE mod(x, 2) = 0', "pipeline_stream_insert('stream1', 'stream2')")
+  pipeline.create_ct('ct1', 'SELECT x::int FROM stream0 WHERE mod(x, 2) = 0', "pipelinedb.insert_into_stream('stream1', 'stream2')")
 
   pipeline.insert('stream0', ('x',), [(n,) for n in range(1000)])
 
-  count = pipeline.execute('SELECT count FROM cv0').first()['count']
+  count = pipeline.execute('SELECT count FROM cv0')[0]['count']
   assert count == 500
-  count = pipeline.execute('SELECT count FROM cv1').first()['count']
+  count = pipeline.execute('SELECT count FROM cv1')[0]['count']
   assert count == 500
 
 
@@ -29,15 +29,15 @@ def test_nested_transforms(pipeline, clean_db):
   pipeline.create_cv('cv0', 'SELECT count(*) FROM stream4')
   pipeline.create_cv('cv1', 'SELECT count(*) FROM stream2')
   pipeline.create_ct('ct0', 'SELECT x::int FROM stream2 WHERE mod(x, 4) = 0',
-                     "pipeline_stream_insert('stream4')")
+             "pipelinedb.insert_into_stream('stream4')")
   pipeline.create_ct('ct1', 'SELECT x::int FROM stream0 WHERE mod(x, 2) = 0',
-                     "pipeline_stream_insert('stream2')")
+             "pipelinedb.insert_into_stream('stream2')")
 
   pipeline.insert('stream0', ('x',), [(n,) for n in range(1000)])
 
-  count = pipeline.execute('SELECT count FROM cv0').first()['count']
+  count = pipeline.execute('SELECT count FROM cv0')[0]['count']
   assert count == 250
-  count = pipeline.execute('SELECT count FROM cv1').first()['count']
+  count = pipeline.execute('SELECT count FROM cv1')[0]['count']
   assert count == 500
 
 
@@ -50,7 +50,7 @@ def test_deadlock_regress(pipeline, clean_db):
   pipeline.create_stream('s1', n='int')
   pipeline.create_stream('s2', n='int')
   pipeline.create_ct('ct', 'SELECT n FROM s1 WHERE n IS NOT NULL',
-                     "pipeline_stream_insert('s2')")
+             "pipelinedb.insert_into_stream('s2')")
   pipeline.create_cv('cv', 'SELECT count(*) FROM s2')
 
   for copy in [True, False]:
@@ -58,11 +58,11 @@ def test_deadlock_regress(pipeline, clean_db):
       for sync in ['receive', 'commit']:
         pipeline.stop()
         pipeline.run({
-          'continuous_query_num_workers': nworkers,
-          'stream_insert_level': 'sync_%s' % sync
+          'pipelinedb.num_workers': nworkers,
+          'pipelinedb.stream_insert_level': 'sync_%s' % sync
           })
 
-        pipeline.execute("SELECT truncate_continuous_view('cv')")
+        pipeline.execute("SELECT pipelinedb.truncate_continuous_view('cv')")
         pipeline.execute('COMMIT')
 
         if copy:
@@ -70,12 +70,12 @@ def test_deadlock_regress(pipeline, clean_db):
         else:
           pipeline.execute('INSERT INTO s1 (n) %s' % query)
 
-        count = dict(pipeline.execute('SELECT count FROM cv').first() or {})
+        count = dict(pipeline.execute('SELECT count FROM cv')[0] or {})
         ntries = 5
         while count.get('count') != nitems and ntries > 0:
           assert sync == 'receive'
           time.sleep(1)
-          count = dict(pipeline.execute('SELECT count FROM cv').first() or {})
+          count = dict(pipeline.execute('SELECT count FROM cv')[0] or {})
           ntries -= 1
         assert count and count['count'] == nitems
 

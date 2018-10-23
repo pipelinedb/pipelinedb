@@ -1,6 +1,6 @@
-CREATE STREAM cqlimit_stream (x int);
+CREATE FOREIGN TABLE cqlimit_stream (x int) SERVER pipelinedb;
 
-CREATE CONTINUOUS VIEW cqlimit AS SELECT x::int FROM cqlimit_stream LIMIT 9 OFFSET 3;
+CREATE VIEW cqlimit AS SELECT x::int FROM cqlimit_stream LIMIT 9 OFFSET 3;
 
 INSERT INTO cqlimit_stream (x) VALUES (1), (2), (3);
 INSERT INTO cqlimit_stream (x) VALUES (4), (5), (6);
@@ -13,4 +13,4 @@ INSERT INTO cqlimit_stream (x) VALUES (19), (20), (21);
 SELECT * FROM cqlimit ORDER BY x;
 SELECT * FROM cqlimit_mrel ORDER BY x;
 
-DROP STREAM cqlimit_stream CASCADE;
+DROP FOREIGN TABLE cqlimit_stream CASCADE;

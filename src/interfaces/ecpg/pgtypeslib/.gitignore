@@ -1,6 +1,0 @@
-/pgtypeslib.def
-/blibpgtypesdll.def
-/exports.list
-/pgstrcasecmp.c
-/rint.c
-/snprintf.c

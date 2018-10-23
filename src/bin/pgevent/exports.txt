@@ -1,3 +1,0 @@
-	DllUnregisterServer@0 ;
-	DllRegisterServer@0 ;
-	DllInstall ;

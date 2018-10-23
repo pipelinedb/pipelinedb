@@ -1,37 +1,37 @@
-CREATE STREAM regr_stream (x integer, y integer);
+CREATE FOREIGN TABLE regr_stream (x integer, y integer) SERVER pipelinedb;
 
 -- regr_sxx
-CREATE CONTINUOUS VIEW test_regr_sxx AS SELECT regr_sxx(x::float8, y::float8) FROM regr_stream;
+CREATE VIEW test_regr_sxx AS SELECT regr_sxx(x::float8, y::float8) FROM regr_stream;
 
 -- regr_syy
-CREATE CONTINUOUS VIEW test_regr_syy AS SELECT regr_syy(x::integer, y::integer) FROM regr_stream;
+CREATE VIEW test_regr_syy AS SELECT regr_syy(x::integer, y::integer) FROM regr_stream;
 
 -- regr_sxy
-CREATE CONTINUOUS VIEW test_regr_sxy AS SELECT regr_sxy(x::float4, y::float4) FROM regr_stream;
+CREATE VIEW test_regr_sxy AS SELECT regr_sxy(x::float4, y::float4) FROM regr_stream;
 
 -- regr_avgx
-CREATE CONTINUOUS VIEW test_regr_avgx AS SELECT regr_avgx(x::numeric, y::numeric) FROM regr_stream;
+CREATE VIEW test_regr_avgx AS SELECT regr_avgx(x::numeric, y::numeric) FROM regr_stream;
 
 -- regr_avgy
-CREATE CONTINUOUS VIEW test_regr_avgy AS SELECT regr_avgy(x::integer, y::integer) FROM regr_stream;
+CREATE VIEW test_regr_avgy AS SELECT regr_avgy(x::integer, y::integer) FROM regr_stream;
 
 -- regr_r2
-CREATE CONTINUOUS VIEW test_regr_r2 AS SELECT regr_r2(x::integer, y::integer) FROM regr_stream;
+CREATE VIEW test_regr_r2 AS SELECT regr_r2(x::integer, y::integer) FROM regr_stream;
 
 -- regr_slope
-CREATE CONTINUOUS VIEW test_regr_slope AS SELECT regr_slope(x::float8, y::float8) FROM regr_stream;
+CREATE VIEW test_regr_slope AS SELECT regr_slope(x::float8, y::float8) FROM regr_stream;
 
 -- regr_intercept
-CREATE CONTINUOUS VIEW test_regr_intercept AS SELECT regr_intercept(x::integer, y::integer) FROM regr_stream;
+CREATE VIEW test_regr_intercept AS SELECT regr_intercept(x::integer, y::integer) FROM regr_stream;
 
 -- regr_count
-CREATE CONTINUOUS VIEW test_regr_count AS SELECT regr_count(x::integer, y::float4) FROM regr_stream;
+CREATE VIEW test_regr_count AS SELECT regr_count(x::integer, y::float4) FROM regr_stream;
 
 -- covar_pop
-CREATE CONTINUOUS VIEW test_covar_pop AS SELECT covar_pop(x::float4, y::int4) FROM regr_stream;
+CREATE VIEW test_covar_pop AS SELECT covar_pop(x::float4, y::int4) FROM regr_stream;
 
 -- corr
-CREATE CONTINUOUS VIEW test_corr AS SELECT corr(x::float4, y::int4) FROM regr_stream;
+CREATE VIEW test_corr AS SELECT corr(x::float4, y::int4) FROM regr_stream;
 
 INSERT INTO regr_stream (x, y) VALUES (0, 164), (1, 155), (2, 252), (3, 169), (4, 148), (5, 25), (6, 119), (7, 149), (8, 30), (9, 177), (10, 144), (11, 87), (12, 119), (13, 65), (14, 94), (15, 67), (16, 20), (17, 14), (18, 42), (19, 38), (20, 114), (21, 192), (22, 134), (23, 172), (24, 8), (25, 50), (26, 34), (27, 5), (28, 206), (29, 182), (30, 43), (31, 133), (32, 39), (33, 244), (34, 7), (35, 198), (36, 77), (37, 237), (38, 126), (39, 64), (40, 132), (41, 36), (42, 32), (43, 167), (44, 108), (45, 107), (46, 223), (47, 57), (48, 224), (49, 34), (50, 174), (51, 17), (52, 161), (53, 66), (54, 199), (55, 238), (56, 157), (57, 243), (58, 145), (59, 181), (60, 179), (61, 180), (62, 184), (63, 31), (64, 249), (65, 219), (66, 115), (67, 68), (68, 205), (69, 168), (70, 232), (71, 36), (72, 49), (73, 89), (74, 218), (75, 140), (76, 100), (77, 69), (78, 218), (79, 78), (80, 83), (81, 63), (82, 245), (83, 21), (84, 136), (85, 46), (86, 200), (87, 132), (88, 109), (89, 47), (90, 164), (91, 174), (92, 206), (93, 52), (94, 73), (95, 228), (96, 105), (97, 89), (98, 200), (99, 32);
 
@@ -49,4 +49,4 @@ SELECT * FROM test_regr_intercept;
 SELECT * FROM test_covar_pop;
 SELECT * FROM test_corr;
 
-DROP STREAM regr_stream CASCADE;
+DROP FOREIGN TABLE regr_stream CASCADE;

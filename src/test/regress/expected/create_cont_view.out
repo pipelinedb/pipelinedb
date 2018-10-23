@@ -1,752 +1,578 @@
 SET IntervalStyle to postgres;
-CREATE STREAM create_cont_stream (key integer, url text, value text);
+CREATE FOREIGN TABLE create_cont_stream (key integer, url text, value text) SERVER pipelinedb;
 -- Simple ones
-CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key FROM create_cont_stream;
-SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate0';
+CREATE VIEW cqcreate0 AS SELECT key FROM create_cont_stream;
+SELECT COUNT(*) FROM pipelinedb.get_views() WHERE name = 'cqcreate0';
  count 
 -------
      1
 (1 row)
 
 SELECT pg_get_viewdef('cqcreate0');
-       pg_get_viewdef        
------------------------------
-  SELECT key                +
-    FROM create_cont_stream;
-(1 row)
-
-\d+ cqcreate0_mrel;
-                    Table "public.cqcreate0_mrel"
- Column |  Type   | Modifiers | Storage | Stats target | Description 
---------+---------+-----------+---------+--------------+-------------
- key    | integer |           | plain   |              | 
- $pk    | bigint  | not null  | plain   |              | 
-Indexes:
-    "cqcreate0_mrel_pkey" PRIMARY KEY, btree ("$pk")
-Options: fillfactor=50
-
-\d+ cqcreate0_osrel;
-                                     Foreign table "public.cqcreate0_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqcreate0                |           |             | extended |              | 
- new               | cqcreate0                |           |             | extended |              | 
- delta             | cqcreate0_mrel           |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
-Server: pipelinedb
-
-SELECT pipeline_get_overlay_viewdef('cqcreate0');
- pipeline_get_overlay_viewdef 
+        pg_get_viewdef        
 ------------------------------
   SELECT cqcreate0_mrel.key  +
     FROM ONLY cqcreate0_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url, 1, 2) FROM create_cont_stream;
-SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate1';
+\d+ cqcreate0_mrel;
+                              Table "public.cqcreate0_mrel"
+ Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+--------+---------+-----------+----------+---------+---------+--------------+-------------
+ key    | integer |           |          |         | plain   |              | 
+ $pk    | bigint  |           | not null |         | plain   |              | 
+Indexes:
+    "cqcreate0_mrel_pkey" PRIMARY KEY, btree ("$pk")
+Options: fillfactor=50
+
+\d+ cqcreate0_osrel;
+                                               Foreign table "public.cqcreate0_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqcreate0                |           |          |         |             | extended |              | 
+ new               | cqcreate0                |           |          |         |             | extended |              | 
+ delta             | cqcreate0_mrel           |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
+Server: pipelinedb
+
+CREATE VIEW cqcreate1 AS SELECT substring(url, 1, 2) FROM create_cont_stream;
+SELECT COUNT(*) FROM pipelinedb.get_views() WHERE name = 'cqcreate1';
  count 
 -------
      1
 (1 row)
 
 SELECT pg_get_viewdef('cqcreate1');
-                pg_get_viewdef                 
------------------------------------------------
-  SELECT "substring"(url, 1, 2) AS "substring"+
-    FROM create_cont_stream;
-(1 row)
-
-\d+ cqcreate1_mrel;
-                     Table "public.cqcreate1_mrel"
-  Column   |  Type  | Modifiers | Storage  | Stats target | Description 
------------+--------+-----------+----------+--------------+-------------
- substring | text   |           | extended |              | 
- $pk       | bigint | not null  | plain    |              | 
-Indexes:
-    "cqcreate1_mrel_pkey" PRIMARY KEY, btree ("$pk")
-Options: fillfactor=50
-
-\d+ cqcreate1_osrel;
-                                     Foreign table "public.cqcreate1_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqcreate1                |           |             | extended |              | 
- new               | cqcreate1                |           |             | extended |              | 
- delta             | cqcreate1_mrel           |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
-Server: pipelinedb
-
-SELECT pipeline_get_overlay_viewdef('cqcreate1');
-    pipeline_get_overlay_viewdef    
+           pg_get_viewdef           
 ------------------------------------
   SELECT cqcreate1_mrel."substring"+
     FROM ONLY cqcreate1_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqcreate2 AS SELECT key, substring(value, 1, 2) AS s FROM create_cont_stream;
-SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate2';
+\d+ cqcreate1_mrel;
+                                Table "public.cqcreate1_mrel"
+  Column   |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+-----------+--------+-----------+----------+---------+----------+--------------+-------------
+ substring | text   |           |          |         | extended |              | 
+ $pk       | bigint |           | not null |         | plain    |              | 
+Indexes:
+    "cqcreate1_mrel_pkey" PRIMARY KEY, btree ("$pk")
+Options: fillfactor=50
+
+\d+ cqcreate1_osrel;
+                                               Foreign table "public.cqcreate1_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqcreate1                |           |          |         |             | extended |              | 
+ new               | cqcreate1                |           |          |         |             | extended |              | 
+ delta             | cqcreate1_mrel           |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
+Server: pipelinedb
+
+CREATE VIEW cqcreate2 AS SELECT key, substring(value, 1, 2) AS s FROM create_cont_stream;
+SELECT COUNT(*) FROM pipelinedb.get_views() WHERE name = 'cqcreate2';
  count 
 -------
      1
 (1 row)
 
 SELECT pg_get_viewdef('cqcreate2');
-          pg_get_viewdef           
------------------------------------
-  SELECT key,                     +
-     "substring"(value, 1, 2) AS s+
-    FROM create_cont_stream;
-(1 row)
-
-\d+ cqcreate2_mrel;
-                    Table "public.cqcreate2_mrel"
- Column |  Type   | Modifiers | Storage  | Stats target | Description 
---------+---------+-----------+----------+--------------+-------------
- key    | integer |           | plain    |              | 
- s      | text    |           | extended |              | 
- $pk    | bigint  | not null  | plain    |              | 
-Indexes:
-    "cqcreate2_mrel_pkey" PRIMARY KEY, btree ("$pk")
-Options: fillfactor=50
-
-\d+ cqcreate2_osrel;
-                                     Foreign table "public.cqcreate2_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqcreate2                |           |             | extended |              | 
- new               | cqcreate2                |           |             | extended |              | 
- delta             | cqcreate2_mrel           |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
-Server: pipelinedb
-
-SELECT pipeline_get_overlay_viewdef('cqcreate2');
- pipeline_get_overlay_viewdef 
+        pg_get_viewdef        
 ------------------------------
   SELECT cqcreate2_mrel.key, +
      cqcreate2_mrel.s        +
     FROM ONLY cqcreate2_mrel;
 (1 row)
 
-DROP STREAM create_cont_stream CASCADE;
+\d+ cqcreate2_mrel;
+                               Table "public.cqcreate2_mrel"
+ Column |  Type   | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+---------+-----------+----------+---------+----------+--------------+-------------
+ key    | integer |           |          |         | plain    |              | 
+ s      | text    |           |          |         | extended |              | 
+ $pk    | bigint  |           | not null |         | plain    |              | 
+Indexes:
+    "cqcreate2_mrel_pkey" PRIMARY KEY, btree ("$pk")
+Options: fillfactor=50
+
+\d+ cqcreate2_osrel;
+                                               Foreign table "public.cqcreate2_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqcreate2                |           |          |         |             | extended |              | 
+ new               | cqcreate2                |           |          |         |             | extended |              | 
+ delta             | cqcreate2_mrel           |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
+Server: pipelinedb
+
+DROP FOREIGN TABLE create_cont_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
-DETAIL:  drop cascades to view cqcreate0
-drop cascades to view cqcreate1
+DETAIL:  drop cascades to view cqcreate1
+drop cascades to view cqcreate0
 drop cascades to view cqcreate2
-CREATE STREAM create_cont_stream (key text, value int8, x float8, y int8, z int2, ts0 timestamp, ts1 timestamp);
+CREATE FOREIGN TABLE create_cont_stream (key text, value int8, x float8, y int8, z int2, ts0 timestamp, ts1 timestamp) SERVER pipelinedb;
 -- Group by projections
-CREATE CONTINUOUS VIEW cqcreate3 AS SELECT key, COUNT(*), SUM(value) FROM create_cont_stream GROUP BY key;
-SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate3';
+CREATE VIEW cqcreate3 AS SELECT key, COUNT(*), SUM(value) FROM create_cont_stream GROUP BY key;
+SELECT COUNT(*) FROM pipelinedb.get_views() WHERE name = 'cqcreate3';
  count 
 -------
      1
 (1 row)
 
 SELECT pg_get_viewdef('cqcreate3');
-       pg_get_viewdef       
-----------------------------
-  SELECT key,              +
-     count(*) AS count,    +
-     sum(value) AS sum     +
-    FROM create_cont_stream+
-   GROUP BY key;
-(1 row)
-
-\d+ cqcreate3_mrel;
-                    Table "public.cqcreate3_mrel"
- Column |  Type  | Modifiers | Storage  | Stats target | Description 
---------+--------+-----------+----------+--------------+-------------
- key    | text   |           | extended |              | 
- count  | bigint |           | plain    |              | 
- sum    | bytea  |           | extended |              | 
- $pk    | bigint | not null  | plain    |              | 
-Indexes:
-    "cqcreate3_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cqcreate3_mrel_expr_idx" btree (hash_group(key))
-Options: fillfactor=50
-
-\d+ cqcreate3_osrel;
-                                     Foreign table "public.cqcreate3_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqcreate3                |           |             | extended |              | 
- new               | cqcreate3                |           |             | extended |              | 
- delta             | cqcreate3_mrel           |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
-Server: pipelinedb
-
-SELECT pipeline_get_overlay_viewdef('cqcreate3');
-                     pipeline_get_overlay_viewdef                     
-----------------------------------------------------------------------
-  SELECT cqcreate3_mrel.key,                                         +
-     cqcreate3_mrel.count,                                           +
-     numeric_poly_sum(numpolyaggstaterecv(cqcreate3_mrel.sum)) AS sum+
+                                                     pg_get_viewdef                                                     
+------------------------------------------------------------------------------------------------------------------------
+  SELECT cqcreate3_mrel.key,                                                                                           +
+     cqcreate3_mrel.count,                                                                                             +
+     pipelinedb.finalize('pg_catalog.sum'::text, '{pg_catalog.int8}'::text[], cqcreate3_mrel.sum, NULL::numeric) AS sum+
     FROM ONLY cqcreate3_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value) FROM create_cont_stream GROUP BY key;
-SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate4';
+\d+ cqcreate3_mrel;
+                              Table "public.cqcreate3_mrel"
+ Column |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+--------+-----------+----------+---------+----------+--------------+-------------
+ key    | text   |           |          |         | extended |              | 
+ count  | bigint |           |          |         | plain    |              | 
+ sum    | bytea  |           |          |         | extended |              | 
+ $pk    | bigint |           | not null |         | plain    |              | 
+Indexes:
+    "cqcreate3_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cqcreate3_mrel_expr_idx" btree (pipelinedb.hash_group(key))
+Options: fillfactor=50
+
+\d+ cqcreate3_osrel;
+                                               Foreign table "public.cqcreate3_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqcreate3                |           |          |         |             | extended |              | 
+ new               | cqcreate3                |           |          |         |             | extended |              | 
+ delta             | cqcreate3_mrel           |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
+Server: pipelinedb
+
+CREATE VIEW cqcreate4 AS SELECT COUNT(*), SUM(value) FROM create_cont_stream GROUP BY key;
+SELECT COUNT(*) FROM pipelinedb.get_views() WHERE name = 'cqcreate4';
  count 
 -------
      1
 (1 row)
 
 SELECT pg_get_viewdef('cqcreate4');
-       pg_get_viewdef       
-----------------------------
-  SELECT count(*) AS count,+
-     sum(value) AS sum     +
-    FROM create_cont_stream+
-   GROUP BY key;
-(1 row)
-
-\d+ cqcreate4_mrel;
-                    Table "public.cqcreate4_mrel"
- Column |  Type  | Modifiers | Storage  | Stats target | Description 
---------+--------+-----------+----------+--------------+-------------
- _0     | text   |           | extended |              | 
- count  | bigint |           | plain    |              | 
- sum    | bytea  |           | extended |              | 
- $pk    | bigint | not null  | plain    |              | 
-Indexes:
-    "cqcreate4_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cqcreate4_mrel_expr_idx" btree (hash_group(_0))
-Options: fillfactor=50
-
-\d+ cqcreate4_osrel;
-                                     Foreign table "public.cqcreate4_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqcreate4                |           |             | extended |              | 
- new               | cqcreate4                |           |             | extended |              | 
- delta             | cqcreate4_mrel           |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
-Server: pipelinedb
-
-SELECT pipeline_get_overlay_viewdef('cqcreate4');
-                     pipeline_get_overlay_viewdef                     
-----------------------------------------------------------------------
-  SELECT cqcreate4_mrel.count,                                       +
-     numeric_poly_sum(numpolyaggstaterecv(cqcreate4_mrel.sum)) AS sum+
+                                                     pg_get_viewdef                                                     
+------------------------------------------------------------------------------------------------------------------------
+  SELECT cqcreate4_mrel.count,                                                                                         +
+     pipelinedb.finalize('pg_catalog.sum'::text, '{pg_catalog.int8}'::text[], cqcreate4_mrel.sum, NULL::numeric) AS sum+
     FROM ONLY cqcreate4_mrel;
 (1 row)
 
+\d+ cqcreate4_mrel;
+                              Table "public.cqcreate4_mrel"
+ Column |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+--------+-----------+----------+---------+----------+--------------+-------------
+ _0     | text   |           |          |         | extended |              | 
+ count  | bigint |           |          |         | plain    |              | 
+ sum    | bytea  |           |          |         | extended |              | 
+ $pk    | bigint |           | not null |         | plain    |              | 
+Indexes:
+    "cqcreate4_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cqcreate4_mrel_expr_idx" btree (pipelinedb.hash_group(_0))
+Options: fillfactor=50
+
+\d+ cqcreate4_osrel;
+                                               Foreign table "public.cqcreate4_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqcreate4                |           |          |         |             | extended |              | 
+ new               | cqcreate4                |           |          |         |             | extended |              | 
+ delta             | cqcreate4_mrel           |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
+Server: pipelinedb
+
 -- Sliding window queries
-CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds');
-SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate5';
+CREATE VIEW cqcreate5 AS SELECT key FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds');
+SELECT COUNT(*) FROM pipelinedb.get_views() WHERE name = 'cqcreate5';
  count 
 -------
      1
 (1 row)
 
 SELECT pg_get_viewdef('cqcreate5');
-                              pg_get_viewdef                               
----------------------------------------------------------------------------
-  SELECT key                                                              +
-    FROM create_cont_stream                                               +
-   WHERE (arrival_timestamp > (clock_timestamp() - '00:00:05'::interval));
-(1 row)
-
-\d+ cqcreate5_mrel;
-                                  Table "public.cqcreate5_mrel"
-      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+----------+--------------+-------------
- arrival_timestamp | timestamp with time zone |           | plain    |              | 
- key               | text                     |           | extended |              | 
- $pk               | bigint                   | not null  | plain    |              | 
-Indexes:
-    "cqcreate5_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cqcreate5_mrel_arrival_timestamp_idx" btree (arrival_timestamp)
-Options: fillfactor=50
-
-\d+ cqcreate5_osrel;
-                                     Foreign table "public.cqcreate5_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqcreate5                |           |             | extended |              | 
- new               | cqcreate5                |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
-Server: pipelinedb
-
-SELECT pipeline_get_overlay_viewdef('cqcreate5');
-                               pipeline_get_overlay_viewdef                               
+                                      pg_get_viewdef                                      
 ------------------------------------------------------------------------------------------
   SELECT cqcreate5_mrel.key                                                              +
     FROM ONLY cqcreate5_mrel                                                             +
    WHERE (cqcreate5_mrel.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval));
 (1 row)
 
-CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key::text;
-SELECT COUNT(*) FROM pipeline_views() WHERE name = 'cqcreate6';
+\d+ cqcreate5_mrel;
+                                             Table "public.cqcreate5_mrel"
+      Column       |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           |          |         | plain    |              | 
+ key               | text                     |           |          |         | extended |              | 
+ $pk               | bigint                   |           | not null |         | plain    |              | 
+Indexes:
+    "cqcreate5_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cqcreate5_mrel_arrival_timestamp_idx" btree (arrival_timestamp)
+Options: fillfactor=50
+
+\d+ cqcreate5_osrel;
+                                               Foreign table "public.cqcreate5_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqcreate5                |           |          |         |             | extended |              | 
+ new               | cqcreate5                |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
+Server: pipelinedb
+
+CREATE VIEW cqcreate6 AS SELECT COUNT(*) FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key::text;
+SELECT COUNT(*) FROM pipelinedb.get_views() WHERE name = 'cqcreate6';
  count 
 -------
      1
 (1 row)
 
 SELECT pg_get_viewdef('cqcreate6');
-                              pg_get_viewdef                              
---------------------------------------------------------------------------
-  SELECT count(*) AS count                                               +
-    FROM create_cont_stream                                              +
-   WHERE (arrival_timestamp > (clock_timestamp() - '00:00:05'::interval))+
-   GROUP BY key;
-(1 row)
-
-\d+ cqcreate6_mrel;
-                                  Table "public.cqcreate6_mrel"
-      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+----------+--------------+-------------
- arrival_timestamp | timestamp with time zone |           | plain    |              | 
- _0                | text                     |           | extended |              | 
- count             | bigint                   |           | plain    |              | 
- $pk               | bigint                   | not null  | plain    |              | 
-Indexes:
-    "cqcreate6_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cqcreate6_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, _0))
-Options: fillfactor=50
-
-\d+ cqcreate6_osrel;
-                                     Foreign table "public.cqcreate6_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqcreate6                |           |             | extended |              | 
- new               | cqcreate6                |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
-Server: pipelinedb
-
-SELECT pipeline_get_overlay_viewdef('cqcreate6');
-                              pipeline_get_overlay_viewdef                               
+                                     pg_get_viewdef                                      
 -----------------------------------------------------------------------------------------
-  SELECT combine(cqcreate6_mrel.count) AS count                                         +
+  SELECT sw_combine(cqcreate6_mrel.count) AS count                                      +
     FROM ONLY cqcreate6_mrel                                                            +
    WHERE (cqcreate6_mrel.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval))+
    GROUP BY cqcreate6_mrel._0;
 (1 row)
 
--- These use a combine state column
-CREATE CONTINUOUS VIEW cvavg AS SELECT key, AVG(x) AS float_avg, AVG(y) AS int_avg, AVG(ts0 - ts1) AS internal_avg FROM create_cont_stream GROUP BY key;
-SELECT pg_get_viewdef('cvavg');
-            pg_get_viewdef            
---------------------------------------
-  SELECT key,                        +
-     avg(x) AS float_avg,            +
-     avg(y) AS int_avg,              +
-     avg((ts0 - ts1)) AS internal_avg+
-    FROM create_cont_stream          +
-   GROUP BY key;
-(1 row)
-
-\d+ cvavg_mrel;
-                               Table "public.cvavg_mrel"
-    Column    |        Type        | Modifiers | Storage  | Stats target | Description 
---------------+--------------------+-----------+----------+--------------+-------------
- key          | text               |           | extended |              | 
- float_avg    | double precision[] |           | extended |              | 
- int_avg      | bytea              |           | extended |              | 
- internal_avg | interval[]         |           | extended |              | 
- $pk          | bigint             | not null  | plain    |              | 
+\d+ cqcreate6_mrel;
+                                             Table "public.cqcreate6_mrel"
+      Column       |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           |          |         | plain    |              | 
+ _0                | text                     |           |          |         | extended |              | 
+ count             | bigint                   |           |          |         | plain    |              | 
+ $pk               | bigint                   |           | not null |         | plain    |              | 
 Indexes:
-    "cvavg_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cvavg_mrel_expr_idx" btree (hash_group(key))
+    "cqcreate6_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cqcreate6_mrel_expr_idx" btree (pipelinedb.ls_hash_group(arrival_timestamp, _0))
 Options: fillfactor=50
 
-\d+ cvavg_osrel;
-                                       Foreign table "public.cvavg_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cvavg                    |           |             | extended |              | 
- new               | cvavg                    |           |             | extended |              | 
- delta             | cvavg_mrel               |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+\d+ cqcreate6_osrel;
+                                               Foreign table "public.cqcreate6_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqcreate6                |           |          |         |             | extended |              | 
+ new               | cqcreate6                |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('cvavg');
-                       pipeline_get_overlay_viewdef                        
----------------------------------------------------------------------------
-  SELECT cvavg_mrel.key,                                                  +
-     float8_avg(cvavg_mrel.float_avg) AS float_avg,                       +
-     numeric_poly_avg(numpolyaggstaterecv(cvavg_mrel.int_avg)) AS int_avg,+
-     interval_avg(cvavg_mrel.internal_avg) AS internal_avg                +
+-- These use a combine state column
+CREATE VIEW cvavg AS SELECT key, AVG(x) AS float_avg, AVG(y) AS int_avg, AVG(ts0 - ts1) AS internal_avg FROM create_cont_stream GROUP BY key;
+SELECT pg_get_viewdef('cvavg');
+                                                       pg_get_viewdef                                                        
+-----------------------------------------------------------------------------------------------------------------------------
+  SELECT cvavg_mrel.key,                                                                                                    +
+     float8_avg(cvavg_mrel.float_avg) AS float_avg,                                                                         +
+     pipelinedb.finalize('pg_catalog.avg'::text, '{pg_catalog.int8}'::text[], cvavg_mrel.int_avg, NULL::numeric) AS int_avg,+
+     interval_avg(cvavg_mrel.internal_avg) AS internal_avg                                                                  +
     FROM ONLY cvavg_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(key) AS count_col FROM create_cont_stream;
+\d+ cvavg_mrel;
+                                         Table "public.cvavg_mrel"
+    Column    |        Type        | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------------+--------------------+-----------+----------+---------+----------+--------------+-------------
+ key          | text               |           |          |         | extended |              | 
+ float_avg    | double precision[] |           |          |         | extended |              | 
+ int_avg      | bytea              |           |          |         | extended |              | 
+ internal_avg | interval[]         |           |          |         | extended |              | 
+ $pk          | bigint             |           | not null |         | plain    |              | 
+Indexes:
+    "cvavg_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cvavg_mrel_expr_idx" btree (pipelinedb.hash_group(key))
+Options: fillfactor=50
+
+\d+ cvavg_osrel;
+                                                 Foreign table "public.cvavg_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cvavg                    |           |          |         |             | extended |              | 
+ new               | cvavg                    |           |          |         |             | extended |              | 
+ delta             | cvavg_mrel               |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
+Server: pipelinedb
+
+CREATE VIEW cvjson AS SELECT json_agg(key) AS count_col FROM create_cont_stream;
 SELECT pg_get_viewdef('cvjson');
-           pg_get_viewdef           
-------------------------------------
-  SELECT json_agg(key) AS count_col+
-    FROM create_cont_stream;
+                                                                   pg_get_viewdef                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT pipelinedb.finalize('public.combinable_json_agg'::text, '{pg_catalog.anyelement}'::text[], cvjson_mrel.count_col, NULL::json) AS count_col+
+    FROM ONLY cvjson_mrel;
 (1 row)
 
 \d+ cvjson_mrel;
-                       Table "public.cvjson_mrel"
-  Column   |  Type  | Modifiers | Storage  | Stats target | Description 
------------+--------+-----------+----------+--------------+-------------
- count_col | bytea  |           | extended |              | 
- $pk       | bigint | not null  | plain    |              | 
+                                 Table "public.cvjson_mrel"
+  Column   |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+-----------+--------+-----------+----------+---------+----------+--------------+-------------
+ count_col | bytea  |           |          |         | extended |              | 
+ $pk       | bigint |           | not null |         | plain    |              | 
 Indexes:
     "cvjson_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 \d+ cvjson_osrel;
-                                      Foreign table "public.cvjson_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cvjson                   |           |             | extended |              | 
- new               | cvjson                   |           |             | extended |              | 
- delta             | cvjson_mrel              |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+                                                 Foreign table "public.cvjson_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cvjson                   |           |          |         |             | extended |              | 
+ new               | cvjson                   |           |          |         |             | extended |              | 
+ delta             | cvjson_mrel              |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('cvjson');
-                          pipeline_get_overlay_viewdef                          
---------------------------------------------------------------------------------
-  SELECT json_agg_finalfn(jsonaggstaterecv(cvjson_mrel.count_col)) AS count_col+
-    FROM ONLY cvjson_mrel;
-(1 row)
-
-CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key, value) FROM create_cont_stream;
+CREATE VIEW cvjsonobj AS SELECT json_object_agg(key, value) FROM create_cont_stream;
 SELECT pg_get_viewdef('cvjsonobj');
-                     pg_get_viewdef                     
---------------------------------------------------------
-  SELECT json_object_agg(key, value) AS json_object_agg+
-    FROM create_cont_stream;
+                                                                                  pg_get_viewdef                                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT pipelinedb.finalize('public.combinable_json_object_agg'::text, '{pg_catalog.any,pg_catalog.any}'::text[], cvjsonobj_mrel.json_object_agg, NULL::json) AS json_object_agg+
+    FROM ONLY cvjsonobj_mrel;
 (1 row)
 
 \d+ cvjsonobj_mrel;
-                        Table "public.cvjsonobj_mrel"
-     Column      |  Type  | Modifiers | Storage  | Stats target | Description 
------------------+--------+-----------+----------+--------------+-------------
- json_object_agg | bytea  |           | extended |              | 
- $pk             | bigint | not null  | plain    |              | 
+                                   Table "public.cvjsonobj_mrel"
+     Column      |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+-----------------+--------+-----------+----------+---------+----------+--------------+-------------
+ json_object_agg | bytea  |           |          |         | extended |              | 
+ $pk             | bigint |           | not null |         | plain    |              | 
 Indexes:
     "cvjsonobj_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 \d+ cvjsonobj_osrel;
-                                     Foreign table "public.cvjsonobj_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cvjsonobj                |           |             | extended |              | 
- new               | cvjsonobj                |           |             | extended |              | 
- delta             | cvjsonobj_mrel           |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+                                               Foreign table "public.cvjsonobj_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cvjsonobj                |           |          |         |             | extended |              | 
+ new               | cvjsonobj                |           |          |         |             | extended |              | 
+ delta             | cvjsonobj_mrel           |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('cvjsonobj');
-                                     pipeline_get_overlay_viewdef                                     
-------------------------------------------------------------------------------------------------------
-  SELECT json_object_agg_finalfn(jsonaggstaterecv(cvjsonobj_mrel.json_object_agg)) AS json_object_agg+
-    FROM ONLY cvjsonobj_mrel;
-(1 row)
-
 -- But these aggregates don't
-CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(z + y) AS sum_col FROM create_cont_stream;
+CREATE VIEW cvcount AS SELECT SUM(z + y) AS sum_col FROM create_cont_stream;
 SELECT pg_get_viewdef('cvcount');
-         pg_get_viewdef          
----------------------------------
-  SELECT sum((z + y)) AS sum_col+
-    FROM create_cont_stream;
+                                                          pg_get_viewdef                                                          
+----------------------------------------------------------------------------------------------------------------------------------
+  SELECT pipelinedb.finalize('pg_catalog.sum'::text, '{pg_catalog.int8}'::text[], cvcount_mrel.sum_col, NULL::numeric) AS sum_col+
+    FROM ONLY cvcount_mrel;
 (1 row)
 
 \d+ cvcount_mrel;
-                     Table "public.cvcount_mrel"
- Column  |  Type  | Modifiers | Storage  | Stats target | Description 
----------+--------+-----------+----------+--------------+-------------
- sum_col | bytea  |           | extended |              | 
- $pk     | bigint | not null  | plain    |              | 
+                                Table "public.cvcount_mrel"
+ Column  |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+--------+-----------+----------+---------+----------+--------------+-------------
+ sum_col | bytea  |           |          |         | extended |              | 
+ $pk     | bigint |           | not null |         | plain    |              | 
 Indexes:
     "cvcount_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 \d+ cvcount_osrel;
-                                      Foreign table "public.cvcount_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cvcount                  |           |             | extended |              | 
- new               | cvcount                  |           |             | extended |              | 
- delta             | cvcount_mrel             |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+                                                Foreign table "public.cvcount_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cvcount                  |           |          |         |             | extended |              | 
+ new               | cvcount                  |           |          |         |             | extended |              | 
+ delta             | cvcount_mrel             |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('cvcount');
-                          pipeline_get_overlay_viewdef                          
---------------------------------------------------------------------------------
-  SELECT numeric_poly_sum(numpolyaggstaterecv(cvcount_mrel.sum_col)) AS sum_col+
-    FROM ONLY cvcount_mrel;
-(1 row)
-
-CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream;
+CREATE VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream;
 SELECT pg_get_viewdef('cvarray');
-        pg_get_viewdef         
--------------------------------
-  SELECT count(*) AS count_col+
-    FROM create_cont_stream;
-(1 row)
-
-\d+ cvarray_mrel;
-                      Table "public.cvarray_mrel"
-  Column   |  Type  | Modifiers | Storage | Stats target | Description 
------------+--------+-----------+---------+--------------+-------------
- count_col | bigint |           | plain   |              | 
- $pk       | bigint | not null  | plain   |              | 
-Indexes:
-    "cvarray_mrel_pkey" PRIMARY KEY, btree ("$pk")
-Options: fillfactor=50
-
-\d+ cvarray_osrel;
-                                      Foreign table "public.cvarray_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cvarray                  |           |             | extended |              | 
- new               | cvarray                  |           |             | extended |              | 
- delta             | cvarray_mrel             |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
-Server: pipelinedb
-
-SELECT pipeline_get_overlay_viewdef('cvarray');
-  pipeline_get_overlay_viewdef  
+         pg_get_viewdef         
 --------------------------------
   SELECT cvarray_mrel.count_col+
     FROM ONLY cvarray_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cvtext AS SELECT key, string_agg(substring(key, 1, 2), ',') FROM create_cont_stream GROUP BY key;
-SELECT pg_get_viewdef('cvtext');
-                         pg_get_viewdef                          
------------------------------------------------------------------
-  SELECT key,                                                   +
-     string_agg("substring"(key, 1, 2), ','::text) AS string_agg+
-    FROM create_cont_stream                                     +
-   GROUP BY key;
-(1 row)
-
-\d+ cvtext_mrel;
-                       Table "public.cvtext_mrel"
-   Column   |  Type  | Modifiers | Storage  | Stats target | Description 
-------------+--------+-----------+----------+--------------+-------------
- key        | text   |           | extended |              | 
- string_agg | bytea  |           | extended |              | 
- $pk        | bigint | not null  | plain    |              | 
+\d+ cvarray_mrel;
+                                Table "public.cvarray_mrel"
+  Column   |  Type  | Collation | Nullable | Default | Storage | Stats target | Description 
+-----------+--------+-----------+----------+---------+---------+--------------+-------------
+ count_col | bigint |           |          |         | plain   |              | 
+ $pk       | bigint |           | not null |         | plain   |              | 
 Indexes:
-    "cvtext_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cvtext_mrel_expr_idx" btree (hash_group(key))
+    "cvarray_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
-\d+ cvtext_osrel;
-                                      Foreign table "public.cvtext_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cvtext                   |           |             | extended |              | 
- new               | cvtext                   |           |             | extended |              | 
- delta             | cvtext_mrel              |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+\d+ cvarray_osrel;
+                                                Foreign table "public.cvarray_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cvarray                  |           |          |         |             | extended |              | 
+ new               | cvarray                  |           |          |         |             | extended |              | 
+ delta             | cvarray_mrel             |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('cvtext');
-                           pipeline_get_overlay_viewdef                           
-----------------------------------------------------------------------------------
-  SELECT cvtext_mrel.key,                                                        +
-     string_agg_finalfn(stringaggstaterecv(cvtext_mrel.string_agg)) AS string_agg+
+CREATE VIEW cvtext AS SELECT key, string_agg(substring(key, 1, 2), ',') FROM create_cont_stream GROUP BY key;
+SELECT pg_get_viewdef('cvtext');
+                                                                        pg_get_viewdef                                                                        
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT cvtext_mrel.key,                                                                                                                                    +
+     pipelinedb.finalize('public.combinable_string_agg'::text, '{pg_catalog.text,pg_catalog.text}'::text[], cvtext_mrel.string_agg, NULL::text) AS string_agg+
     FROM ONLY cvtext_mrel;
 (1 row)
 
+\d+ cvtext_mrel;
+                                  Table "public.cvtext_mrel"
+   Column   |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+------------+--------+-----------+----------+---------+----------+--------------+-------------
+ key        | text   |           |          |         | extended |              | 
+ string_agg | bytea  |           |          |         | extended |              | 
+ $pk        | bigint |           | not null |         | plain    |              | 
+Indexes:
+    "cvtext_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cvtext_mrel_expr_idx" btree (pipelinedb.hash_group(key))
+Options: fillfactor=50
+
+\d+ cvtext_osrel;
+                                                 Foreign table "public.cvtext_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cvtext                   |           |          |         |             | extended |              | 
+ new               | cvtext                   |           |          |         |             | extended |              | 
+ delta             | cvtext_mrel              |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
+Server: pipelinedb
+
 -- Check for expressions containing aggregates
-CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(y) FROM create_cont_stream;
+CREATE VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(y) FROM create_cont_stream;
 SELECT pg_get_viewdef('cqaggexpr1');
-                       pg_get_viewdef                        
--------------------------------------------------------------
-  SELECT ((count(*))::numeric OPERATOR(pg_catalog.+) sum(y))+
-    FROM create_cont_stream;
+                                                                    pg_get_viewdef                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT ((cqaggexpr1_mrel._0)::numeric + pipelinedb.finalize('pg_catalog.sum'::text, '{pg_catalog.int8}'::text[], cqaggexpr1_mrel._1, NULL::numeric))+
+    FROM ONLY cqaggexpr1_mrel;
 (1 row)
 
 \d+ cqaggexpr1_mrel;
-                   Table "public.cqaggexpr1_mrel"
- Column |  Type  | Modifiers | Storage  | Stats target | Description 
---------+--------+-----------+----------+--------------+-------------
- _0     | bigint |           | plain    |              | 
- _1     | bytea  |           | extended |              | 
- $pk    | bigint | not null  | plain    |              | 
+                              Table "public.cqaggexpr1_mrel"
+ Column |  Type  | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+--------+-----------+----------+---------+----------+--------------+-------------
+ _0     | bigint |           |          |         | plain    |              | 
+ _1     | bytea  |           |          |         | extended |              | 
+ $pk    | bigint |           | not null |         | plain    |              | 
 Indexes:
     "cqaggexpr1_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=50
 
 \d+ cqaggexpr1_osrel;
-                                    Foreign table "public.cqaggexpr1_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqaggexpr1               |           |             | extended |              | 
- new               | cqaggexpr1               |           |             | extended |              | 
- delta             | cqaggexpr1_mrel          |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+                                               Foreign table "public.cqaggexpr1_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqaggexpr1               |           |          |         |             | extended |              | 
+ new               | cqaggexpr1               |           |          |         |             | extended |              | 
+ delta             | cqaggexpr1_mrel          |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
-                                    pipeline_get_overlay_viewdef                                     
------------------------------------------------------------------------------------------------------
-  SELECT ((cqaggexpr1_mrel._0)::numeric + numeric_poly_sum(numpolyaggstaterecv(cqaggexpr1_mrel._1)))+
-    FROM ONLY cqaggexpr1_mrel;
-(1 row)
-
-CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key, AVG(x) + MAX(y) AS value FROM create_cont_stream GROUP BY key;
+CREATE VIEW cqaggexpr2 AS SELECT key, AVG(x) + MAX(y) AS value FROM create_cont_stream GROUP BY key;
 SELECT pg_get_viewdef('cqaggexpr2');
-                             pg_get_viewdef                              
--------------------------------------------------------------------------
-  SELECT key,                                                           +
-     (avg(x) OPERATOR(pg_catalog.+) (max(y))::double precision) AS value+
-    FROM create_cont_stream                                             +
-   GROUP BY key;
-(1 row)
-
-\d+ cqaggexpr2_mrel;
-                         Table "public.cqaggexpr2_mrel"
- Column |        Type        | Modifiers | Storage  | Stats target | Description 
---------+--------------------+-----------+----------+--------------+-------------
- key    | text               |           | extended |              | 
- _0     | double precision[] |           | extended |              | 
- _1     | bigint             |           | plain    |              | 
- $pk    | bigint             | not null  | plain    |              | 
-Indexes:
-    "cqaggexpr2_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cqaggexpr2_mrel_expr_idx" btree (hash_group(key))
-Options: fillfactor=50
-
-\d+ cqaggexpr2_osrel;
-                                    Foreign table "public.cqaggexpr2_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqaggexpr2               |           |             | extended |              | 
- new               | cqaggexpr2               |           |             | extended |              | 
- delta             | cqaggexpr2_mrel          |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
-Server: pipelinedb
-
-SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
-                              pipeline_get_overlay_viewdef                              
+                                     pg_get_viewdef                                     
 ----------------------------------------------------------------------------------------
   SELECT cqaggexpr2_mrel.key,                                                          +
      (float8_avg(cqaggexpr2_mrel._0) + (cqaggexpr2_mrel._1)::double precision) AS value+
     FROM ONLY cqaggexpr2_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key, COUNT(*) AS value FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key;
-SELECT pg_get_viewdef('cqaggexpr3');
-                              pg_get_viewdef                              
---------------------------------------------------------------------------
-  SELECT key,                                                            +
-     count(*) AS value                                                   +
-    FROM create_cont_stream                                              +
-   WHERE (arrival_timestamp > (clock_timestamp() - '00:00:05'::interval))+
-   GROUP BY key;
-(1 row)
-
-\d+ cqaggexpr3_mrel;
-                                  Table "public.cqaggexpr3_mrel"
-      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+----------+--------------+-------------
- arrival_timestamp | timestamp with time zone |           | plain    |              | 
- key               | text                     |           | extended |              | 
- value             | bigint                   |           | plain    |              | 
- $pk               | bigint                   | not null  | plain    |              | 
+\d+ cqaggexpr2_mrel;
+                                    Table "public.cqaggexpr2_mrel"
+ Column |        Type        | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+--------------------+-----------+----------+---------+----------+--------------+-------------
+ key    | text               |           |          |         | extended |              | 
+ _0     | double precision[] |           |          |         | extended |              | 
+ _1     | bigint             |           |          |         | plain    |              | 
+ $pk    | bigint             |           | not null |         | plain    |              | 
 Indexes:
-    "cqaggexpr3_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cqaggexpr3_mrel_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
+    "cqaggexpr2_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cqaggexpr2_mrel_expr_idx" btree (pipelinedb.hash_group(key))
 Options: fillfactor=50
 
-\d+ cqaggexpr3_osrel;
-                                    Foreign table "public.cqaggexpr3_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqaggexpr3               |           |             | extended |              | 
- new               | cqaggexpr3               |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+\d+ cqaggexpr2_osrel;
+                                               Foreign table "public.cqaggexpr2_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqaggexpr2               |           |          |         |             | extended |              | 
+ new               | cqaggexpr2               |           |          |         |             | extended |              | 
+ delta             | cqaggexpr2_mrel          |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
-                               pipeline_get_overlay_viewdef                               
+CREATE VIEW cqaggexpr3 AS SELECT key, COUNT(*) AS value FROM create_cont_stream WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key;
+SELECT pg_get_viewdef('cqaggexpr3');
+                                      pg_get_viewdef                                      
 ------------------------------------------------------------------------------------------
   SELECT cqaggexpr3_mrel.key,                                                            +
-     combine(cqaggexpr3_mrel.value) AS value                                             +
+     sw_combine(cqaggexpr3_mrel.value) AS value                                          +
     FROM ONLY cqaggexpr3_mrel                                                            +
    WHERE (cqaggexpr3_mrel.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval))+
    GROUP BY cqaggexpr3_mrel.key;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key, floor(AVG(x)) AS value FROM create_cont_stream GROUP BY key;
-SELECT pg_get_viewdef('cqaggexpr4');
-            pg_get_viewdef             
----------------------------------------
-  SELECT key,                         +
-     pg_catalog.floor(avg(x)) AS value+
-    FROM create_cont_stream           +
-   GROUP BY key;
-(1 row)
-
-\d+ cqaggexpr4_mrel;
-                         Table "public.cqaggexpr4_mrel"
- Column |        Type        | Modifiers | Storage  | Stats target | Description 
---------+--------------------+-----------+----------+--------------+-------------
- key    | text               |           | extended |              | 
- _0     | double precision[] |           | extended |              | 
- $pk    | bigint             | not null  | plain    |              | 
+\d+ cqaggexpr3_mrel;
+                                            Table "public.cqaggexpr3_mrel"
+      Column       |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           |          |         | plain    |              | 
+ key               | text                     |           |          |         | extended |              | 
+ value             | bigint                   |           |          |         | plain    |              | 
+ $pk               | bigint                   |           | not null |         | plain    |              | 
 Indexes:
-    "cqaggexpr4_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cqaggexpr4_mrel_expr_idx" btree (hash_group(key))
+    "cqaggexpr3_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cqaggexpr3_mrel_expr_idx" btree (pipelinedb.ls_hash_group(arrival_timestamp, key))
 Options: fillfactor=50
 
-\d+ cqaggexpr4_osrel;
-                                    Foreign table "public.cqaggexpr4_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqaggexpr4               |           |             | extended |              | 
- new               | cqaggexpr4               |           |             | extended |              | 
- delta             | cqaggexpr4_mrel          |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+\d+ cqaggexpr3_osrel;
+                                               Foreign table "public.cqaggexpr3_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqaggexpr3               |           |          |         |             | extended |              | 
+ new               | cqaggexpr3               |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
-            pipeline_get_overlay_viewdef            
+CREATE VIEW cqaggexpr4 AS SELECT key, floor(AVG(x)) AS value FROM create_cont_stream GROUP BY key;
+SELECT pg_get_viewdef('cqaggexpr4');
+                   pg_get_viewdef                   
 ----------------------------------------------------
   SELECT cqaggexpr4_mrel.key,                      +
      floor(float8_avg(cqaggexpr4_mrel._0)) AS value+
     FROM ONLY cqaggexpr4_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqgroupby AS SELECT key, x, COUNT(*) FROM create_cont_stream GROUP BY key, x;
-SELECT pg_get_viewdef('cqgroupby');
-       pg_get_viewdef       
-----------------------------
-  SELECT key,              +
-     x,                    +
-     count(*) AS count     +
-    FROM create_cont_stream+
-   GROUP BY key, x;
-(1 row)
-
-\d+ cqgroupby_mrel;
-                         Table "public.cqgroupby_mrel"
- Column |       Type       | Modifiers | Storage  | Stats target | Description 
---------+------------------+-----------+----------+--------------+-------------
- key    | text             |           | extended |              | 
- x      | double precision |           | plain    |              | 
- count  | bigint           |           | plain    |              | 
- $pk    | bigint           | not null  | plain    |              | 
+\d+ cqaggexpr4_mrel;
+                                    Table "public.cqaggexpr4_mrel"
+ Column |        Type        | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+--------------------+-----------+----------+---------+----------+--------------+-------------
+ key    | text               |           |          |         | extended |              | 
+ _0     | double precision[] |           |          |         | extended |              | 
+ $pk    | bigint             |           | not null |         | plain    |              | 
 Indexes:
-    "cqgroupby_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "cqgroupby_mrel_expr_idx" btree (hash_group(key, x))
+    "cqaggexpr4_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cqaggexpr4_mrel_expr_idx" btree (pipelinedb.hash_group(key))
 Options: fillfactor=50
 
-\d+ cqgroupby_osrel;
-                                     Foreign table "public.cqgroupby_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | cqgroupby                |           |             | extended |              | 
- new               | cqgroupby                |           |             | extended |              | 
- delta             | cqgroupby_mrel           |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+\d+ cqaggexpr4_osrel;
+                                               Foreign table "public.cqaggexpr4_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqaggexpr4               |           |          |         |             | extended |              | 
+ new               | cqaggexpr4               |           |          |         |             | extended |              | 
+ delta             | cqaggexpr4_mrel          |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('cqgroupby');
- pipeline_get_overlay_viewdef 
+CREATE VIEW cqgroupby AS SELECT key, x, COUNT(*) FROM create_cont_stream GROUP BY key, x;
+SELECT pg_get_viewdef('cqgroupby');
+        pg_get_viewdef        
 ------------------------------
   SELECT cqgroupby_mrel.key, +
      cqgroupby_mrel.x,       +
@@ -754,49 +580,33 @@ SELECT pipeline_get_overlay_viewdef('cqgroupby');
     FROM ONLY cqgroupby_mrel;
 (1 row)
 
-CREATE CONTINUOUS VIEW multigroupindex AS SELECT key, x, y, z, value, COUNT(*) FROM create_cont_stream
-GROUP BY key, x, y, z, value;
-SELECT pg_get_viewdef('multigroupindex');
-         pg_get_viewdef          
----------------------------------
-  SELECT key,                   +
-     x,                         +
-     y,                         +
-     z,                         +
-     value,                     +
-     count(*) AS count          +
-    FROM create_cont_stream     +
-   GROUP BY key, x, y, z, value;
-(1 row)
-
-\d+ multigroupindex_mrel;
-                      Table "public.multigroupindex_mrel"
- Column |       Type       | Modifiers | Storage  | Stats target | Description 
---------+------------------+-----------+----------+--------------+-------------
- key    | text             |           | extended |              | 
- x      | double precision |           | plain    |              | 
- y      | bigint           |           | plain    |              | 
- z      | smallint         |           | plain    |              | 
- value  | bigint           |           | plain    |              | 
- count  | bigint           |           | plain    |              | 
- $pk    | bigint           | not null  | plain    |              | 
+\d+ cqgroupby_mrel;
+                                   Table "public.cqgroupby_mrel"
+ Column |       Type       | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+------------------+-----------+----------+---------+----------+--------------+-------------
+ key    | text             |           |          |         | extended |              | 
+ x      | double precision |           |          |         | plain    |              | 
+ count  | bigint           |           |          |         | plain    |              | 
+ $pk    | bigint           |           | not null |         | plain    |              | 
 Indexes:
-    "multigroupindex_mrel_pkey" PRIMARY KEY, btree ("$pk")
-    "multigroupindex_mrel_expr_idx" btree (hash_group(key, x, y, z, value))
+    "cqgroupby_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "cqgroupby_mrel_expr_idx" btree (pipelinedb.hash_group(key, x))
 Options: fillfactor=50
 
-\d+ multigroupindex_osrel;
-                                  Foreign table "public.multigroupindex_osrel"
-      Column       |           Type           | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+-------------+----------+--------------+-------------
- old               | multigroupindex          |           |             | extended |              | 
- new               | multigroupindex          |           |             | extended |              | 
- delta             | multigroupindex_mrel     |           |             | extended |              | 
- arrival_timestamp | timestamp with time zone |           |             | plain    |              | 
+\d+ cqgroupby_osrel;
+                                               Foreign table "public.cqgroupby_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | cqgroupby                |           |          |         |             | extended |              | 
+ new               | cqgroupby                |           |          |         |             | extended |              | 
+ delta             | cqgroupby_mrel           |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
 Server: pipelinedb
 
-SELECT pipeline_get_overlay_viewdef('multigroupindex');
-    pipeline_get_overlay_viewdef    
+CREATE VIEW multigroupindex AS SELECT key, x, y, z, value, COUNT(*) FROM create_cont_stream
+GROUP BY key, x, y, z, value;
+SELECT pg_get_viewdef('multigroupindex');
+           pg_get_viewdef           
 ------------------------------------
   SELECT multigroupindex_mrel.key, +
      multigroupindex_mrel.x,       +
@@ -807,101 +617,127 @@ SELECT pipeline_get_overlay_viewdef('multigroupindex');
     FROM ONLY multigroupindex_mrel;
 (1 row)
 
-DROP STREAM create_cont_stream CASCADE;
+\d+ multigroupindex_mrel;
+                                Table "public.multigroupindex_mrel"
+ Column |       Type       | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+------------------+-----------+----------+---------+----------+--------------+-------------
+ key    | text             |           |          |         | extended |              | 
+ x      | double precision |           |          |         | plain    |              | 
+ y      | bigint           |           |          |         | plain    |              | 
+ z      | smallint         |           |          |         | plain    |              | 
+ value  | bigint           |           |          |         | plain    |              | 
+ count  | bigint           |           |          |         | plain    |              | 
+ $pk    | bigint           |           | not null |         | plain    |              | 
+Indexes:
+    "multigroupindex_mrel_pkey" PRIMARY KEY, btree ("$pk")
+    "multigroupindex_mrel_expr_idx" btree (pipelinedb.hash_group(key, x, y, z, value))
+Options: fillfactor=50
+
+\d+ multigroupindex_osrel;
+                                            Foreign table "public.multigroupindex_osrel"
+      Column       |           Type           | Collation | Nullable | Default | FDW options | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+-------------+----------+--------------+-------------
+ old               | multigroupindex          |           |          |         |             | extended |              | 
+ new               | multigroupindex          |           |          |         |             | extended |              | 
+ delta             | multigroupindex_mrel     |           |          |         |             | extended |              | 
+ arrival_timestamp | timestamp with time zone |           |          |         |             | plain    |              | 
+Server: pipelinedb
+
+DROP FOREIGN TABLE create_cont_stream CASCADE;
 NOTICE:  drop cascades to 16 other objects
-DETAIL:  drop cascades to view cqcreate3
+DETAIL:  drop cascades to view cvcount
+drop cascades to view cqaggexpr1
+drop cascades to view cqcreate3
 drop cascades to view cqcreate4
 drop cascades to view cqcreate5
 drop cascades to view cqcreate6
 drop cascades to view cvavg
 drop cascades to view cvjson
 drop cascades to view cvjsonobj
-drop cascades to view cvcount
-drop cascades to view cvarray
 drop cascades to view cvtext
-drop cascades to view cqaggexpr1
 drop cascades to view cqaggexpr2
 drop cascades to view cqaggexpr3
 drop cascades to view cqaggexpr4
 drop cascades to view cqgroupby
 drop cascades to view multigroupindex
-CREATE STREAM create_cont_stream (x int, y int);
+drop cascades to view cvarray
+CREATE FOREIGN TABLE create_cont_stream (x int, y int) SERVER pipelinedb;
 -- A user-specified fillfactor should override the default
-CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM create_cont_stream;
 \d+ withff_mrel;
-                     Table "public.withff_mrel"
- Column |  Type  | Modifiers | Storage | Stats target | Description 
---------+--------+-----------+---------+--------------+-------------
- count  | bigint |           | plain   |              | 
- $pk    | bigint | not null  | plain   |              | 
+                               Table "public.withff_mrel"
+ Column |  Type  | Collation | Nullable | Default | Storage | Stats target | Description 
+--------+--------+-----------+----------+---------+---------+--------------+-------------
+ count  | bigint |           |          |         | plain   |              | 
+ $pk    | bigint |           | not null |         | plain   |              | 
 Indexes:
     "withff_mrel_pkey" PRIMARY KEY, btree ("$pk")
 Options: fillfactor=42
 
 -- It shouldn't be possible to DROP a continuous view with DROP VIEW, and vice-versa
 CREATE VIEW ccvv AS SELECT * FROM generate_series(1, 10);
-DROP CONTINUOUS VIEW ccvv;
+DROP VIEW ccvv;
 DROP VIEW ccvv;
 ERROR:  view "ccvv" does not exist
-CREATE CONTINUOUS VIEW ccvv AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE VIEW ccvv AS SELECT COUNT(*) FROM create_cont_stream;
 DROP VIEW ccvv;
-DROP CONTINUOUS VIEW ccvv;
+DROP VIEW ccvv;
 ERROR:  view "ccvv" does not exist
 -- Subselects aren't allowed in a CV's target list
 CREATE TABLE ccvt (x integer);
-CREATE CONTINUOUS VIEW noss AS SELECT y, (SELECT x FROM ccvt WHERE x = 1) FROM create_cont_stream;
+CREATE VIEW noss AS SELECT y, (SELECT x FROM ccvt WHERE x = 1) FROM create_cont_stream;
 ERROR:  subqueries are not allowed in a continuous view's target list
 HINT:  Stream-table joins are the preferred method for combining other relations with continuous views.
 DROP TABLE ccvt;
 -- arrival_timestamp is reserved
-CREATE CONTINUOUS VIEW arrts AS SELECT x AS arrival_timestamp FROM create_cont_stream;
+CREATE VIEW arrts AS SELECT x AS arrival_timestamp FROM create_cont_stream;
 ERROR:  arrival_timestamp is a reserved column name
-CREATE CONTINUOUS VIEW arrts AS SELECT arrival_timestamp AS arrival_timestamp FROM create_cont_stream;
-DROP CONTINUOUS VIEW arrts;
+CREATE VIEW arrts AS SELECT arrival_timestamp AS arrival_timestamp FROM create_cont_stream;
+DROP VIEW arrts;
 -- WITH sw
-CREATE CONTINUOUS VIEW ma0 WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE VIEW ma0 WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream;
 SELECT pg_get_viewdef('ma0');
-                             pg_get_viewdef                             
-------------------------------------------------------------------------
-  SELECT count(*) AS count                                             +
-    FROM create_cont_stream                                            +
-   WHERE (arrival_timestamp > (clock_timestamp() - '1 day'::interval));
+                                 pg_get_viewdef                                  
+---------------------------------------------------------------------------------
+  SELECT sw_combine(ma0_mrel.count) AS count                                    +
+    FROM ONLY ma0_mrel                                                          +
+   WHERE (ma0_mrel.arrival_timestamp > (clock_timestamp() - '1 day'::interval));
 (1 row)
 
 -- sw must be a valid interval string
-CREATE CONTINUOUS VIEW mainvalid WITH (sw = 42) AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE VIEW mainvalid WITH (sw = 42) AS SELECT COUNT(*) FROM create_cont_stream;
 ERROR:  "sw" must be a valid interval string
 HINT:  For example, ... WITH (sw = '1 hour') ...
-CREATE CONTINUOUS VIEW mainvalid WITH (sw = 42.1) AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE VIEW mainvalid WITH (sw = 42.1) AS SELECT COUNT(*) FROM create_cont_stream;
 ERROR:  "sw" must be a valid interval string
 HINT:  For example, ... WITH (sw = '1 hour') ...
-CREATE CONTINUOUS VIEW mainvalid WITH (sw = 'not an interval') AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE VIEW mainvalid WITH (sw = 'not an interval') AS SELECT COUNT(*) FROM create_cont_stream;
 ERROR:  invalid input syntax for type interval: "not an interval"
-CREATE CONTINUOUS VIEW mawhere WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
+CREATE VIEW mawhere WITH (sw = '1 day') AS SELECT COUNT(*) FROM create_cont_stream
 WHERE x::integer = 1;
 SELECT pg_get_viewdef('mawhere');
-                                    pg_get_viewdef                                    
---------------------------------------------------------------------------------------
-  SELECT count(*) AS count                                                           +
-    FROM create_cont_stream                                                          +
-   WHERE ((arrival_timestamp > (clock_timestamp() - '1 day'::interval)) AND (x = 1));
+                                   pg_get_viewdef                                    
+-------------------------------------------------------------------------------------
+  SELECT sw_combine(mawhere_mrel.count) AS count                                    +
+    FROM ONLY mawhere_mrel                                                          +
+   WHERE (mawhere_mrel.arrival_timestamp > (clock_timestamp() - '1 day'::interval));
 (1 row)
 
-DROP CONTINUOUS VIEW mawhere;
-DROP STREAM create_cont_stream CASCADE;
+DROP VIEW mawhere;
+DROP FOREIGN TABLE create_cont_stream CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to view withff
-drop cascades to view ma0
-CREATE STREAM create_cont_stream (key integer, url text, value text);
-CREATE CONTINUOUS VIEW ccv0 AS SELECT 1, count(*) FROM create_cont_stream;
-CREATE CONTINUOUS VIEW ccv1 AS SELECT 1 FROM create_cont_stream;
-CREATE CONTINUOUS VIEW ccv2 AS SELECT 1 AS x, 2 AS y FROM create_cont_stream;
-CREATE CONTINUOUS VIEW ccv3 AS SELECT 1 AS x, 2 AS y, count(*) FROM create_cont_stream;
-CREATE CONTINUOUS VIEW ccv4 AS SELECT 1 + 1 AS x, 2 + 2 AS y, count(*) FROM create_cont_stream;
-CREATE CONTINUOUS VIEW ccv5 AS SELECT 1 + ('1'::integer + 1), count(*) FROM create_cont_stream;
-CREATE CONTINUOUS VIEW ccv6 AS SELECT 1 + ('1'::integer + 1), count(*) FROM create_cont_stream GROUP BY random();
-CREATE CONTINUOUS VIEW ccv7 AS SELECT 1 + ('1'::integer + 1) AS col, key, count(*) FROM create_cont_stream GROUP BY key;
-CREATE CONTINUOUS VIEW ccv8 AS SELECT 1 + ('1'::integer + 1) AS col, key + 1 AS g, count(*) FROM create_cont_stream GROUP BY g;
+DETAIL:  drop cascades to view ma0
+drop cascades to view withff
+CREATE FOREIGN TABLE create_cont_stream (key integer, url text, value text) SERVER pipelinedb;
+CREATE VIEW ccv0 AS SELECT 1, count(*) FROM create_cont_stream;
+CREATE VIEW ccv1 AS SELECT 1 FROM create_cont_stream;
+CREATE VIEW ccv2 AS SELECT 1 AS x, 2 AS y FROM create_cont_stream;
+CREATE VIEW ccv3 AS SELECT 1 AS x, 2 AS y, count(*) FROM create_cont_stream;
+CREATE VIEW ccv4 AS SELECT 1 + 1 AS x, 2 + 2 AS y, count(*) FROM create_cont_stream;
+CREATE VIEW ccv5 AS SELECT 1 + ('1'::integer + 1), count(*) FROM create_cont_stream;
+CREATE VIEW ccv6 AS SELECT 1 + ('1'::integer + 1), count(*) FROM create_cont_stream GROUP BY key % 2;
+CREATE VIEW ccv7 AS SELECT 1 + ('1'::integer + 1) AS col, key, count(*) FROM create_cont_stream GROUP BY key;
+CREATE VIEW ccv8 AS SELECT 1 + ('1'::integer + 1) AS col, key + 1 AS g, count(*) FROM create_cont_stream GROUP BY g;
 INSERT INTO create_cont_stream (key) VALUES (0), (1), (2);
 INSERT INTO create_cont_stream (key) VALUES (0), (1), (2);
 SELECT * FROM ccv0;
@@ -950,16 +786,12 @@ SELECT * FROM ccv5;
         3 |     6
 (1 row)
 
-SELECT * FROM ccv6;
+SELECT * FROM ccv6 ORDER BY count;
  ?column? | count 
 ----------+-------
-        3 |     1
-        3 |     1
-        3 |     1
-        3 |     1
-        3 |     1
-        3 |     1
-(6 rows)
+        3 |     2
+        3 |     4
+(2 rows)
 
 SELECT * FROM ccv7 ORDER BY key;
  col | key | count 
@@ -977,29 +809,29 @@ SELECT * FROM ccv8 ORDER BY g;
    3 | 3 |     2
 (3 rows)
 
-DROP STREAM create_cont_stream CASCADE;
+DROP FOREIGN TABLE create_cont_stream CASCADE;
 NOTICE:  drop cascades to 9 other objects
-DETAIL:  drop cascades to view ccv0
+DETAIL:  drop cascades to view ccv6
+drop cascades to view ccv7
+drop cascades to view ccv8
+drop cascades to view ccv0
 drop cascades to view ccv1
 drop cascades to view ccv2
 drop cascades to view ccv3
 drop cascades to view ccv4
 drop cascades to view ccv5
-drop cascades to view ccv6
-drop cascades to view ccv7
-drop cascades to view ccv8
 -- Custom type
 CREATE TYPE custom_type AS (integerone integer, integertwo integer);
-CREATE STREAM create_cont_stream(val custom_type, x float8);
-CREATE CONTINUOUS VIEW type_cv as SELECT val, count(*) FROM create_cont_stream GROUP BY val;
+CREATE FOREIGN TABLE create_cont_stream(val custom_type, x float8) SERVER pipelinedb;
+CREATE VIEW type_cv as SELECT val, count(*) FROM create_cont_stream GROUP BY val;
 ERROR:  each grouping column type must be associated with an operator class
 HINT:  Define an operator class using CREATE OPERATOR CLASS.
-CREATE CONTINUOUS VIEW tts AS SELECT COUNT(*) FROM create_cont_stream WHERE to_timestamp(x) > clock_timestamp() - interval '3 months';
+CREATE VIEW tts AS SELECT COUNT(*) FROM create_cont_stream WHERE to_timestamp(x) > clock_timestamp() - interval '3 months';
 -- Verify that we can't create triggers on continuous views
-CREATE CONTINUOUS VIEW trigcv AS SELECT COUNT(*) FROM create_cont_stream;
-CREATE TRIGGER trig AFTER INSERT OR UPDATE ON trigcv EXECUTE PROCEDURE pipeline_stream_insert('create_cont_stream');
+CREATE VIEW trigcv AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE TRIGGER trig AFTER INSERT OR UPDATE ON trigcv EXECUTE PROCEDURE pipelinedb.insert_into_stream('create_cont_stream');
 ERROR:  continuous views do not support triggers
-CREATE CONTINUOUS VIEW altercv AS SELECT COUNT(*) FROM create_cont_stream;
+CREATE VIEW altercv AS SELECT COUNT(*) FROM create_cont_stream;
 -- Verify that we can't alter a CV's columns
 ALTER VIEW altercv ALTER COUNT SET DEFAULT 1;
 ERROR:  continuous views cannot be modified
@@ -1020,8 +852,22 @@ SELECT * FROM altertest.altercv_renamed;
 CREATE OR REPLACE VIEW altercv_renamed WITH (action=materialize) AS SELECT COUNT(*) FROM create_cont_stream;
 DROP SCHEMA altertest CASCADE;
 NOTICE:  drop cascades to view altertest.altercv_renamed
-DROP STREAM create_cont_stream CASCADE;
+DROP FOREIGN TABLE create_cont_stream CASCADE;
 NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to view tts
 drop cascades to view trigcv
 drop cascades to view altercv_renamed
+-- Verify that sw_column parameters are validated correctly
+CREATE FOREIGN TABLE create_sw_col_s (x integer, ts timestamptz) SERVER pipelinedb;
+-- No sw option
+CREATE VIEW create_sw_col0 WITH (sw_column = 'ts') AS SELECT count(*) FROM create_sw_col_s;
+ERROR:  "sw_column" must be passed in conjunction with the "sw" option
+-- Wrong argument types
+CREATE VIEW create_sw_col0 WITH (sw = '1 day', sw_column = wrong_type) AS SELECT count(*) FROM create_sw_col_s;
+ERROR:  "sw_column" must be a valid column name specified as a string
+CREATE VIEW create_sw_col0 WITH (sw = '1 day', sw_column = 0) AS SELECT count(*) FROM create_sw_col_s;
+ERROR:  "sw_column" must be a valid column name specified as a string
+-- Ok
+CREATE VIEW create_sw_col0 WITH (sw = '1 day', sw_column = 'ts') AS SELECT count(*) FROM create_sw_col_s;
+DROP FOREIGN TABLE create_sw_col_s CASCADE;
+NOTICE:  drop cascades to view create_sw_col0
