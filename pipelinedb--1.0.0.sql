@@ -1833,7 +1833,7 @@ CREATE AGGREGATE partial_combine_topk_agg(topk) (
   parallel = safe
 );
 
-CREATE FUNCTION topk_increment_weighted(topk, anyelement, int8)
+CREATE FUNCTION topk_increment(topk, anyelement, int8)
 RETURNS topk
 AS 'MODULE_PATHNAME', 'topk_increment_weighted'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
