@@ -10,7 +10,6 @@ If you just want to get started with PipelineDB right away, head over to the [do
 If you'd like to build PipelineDB from source, keep reading!
 
 ## Building from source
-Install some dependencies first:
 
 Since PipelineDB is a PostgreSQL extension, you'll need to have the [PostgreSQL development packages](https://www.postgresql.org/download/) installed to build PipelineDB.
 
