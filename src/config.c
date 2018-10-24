@@ -433,7 +433,7 @@ _PG_init(void)
 			gettext_noop("Anonymously check for available updates."),
 			NULL,
 			&anonymous_update_checks,
-			false,
+			true,
 			PGC_USERSET, 0,
 			NULL, NULL, NULL);
 
