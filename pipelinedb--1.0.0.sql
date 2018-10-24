@@ -74,11 +74,18 @@ RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'pipeline_get_views'
 LANGUAGE C IMMUTABLE;
 
+CREATE VIEW pipelinedb.views AS
+ SELECT * FROM pipelinedb.get_views();
+
 CREATE OR REPLACE FUNCTION pipelinedb.get_transforms(
   OUT id oid, OUT schema text, OUT name text, OUT active bool, OUT tgfunc text, OUT tgargs text[], OUT query text)
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'pipeline_get_transforms'
 LANGUAGE C IMMUTABLE;
+
+CREATE VIEW pipelinedb.transforms AS
+ SELECT * FROM pipelinedb.get_transforms();
+
 
 CREATE OR REPLACE FUNCTION pipelinedb.hash_group(VARIADIC "any")
 RETURNS integer
