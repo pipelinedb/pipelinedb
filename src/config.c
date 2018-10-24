@@ -277,9 +277,7 @@ _PG_init(void)
 	if (PG_VERSION_NUM < 100001)
 		ereport(ERROR, (errmsg("PipelineDB requires PostgreSQL version 10.1 or higher")));
 
-#ifdef PIPELINE_VERSION_STR
-	pipeline_version_str = PIPELINE_VERSION_STR;
-#endif
+	pipeline_version_str = "1.0.0";
 #ifdef PIPELINE_REVISION_STR
 	pipeline_revision_str = PIPELINE_REVISION_STR;
 #endif
