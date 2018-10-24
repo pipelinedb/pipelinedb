@@ -5,7 +5,7 @@
 
 ## Getting started
 
-If you just want to get started with PipelineDB right away, head over to the [download page](http://pipelinedb.com/download) and follow the simple [installation instructions](http://docs.pipelinedb.com/installation.html).
+If you just want to start using PipelineDB right away, head over to the [installation docs](http://docs.pipelinedb.com/installation.html) to get going.
 
 If you'd like to build PipelineDB from source, keep reading!
 
