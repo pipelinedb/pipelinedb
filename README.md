@@ -75,9 +75,9 @@ Now let's generate some test data and stream it into a simple continuous view. F
 
     $ psql
     =# CREATE FOREIGN TABLE test_stream (key integer, value integer) SERVER pipelinedb;
-    CREATE STREAM
+    CREATE FOREIGN TABLE
     =# CREATE VIEW test_view WITH (action=materialize) AS SELECT key, COUNT(*) FROM test_stream GROUP BY key;
-    CREATE CONTINUOUS VIEW
+    CREATE VIEW
 
 Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Any `INSERT` target that isn't a table is considered a stream by PipelineDB, meaning streams don't need to have a schema created in advance. Let's emit a single event into the `test_stream` stream since our continuous view is reading from it:
 
