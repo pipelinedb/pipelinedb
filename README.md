@@ -73,7 +73,7 @@ make run
 
 Now let's generate some test data and stream it into a simple continuous view. First, create the stream and the continuous view that reads from it:
 
-    pipeline
+    $ psql
     =# CREATE FOREIGN TABLE test_stream (key integer, value integer) SERVER pipelinedb;
     CREATE STREAM
     =# CREATE VIEW test_view WITH (action=materialize) AS SELECT key, COUNT(*) FROM test_stream GROUP BY key;
@@ -81,7 +81,7 @@ Now let's generate some test data and stream it into a simple continuous view. F
 
 Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Any `INSERT` target that isn't a table is considered a stream by PipelineDB, meaning streams don't need to have a schema created in advance. Let's emit a single event into the `test_stream` stream since our continuous view is reading from it:
 
-    pipeline
+    $ psql
     =# INSERT INTO test_stream (key, value) VALUES (0, 42);
     INSERT 0 1
 
@@ -92,7 +92,7 @@ The 1 in the `INSERT 0 1` response means that 1 event was emitted into a stream 
 
 Query the continuous view to verify that the continuous view was properly updated. Were there actually 100,001 events counted?
 
-    pipeline -c "SELECT sum(count) FROM test_view"
+    $ psql -c "SELECT sum(count) FROM test_view"
       sum
     -------
     100001
@@ -100,7 +100,7 @@ Query the continuous view to verify that the continuous view was properly update
 
 What were the 10 most common randomly generated keys?
 
-    pipeline -c "SELECT * FROM test_view ORDER BY count DESC limit 10"
+    $ psql -c "SELECT * FROM test_view ORDER BY count DESC limit 10"
 	key  | count 
 	-----+-------
 	 2   | 10124
