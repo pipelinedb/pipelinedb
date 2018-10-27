@@ -1072,6 +1072,17 @@ QueryHasStream(Node *node)
 	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
 	collect_rels_and_streams((Node *) stmt->fromClause, &cxt);
 
+	/*
+	 * Set operations are currently unsupported on CVs, but we'll want to collect
+	 * any streams here anyways so that we know this is in fact a CV definition, and
+	 * we can fail properly later on.
+	 */
+	if (stmt->op)
+	{
+		collect_rels_and_streams((Node *) stmt->larg, &cxt);
+		collect_rels_and_streams((Node *) stmt->rarg, &cxt);
+	}
+
 	if (cxt.streams)
 		return true;
 
@@ -1400,7 +1411,7 @@ ValidateSubselect(Node *subquery, char *objdesc)
 void
 RewriteFromClause(SelectStmt *stmt)
 {
-	if (stmt->op)
+	if (PipelineContextIsDDL() && stmt->op)
 		elog(ERROR, "set operations within continuous views are currently not supported");
 	stmt->fromClause = (List *) rewrite_from_clause((Node *) stmt->fromClause);
 }
