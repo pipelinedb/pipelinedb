@@ -228,3 +228,24 @@ CREATE VIEW not_happenin AS
 FROM window_s WINDOW w AS (ORDER BY x);
 
 DROP FOREIGN TABLE window_s;
+
+-- Set operations can be used within VIEWs created over CVs, but not in CV definitions themselves
+CREATE FOREIGN TABLE set_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW set0 AS
+ SELECT x FROM set_s UNION ALL SELECT x FROM set_s;
+
+CREATE VIEW set0 AS
+ SELECT x, count(*) FROM set_s GROUP BY x;
+
+CREATE VIEW set1 AS
+ SELECT x, count(*) FROM set_s GROUP BY x;
+
+CREATE VIEW set2 AS
+ SELECT x, count FROM set0 UNION ALL SELECT x, count FROM set1;
+
+INSERT INTO set_s (x) SELECT generate_series(1, 5) x;
+
+SELECT x, count FROM set2 ORDER BY x, count;
+
+DROP FOREIGN TABLE set_s CASCADE;
