@@ -3,6 +3,16 @@
 [![Gitter chat](https://img.shields.io/badge/gitter-join%20chat-brightgreen.svg?style=flat-square)](https://gitter.im/pipelinedb/pipelinedb)
 [![Twitter](https://img.shields.io/badge/twitter-@pipelinedb-55acee.svg?style=flat-square)](https://twitter.com/pipelinedb)
 
+## Overview
+
+PipelineDB is a PostgreSQL extension for high-performance time-series aggregation, designed to power realtime reporting and analytics applications.
+
+PipelineDB allows you to define [continuous SQL queries](http://docs.pipelinedb.com/continuous-views.html) that perpetually aggregate time-series data and store **only the aggregate output** in regular, queryable tables. You can think of this concept as extremely high-throughput, incrementally updated materialized views that never need to be manually refreshed.
+
+Raw time-series data is never written to disk, making PipelineDB extremely efficient for aggregation workloads.
+
+Continuous queries produce their own [output streams](http://docs.pipelinedb.com/streams.html#output-streams), and thus can be [chained together](http://docs.pipelinedb.com/continuous-transforms.html) into arbitrary networks of continuous SQL.
+
 ## Getting started
 
 If you just want to start using PipelineDB right away, head over to the [installation docs](http://docs.pipelinedb.com/installation.html) to get going.
