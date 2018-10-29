@@ -764,3 +764,53 @@ HAVING combine(h.count) + 1 > 100 ORDER BY g;
 DROP FOREIGN TABLE having_s CASCADE;
 NOTICE:  drop cascades to view having0
 DROP TABLE having_t;
+-- Verify combine works within CTEs
+CREATE FOREIGN TABLE cte_s (x integer) SERVER pipelinedb;
+CREATE VIEW cte0 WITH (sw = '1 day') AS
+ SELECT x, count(*) FROM cte_s GROUP BY x;
+CREATE VIEW cte1 AS
+ SELECT x, count(*) FROM cte_s GROUP BY x;
+INSERT INTO cte_s (x) SELECT x % 10 FROM generate_series(1, 1000) x;
+-- This will have an implicit sw_combine call
+WITH cte AS (
+  SELECT * FROM cte0
+)
+SELECT * FROM cte ORDER BY x;
+ x | count 
+---+-------
+ 0 |   100
+ 1 |   100
+ 2 |   100
+ 3 |   100
+ 4 |   100
+ 5 |   100
+ 6 |   100
+ 7 |   100
+ 8 |   100
+ 9 |   100
+(10 rows)
+
+-- Now use an explicit combine call on non-SW
+WITH cte AS (
+  SELECT combine(count) FROM cte0
+)
+SELECT * FROM cte;
+ combine 
+---------
+    1000
+(1 row)
+
+-- Now use an explicit combine call on non-SW
+WITH cte AS (
+  SELECT combine(count) FROM cte1
+)
+SELECT * FROM cte;
+ combine 
+---------
+    1000
+(1 row)
+
+DROP FOREIGN TABLE cte_s CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view cte0
+drop cascades to view cte1
