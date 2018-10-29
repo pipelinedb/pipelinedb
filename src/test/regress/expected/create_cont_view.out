@@ -873,8 +873,8 @@ DROP FOREIGN TABLE create_sw_col_s CASCADE;
 NOTICE:  drop cascades to view create_sw_col0
 -- Verify that we don't allow CREATE OR REPLACE semantics on CQs
 CREATE FOREIGN TABLE cor_s (x integer) SERVER pipelinedb;
-CREATE VIEW v0 AS SELECT count(*) FROM cor_s;
-CREATE OR REPLACE VIEW v0 AS SELECT count(*) FROM cor_s;
+CREATE VIEW cor0 AS SELECT count(*) FROM cor_s;
+CREATE OR REPLACE VIEW cor0 AS SELECT count(*) FROM cor_s;
 ERROR:  continuous queries cannot be replaced
 DROP FOREIGN TABLE cor_s CASCADE;
-NOTICE:  drop cascades to view v0
+NOTICE:  drop cascades to view cor0
