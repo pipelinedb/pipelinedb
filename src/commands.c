@@ -228,6 +228,13 @@ PipelineProcessUtility(PlannedStmt *pstmt, const char *sql, ProcessUtilityContex
 			}
 			if (action != NONE)
 			{
+				/*
+				 * We currently don't allow CREATE OR REPLACE semantics on continuous queries, because it would essentially
+				 * equate to modifying CQ definitions, which is not supported.
+				 */
+				if (stmt->replace)
+					elog(ERROR, "continuous queries cannot be replaced");
+
 				PipelineContextSetIsDDL();
 				ddl_lock = AcquirePipelineDDLLock();
 			}
