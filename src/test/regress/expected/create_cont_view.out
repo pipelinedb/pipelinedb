@@ -850,13 +850,13 @@ SELECT * FROM altertest.altercv_renamed;
 
 -- Verify that we cannot replace an existing CV
 CREATE OR REPLACE VIEW altercv_renamed WITH (action=materialize) AS SELECT COUNT(*) FROM create_cont_stream;
+ERROR:  continuous queries cannot be replaced
 DROP SCHEMA altertest CASCADE;
 NOTICE:  drop cascades to view altertest.altercv_renamed
 DROP FOREIGN TABLE create_cont_stream CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view tts
 drop cascades to view trigcv
-drop cascades to view altercv_renamed
 -- Verify that sw_column parameters are validated correctly
 CREATE FOREIGN TABLE create_sw_col_s (x integer, ts timestamptz) SERVER pipelinedb;
 -- No sw option
@@ -871,3 +871,10 @@ ERROR:  "sw_column" must be a valid column name specified as a string
 CREATE VIEW create_sw_col0 WITH (sw = '1 day', sw_column = 'ts') AS SELECT count(*) FROM create_sw_col_s;
 DROP FOREIGN TABLE create_sw_col_s CASCADE;
 NOTICE:  drop cascades to view create_sw_col0
+-- Verify that we don't allow CREATE OR REPLACE semantics on CQs
+CREATE FOREIGN TABLE cor_s (x integer) SERVER pipelinedb;
+CREATE VIEW v0 AS SELECT count(*) FROM cor_s;
+CREATE OR REPLACE VIEW v0 AS SELECT count(*) FROM cor_s;
+ERROR:  continuous queries cannot be replaced
+DROP FOREIGN TABLE cor_s CASCADE;
+NOTICE:  drop cascades to view v0

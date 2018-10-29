@@ -39,6 +39,7 @@ lib*.pc
 /Debug/
 /Release/
 /tmp_install
+/tmp_check
 
 src/test/regress/regression.diffs
 src/test/regress/regression.out

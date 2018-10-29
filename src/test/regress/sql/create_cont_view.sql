@@ -231,3 +231,11 @@ CREATE VIEW create_sw_col0 WITH (sw = '1 day', sw_column = 0) AS SELECT count(*)
 CREATE VIEW create_sw_col0 WITH (sw = '1 day', sw_column = 'ts') AS SELECT count(*) FROM create_sw_col_s;
 
 DROP FOREIGN TABLE create_sw_col_s CASCADE;
+
+-- Verify that we don't allow CREATE OR REPLACE semantics on CQs
+CREATE FOREIGN TABLE cor_s (x integer) SERVER pipelinedb;
+
+CREATE VIEW cor0 AS SELECT count(*) FROM cor_s;
+CREATE OR REPLACE VIEW cor0 AS SELECT count(*) FROM cor_s;
+
+DROP FOREIGN TABLE cor_s CASCADE;
