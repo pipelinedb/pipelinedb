@@ -1021,6 +1021,9 @@ GetMyContQueryDatabaseMetadata(void)
 	if (!db_meta)
 		db_meta = GetContQueryDatabaseMetadata(MyDatabaseId);
 
+	if (!db_meta)
+		elog(ERROR, "pipelinedb workers have not started up yet");
+
 	return db_meta;
 }
 

@@ -505,10 +505,6 @@ BeginStreamModify(ModifyTableState *mtstate, ResultRelInfo *result_info,
 	else
 	{
 		sis->db_meta = GetMyContQueryDatabaseMetadata();
-
-		if (!sis->db_meta)
-			elog(ERROR, "pipelinedb workers have not started up yet");
-
 		sis->start_generation = pg_atomic_read_u64(&sis->db_meta->generation);
 		if (stream_insert_level == STREAM_INSERT_ASYNCHRONOUS)
 			sis->ack = NULL;
