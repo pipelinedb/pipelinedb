@@ -2598,7 +2598,7 @@ SyncPipelineQuery(void)
 	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		if (!OidIsValid(get_rel_name(row->relid)))
+		if (!get_rel_name(row->relid))
 		{
 			PipelineCatalogTupleDelete(pipeline_query, &tup->t_self);
 			PurgeDeadProcStats(row->id);

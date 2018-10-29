@@ -625,7 +625,7 @@ SyncPipelineStream(void)
 	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_stream row = (Form_pipeline_stream) GETSTRUCT(tup);
-		if (!OidIsValid(get_rel_name(row->relid)))
+		if (!get_rel_name(row->relid))
 		{
 			PipelineCatalogTupleDelete(pipeline_stream, &tup->t_self);
 			PurgeDeadStreamStats(row->relid);
