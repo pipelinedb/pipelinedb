@@ -4534,6 +4534,12 @@ RewriteCombineAggs(Query *q)
 	ListCell *qlc;
 	List *nodes;
 
+	foreach(qlc, q->cteList)
+	{
+		CommonTableExpr *cte = (CommonTableExpr *) lfirst(qlc);
+		RewriteCombineAggs((Query *) cte->ctequery);
+	}
+
 	/*
 	 * First recursively perform the combine aggregate rewrite on any subqueries
 	 */
