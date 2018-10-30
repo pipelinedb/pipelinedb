@@ -18,6 +18,7 @@
 #include "catalog/pg_namespace.h"
 #include "commands.h"
 #include "commands/dbcommands.h"
+#include "compat.h"
 #include "config.h"
 #include "copy.h"
 #include "executor.h"
@@ -347,8 +348,7 @@ PipelineProcessUtility(PlannedStmt *pstmt, const char *sql, ProcessUtilityContex
 			 * trying to do vacuum the CV's materialization table, so rewrite
 			 * the name of the target relation if we need to.
 			 */
-			if (vstmt->relation && RangeVarIsContView(vstmt->relation))
-				vstmt->relation = RangeVarGetMatRelName(vstmt->relation);
+			CompatAnalyzeVacuumStmt(vstmt);
 		}
 		else if (IsA(parsetree, CreateTrigStmt))
 		{

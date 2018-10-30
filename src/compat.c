@@ -13,9 +13,10 @@
 #include "access/htup.h"
 #include "access/htup_details.h"
 #include "catalog/pg_proc.h"
+#include "compat.h"
 #include "commands/defrem.h"
 #include "executor/executor.h"
-#include "compat.h"
+#include "pipeline_query.h"
 #include "utils/syscache.h"
 
 /*
@@ -62,4 +63,14 @@ CompatDefineIndex(Oid relationId,
 {
 	return DefineIndex(relationId, stmt, indexRelationId, is_alter_table,
 			check_rights, check_not_in_use, skip_build, quiet);
+}
+
+/*
+ * CompatAnalyzeVacuumStmt
+ */
+void
+CompatAnalyzeVacuumStmt(VacuumStmt *stmt)
+{
+	if (stmt->relation && RangeVarIsContView(stmt->relation))
+		stmt->relation = RangeVarGetMatRelName(stmt->relation);
 }

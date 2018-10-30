@@ -25,3 +25,5 @@ extern ObjectAddress CompatDefineIndex(Oid relationId,
 			bool check_not_in_use,
 			bool skip_build,
 			bool quiet);
+
+extern void CompatAnalyzeVacuumStmt(VacuumStmt *stmt);
