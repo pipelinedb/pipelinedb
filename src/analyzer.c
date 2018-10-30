@@ -14,6 +14,7 @@
 #include "access/sysattr.h"
 #include "access/xact.h"
 #include "catalog.h"
+#include "compat.h"
 #include "config.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_aggregate.h"
@@ -220,7 +221,7 @@ static bool
 col_has_index(RangeVar *rv, ColumnRef *col)
 {
 	Relation rel = heap_openrv(rv, NoLock);
-	Bitmapset *indexed = RelationGetIndexAttrBitmap(rel, INDEX_ATTR_BITMAP_ALL);
+	Bitmapset *indexed = RelationGetIndexAttrBitmap(rel, PIPELINE_COMPAT_INDEX_ATTR_BITMAP_ALL);
 	TupleDesc desc = RelationGetDescr(rel);
 	char *table;
 	char *colname;
@@ -867,23 +868,15 @@ collect_agg_funcs(Node *node, ContAnalyzeContext *context)
 	if (IsA(node, FuncCall))
 	{
 		FuncCall *func = (FuncCall *) node;
-		HeapTuple ftup;
-		Form_pg_proc pform;
-		bool is_agg = func->agg_within_group;
 		FuncCandidateList clist;
+		bool is_agg = func->agg_within_group;
 
 		if (!is_agg)
 		{
 			clist = FuncnameGetCandidates(func->funcname, list_length(func->args), NIL, true, false, true);
 			while (clist)
 			{
-				ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
-				if (!HeapTupleIsValid(ftup))
-					break;
-
-				pform = (Form_pg_proc) GETSTRUCT(ftup);
-				is_agg = pform->proisagg;
-				ReleaseSysCache(ftup);
+				is_agg = ProcOidIsAgg(clist->oid);
 
 				if (is_agg)
 					break;
