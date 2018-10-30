@@ -26,6 +26,7 @@
 #include "commands/copy.h"
 #include "commands/defrem.h"
 #include "commands/trigger.h"
+#include "compat.h"
 #include "copy.h"
 #include "executor/executor.h"
 #include "libpq/libpq.h"
@@ -162,7 +163,9 @@ typedef struct CopyStateData
 	bool		volatile_defexprs;	/* is any of defexprs volatile? */
 	List	   *range_table;
 
+#if PG_VERSION_NUM > 100000 && PG_VERSION_NUM < 110000
 	PartitionDispatch *partition_dispatch_info;
+#endif
 	int			num_dispatch;	/* Number of entries in the above array */
 	int			num_partitions; /* Number of members in the following arrays */
 	ResultRelInfo *partitions;	/* Per partition result relation */
@@ -1248,7 +1251,7 @@ CopyStreamFrom(CopyState cstate)
 	estate->es_range_table = cstate->range_table;
 
 	/* Set up a tuple slot too */
-	myslot = ExecInitExtraTupleSlot(estate);
+	myslot = CompatExecInitExtraTupleSlot(estate);
 	ExecSetSlotDescriptor(myslot, tupDesc);
 
 	values = (Datum *) palloc(tupDesc->natts * sizeof(Datum));

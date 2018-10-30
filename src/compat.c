@@ -17,10 +17,10 @@
 #include "utils/syscache.h"
 
 /*
- * ProcOidIsAgg
+ * CompatProcOidIsAgg
  */
 bool
-ProcOidIsAgg(Oid oid)
+CompatProcOidIsAgg(Oid oid)
 {
 	HeapTuple ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(oid));
 	Form_pg_proc pform;
@@ -34,4 +34,13 @@ ProcOidIsAgg(Oid oid)
 	ReleaseSysCache(ftup);
 
 	return is_agg;
+}
+
+/*
+ * CompatExecInitExtraTupleSlot
+ */
+TupleTableSlot *
+CompatExecInitExtraTupleSlot(EState *estate)
+{
+	return ExecInitExtraTupleSlot(estate);
 }

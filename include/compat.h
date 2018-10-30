@@ -7,7 +7,12 @@
  *
  *-------------------------------------------------------------------------
  */
+#include "postgres.h"
+
+#include "executor/tuptable.h"
+#include "nodes/execnodes.h"
 
 #define PIPELINE_COMPAT_INDEX_ATTR_BITMAP_ALL INDEX_ATTR_BITMAP_ALL
 
-extern bool ProcOidIsAgg(Oid oid);
+extern bool CompatProcOidIsAgg(Oid oid);
+extern TupleTableSlot *CompatExecInitExtraTupleSlot(EState *estate);

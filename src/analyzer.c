@@ -876,7 +876,7 @@ collect_agg_funcs(Node *node, ContAnalyzeContext *context)
 			clist = FuncnameGetCandidates(func->funcname, list_length(func->args), NIL, true, false, true);
 			while (clist)
 			{
-				is_agg = ProcOidIsAgg(clist->oid);
+				is_agg = CompatProcOidIsAgg(clist->oid);
 
 				if (is_agg)
 					break;
