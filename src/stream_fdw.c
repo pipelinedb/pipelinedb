@@ -16,6 +16,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "commands/trigger.h"
+#include "compat.h"
 #include "executor/executor.h"
 #include "foreign/fdwapi.h"
 #include "nodes/makefuncs.h"
@@ -232,7 +233,7 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 	/*
 	 * Override result tuple type and projection info.
 	 */
-	ExecAssignResultTypeFromTL(&node->ss.ps);
+	CompatExecAssignResultTypeFromTL(&node->ss.ps);
 	ExecAssignScanProjectionInfo(&node->ss);
 
 	node->fdw_state = (void *) state;

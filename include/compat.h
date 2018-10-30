@@ -35,3 +35,5 @@ extern void CompatInitializePostgres(const char *in_dbname, Oid dboid, const cha
 
 extern Relids CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner);
 extern void CompatPrepareEState(PlannedStmt *pstmt, EState *estate);
+
+extern void CompatExecAssignResultTypeFromTL(PlanState *ps);

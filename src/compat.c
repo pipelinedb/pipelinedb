@@ -118,3 +118,12 @@ CompatPrepareEState(PlannedStmt *pstmt, EState *estate)
 	estate->es_param_exec_vals = (ParamExecData *)
 		palloc0(pstmt->nParamExec * sizeof(ParamExecData));
 }
+
+/*
+ * CompatExecAssignResultTypeFromTL
+ */
+void
+CompatExecAssignResultTypeFromTL(PlanState *ps)
+{
+	ExecAssignResultTypeFromTL(ps);
+}
