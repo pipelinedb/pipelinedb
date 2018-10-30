@@ -814,3 +814,54 @@ DROP FOREIGN TABLE cte_s CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DETAIL:  drop cascades to view cte0
 drop cascades to view cte1
+-- Verify combine works within targetlist entries whose expressions are parenthesized queries
+CREATE FOREIGN TABLE expr_s (x numeric) SERVER pipelinedb;
+CREATE VIEW expr0 AS
+ SELECT x, avg(x), count(*) FROM expr_s GROUP BY x;
+CREATE VIEW expr1 WITH (sw = '1 day') AS
+ SELECT x, avg(x), count(*) FROM expr_s GROUP BY x;
+INSERT INTO expr_s (x) SELECT x % 10 FROM generate_series(1, 1000) x;
+SELECT (SELECT count(count) FROM expr0) AS v;
+ v  
+----
+ 10
+(1 row)
+
+SELECT (SELECT count(count) FROM expr1) AS v;
+ v  
+----
+ 10
+(1 row)
+
+SELECT (SELECT combine(avg) FROM expr0) AS v;
+         v          
+--------------------
+ 4.5000000000000000
+(1 row)
+
+SELECT (SELECT combine(avg) FROM expr1) AS v;
+         v          
+--------------------
+ 4.5000000000000000
+(1 row)
+
+-- Now verify we combine calls are properly compiled when used in WHERE and HAVING clauses
+CREATE TABLE expr_t AS SELECT generate_series(1, 10) x;
+SELECT * FROM expr_t WHERE x = (SELECT count(*) - 1 FROM expr1);
+ x 
+---
+ 9
+(1 row)
+
+SELECT x % 2 AS g, count(*) FROM expr_t GROUP BY g HAVING count(*) > (SELECT combine(avg) FROM expr0) ORDER BY g;
+ g | count 
+---+-------
+ 0 |     5
+ 1 |     5
+(2 rows)
+
+DROP FOREIGN TABLE expr_s CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view expr0
+drop cascades to view expr1
+DROP TABLE expr_t;

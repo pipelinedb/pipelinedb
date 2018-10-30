@@ -4523,6 +4523,25 @@ rewrite_nodes(Query *q, List *nodes)
 }
 
 /*
+ * sublink_walker
+ */
+static bool
+sublink_walker(Node *n, void *context)
+{
+	if (n == NULL)
+		return false;
+
+	if (IsA(n, SubLink))
+	{
+		SubLink *sub = (SubLink *) n;
+		if (IsA(sub->subselect, Query))
+			RewriteCombineAggs((Query *) sub->subselect);
+	}
+
+	return expression_tree_walker(n, sublink_walker, NULL);
+}
+
+/*
  * RewriteCombineAggs
  *
  * Expands any combine aggregate references into correct Aggref expressions, adding any
@@ -4534,10 +4553,17 @@ RewriteCombineAggs(Query *q)
 	ListCell *qlc;
 	List *nodes;
 
+	if (q->hasSubLinks)
+		query_tree_walker(q, sublink_walker, NULL, QTW_DONT_COPY_QUERY);
+
+	/*
+	 * Recurse for CTEs
+	 */
 	foreach(qlc, q->cteList)
 	{
 		CommonTableExpr *cte = (CommonTableExpr *) lfirst(qlc);
-		RewriteCombineAggs((Query *) cte->ctequery);
+		if (IsA(cte->ctequery, Query))
+			RewriteCombineAggs((Query *) cte->ctequery);
 	}
 
 	/*
