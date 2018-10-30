@@ -9,6 +9,7 @@
  */
 #include "postgres.h"
 
+#include "catalog/objectaddress.h"
 #include "executor/tuptable.h"
 #include "nodes/execnodes.h"
 
@@ -16,3 +17,11 @@
 
 extern bool CompatProcOidIsAgg(Oid oid);
 extern TupleTableSlot *CompatExecInitExtraTupleSlot(EState *estate);
+extern ObjectAddress CompatDefineIndex(Oid relationId,
+			IndexStmt *stmt,
+			Oid indexRelationId,
+			bool is_alter_table,
+			bool check_rights,
+			bool check_not_in_use,
+			bool skip_build,
+			bool quiet);

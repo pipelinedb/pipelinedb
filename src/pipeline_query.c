@@ -28,6 +28,7 @@
 #include "commands/sequence.h"
 #include "commands/tablecmds.h"
 #include "commands/view.h"
+#include "compat.h"
 #include "executor/spi.h"
 #include "matrel.h"
 #include "miscadmin.h"
@@ -885,7 +886,7 @@ create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, SelectStmt *se
 	index->accessMethod = CQ_MATREL_INDEX_TYPE;
 	index->indexParams = list_make1(indexcol);
 
-	address = DefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
+	address = CompatDefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
 	index_oid = address.objectId;
 
 	return index_oid;
@@ -915,7 +916,7 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 	index->unique = true;
 	index->isconstraint = true;
 
-	address = DefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
+	address = CompatDefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
 	index_oid = address.objectId;
 
 	return index_oid;

@@ -13,6 +13,8 @@
 #include "access/htup.h"
 #include "access/htup_details.h"
 #include "catalog/pg_proc.h"
+#include "commands/defrem.h"
+#include "executor/executor.h"
 #include "compat.h"
 #include "utils/syscache.h"
 
@@ -43,4 +45,21 @@ TupleTableSlot *
 CompatExecInitExtraTupleSlot(EState *estate)
 {
 	return ExecInitExtraTupleSlot(estate);
+}
+
+/*
+ * CompatDefineIndex
+ */
+ObjectAddress
+CompatDefineIndex(Oid relationId,
+			IndexStmt *stmt,
+			Oid indexRelationId,
+			bool is_alter_table,
+			bool check_rights,
+			bool check_not_in_use,
+			bool skip_build,
+			bool quiet)
+{
+	return DefineIndex(relationId, stmt, indexRelationId, is_alter_table,
+			check_rights, check_not_in_use, skip_build, quiet);
 }
