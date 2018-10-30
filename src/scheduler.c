@@ -20,6 +20,7 @@
 #include "catalog.h"
 #include "catalog/pg_database.h"
 #include "commands/dbcommands.h"
+#include "compat.h"
 #include "config.h"
 #include "libpq/pqsignal.h"
 #include "microbatch.h"
@@ -397,7 +398,7 @@ cont_bgworker_main(Datum arg)
 	pg_atomic_fetch_add_u64(&MyContQueryProc->db_meta->generation, 1);
 
 	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnectionByOid(proc->db_meta->db_id, InvalidOid);
+	CompatBackgroundWorkerInitializeConnectionByOid(proc->db_meta->db_id, InvalidOid);
 
 	/*
 	 * We must keep checking for the extension's existence for a short duration,
@@ -810,7 +811,7 @@ ContQuerySchedulerMain(Datum arg)
 
 	BackgroundWorkerUnblockSignals();
 
-	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, NULL);
+	CompatInitializePostgres(NULL, InvalidOid, NULL, InvalidOid, NULL);
 
 	ContQuerySchedulerShmem->pid = MyProcPid;
 

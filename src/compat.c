@@ -16,7 +16,9 @@
 #include "compat.h"
 #include "commands/defrem.h"
 #include "executor/executor.h"
+#include "miscadmin.h"
 #include "pipeline_query.h"
+#include "postmaster/bgworker.h"
 #include "utils/syscache.h"
 
 /*
@@ -73,4 +75,23 @@ CompatAnalyzeVacuumStmt(VacuumStmt *stmt)
 {
 	if (stmt->relation && RangeVarIsContView(stmt->relation))
 		stmt->relation = RangeVarGetMatRelName(stmt->relation);
+}
+
+/*
+ * CompatBackgroundWorkerInitializeConnectionByOid
+ */
+void
+CompatBackgroundWorkerInitializeConnectionByOid(Oid db, Oid user)
+{
+	BackgroundWorkerInitializeConnectionByOid(db, user);
+}
+
+/*
+ * CompatInitializePostgres
+ */
+void
+CompatInitializePostgres(const char *in_dbname, Oid dboid, const char *username,
+			 Oid useroid, char *out_dbname)
+{
+	InitPostgres(in_dbname, dboid, username, useroid, out_dbname);
 }

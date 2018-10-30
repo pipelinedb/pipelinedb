@@ -27,3 +27,7 @@ extern ObjectAddress CompatDefineIndex(Oid relationId,
 			bool quiet);
 
 extern void CompatAnalyzeVacuumStmt(VacuumStmt *stmt);
+
+extern void CompatBackgroundWorkerInitializeConnectionByOid(Oid db, Oid user);
+extern void CompatInitializePostgres(const char *in_dbname, Oid dboid, const char *username,
+			 Oid useroid, char *out_dbname);
