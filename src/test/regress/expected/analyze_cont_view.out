@@ -1,31 +1,55 @@
 -- Sanity checks
 CREATE VIEW cqanalyze0 AS SELECT substring(url, 1, 2) FROM analyze_cont_stream;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: ...EW cqanalyze0 AS SELECT substring(url, 1, 2) FROM analyze_co...
+                                                             ^
 CREATE VIEW cqanalyze1 AS SELECT CASE WHEN x = '1' THEN 1 END FROM analyze_cont_stream;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: ...lyze1 AS SELECT CASE WHEN x = '1' THEN 1 END FROM analyze_co...
+                                                             ^
 CREATE VIEW cqanalyze2 AS SELECT a FROM analyze_cont_stream GROUP BY a;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: CREATE VIEW cqanalyze2 AS SELECT a FROM analyze_cont_stream ...
+                                                ^
 CREATE VIEW cqanalyze3 AS SELECT a FROM analyze_cont_stream WHERE a > 10 GROUP BY a;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: CREATE VIEW cqanalyze3 AS SELECT a FROM analyze_cont_stream ...
+                                                ^
 CREATE VIEW cqanalyze4 AS SELECT a, b FROM analyze_cont_stream WHERE a > 10 GROUP BY a, b, c HAVING a < 12 AND c > 2;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: CREATE VIEW cqanalyze4 AS SELECT a, b FROM analyze_cont_stre...
+                                                   ^
 CREATE VIEW cqanalyze5 AS SELECT substring(url, 1, 2) AS g, COUNT(*) FROM analyze_cont_stream GROUP BY g;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: ...S SELECT substring(url, 1, 2) AS g, COUNT(*) FROM analyze_co...
+                                                             ^
 CREATE VIEW cqanalyze6 AS SELECT s.id FROM analyze_cont_stream s WHERE s.id < 10 AND s.value > 10;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: CREATE VIEW cqanalyze6 AS SELECT s.id FROM analyze_cont_stre...
+                                                   ^
 -- Windows
 CREATE VIEW cqanalyze10 AS SELECT ts, SUM(val) OVER (ORDER BY ts) FROM analyze_cont_stream;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: ...10 AS SELECT ts, SUM(val) OVER (ORDER BY ts) FROM analyze_co...
+                                                             ^
 CREATE VIEW cqanalyze11 AS SELECT ts, AVG(val) OVER (PARTITION BY ts ORDER BY ts) FROM analyze_cont_stream;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: ... AVG(val) OVER (PARTITION BY ts ORDER BY ts) FROM analyze_co...
+                                                             ^
 CREATE VIEW cqanalyze12 AS SELECT ts, AVG(val) OVER (PARTITION BY ts ORDER BY (ts + INTERVAL '1 day')) FROM analyze_cont_stream;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: ...TION BY ts ORDER BY (ts + INTERVAL '1 day')) FROM analyze_co...
+                                                             ^
 -- Stream-table JOINs
 CREATE TABLE t0 (id INTEGER);
 CREATE VIEW cqanalyze16 AS SELECT s0.id AS s0_id, t0.id AS t0_id FROM analyze_cont_stream s0 JOIN t0 ON s0.id = t0.id;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: ...e16 AS SELECT s0.id AS s0_id, t0.id AS t0_id FROM analyze_co...
+                                                             ^
 CREATE VIEW cqanalyze17 AS SELECT s.a, t0.id FROM analyze_cont_stream s JOIN t0 ON s.a = t0.id;
 ERROR:  relation "analyze_cont_stream" does not exist
+LINE 1: CREATE VIEW cqanalyze17 AS SELECT s.a, t0.id FROM analyze_co...
+                                                          ^
 DROP FOREIGN TABLE analyze_cont_stream CASCADE;
 ERROR:  foreign table "analyze_cont_stream" does not exist
 -- Now let's verify our error handling and messages
@@ -140,8 +164,12 @@ CREATE FOREIGN TABLE analyze_cont_stream (id int, x float, y int, z numeric, g i
 -- Verify that for stream-table joins, the correct error message is generated when the table is missing
 CREATE VIEW  error_not_created AS SELECT s.id, t.tid FROM analyze_cont_stream s JOIN not_a_table t ON s.id = t.tid;
 ERROR:  relation "not_a_table" does not exist
+LINE 1: ...ELECT s.id, t.tid FROM analyze_cont_stream s JOIN not_a_tabl...
+                                                             ^
 CREATE VIEW  error_not_created AS SELECT s.id, tid FROM analyze_cont_stream s JOIN not_a_table ON s.id = tid;
 ERROR:  relation "not_a_table" does not exist
+LINE 1: ... SELECT s.id, tid FROM analyze_cont_stream s JOIN not_a_tabl...
+                                                             ^
 -- Ordered-set aggregates
 CREATE VIEW cqanalyze50 AS SELECT g, percentile_cont(ARRAY[0.2, 0.8]) WITHIN GROUP (ORDER BY x), percentile_cont(0.9) WITHIN GROUP (ORDER BY y) + percentile_cont(0.1) WITHIN GROUP (ORDER BY z) AS col FROM analyze_cont_stream GROUP BY g;
 CREATE VIEW cqanalyze51 AS SELECT g, percentile_cont(0.1) WITHIN GROUP (ORDER BY x + y) FROM analyze_cont_stream GROUP BY g;
@@ -173,6 +201,8 @@ LINE 1: CREATE VIEW cqregress3 AS SELECT stream0.sid::integer FROM a...
                                          ^
 CREATE VIEW cqregress4 AS SELECT x FROM cqregress4;
 ERROR:  relation "cqregress4" does not exist
+LINE 1: CREATE VIEW cqregress4 AS SELECT x FROM cqregress4;
+                                                ^
 CREATE VIEW cqregress5 AS SELECT count(DISTINCT x), percentile_cont(0.1) WITHIN GROUP (ORDER BY x) FROM analyze_cont_stream;
 SELECT pg_get_viewdef('cqregress5');
                                                                                          pg_get_viewdef                                                                                          
