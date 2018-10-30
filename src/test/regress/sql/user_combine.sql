@@ -515,7 +515,6 @@ DROP FOREIGN TABLE having_s CASCADE;
 DROP TABLE having_t;
 
 -- Verify combine works within CTEs
-
 CREATE FOREIGN TABLE cte_s (x integer) SERVER pipelinedb;
 
 CREATE VIEW cte0 WITH (sw = '1 day') AS
@@ -545,3 +544,28 @@ WITH cte AS (
 SELECT * FROM cte;
 
 DROP FOREIGN TABLE cte_s CASCADE;
+
+-- Verify combine works within targetlist entries whose expressions are parenthesized queries
+CREATE FOREIGN TABLE expr_s (x numeric) SERVER pipelinedb;
+
+CREATE VIEW expr0 AS
+ SELECT x, avg(x), count(*) FROM expr_s GROUP BY x;
+
+CREATE VIEW expr1 WITH (sw = '1 day') AS
+ SELECT x, avg(x), count(*) FROM expr_s GROUP BY x;
+
+INSERT INTO expr_s (x) SELECT x % 10 FROM generate_series(1, 1000) x;
+
+SELECT (SELECT count(count) FROM expr0) AS v;
+SELECT (SELECT count(count) FROM expr1) AS v;
+SELECT (SELECT combine(avg) FROM expr0) AS v;
+SELECT (SELECT combine(avg) FROM expr1) AS v;
+
+-- Now verify we combine calls are properly compiled when used in WHERE and HAVING clauses
+CREATE TABLE expr_t AS SELECT generate_series(1, 10) x;
+
+SELECT * FROM expr_t WHERE x = (SELECT count(*) - 1 FROM expr1);
+SELECT x % 2 AS g, count(*) FROM expr_t GROUP BY g HAVING count(*) > (SELECT combine(avg) FROM expr0) ORDER BY g;
+
+DROP FOREIGN TABLE expr_s CASCADE;
+DROP TABLE expr_t;
