@@ -12,6 +12,7 @@
 #include "catalog/objectaddress.h"
 #include "executor/tuptable.h"
 #include "nodes/execnodes.h"
+#include "nodes/relation.h"
 
 #define PIPELINE_COMPAT_INDEX_ATTR_BITMAP_ALL INDEX_ATTR_BITMAP_ALL
 
@@ -31,3 +32,6 @@ extern void CompatAnalyzeVacuumStmt(VacuumStmt *stmt);
 extern void CompatBackgroundWorkerInitializeConnectionByOid(Oid db, Oid user);
 extern void CompatInitializePostgres(const char *in_dbname, Oid dboid, const char *username,
 			 Oid useroid, char *out_dbname);
+
+extern Relids CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner);
+extern void CompatPrepareEState(PlannedStmt *pstmt, EState *estate);

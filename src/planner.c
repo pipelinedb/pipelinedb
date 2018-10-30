@@ -13,6 +13,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "commands/extension.h"
+#include "compat.h"
 #include "config.h"
 #include "executor/executor.h"
 #include "matrel.h"
@@ -353,7 +354,7 @@ try_nestloop_path(PlannerInfo *root,
 	 * doesn't like the look of it, which could only happen if the nestloop is
 	 * still parameterized.
 	 */
-	required_outer = calc_nestloop_required_outer(outer_path,
+	required_outer = CompatCalcNestLoopRequiredOuter(outer_path,
 												  inner_path);
 	if (required_outer &&
 		((!bms_overlap(required_outer, extra->param_source_rels) &&
@@ -603,10 +604,7 @@ CreateEState(QueryDesc *query_desc)
 	estate->es_lastoid = InvalidOid;
 	estate->es_processed = 0;
 
-	if (query_desc->plannedstmt->nParamExec > 0)
-		estate->es_param_exec_vals = (ParamExecData *)
-			palloc0(query_desc->plannedstmt->nParamExec *
-					sizeof(ParamExecData));
+	CompatPrepareEState(query_desc->plannedstmt, estate);
 
 	estate->es_top_eflags |= EXEC_FLAG_SKIP_TRIGGERS;
 

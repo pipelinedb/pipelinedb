@@ -17,6 +17,7 @@
 #include "commands/defrem.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
+#include "optimizer/pathnode.h"
 #include "pipeline_query.h"
 #include "postmaster/bgworker.h"
 #include "utils/syscache.h"
@@ -94,4 +95,26 @@ CompatInitializePostgres(const char *in_dbname, Oid dboid, const char *username,
 			 Oid useroid, char *out_dbname)
 {
 	InitPostgres(in_dbname, dboid, username, useroid, out_dbname);
+}
+
+/*
+ * CompatCalcNestLoopRequiredOuter
+ */
+Relids
+CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner)
+{
+	return calc_nestloop_required_outer(outer, inner);
+}
+
+/*
+ * CompatPrepareEState
+ */
+void
+CompatPrepareEState(PlannedStmt *pstmt, EState *estate)
+{
+	if (pstmt->nParamExec == 0)
+		return;
+
+	estate->es_param_exec_vals = (ParamExecData *)
+		palloc0(pstmt->nParamExec * sizeof(ParamExecData));
 }
