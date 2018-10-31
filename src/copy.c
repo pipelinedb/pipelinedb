@@ -163,7 +163,7 @@ typedef struct CopyStateData
 	bool		volatile_defexprs;	/* is any of defexprs volatile? */
 	List	   *range_table;
 
-#if PG_VERSION_NUM > 100000 && PG_VERSION_NUM < 110000
+#if PG_VERSION_NUM < 110000
 	PartitionDispatch *partition_dispatch_info;
 #endif
 	int			num_dispatch;	/* Number of entries in the above array */
@@ -1251,7 +1251,12 @@ CopyStreamFrom(CopyState cstate)
 	estate->es_range_table = cstate->range_table;
 
 	/* Set up a tuple slot too */
-	myslot = CompatExecInitExtraTupleSlot(estate);
+#if PG_VERSION_NUM < 110000
+	myslot = ExecInitExtraTupleSlot(estate);
+#else
+	myslot = ExecInitExtraTupleSlot(estate, tupDesc);
+#endif
+
 	ExecSetSlotDescriptor(myslot, tupDesc);
 
 	values = (Datum *) palloc(tupDesc->natts * sizeof(Datum));

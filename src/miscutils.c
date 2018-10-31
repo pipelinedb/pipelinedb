@@ -37,6 +37,7 @@
 #include "utils/datum.h"
 #include "utils/fmgrprotos.h"
 #include "utils/numeric.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 #include "utils/typcache.h"

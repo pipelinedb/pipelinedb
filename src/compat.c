@@ -20,6 +20,7 @@
 #include "optimizer/pathnode.h"
 #include "pipeline_query.h"
 #include "postmaster/bgworker.h"
+#include "utils/lsyscache.h"
 #include "utils/syscache.h"
 
 /*
@@ -36,7 +37,12 @@ CompatProcOidIsAgg(Oid oid)
 		return false;
 
 	pform = (Form_pg_proc) GETSTRUCT(ftup);
+#if PG_VERSION_NUM < 110000
 	is_agg = pform->proisagg;
+#else
+	is_agg = pform->prokind == PROKIND_AGGREGATE;
+#endif
+
 	ReleaseSysCache(ftup);
 
 	return is_agg;
@@ -48,7 +54,11 @@ CompatProcOidIsAgg(Oid oid)
 TupleTableSlot *
 CompatExecInitExtraTupleSlot(EState *estate)
 {
-	return ExecInitExtraTupleSlot(estate);
+//#if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
+//	return ExecInitExtraTupleSlot(estate);
+//#else
+//#endif
+	return NULL;
 }
 
 /*
@@ -64,8 +74,10 @@ CompatDefineIndex(Oid relationId,
 			bool skip_build,
 			bool quiet)
 {
-	return DefineIndex(relationId, stmt, indexRelationId, is_alter_table,
-			check_rights, check_not_in_use, skip_build, quiet);
+//	return DefineIndex(relationId, stmt, indexRelationId, is_alter_table,
+//			check_rights, check_not_in_use, skip_build, quiet);
+	ObjectAddress o;
+	return o;
 }
 
 /*
@@ -74,8 +86,8 @@ CompatDefineIndex(Oid relationId,
 void
 CompatAnalyzeVacuumStmt(VacuumStmt *stmt)
 {
-	if (stmt->relation && RangeVarIsContView(stmt->relation))
-		stmt->relation = RangeVarGetMatRelName(stmt->relation);
+//	if (stmt->relation && RangeVarIsContView(stmt->relation))
+//		stmt->relation = RangeVarGetMatRelName(stmt->relation);
 }
 
 /*
@@ -84,7 +96,7 @@ CompatAnalyzeVacuumStmt(VacuumStmt *stmt)
 void
 CompatBackgroundWorkerInitializeConnectionByOid(Oid db, Oid user)
 {
-	BackgroundWorkerInitializeConnectionByOid(db, user);
+//	BackgroundWorkerInitializeConnectionByOid(db, user);
 }
 
 /*
@@ -94,7 +106,7 @@ void
 CompatInitializePostgres(const char *in_dbname, Oid dboid, const char *username,
 			 Oid useroid, char *out_dbname)
 {
-	InitPostgres(in_dbname, dboid, username, useroid, out_dbname);
+//	InitPostgres(in_dbname, dboid, username, useroid, out_dbname);
 }
 
 /*
@@ -103,7 +115,9 @@ CompatInitializePostgres(const char *in_dbname, Oid dboid, const char *username,
 Relids
 CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner)
 {
-	return calc_nestloop_required_outer(outer, inner);
+//	return calc_nestloop_required_outer(outer, inner);
+	return calc_nestloop_required_outer(outer->parent->relids,
+			PATH_REQ_OUTER(outer), inner->parent->relids, PATH_REQ_OUTER(inner));
 }
 
 /*
@@ -112,11 +126,11 @@ CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner)
 void
 CompatPrepareEState(PlannedStmt *pstmt, EState *estate)
 {
-	if (pstmt->nParamExec == 0)
-		return;
-
-	estate->es_param_exec_vals = (ParamExecData *)
-		palloc0(pstmt->nParamExec * sizeof(ParamExecData));
+//	if (pstmt->nParamExec == 0)
+//		return;
+//
+//	estate->es_param_exec_vals = (ParamExecData *)
+//		palloc0(pstmt->nParamExec * sizeof(ParamExecData));
 }
 
 /*
@@ -125,32 +139,31 @@ CompatPrepareEState(PlannedStmt *pstmt, EState *estate)
 void
 CompatExecAssignResultTypeFromTL(PlanState *ps)
 {
-	ExecAssignResultTypeFromTL(ps);
-}
-
-/*
- * CompatBuildTupleHashTable
- */
-TupleHashTable
-CompatBuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
-		FmgrInfo *eqfunctions,
-		FmgrInfo *hashfunctions,
-		long nbuckets, Size additionalsize,
-		MemoryContext tablecxt,
-		MemoryContext tempcxt, bool use_variable_hash_iv)
-{
-	return BuildTupleHashTable(numCols, keyColIdx, eqfunctions, hashfunctions, nbuckets,
-				additionalsize, tablecxt, tempcxt, use_variable_hash_iv);
+//	ExecAssignResultTypeFromTL(ps);
 }
 
 /*
  * CompatExecTuplesHashPrepare
  */
 void
-CompatExecTuplesHashPrepare(int numCols,
-					  Oid *eqOperators,
-					  FmgrInfo **eqFunctions,
-					  FmgrInfo **hashFunctions)
+#if PG_VERSION_NUM < 110000
+CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, FmgrInfo **eqFunctions, FmgrInfo **hashFunctions)
+#else
+CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, Oid **eqFunctions, FmgrInfo **hashFunctions)
+#endif
 {
 	execTuplesHashPrepare(numCols, eqOperators, eqFunctions, hashFunctions);
+}
+
+/*
+ * CompatGetAttName
+ */
+char *
+CompatGetAttName(Oid relid, AttrNumber att)
+{
+#if PG_VERSION_NUM < 110000
+	return get_relid_attribute_name(relid, att);
+#else
+	return get_attname(relid, att, false);
+#endif
 }

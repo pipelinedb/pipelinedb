@@ -40,6 +40,7 @@
 #include "commands/defrem.h"
 #include "commands/tablespace.h"
 #include "common/keywords.h"
+#include "compat.h"
 #include "executor/spi.h"
 #include "funcapi.h"
 #include "mb/pg_wchar.h"
@@ -6523,7 +6524,7 @@ processIndirection(Node *node, deparse_context *context)
 			 * target lists, but this function cannot be used for that case.
 			 */
 			Assert(list_length(fstore->fieldnums) == 1);
-			fieldname = get_relid_attribute_name(typrelid,
+			fieldname = CompatGetAttName(typrelid,
 												 linitial_int(fstore->fieldnums));
 			appendStringInfo(buf, ".%s", quote_identifier(fieldname));
 

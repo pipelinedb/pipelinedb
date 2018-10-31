@@ -14,7 +14,11 @@
 #include "nodes/execnodes.h"
 #include "nodes/relation.h"
 
+#if PG_VERSION_NUM < 110000
 #define PIPELINE_COMPAT_INDEX_ATTR_BITMAP_ALL INDEX_ATTR_BITMAP_ALL
+#else
+#define PIPELINE_COMPAT_INDEX_ATTR_BITMAP_ALL INDEX_ATTR_BITMAP_HOT
+#endif
 
 extern bool CompatProcOidIsAgg(Oid oid);
 extern TupleTableSlot *CompatExecInitExtraTupleSlot(EState *estate);
@@ -38,14 +42,10 @@ extern void CompatPrepareEState(PlannedStmt *pstmt, EState *estate);
 
 extern void CompatExecAssignResultTypeFromTL(PlanState *ps);
 
-extern TupleHashTable CompatBuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
-		FmgrInfo *eqfunctions,
-		FmgrInfo *hashfunctions,
-		long nbuckets, Size additionalsize,
-		MemoryContext tablecxt,
-		MemoryContext tempcxt, bool use_variable_hash_iv);
+#if PG_VERSION_NUM < 110000
+extern void CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, FmgrInfo **eqFunctions, FmgrInfo **hashFunctions);
+#else
+extern void CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, Oid **eqFunctions, FmgrInfo **hashFunctions);
+#endif
 
-extern void CompatExecTuplesHashPrepare(int numCols,
-		Oid *eqOperators,
-		FmgrInfo **eqFunctions,
-		FmgrInfo **hashFunctions);
+extern char *CompatGetAttName(Oid relid, AttrNumber att);

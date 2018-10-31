@@ -398,7 +398,12 @@ cont_bgworker_main(Datum arg)
 	pg_atomic_fetch_add_u64(&MyContQueryProc->db_meta->generation, 1);
 
 	BackgroundWorkerUnblockSignals();
-	CompatBackgroundWorkerInitializeConnectionByOid(proc->db_meta->db_id, InvalidOid);
+
+#if PG_VERSION_NUM < 110000
+	BackgroundWorkerInitializeConnectionByOid(proc->db_meta->db_id, InvalidOid);
+#else
+	BackgroundWorkerInitializeConnectionByOid(proc->db_meta->db_id, InvalidOid, 0);
+#endif
 
 	/*
 	 * We must keep checking for the extension's existence for a short duration,
@@ -811,7 +816,11 @@ ContQuerySchedulerMain(Datum arg)
 
 	BackgroundWorkerUnblockSignals();
 
-	CompatInitializePostgres(NULL, InvalidOid, NULL, InvalidOid, NULL);
+#if PG_VERSION_NUM < 110000
+	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, NULL);
+#else
+	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, NULL, false);
+#endif
 
 	ContQuerySchedulerShmem->pid = MyProcPid;
 

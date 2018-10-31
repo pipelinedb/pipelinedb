@@ -59,7 +59,7 @@ typedef struct JsonbAggState
 	Oid			val_output_func;
 } JsonbAggState;
 
-#if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
+#if PG_VERSION_NUM < 110000
 #define DatumGetJsonbP(d)	((Jsonb *) PG_DETOAST_DATUM(d))
 #define JsonbPGetDatum(p)	PointerGetDatum(p)
 #define PG_GETARG_JSONB_P(x)	DatumGetJsonb(PG_GETARG_DATUM(x))

@@ -113,7 +113,11 @@ typedef struct
 	bool isagg;
 	int ngroupatts;
 	AttrNumber *groupatts;
+#if PG_VERSION_NUM < 110000
 	FmgrInfo *eq_funcs;
+#else
+	Oid *eq_funcs;
+#endif
 	FmgrInfo *hash_funcs;
 	Oid *groupops;
 	FuncExpr *hashfunc;
@@ -372,9 +376,19 @@ hash_groups(ContQueryCombinerState *state)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	groups = CompatBuildTupleHashTable(existing->numCols, existing->keyColIdx,
-			existing->tab_eq_funcs, existing->tab_hash_funcs, 1000,
+#if PG_VERSION_NUM < 110000
+	groups = BuildTupleHashTable(existing->numCols, existing->keyColIdx,
+			state->eq_funcs, existing->tab_hash_funcs, 1000,
 			existing->entrysize, cxt, tmp_cxt, false);
+#else
+	{
+		PlanState *parent = makeNode(PlanState);
+		parent->state = CreateExecutorState();
+		groups = BuildTupleHashTable(parent, state->desc, existing->numCols, existing->keyColIdx,
+				state->eq_funcs, existing->tab_hash_funcs, 1000,
+				existing->entrysize, cxt, tmp_cxt, false);
+	}
+#endif
 
 	tuplestore_rescan(state->batch);
 
@@ -550,8 +564,17 @@ build_existing_hashtable(ContQueryCombinerState *state, char *name)
 			ALLOCSET_DEFAULT_MAXSIZE);
 	old = MemoryContextSwitchTo(state->combine_cxt);
 
-	result = CompatBuildTupleHashTable(state->ngroupatts, state->groupatts, state->eq_funcs, state->hash_funcs, 1000,
+#if PG_VERSION_NUM < 110000
+	result = BuildTupleHashTable(state->ngroupatts, state->groupatts, state->eq_funcs, state->hash_funcs, 1000,
 			sizeof(PhysicalTupleData), existing_cxt, existing_tmp_cxt, false);
+#else
+	{
+		PlanState *parent = makeNode(PlanState);
+		parent->state = CreateExecutorState();
+		result = BuildTupleHashTable(parent, state->desc, state->ngroupatts, state->groupatts, state->eq_funcs, state->hash_funcs, 1000,
+				sizeof(PhysicalTupleData), existing_cxt, existing_tmp_cxt, false);
+	}
+#endif
 
 	MemoryContextSwitchTo(old);
 
@@ -1189,7 +1212,11 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	MemoryContext old;
 	Oid *group_ops = NULL;
 	AttrNumber *group_idx = NULL;
+#if PG_VERSION_NUM < 110000
 	FmgrInfo *eq_funcs;
+#else
+	Oid *eq_funcs;
+#endif
 	FmgrInfo *hash_funcs;
 	ColumnRef *cref;
 	int n_group_attr = 0;
@@ -1210,9 +1237,19 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
 
-	state->sw->step_groups = CompatBuildTupleHashTable(state->ngroupatts,
+#if PG_VERSION_NUM < 110000
+	state->sw->step_groups = BuildTupleHashTable(state->ngroupatts,
 			state->groupatts, state->eq_funcs, state->hash_funcs, 1000,
 			sizeof(OverlayTupleEntry), CurrentMemoryContext, tmp_cxt, false);
+#else
+	{
+		PlanState *parent = makeNode(PlanState);
+		parent->state = CreateExecutorState();
+		state->sw->step_groups = BuildTupleHashTable(parent, state->desc, state->ngroupatts,
+				state->groupatts, state->eq_funcs, state->hash_funcs, 1000,
+				sizeof(OverlayTupleEntry), CurrentMemoryContext, tmp_cxt, false);
+	}
+#endif
 
 	state->sw->overlay_plan = GetContViewOverlayPlan(state->base.query);
 	state->sw->context = AllocSetContextCreate(CurrentMemoryContext, "SWOutputCxt",
@@ -1254,8 +1291,18 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 
 	CompatExecTuplesHashPrepare(n_group_attr, group_ops, &eq_funcs, &hash_funcs);
 
-	state->sw->overlay_groups = CompatBuildTupleHashTable(n_group_attr,
+#if PG_VERSION_NUM < 110000
+	state->sw->overlay_groups = BuildTupleHashTable(n_group_attr,
 			group_idx, eq_funcs, hash_funcs, 1000, sizeof(OverlayTupleEntry), CurrentMemoryContext, tmp_cxt, false);
+#else
+
+	{
+		PlanState *parent = makeNode(PlanState);
+		parent->state = CreateExecutorState();
+		state->sw->overlay_groups = BuildTupleHashTable(parent, state->overlay_desc, n_group_attr,
+				group_idx, eq_funcs, hash_funcs, 1000, sizeof(OverlayTupleEntry), CurrentMemoryContext, tmp_cxt, false);
+	}
+#endif
 }
 
 /*
@@ -2192,13 +2239,27 @@ GetCombinerLookupPlan(ContQuery *view)
 	if (state->isagg && state->ngroupatts > 0)
 	{
 		TupleHashTable existing;
+#if PG_VERSION_NUM < 110000
 		FmgrInfo *eq_funcs;
+#else
+		Oid *eq_funcs;
+#endif
 		FmgrInfo *hash_funcs;
 		Relation rel;
 
 		CompatExecTuplesHashPrepare(state->ngroupatts, state->groupops, &eq_funcs, &hash_funcs);
-		existing = CompatBuildTupleHashTable(state->ngroupatts, state->groupatts, eq_funcs, hash_funcs, 1000,
+
+#if PG_VERSION_NUM < 110000
+		existing = BuildTupleHashTable(state->ngroupatts, state->groupatts, eq_funcs, hash_funcs, 1000,
 				sizeof(PhysicalTupleData), CurrentMemoryContext, CurrentMemoryContext, false);
+#else
+		{
+			PlanState *parent = makeNode(PlanState);
+			parent->state = CreateExecutorState();
+			existing = BuildTupleHashTable(parent, state->desc, state->ngroupatts, state->groupatts, eq_funcs, hash_funcs, 1000,
+					sizeof(PhysicalTupleData), CurrentMemoryContext, CurrentMemoryContext, false);
+		}
+#endif
 
 		rel = heap_openrv_extended(view->matrel, AccessShareLock, true);
 

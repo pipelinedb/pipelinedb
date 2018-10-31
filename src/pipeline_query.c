@@ -886,7 +886,11 @@ create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, SelectStmt *se
 	index->accessMethod = CQ_MATREL_INDEX_TYPE;
 	index->indexParams = list_make1(indexcol);
 
-	address = CompatDefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
+#if PG_VERSION_NUM < 110000
+	address = DefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
+#else
+	address = DefineIndex(matrelid, index, InvalidOid, InvalidOid, InvalidOid, false, false, false, false, false);
+#endif
 	index_oid = address.objectId;
 
 	return index_oid;
@@ -916,7 +920,12 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 	index->unique = true;
 	index->isconstraint = true;
 
-	address = CompatDefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
+#if PG_VERSION_NUM < 110000
+	address = DefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
+#else
+	address = DefineIndex(matrelid, index, InvalidOid, InvalidOid, InvalidOid, false, false, false, false, false);
+#endif
+
 	index_oid = address.objectId;
 
 	return index_oid;
