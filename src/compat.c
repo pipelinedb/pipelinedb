@@ -49,38 +49,6 @@ CompatProcOidIsAgg(Oid oid)
 }
 
 /*
- * CompatExecInitExtraTupleSlot
- */
-TupleTableSlot *
-CompatExecInitExtraTupleSlot(EState *estate)
-{
-//#if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
-//	return ExecInitExtraTupleSlot(estate);
-//#else
-//#endif
-	return NULL;
-}
-
-/*
- * CompatDefineIndex
- */
-ObjectAddress
-CompatDefineIndex(Oid relationId,
-			IndexStmt *stmt,
-			Oid indexRelationId,
-			bool is_alter_table,
-			bool check_rights,
-			bool check_not_in_use,
-			bool skip_build,
-			bool quiet)
-{
-//	return DefineIndex(relationId, stmt, indexRelationId, is_alter_table,
-//			check_rights, check_not_in_use, skip_build, quiet);
-	ObjectAddress o;
-	return o;
-}
-
-/*
  * CompatAnalyzeVacuumStmt
  */
 void
@@ -88,25 +56,6 @@ CompatAnalyzeVacuumStmt(VacuumStmt *stmt)
 {
 //	if (stmt->relation && RangeVarIsContView(stmt->relation))
 //		stmt->relation = RangeVarGetMatRelName(stmt->relation);
-}
-
-/*
- * CompatBackgroundWorkerInitializeConnectionByOid
- */
-void
-CompatBackgroundWorkerInitializeConnectionByOid(Oid db, Oid user)
-{
-//	BackgroundWorkerInitializeConnectionByOid(db, user);
-}
-
-/*
- * CompatInitializePostgres
- */
-void
-CompatInitializePostgres(const char *in_dbname, Oid dboid, const char *username,
-			 Oid useroid, char *out_dbname)
-{
-//	InitPostgres(in_dbname, dboid, username, useroid, out_dbname);
 }
 
 /*
@@ -131,15 +80,6 @@ CompatPrepareEState(PlannedStmt *pstmt, EState *estate)
 //
 //	estate->es_param_exec_vals = (ParamExecData *)
 //		palloc0(pstmt->nParamExec * sizeof(ParamExecData));
-}
-
-/*
- * CompatExecAssignResultTypeFromTL
- */
-void
-CompatExecAssignResultTypeFromTL(PlanState *ps)
-{
-//	ExecAssignResultTypeFromTL(ps);
 }
 
 /*
