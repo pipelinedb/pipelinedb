@@ -399,7 +399,7 @@ cont_bgworker_main(Datum arg)
 
 	BackgroundWorkerUnblockSignals();
 
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	BackgroundWorkerInitializeConnectionByOid(proc->db_meta->db_id, InvalidOid);
 #else
 	BackgroundWorkerInitializeConnectionByOid(proc->db_meta->db_id, InvalidOid, 0);
@@ -483,7 +483,7 @@ cont_bgworker_main(Datum arg)
 	/* If this isn't a clean termination, exit with a non-zero status code */
 	if (!proc->db_meta->terminate)
 	{
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 		elog(LOG, "pipelinedb process \"%s\" was killed", GetContQueryProcName(proc));
 #endif
 		proc_exit(1);
@@ -821,7 +821,7 @@ ContQuerySchedulerMain(Datum arg)
 
 	BackgroundWorkerUnblockSignals();
 
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, NULL);
 #else
 	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, NULL, false);
