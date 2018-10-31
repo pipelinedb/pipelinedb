@@ -32,4 +32,17 @@ extern void CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, FmgrInfo 
 extern void CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, Oid **eqFunctions, FmgrInfo **hashFunctions);
 #endif
 
+extern TupleHashTable
+CompatBuildTupleHashTable(TupleDesc inputDesc,
+					int numCols, AttrNumber *keyColIdx,
+#if PG_VERSION_NUM < 110000
+					FmgrInfo *eqfuncs,
+#else
+					Oid *eqfuncs,
+#endif
+					FmgrInfo *hashfunctions,
+					long nbuckets, Size additionalsize,
+					MemoryContext tablecxt,
+					MemoryContext tempcxt, bool use_variable_hash_iv);
+
 extern char *CompatGetAttName(Oid relid, AttrNumber att);

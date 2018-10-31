@@ -83,6 +83,36 @@ CompatPrepareEState(PlannedStmt *pstmt, EState *estate)
 }
 
 /*
+ * CompatBuildTupleHashTable
+ */
+TupleHashTable
+CompatBuildTupleHashTable(TupleDesc desc,
+					int numCols, AttrNumber *keyColIdx,
+#if PG_VERSION_NUM < 110000
+					FmgrInfo *eqfuncs,
+#else
+					Oid *eqfuncs,
+#endif
+					FmgrInfo *hashfunctions,
+					long nbuckets, Size additionalsize,
+					MemoryContext tablecxt,
+					MemoryContext tempcxt, bool use_variable_hash_iv)
+{
+#if PG_VERSION_NUM < 110000
+	return BuildTupleHashTable(numCols, keyColIdx, eqfuncs, hashfunctions, nbuckets,
+			additionalsize, tablecxt, tempcxt, use_variable_hash_iv);
+#else
+	{
+		PlanState *parent = makeNode(PlanState);
+		parent->state = CreateExecutorState();
+		return BuildTupleHashTable(parent, desc, numCols, keyColIdx, eqfuncs, hashfunctions, nbuckets,
+				additionalsize, tablecxt, tempcxt, use_variable_hash_iv);
+	}
+#endif
+
+}
+
+/*
  * CompatExecTuplesHashPrepare
  */
 void
