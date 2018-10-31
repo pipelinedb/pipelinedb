@@ -404,11 +404,11 @@ PipelineProcessUtility(PlannedStmt *pstmt, const char *sql, ProcessUtilityContex
 			}
 			else if (rename->relation)
 			{
-				Oid relid = RangeVarGetRelid(rename->relation, NoLock, false);
+				Oid relid = RangeVarGetRelid(rename->relation, NoLock, true);
 				/*
 				 * We disallow the renaming of a continuous view/transform's internal relations
 				 */
-				if (RelidIsContQueryInternalRelation(relid))
+				if (OidIsValid(relid) && RelidIsContQueryInternalRelation(relid))
 				{
 					if (rename->relation->schemaname)
 						elog(ERROR, "relation \"%s.%s\" is an internal relation and cannot be renamed",

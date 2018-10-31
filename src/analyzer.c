@@ -786,13 +786,18 @@ rewrite_from_clause(Node *from)
 		 RangeVar *rv;
 		 Relation cvrel;
 		 A_Const *arg;
+		 Node *nfn;
 		 char *cv_name;
 
 		 /* Functions here are represented by a lists of length 2 */
 		 if (list_length(rf->functions) != 1 || list_length(linitial(rf->functions)) != 2)
 			 return from;
 
-		 fn = (FuncCall *) linitial(linitial(rf->functions));
+		 nfn = linitial(linitial(rf->functions));
+		 if (!IsA(nfn, FuncCall))
+			 return from;
+
+		 fn = (FuncCall *) nfn;
 		 if (list_length(fn->funcname) != 1)
 			 return from;
 
@@ -1059,7 +1064,7 @@ QueryHasStream(Node *node)
 		return false;
 
 	/* We need to make sure output_of is transformed before checking for streams */
-	stmt = (SelectStmt *) node;
+	stmt = (SelectStmt *) copyObject(node);
 	RewriteFromClause(stmt);
 
 	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
@@ -3661,10 +3666,10 @@ PostParseAnalyzeHook(ParseState *pstate, Query *query)
 		return;
 
 	if (QueryIsContinuous(query))
+	{
 		query->targetList = transform_cont_select_tlist(pstate, query->targetList);
-
-	if (query->commandType == CMD_SELECT)
 		QuerySetSWStepFactor(query, PipelineContextGetStepFactor());
+	}
 }
 
 /*
@@ -4539,6 +4544,37 @@ sublink_walker(Node *n, void *context)
 }
 
 /*
+ * pull_aggrefs_walker
+ */
+static bool
+pull_aggrefs_walker(Node *node, List **context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, Aggref))
+	{
+		*context = lappend(*context, node);
+		return false;
+	}
+
+	return expression_tree_walker(node, pull_aggrefs_walker, context);
+}
+
+/*
+ * pull_aggrefs
+ */
+static List *
+pull_aggrefs(Node *node)
+{
+	List *result = NIL;
+
+	expression_tree_walker(node, pull_aggrefs_walker, &result);
+
+	return result;
+}
+
+/*
  * RewriteCombineAggs
  *
  * Expands any combine aggregate references into correct Aggref expressions, adding any
@@ -4576,7 +4612,7 @@ RewriteCombineAggs(Query *q)
 	/*
 	 * Now rewrite top-level combine aggregates in this Query's target list
 	 */
-	nodes = pull_var_clause((Node *) q->targetList, PVC_INCLUDE_AGGREGATES | PVC_INCLUDE_WINDOWFUNCS);
+	nodes = pull_aggrefs((Node *) q->targetList);
 	rewrite_nodes(q, nodes);
 
 	/*
@@ -4584,7 +4620,7 @@ RewriteCombineAggs(Query *q)
 	 */
 	if (q->havingQual)
 	{
-		nodes = pull_var_clause((Node *) q->havingQual, PVC_INCLUDE_AGGREGATES | PVC_INCLUDE_WINDOWFUNCS);
+		nodes = pull_aggrefs((Node *) q->havingQual);
 		rewrite_nodes(q, nodes);
 	}
 }
