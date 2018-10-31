@@ -37,3 +37,15 @@ extern Relids CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner);
 extern void CompatPrepareEState(PlannedStmt *pstmt, EState *estate);
 
 extern void CompatExecAssignResultTypeFromTL(PlanState *ps);
+
+extern TupleHashTable CompatBuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
+		FmgrInfo *eqfunctions,
+		FmgrInfo *hashfunctions,
+		long nbuckets, Size additionalsize,
+		MemoryContext tablecxt,
+		MemoryContext tempcxt, bool use_variable_hash_iv);
+
+extern void CompatExecTuplesHashPrepare(int numCols,
+		Oid *eqOperators,
+		FmgrInfo **eqFunctions,
+		FmgrInfo **hashFunctions);

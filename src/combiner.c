@@ -18,6 +18,7 @@
 #include "combiner_receiver.h"
 #include "commands/sequence.h"
 #include "commands/lockcmds.h"
+#include "compat.h"
 #include "executor/execdesc.h"
 #include "executor/executor.h"
 #include "executor/tstoreReceiver.h"
@@ -371,7 +372,7 @@ hash_groups(ContQueryCombinerState *state)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	groups = BuildTupleHashTable(existing->numCols, existing->keyColIdx,
+	groups = CompatBuildTupleHashTable(existing->numCols, existing->keyColIdx,
 			existing->tab_eq_funcs, existing->tab_hash_funcs, 1000,
 			existing->entrysize, cxt, tmp_cxt, false);
 
@@ -533,30 +534,23 @@ finish:
 static TupleHashTable
 build_existing_hashtable(ContQueryCombinerState *state, char *name)
 {
-	StringInfoData buf;
 	MemoryContext existing_cxt;
 	MemoryContext existing_tmp_cxt;
 	MemoryContext old;
 	TupleHashTable result;
 
-	initStringInfo(&buf);
-	appendStringInfo(&buf, "%s%s", name, "Context");
-
-	existing_cxt = AllocSetContextCreate(state->combine_cxt, buf.data,
+	existing_cxt = AllocSetContextCreate(state->combine_cxt, "CombinerExistingContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	resetStringInfo(&buf);
-	appendStringInfo(&buf, "%s%s", name, "TmpContext");
-
-	existing_tmp_cxt = AllocSetContextCreate(existing_cxt, buf.data,
+	existing_tmp_cxt = AllocSetContextCreate(existing_cxt, "CombinerExistingTmpContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 	old = MemoryContextSwitchTo(state->combine_cxt);
 
-	result = BuildTupleHashTable(state->ngroupatts, state->groupatts, state->eq_funcs, state->hash_funcs, 1000,
+	result = CompatBuildTupleHashTable(state->ngroupatts, state->groupatts, state->eq_funcs, state->hash_funcs, 1000,
 			sizeof(PhysicalTupleData), existing_cxt, existing_tmp_cxt, false);
 
 	MemoryContextSwitchTo(old);
@@ -1216,7 +1210,7 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
 
-	state->sw->step_groups = BuildTupleHashTable(state->ngroupatts,
+	state->sw->step_groups = CompatBuildTupleHashTable(state->ngroupatts,
 			state->groupatts, state->eq_funcs, state->hash_funcs, 1000,
 			sizeof(OverlayTupleEntry), CurrentMemoryContext, tmp_cxt, false);
 
@@ -1258,9 +1252,9 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
 
-	execTuplesHashPrepare(n_group_attr, group_ops, &eq_funcs, &hash_funcs);
+	CompatExecTuplesHashPrepare(n_group_attr, group_ops, &eq_funcs, &hash_funcs);
 
-	state->sw->overlay_groups = BuildTupleHashTable(n_group_attr,
+	state->sw->overlay_groups = CompatBuildTupleHashTable(n_group_attr,
 			group_idx, eq_funcs, hash_funcs, 1000, sizeof(OverlayTupleEntry), CurrentMemoryContext, tmp_cxt, false);
 }
 
@@ -1913,7 +1907,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 
 		CQMatRelClose(ri);
 
-		execTuplesHashPrepare(state->ngroupatts, state->groupops, &state->eq_funcs, &state->hash_funcs);
+		CompatExecTuplesHashPrepare(state->ngroupatts, state->groupops, &state->eq_funcs, &state->hash_funcs);
 		state->existing = build_existing_hashtable(state, "CombinerExistingGroups");
 	}
 
@@ -2202,8 +2196,8 @@ GetCombinerLookupPlan(ContQuery *view)
 		FmgrInfo *hash_funcs;
 		Relation rel;
 
-		execTuplesHashPrepare(state->ngroupatts, state->groupops, &eq_funcs, &hash_funcs);
-		existing = BuildTupleHashTable(state->ngroupatts, state->groupatts, eq_funcs, hash_funcs, 1000,
+		CompatExecTuplesHashPrepare(state->ngroupatts, state->groupops, &eq_funcs, &hash_funcs);
+		existing = CompatBuildTupleHashTable(state->ngroupatts, state->groupatts, eq_funcs, hash_funcs, 1000,
 				sizeof(PhysicalTupleData), CurrentMemoryContext, CurrentMemoryContext, false);
 
 		rel = heap_openrv_extended(view->matrel, AccessShareLock, true);

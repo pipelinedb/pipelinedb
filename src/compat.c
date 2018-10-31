@@ -127,3 +127,30 @@ CompatExecAssignResultTypeFromTL(PlanState *ps)
 {
 	ExecAssignResultTypeFromTL(ps);
 }
+
+/*
+ * CompatBuildTupleHashTable
+ */
+TupleHashTable
+CompatBuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
+		FmgrInfo *eqfunctions,
+		FmgrInfo *hashfunctions,
+		long nbuckets, Size additionalsize,
+		MemoryContext tablecxt,
+		MemoryContext tempcxt, bool use_variable_hash_iv)
+{
+	return BuildTupleHashTable(numCols, keyColIdx, eqfunctions, hashfunctions, nbuckets,
+				additionalsize, tablecxt, tempcxt, use_variable_hash_iv);
+}
+
+/*
+ * CompatExecTuplesHashPrepare
+ */
+void
+CompatExecTuplesHashPrepare(int numCols,
+					  Oid *eqOperators,
+					  FmgrInfo **eqFunctions,
+					  FmgrInfo **hashFunctions)
+{
+	execTuplesHashPrepare(numCols, eqOperators, eqFunctions, hashFunctions);
+}
