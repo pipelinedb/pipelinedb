@@ -59,6 +59,13 @@ typedef struct JsonbAggState
 	Oid			val_output_func;
 } JsonbAggState;
 
+#if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
+#define DatumGetJsonbP(d)	((Jsonb *) PG_DETOAST_DATUM(d))
+#define JsonbPGetDatum(p)	PointerGetDatum(p)
+#define PG_GETARG_JSONB_P(x)	DatumGetJsonb(PG_GETARG_DATUM(x))
+#define PG_RETURN_JSONB_P(x)	PG_RETURN_POINTER(x)
+#endif
+
 static inline Datum jsonb_from_cstring(char *json, int len);
 static size_t checkStringLen(size_t len);
 static void jsonb_in_object_start(void *pstate);
@@ -129,7 +136,7 @@ jsonb_recv(PG_FUNCTION_ARGS)
 Datum
 jsonb_out(PG_FUNCTION_ARGS)
 {
-	Jsonb	   *jb = PG_GETARG_JSONB(0);
+	Jsonb	   *jb = PG_GETARG_JSONB_P(0);
 	char	   *out;
 
 	out = JsonbToCString(NULL, &jb->root, VARSIZE(jb));
@@ -145,7 +152,7 @@ jsonb_out(PG_FUNCTION_ARGS)
 Datum
 jsonb_send(PG_FUNCTION_ARGS)
 {
-	Jsonb	   *jb = PG_GETARG_JSONB(0);
+	Jsonb	   *jb = PG_GETARG_JSONB_P(0);
 	StringInfoData buf;
 	StringInfo	jtext = makeStringInfo();
 	int			version = 1;
@@ -170,7 +177,7 @@ jsonb_send(PG_FUNCTION_ARGS)
 Datum
 jsonb_typeof(PG_FUNCTION_ARGS)
 {
-	Jsonb	   *in = PG_GETARG_JSONB(0);
+	Jsonb	   *in = PG_GETARG_JSONB_P(0);
 	JsonbIterator *it;
 	JsonbValue	v;
 	char	   *result;
@@ -877,7 +884,7 @@ datum_to_jsonb(Datum val, bool is_null, JsonbInState *result,
 				break;
 			case JSONBTYPE_JSONB:
 				{
-					Jsonb	   *jsonb = DatumGetJsonb(val);
+					Jsonb	   *jsonb = DatumGetJsonbP(val);
 					JsonbIterator *it;
 
 					it = JsonbIteratorInit(&jsonb->root);
@@ -2007,7 +2014,7 @@ jsonb_agg_deserialize(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;
 
-	jsonb = PG_GETARG_JSONB(0);
+	jsonb = PG_GETARG_JSONB_P(0);
 
 	old = MemoryContextSwitchTo(context);
 
