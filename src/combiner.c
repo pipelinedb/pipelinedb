@@ -113,7 +113,7 @@ typedef struct
 	bool isagg;
 	int ngroupatts;
 	AttrNumber *groupatts;
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	FmgrInfo *eq_funcs;
 #else
 	Oid *eq_funcs;
@@ -1193,7 +1193,7 @@ init_sw_state(ContQueryCombinerState *state, Relation matrel)
 	MemoryContext old;
 	Oid *group_ops = NULL;
 	AttrNumber *group_idx = NULL;
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	FmgrInfo *eq_funcs;
 #else
 	Oid *eq_funcs;

@@ -37,7 +37,7 @@ CompatProcOidIsAgg(Oid oid)
 		return false;
 
 	pform = (Form_pg_proc) GETSTRUCT(ftup);
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	is_agg = pform->proisagg;
 #else
 	is_agg = pform->prokind == PROKIND_AGGREGATE;
@@ -54,8 +54,20 @@ CompatProcOidIsAgg(Oid oid)
 void
 CompatAnalyzeVacuumStmt(VacuumStmt *stmt)
 {
-//	if (stmt->relation && RangeVarIsContView(stmt->relation))
-//		stmt->relation = RangeVarGetMatRelName(stmt->relation);
+#if (PG_VERSION_NUM < 110000)
+	if (stmt->relation && RangeVarIsContView(stmt->relation))
+		stmt->relation = RangeVarGetMatRelName(stmt->relation);
+#else
+	{
+		ListCell *lc;
+		foreach(lc, stmt->rels)
+		{
+			VacuumRelation *vrel = lfirst_node(VacuumRelation, lc);
+			if (vrel->relation && RangeVarIsContView(vrel->relation))
+				vrel->relation = RangeVarGetMatRelName(vrel->relation);
+		}
+	}
+#endif
 }
 
 /*
@@ -64,7 +76,7 @@ CompatAnalyzeVacuumStmt(VacuumStmt *stmt)
 Relids
 CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner)
 {
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	return calc_nestloop_required_outer(outer, inner);
 #else
 	return calc_nestloop_required_outer(outer->parent->relids,
@@ -78,11 +90,18 @@ CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner)
 void
 CompatPrepareEState(PlannedStmt *pstmt, EState *estate)
 {
-//	if (pstmt->nParamExec == 0)
-//		return;
-//
-//	estate->es_param_exec_vals = (ParamExecData *)
-//		palloc0(pstmt->nParamExec * sizeof(ParamExecData));
+	int len;
+
+#if (PG_VERSION_NUM < 110000)
+	len = pstmt->nParamExec;
+#else
+	len = list_length(pstmt->paramExecTypes);
+#endif
+
+	if (len == 0)
+		return;
+
+	estate->es_param_exec_vals = (ParamExecData *) palloc0(len * sizeof(ParamExecData));
 }
 
 /*
@@ -91,7 +110,7 @@ CompatPrepareEState(PlannedStmt *pstmt, EState *estate)
 TupleHashTable
 CompatBuildTupleHashTable(TupleDesc desc,
 					int numCols, AttrNumber *keyColIdx,
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 					FmgrInfo *eqfuncs,
 #else
 					Oid *eqfuncs,
@@ -101,7 +120,7 @@ CompatBuildTupleHashTable(TupleDesc desc,
 					MemoryContext tablecxt,
 					MemoryContext tempcxt, bool use_variable_hash_iv)
 {
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	return BuildTupleHashTable(numCols, keyColIdx, eqfuncs, hashfunctions, nbuckets,
 			additionalsize, tablecxt, tempcxt, use_variable_hash_iv);
 #else
@@ -121,7 +140,7 @@ CompatBuildTupleHashTable(TupleDesc desc,
 void
 CompatExecTuplesHashPrepare(int numCols,
 		Oid *eqOperators,
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 		FmgrInfo **eqFunctions,
 #else
 		Oid **eqFunctions,
@@ -137,7 +156,7 @@ CompatExecTuplesHashPrepare(int numCols,
 char *
 CompatGetAttName(Oid relid, AttrNumber att)
 {
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	return get_relid_attribute_name(relid, att);
 #else
 	return get_attname(relid, att, false);
@@ -150,7 +169,7 @@ CompatGetAttName(Oid relid, AttrNumber att)
 void
 ComaptExecAssignResultTypeFromTL(PlanState *ps)
 {
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	ExecAssignResultTypeFromTL(ps);
 #else
 	ExecInitResultTupleSlotTL(ps->state, ps);
