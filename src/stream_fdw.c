@@ -228,22 +228,10 @@ BeginStreamScan(ForeignScanState *node, int eflags)
 		namestrcpy(&(TupleDescAttr(state->pi->outdesc, i++)->attname), strVal(v));
 	}
 
-	node->ss.ss_ScanTupleSlot->tts_fixedTupleDescriptor = false;
-
-//	scan tuple tts_fixedTupleDescriptor must be false
-	// where is our scan slot even being created?
-
-	ExecAssignScanType(&node->ss, state->pi->outdesc);
-
 	/*
 	 * Override result tuple type and projection info.
 	 */
-#if PG_VERSION_NUM < 110000
-	ExecAssignResultTypeFromTL(&node->ss.ps);
-#else
-	ExecInitResultTupleSlotTL(node->ss.ps.state, &node->ss.ps);
-#endif
-
+	ComaptExecAssignResultTypeFromTL(&node->ss.ps);
 	ExecAssignScanProjectionInfo(&node->ss);
 
 	node->fdw_state = (void *) state;

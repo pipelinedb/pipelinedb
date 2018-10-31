@@ -529,6 +529,9 @@ run_cont_bgworker(ContQueryProc *proc)
 	char *name = GetContQueryProcName(proc);
 
 	strcpy(worker.bgw_name, GetContQueryProcName(proc));
+#if (PG_VERSION_NUM >= 110000)
+	strcpy(worker.bgw_type, GetContQueryProcName(proc));
+#endif
 
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION | BGWORKER_IS_CONT_QUERY_PROC;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;

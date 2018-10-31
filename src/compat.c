@@ -116,11 +116,14 @@ CompatBuildTupleHashTable(TupleDesc desc,
  * CompatExecTuplesHashPrepare
  */
 void
+CompatExecTuplesHashPrepare(int numCols,
+		Oid *eqOperators,
 #if PG_VERSION_NUM < 110000
-CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, FmgrInfo **eqFunctions, FmgrInfo **hashFunctions)
+		FmgrInfo **eqFunctions,
 #else
-CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, Oid **eqFunctions, FmgrInfo **hashFunctions)
+		Oid **eqFunctions,
 #endif
+		FmgrInfo **hashFunctions)
 {
 	execTuplesHashPrepare(numCols, eqOperators, eqFunctions, hashFunctions);
 }
@@ -135,5 +138,18 @@ CompatGetAttName(Oid relid, AttrNumber att)
 	return get_relid_attribute_name(relid, att);
 #else
 	return get_attname(relid, att, false);
+#endif
+}
+
+/*
+ * ComaptExecAssignResultTypeFromTL
+ */
+void
+ComaptExecAssignResultTypeFromTL(PlanState *ps)
+{
+#if PG_VERSION_NUM < 110000
+	ExecAssignResultTypeFromTL(ps);
+#else
+	ExecInitResultTupleSlotTL(ps->state, ps);
 #endif
 }

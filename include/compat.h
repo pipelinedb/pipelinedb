@@ -26,11 +26,14 @@ extern void CompatAnalyzeVacuumStmt(VacuumStmt *stmt);
 extern Relids CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner);
 extern void CompatPrepareEState(PlannedStmt *pstmt, EState *estate);
 
+extern void
+CompatExecTuplesHashPrepare(int numCols,Oid *eqOperators,
 #if PG_VERSION_NUM < 110000
-extern void CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, FmgrInfo **eqFunctions, FmgrInfo **hashFunctions);
+		FmgrInfo **eqFunctions,
 #else
-extern void CompatExecTuplesHashPrepare(int numCols, Oid *eqOperators, Oid **eqFunctions, FmgrInfo **hashFunctions);
+		Oid **eqFunctions,
 #endif
+		FmgrInfo **hashFunctions);
 
 extern TupleHashTable
 CompatBuildTupleHashTable(TupleDesc inputDesc,
@@ -46,3 +49,4 @@ CompatBuildTupleHashTable(TupleDesc inputDesc,
 					MemoryContext tempcxt, bool use_variable_hash_iv);
 
 extern char *CompatGetAttName(Oid relid, AttrNumber att);
+extern void ComaptExecAssignResultTypeFromTL(PlanState *ps);
