@@ -64,9 +64,12 @@ CompatAnalyzeVacuumStmt(VacuumStmt *stmt)
 Relids
 CompatCalcNestLoopRequiredOuter(Path *outer, Path *inner)
 {
-//	return calc_nestloop_required_outer(outer, inner);
+#if PG_VERSION_NUM < 110000
+	return calc_nestloop_required_outer(outer, inner);
+#else
 	return calc_nestloop_required_outer(outer->parent->relids,
 			PATH_REQ_OUTER(outer), inner->parent->relids, PATH_REQ_OUTER(inner));
+#endif
 }
 
 /*
