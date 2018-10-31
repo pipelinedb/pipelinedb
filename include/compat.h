@@ -14,7 +14,7 @@
 #include "nodes/execnodes.h"
 #include "nodes/relation.h"
 
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 #define PIPELINE_COMPAT_INDEX_ATTR_BITMAP_ALL INDEX_ATTR_BITMAP_ALL
 #else
 #define PIPELINE_COMPAT_INDEX_ATTR_BITMAP_ALL INDEX_ATTR_BITMAP_HOT
@@ -28,7 +28,7 @@ extern void CompatPrepareEState(PlannedStmt *pstmt, EState *estate);
 
 extern void
 CompatExecTuplesHashPrepare(int numCols,Oid *eqOperators,
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 		FmgrInfo **eqFunctions,
 #else
 		Oid **eqFunctions,
@@ -38,7 +38,7 @@ CompatExecTuplesHashPrepare(int numCols,Oid *eqOperators,
 extern TupleHashTable
 CompatBuildTupleHashTable(TupleDesc inputDesc,
 					int numCols, AttrNumber *keyColIdx,
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 					FmgrInfo *eqfuncs,
 #else
 					Oid *eqfuncs,

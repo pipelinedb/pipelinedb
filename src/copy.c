@@ -98,7 +98,7 @@ typedef enum EolType
  */
 typedef struct CopyStateData
 {
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	/* low-level state data */
 	CopyDest	copy_dest;		/* type of copy source/destination */
 	FILE	   *copy_file;		/* used if copy_dest == COPY_FILE */
@@ -1369,7 +1369,7 @@ CopyStreamFrom(CopyState cstate)
 	estate->es_range_table = cstate->range_table;
 
 	/* Set up a tuple slot too */
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	myslot = ExecInitExtraTupleSlot(estate);
 	ExecSetSlotDescriptor(myslot, tupDesc);
 #else

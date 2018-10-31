@@ -886,7 +886,7 @@ create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, SelectStmt *se
 	index->accessMethod = CQ_MATREL_INDEX_TYPE;
 	index->indexParams = list_make1(indexcol);
 
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	address = DefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
 #else
 	address = DefineIndex(matrelid, index, InvalidOid, InvalidOid, InvalidOid, false, false, false, false, false);
@@ -920,7 +920,7 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 	index->unique = true;
 	index->isconstraint = true;
 
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 	address = DefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
 #else
 	address = DefineIndex(matrelid, index, InvalidOid, InvalidOid, InvalidOid, false, false, false, false, false);

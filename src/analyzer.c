@@ -1591,7 +1591,7 @@ GetOptionAsString(List *options, char *option, char **result)
 		StringInfoData buf;
 
 		initStringInfo(&buf);
-#if PG_VERSION_NUM < 110000
+#if (PG_VERSION_NUM < 110000)
 		appendStringInfo(&buf, "%ld", intVal(def->arg));
 #else
 		appendStringInfo(&buf, "%d", intVal(def->arg));
