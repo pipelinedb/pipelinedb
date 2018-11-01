@@ -48,6 +48,11 @@ class PipelineDB(object):
     stdout, stderr = p.communicate()
     return stdout.strip()
   
+  @property
+  def version_num(self):
+    r = self.execute('SHOW server_version_num')[0]
+    return int(r['server_version_num'])
+
   def run(self, params=None):
     """
     Runs a test instance of PipelineDB within our temporary directory on
