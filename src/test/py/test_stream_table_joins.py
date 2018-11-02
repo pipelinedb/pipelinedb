@@ -1,4 +1,6 @@
 from base import pipeline, clean_db
+import psycopg2
+import pytest
 import random
 import time
 
@@ -274,3 +276,21 @@ def test_indexed(pipeline, clean_db):
   result = pipeline.execute('SELECT sum(count) FROM test_indexed')[0]
 
   assert result['sum'] == len(expected)
+
+def test_drop_columns(pipeline, clean_db):
+  """
+  Verify that columns on the table-side of a stream-table join can't be dropped
+  """
+  pipeline.create_table('drop_t', x='integer', y='integer')
+  pipeline.create_stream('drop_s', x='integer')
+  q = """
+  SELECT s.x, count(*) FROM drop_s s JOIN drop_t t ON s.x = t.x GROUP BY s.x
+  """
+  pipeline.create_cv('stj_drop_cv', q)
+
+  with pytest.raises(psycopg2.InternalError):
+    pipeline.execute('ALTER TABLE drop_t DROP COLUMN x')
+
+  # Columns not being joined on can be dropped though
+  pipeline.execute('ALTER TABLE drop_t DROP COLUMN y')
+  
