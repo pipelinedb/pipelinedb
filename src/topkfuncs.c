@@ -225,6 +225,7 @@ topk(PG_FUNCTION_ARGS)
 	Tuplestorestate *store;
 	ReturnSetInfo *rsi;
 	TupleDesc desc;
+	MemoryContext old;
 	int i;
 
 	if (PG_ARGISNULL(0))
@@ -239,7 +240,10 @@ topk(PG_FUNCTION_ARGS)
 	rsi->returnMode = SFRM_Materialize;
 	rsi->setDesc = BlessTupleDesc(desc);
 
+	old = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
 	store = tuplestore_begin_heap(false, false, work_mem);
+	MemoryContextSwitchTo(old);
+
 	datums = FSSTopK(fss, fss->k, &null_k, &found);
 	freqs = FSSTopKCounts(fss, fss->k, &found);
 
