@@ -293,4 +293,3 @@ def test_drop_columns(pipeline, clean_db):
 
   # Columns not being joined on can be dropped though
   pipeline.execute('ALTER TABLE drop_t DROP COLUMN y')
-  
