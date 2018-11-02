@@ -1,8 +1,8 @@
 from base import async_insert, pipeline, clean_db
-
 import getpass
 import os
 import psycopg2
+import pytest
 import tempfile
 import threading
 import time
@@ -209,3 +209,17 @@ def test_concurrent_copy(pipeline, clean_db):
 
   total = pipeline.execute('SELECT count FROM concurrent_copy1')[0][0]
   assert total == sum(inserted)
+
+def test_drop_mrel_column(pipeline, clean_db):
+  """
+  Verify that we can't drop matrel columns
+  """
+  pipeline.create_stream('mrel_drop_s', x='integer')
+  q = """
+  SELECT x, sum(x), avg(x), count(*) FROM mrel_drop_s GROUP BY x
+  """
+  pipeline.create_cv('mrel_drop_cv', q)
+
+  for col in ('x', 'sum', 'avg', 'count'):
+    with pytest.raises(psycopg2.InternalError):
+      pipeline.execute('ALTER TABLE mrel_drop_cv_mrel DROP COLUMN %s' % col)

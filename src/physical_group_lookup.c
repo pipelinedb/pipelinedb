@@ -221,7 +221,7 @@ nestloop_lookup_next(struct CustomScanState *node)
 	NestLoopState *outer = (NestLoopState *) outerPlanState(node);
 	TupleTableSlot *result;
 	TupleTableSlot *inner;
-	bool res;
+	HTSU_Result res;
 	EState *estate = outer->js.ps.state;
 	Buffer buffer;
 	HeapUpdateFailureData hufd;

@@ -339,12 +339,7 @@ LANGUAGE plpgsql;
 CREATE FOREIGN TABLE stj_deps_stream (x int) SERVER pipelinedb;
 CREATE VIEW stj_deps AS SELECT test_stj_foo(s.x::integer), t.x FROM stj_deps_stream s JOIN test_stj_t4 t ON s.x = t.x;
 NOTICE:  consider creating an index on t.x for improved stream-table join performance
--- Table columns being joined on can't be dropped
-ALTER TABLE test_stj_t4 DROP COLUMN x;
-ERROR:  cannot drop table test_stj_t4 column x because other objects depend on it
-DETAIL:  view stj_deps depends on table test_stj_t4 column x
-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
--- But unused columns can be
+-- Table columns being joined on can't be dropped, but unused columns can be
 ALTER TABLE test_stj_t4 DROP COLUMN y;
 -- Functions used by CVs can't be dropped
 DROP FUNCTION test_stj_foo(integer);

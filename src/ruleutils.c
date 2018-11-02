@@ -40,6 +40,7 @@
 #include "commands/defrem.h"
 #include "commands/tablespace.h"
 #include "common/keywords.h"
+#include "compat.h"
 #include "executor/spi.h"
 #include "funcapi.h"
 #include "mb/pg_wchar.h"
@@ -346,9 +347,6 @@ static void get_rule_groupingset(GroupingSet *gset, List *targetlist,
 					 bool omit_parens, deparse_context *context);
 static void get_rule_orderby(List *orderList, List *targetList,
 				 bool force_colno, deparse_context *context);
-static void get_rule_windowclause(Query *query, deparse_context *context);
-static void get_rule_windowspec(WindowClause *wc, List *targetList,
-					deparse_context *context);
 static char *get_variable(Var *var, int levelsup, bool istoplevel,
 			 deparse_context *context);
 static void get_special_variable(Node *node, deparse_context *context,
@@ -2259,10 +2257,6 @@ get_basic_select_query(Query *query, deparse_context *context,
 							 -PRETTYINDENT_STD, PRETTYINDENT_STD, 0);
 		get_rule_expr(query->havingQual, context, false);
 	}
-
-	/* Add the WINDOW clause if needed */
-	if (query->windowClause != NIL)
-		get_rule_windowclause(query, context);
 }
 
 /* ----------
@@ -2701,141 +2695,6 @@ get_rule_orderby(List *orderList, List *targetList,
 		}
 		sep = ", ";
 	}
-}
-
-/*
- * Display a WINDOW clause.
- *
- * Note that the windowClause list might contain only anonymous window
- * specifications, in which case we should print nothing here.
- */
-static void
-get_rule_windowclause(Query *query, deparse_context *context)
-{
-	StringInfo	buf = context->buf;
-	const char *sep;
-	ListCell   *l;
-
-	sep = NULL;
-	foreach(l, query->windowClause)
-	{
-		WindowClause *wc = (WindowClause *) lfirst(l);
-
-		if (wc->name == NULL)
-			continue;			/* ignore anonymous windows */
-
-		if (sep == NULL)
-			appendContextKeyword(context, " WINDOW ",
-								 -PRETTYINDENT_STD, PRETTYINDENT_STD, 1);
-		else
-			appendStringInfoString(buf, sep);
-
-		appendStringInfo(buf, "%s AS ", quote_identifier(wc->name));
-
-		get_rule_windowspec(wc, query->targetList, context);
-
-		sep = ", ";
-	}
-}
-
-/*
- * Display a window definition
- */
-static void
-get_rule_windowspec(WindowClause *wc, List *targetList,
-					deparse_context *context)
-{
-	StringInfo	buf = context->buf;
-	bool		needspace = false;
-	const char *sep;
-	ListCell   *l;
-
-	appendStringInfoChar(buf, '(');
-	if (wc->refname)
-	{
-		appendStringInfoString(buf, quote_identifier(wc->refname));
-		needspace = true;
-	}
-	/* partition clauses are always inherited, so only print if no refname */
-	if (wc->partitionClause && !wc->refname)
-	{
-		if (needspace)
-			appendStringInfoChar(buf, ' ');
-		appendStringInfoString(buf, "PARTITION BY ");
-		sep = "";
-		foreach(l, wc->partitionClause)
-		{
-			SortGroupClause *grp = (SortGroupClause *) lfirst(l);
-
-			appendStringInfoString(buf, sep);
-			get_rule_sortgroupclause(grp->tleSortGroupRef, targetList,
-									 false, context);
-			sep = ", ";
-		}
-		needspace = true;
-	}
-	/* print ordering clause only if not inherited */
-	if (wc->orderClause && !wc->copiedOrder)
-	{
-		if (needspace)
-			appendStringInfoChar(buf, ' ');
-		appendStringInfoString(buf, "ORDER BY ");
-		get_rule_orderby(wc->orderClause, targetList, false, context);
-		needspace = true;
-	}
-	/* framing clause is never inherited, so print unless it's default */
-	if (wc->frameOptions & FRAMEOPTION_NONDEFAULT)
-	{
-		if (needspace)
-			appendStringInfoChar(buf, ' ');
-		if (wc->frameOptions & FRAMEOPTION_RANGE)
-			appendStringInfoString(buf, "RANGE ");
-		else if (wc->frameOptions & FRAMEOPTION_ROWS)
-			appendStringInfoString(buf, "ROWS ");
-		else
-			Assert(false);
-		if (wc->frameOptions & FRAMEOPTION_BETWEEN)
-			appendStringInfoString(buf, "BETWEEN ");
-		if (wc->frameOptions & FRAMEOPTION_START_UNBOUNDED_PRECEDING)
-			appendStringInfoString(buf, "UNBOUNDED PRECEDING ");
-		else if (wc->frameOptions & FRAMEOPTION_START_CURRENT_ROW)
-			appendStringInfoString(buf, "CURRENT ROW ");
-		else if (wc->frameOptions & FRAMEOPTION_START_VALUE)
-		{
-			get_rule_expr(wc->startOffset, context, false);
-			if (wc->frameOptions & FRAMEOPTION_START_VALUE_PRECEDING)
-				appendStringInfoString(buf, " PRECEDING ");
-			else if (wc->frameOptions & FRAMEOPTION_START_VALUE_FOLLOWING)
-				appendStringInfoString(buf, " FOLLOWING ");
-			else
-				Assert(false);
-		}
-		else
-			Assert(false);
-		if (wc->frameOptions & FRAMEOPTION_BETWEEN)
-		{
-			appendStringInfoString(buf, "AND ");
-			if (wc->frameOptions & FRAMEOPTION_END_UNBOUNDED_FOLLOWING)
-				appendStringInfoString(buf, "UNBOUNDED FOLLOWING ");
-			else if (wc->frameOptions & FRAMEOPTION_END_CURRENT_ROW)
-				appendStringInfoString(buf, "CURRENT ROW ");
-			else if (wc->frameOptions & FRAMEOPTION_END_VALUE)
-			{
-				get_rule_expr(wc->endOffset, context, false);
-				if (wc->frameOptions & FRAMEOPTION_END_VALUE_PRECEDING)
-					appendStringInfoString(buf, " PRECEDING ");
-				else if (wc->frameOptions & FRAMEOPTION_END_VALUE_FOLLOWING)
-					appendStringInfoString(buf, " FOLLOWING ");
-				else
-					Assert(false);
-			}
-			else
-				Assert(false);
-		}
-		/* we will now have a trailing space; remove it */
-		buf->len--;
-	}
-	appendStringInfoChar(buf, ')');
 }
 
 /*
@@ -6665,7 +6524,7 @@ processIndirection(Node *node, deparse_context *context)
 			 * target lists, but this function cannot be used for that case.
 			 */
 			Assert(list_length(fstore->fieldnums) == 1);
-			fieldname = get_relid_attribute_name(typrelid,
+			fieldname = CompatGetAttName(typrelid,
 												 linitial_int(fstore->fieldnums));
 			appendStringInfo(buf, ".%s", quote_identifier(fieldname));
 

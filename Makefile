@@ -28,6 +28,7 @@ REGRESS_OPTS = --schedule=./src/test/regress/parallel_schedule \
   --temp-config=./src/test/regress/pipelinedb.conf \
   --bindir=$(bindir)
 
+NO_GENERATED_HEADERS = 1
 NO_PGXS = 1
 NO_TEMP_INSTALL = 1
 top_builddir = $(shell $(PG_CONFIG) --pkglibdir)/pgxs

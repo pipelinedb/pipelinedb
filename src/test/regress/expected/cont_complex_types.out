@@ -136,12 +136,10 @@ SELECT bloom_contains(bloom_agg, 'world'::text) FROM test_cont_complex4;
  t
 (1 row)
 
-DROP TYPE test_cont_complex_type CASCADE;
-NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to foreign table cont_complex_stream column r
-drop cascades to view test_cont_complex1
 DROP FOREIGN TABLE cont_complex_stream CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to view test_cont_complex4
 drop cascades to view test_cont_complex2
 drop cascades to view test_cont_complex3
+drop cascades to view test_cont_complex1
+DROP TYPE test_cont_complex_type;

@@ -200,10 +200,7 @@ LANGUAGE plpgsql;
 CREATE FOREIGN TABLE stj_deps_stream (x int) SERVER pipelinedb;
 CREATE VIEW stj_deps AS SELECT test_stj_foo(s.x::integer), t.x FROM stj_deps_stream s JOIN test_stj_t4 t ON s.x = t.x;
 
--- Table columns being joined on can't be dropped
-ALTER TABLE test_stj_t4 DROP COLUMN x;
-
--- But unused columns can be
+-- Table columns being joined on can't be dropped, but unused columns can be
 ALTER TABLE test_stj_t4 DROP COLUMN y;
 
 -- Functions used by CVs can't be dropped

@@ -20,6 +20,7 @@
 #include "catalog.h"
 #include "catalog/pg_database.h"
 #include "commands/dbcommands.h"
+#include "compat.h"
 #include "config.h"
 #include "libpq/pqsignal.h"
 #include "microbatch.h"
@@ -397,7 +398,12 @@ cont_bgworker_main(Datum arg)
 	pg_atomic_fetch_add_u64(&MyContQueryProc->db_meta->generation, 1);
 
 	BackgroundWorkerUnblockSignals();
+
+#if (PG_VERSION_NUM < 110000)
 	BackgroundWorkerInitializeConnectionByOid(proc->db_meta->db_id, InvalidOid);
+#else
+	BackgroundWorkerInitializeConnectionByOid(proc->db_meta->db_id, InvalidOid, 0);
+#endif
 
 	/*
 	 * We must keep checking for the extension's existence for a short duration,
@@ -477,7 +483,9 @@ cont_bgworker_main(Datum arg)
 	/* If this isn't a clean termination, exit with a non-zero status code */
 	if (!proc->db_meta->terminate)
 	{
+#if (PG_VERSION_NUM < 110000)
 		elog(LOG, "pipelinedb process \"%s\" was killed", GetContQueryProcName(proc));
+#endif
 		proc_exit(1);
 	}
 
@@ -523,6 +531,9 @@ run_cont_bgworker(ContQueryProc *proc)
 	char *name = GetContQueryProcName(proc);
 
 	strcpy(worker.bgw_name, GetContQueryProcName(proc));
+#if (PG_VERSION_NUM >= 110000)
+	strcpy(worker.bgw_type, GetContQueryProcName(proc));
+#endif
 
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION | BGWORKER_IS_CONT_QUERY_PROC;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
@@ -810,7 +821,11 @@ ContQuerySchedulerMain(Datum arg)
 
 	BackgroundWorkerUnblockSignals();
 
+#if (PG_VERSION_NUM < 110000)
 	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, NULL);
+#else
+	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, NULL, false);
+#endif
 
 	ContQuerySchedulerShmem->pid = MyProcPid;
 

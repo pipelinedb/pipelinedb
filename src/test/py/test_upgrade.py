@@ -1,4 +1,5 @@
 from base import pipeline, clean_db, PipelineDB
+import pytest
 import os
 import shutil
 import subprocess
@@ -10,6 +11,9 @@ def test_binary_upgrade(pipeline, clean_db):
   Verify that binary upgrades properly transfer all objects and data
   into the new installation
   """
+  if pipeline.version_num == 110000:
+    pytest.skip('skipping until PG11 supports dump/restore WITH OIDS')
+
   # Create some regular tables with data, and create an index on half of them
   for n in range(16):
     name = 't_%d' % n

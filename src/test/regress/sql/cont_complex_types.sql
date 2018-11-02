@@ -63,5 +63,5 @@ SELECT bloom_cardinality(bloom_agg) FROM test_cont_complex4;
 SELECT bloom_contains(bloom_agg, 'hello'::text) FROM test_cont_complex4;
 SELECT bloom_contains(bloom_agg, 'world'::text) FROM test_cont_complex4;
 
-DROP TYPE test_cont_complex_type CASCADE;
 DROP FOREIGN TABLE cont_complex_stream CASCADE;
+DROP TYPE test_cont_complex_type;
