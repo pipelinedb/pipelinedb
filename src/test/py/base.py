@@ -34,6 +34,22 @@ class PipelineDB(object):
       
     # To keep tests fast, we only initdb once and then we just copy that fresh data directory whenever we want a new DB
     do_initdb = False
+
+    # If the base data directory exists but is for a different version of PG, remove it
+    if os.path.exists(BOOTSTRAPPED_BASE):
+      p = subprocess.Popen(['pg_config', '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      stdout, stderr = p.communicate()
+
+      _, bootstrap_version = stdout.strip().split()
+      bootstrap_version = int(float(bootstrap_version))
+      install_version = 0
+
+      with open(os.path.join(BOOTSTRAPPED_BASE, 'PG_VERSION')) as v:
+        install_version = int(v.read().strip())
+
+      if install_version != bootstrap_version:
+        shutil.rmtree(BOOTSTRAPPED_BASE)
+
     if not os.path.exists(BOOTSTRAPPED_BASE):
       out, err = subprocess.Popen(['initdb', '-D', BOOTSTRAPPED_BASE]).communicate()
 
