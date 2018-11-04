@@ -1,5 +1,5 @@
 MODULE_big = pipelinedb
-SOURCES = $(shell find src/ -type f -name '*.c' -not -path 'src/test/*')
+SOURCES = $(shell find src -type f -name '*.c' -not -path 'src/test/*')
 OBJS = $(patsubst %.c,%.o,$(SOURCES))
 
 PG_CONFIG := pg_config
