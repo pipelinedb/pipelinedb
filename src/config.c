@@ -274,10 +274,17 @@ _PG_init(void)
 		return;
 	}
 
-	if (PG_VERSION_NUM < 100001)
-		ereport(ERROR, (errmsg("PipelineDB requires PostgreSQL version 10.1 or higher")));
+#if (PG_VERSION_NUM >= 100001 && PG_VERSION_NUM < 110000)
+	if (PG_VERSION_NUM < 100001 || PG_VERSION_NUM >= 110000)
+		ereport(ERROR, (errmsg("pipelinedb-postgresql-10 requires postgresql version 10.1 or higher")));
+#elif (PG_VERSION_NUM >= 110000)
+	if (PG_VERSION_NUM < 110000)
+		ereport(ERROR, (errmsg("pipelinedb-postgresql-11 requires postgresql version 11.0 or higher")));
+#endif
 
-	pipeline_version_str = "1.0.0";
+#ifdef PIPELINE_VERSION_STR
+	pipeline_version_str = PIPELINE_VERSION_STR;
+#endif
 #ifdef PIPELINE_REVISION_STR
 	pipeline_revision_str = PIPELINE_REVISION_STR;
 #endif

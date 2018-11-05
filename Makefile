@@ -13,6 +13,14 @@ SHLIB_LINK += /usr/lib/libzmq.a -lstdc++
 
 ifdef USE_PGXS
 PG_CPPFLAGS += -I./include -I$(shell $(PG_CONFIG) --includedir)
+
+ifdef PIPELINE_VERSION_STR
+PG_CPPFLAGS += -DPIPELINE_VERSION_STR=\"$(PIPELINE_VERSION_STR)\"
+endif
+ifdef PIPELINE_REVISION_STR
+PG_CPPFLAGS += -DPIPELINE_REVISION_STR=\"$(PIPELINE_REVISION_STR)\"
+endif
+
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 else

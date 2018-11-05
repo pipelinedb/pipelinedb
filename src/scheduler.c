@@ -129,7 +129,8 @@ debug_segfault(SIGNAL_ARGS)
 	void *array[32];
 	size_t size = backtrace(array, 32);
 	fprintf(stderr, "Segmentation fault (PID %d)\n", MyProcPid);
-	fprintf(stderr, "version: %s at revision %s\n", pipeline_version_str, pipeline_revision_str);
+	fprintf(stderr, "PostgreSQL version: %s\n", PG_VERSION);
+	fprintf(stderr, "PipelineDB version: %s at revision %s\n", pipeline_version_str, pipeline_revision_str);
 	fprintf(stderr, "query: %s\n", debug_query_string);
 	fprintf(stderr, "backtrace:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
