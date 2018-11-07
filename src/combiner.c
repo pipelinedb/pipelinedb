@@ -1500,8 +1500,8 @@ sync_combine(ContQueryCombinerState *state)
 		PhysicalTuple update = NULL;
 		HeapTuple tup = NULL;
 		HeapTuple os_tup;
-		Datum os_values[3];
-		bool os_nulls[3];
+		Datum os_values[4];
+		bool os_nulls[4];
 		int replaces = 0;
 		ExprContext *econtext = estate->es_per_tuple_exprcontext;
 
@@ -1589,8 +1589,7 @@ sync_combine(ContQueryCombinerState *state)
 				PhysicalTuple pt = (PhysicalTuple) e->additional;
 				os_values[DELTA_TUPLE] = heap_copy_tuple_as_datum(pt->tuple, state->desc);
 				os_nulls[DELTA_TUPLE] = false;
-
-				os_nulls[state->output_stream_arrival_ts] = true;
+				os_nulls[state->output_stream_arrival_ts - 1] = true;
 				os_tup = heap_form_tuple(state->os_slot->tts_tupleDescriptor, os_values, os_nulls);
 				ExecStoreTuple(os_tup, state->os_slot, InvalidBuffer, false);
 				ExecStreamInsert(NULL, osri, state->os_slot, NULL);
@@ -1650,7 +1649,7 @@ sync_all(ContExecutor *cont_exec)
 
 	while ((id = bms_first_member(tmp)) >= 0)
 	{
-		bool error = false;
+		volatile bool error = false;
 		ContQueryCombinerState *state = states[id];
 
 		if (!state)
