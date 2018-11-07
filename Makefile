@@ -30,6 +30,7 @@ $(shell touch src/test/regress/expected/$(REGRESS).out)
 
 bindir = $(shell $(PG_CONFIG) --bindir)
 REGRESS_OPTS = --schedule=./src/test/regress/parallel_schedule \
+  --host=localhost \
   --inputdir=./src/test/regress \
   --outputdir=./src/test/regress \
   --load-extension=pipelinedb \
