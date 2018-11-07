@@ -13,6 +13,13 @@ Raw time-series data is never written to disk, making PipelineDB extremely effic
 
 Continuous queries produce their own [output streams](http://docs.pipelinedb.com/streams.html#output-streams), and thus can be [chained together](http://docs.pipelinedb.com/continuous-transforms.html) into arbitrary networks of continuous SQL.
 
+## PostgreSQL compatibility
+
+PipelineDB currently supports the following PostgreSQL versions:
+
+* **PostgreSQL 10**: 10.1, 10.2, 10.3, 10.4, 10.5
+* **PostgreSQL 11**: 11.0
+
 ## Getting started
 
 If you just want to start using PipelineDB right away, head over to the [installation docs](http://docs.pipelinedb.com/installation.html) to get going.
