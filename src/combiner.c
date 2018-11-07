@@ -905,8 +905,8 @@ gc_cached_overlay_tuples(ContQueryCombinerState *state,
 	InitTupleHashIterator(state->sw->overlay_groups, &seq);
 	while ((entry = (TupleHashEntry) ScanTupleHashTable(state->sw->overlay_groups, &seq)) != NULL)
 	{
-		Datum values[3];
-		bool nulls[3];
+		Datum values[4];
+		bool nulls[4];
 		HeapTuple tup;
 		HeapTuple os_tup;
 		OverlayTupleEntry *overlay_entry = (OverlayTupleEntry *) entry->additional;
@@ -919,7 +919,7 @@ gc_cached_overlay_tuples(ContQueryCombinerState *state,
 
 		MemSet(nulls, false, sizeof(nulls));
 
-		nulls[state->output_stream_arrival_ts] = true;
+		nulls[state->output_stream_arrival_ts - 1] = true;
 		nulls[NEW_TUPLE] = true;
 		values[NEW_TUPLE] = (Datum) 0;
 		values[OLD_TUPLE] = heap_copy_tuple_as_datum(tup, state->overlay_desc);
@@ -1047,8 +1047,8 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 	foreach_tuple(state->overlay_slot, state->sw->overlay_output)
 	{
 		bool isnew;
-		Datum values[3];
-		bool nulls[3];
+		Datum values[4];
+		bool nulls[4];
 		bool replaces[state->overlay_desc->natts];
 		HeapTuple new_tup = ExecMaterializeSlot(state->overlay_slot);
 		HeapTuple old_tup = NULL;
@@ -1104,7 +1104,7 @@ tick_sw_groups(ContQueryCombinerState *state, Relation matrel, bool force)
 			values[OLD_TUPLE] = heap_copy_tuple_as_datum(old_tup, state->overlay_desc);
 		}
 
-		nulls[state->output_stream_arrival_ts] = true;
+		nulls[state->output_stream_arrival_ts - 1] = true;
 		nulls[NEW_TUPLE] = false;
 		values[NEW_TUPLE] = heap_copy_tuple_as_datum(new_tup, state->overlay_desc);
 
