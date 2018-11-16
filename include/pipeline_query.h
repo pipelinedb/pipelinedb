@@ -151,7 +151,7 @@ typedef struct ContQuery
 	Oid pkidxid;
 	Oid lookupidxid;
 	int sw_step_factor;
-	int sw_step_ms;
+	uint64 sw_step_ms;
 	uint64 sw_interval_ms;
 	bool is_sw;
 	AttrNumber ttl_attno;

@@ -2002,11 +2002,11 @@ need_sync(ContExecutor *exec, TimestampTz last_sync)
 /*
  * get_min_tick_ms
  */
-static int
+static uint64
 get_min_tick_ms(void)
 {
 	Bitmapset *queries;
-	int min_tick_ms = 0;
+	uint64 min_tick_ms = 0;
 	int id;
 
 	/*
@@ -2047,7 +2047,7 @@ ContinuousQueryCombinerMain(void)
 	TimestampTz first_seen = 0;
 	bool do_commit = false;
 	long total_pending = 0;
-	int min_tick_ms;
+	uint64 min_tick_ms;
 
 	min_tick_ms = get_min_tick_ms();
 

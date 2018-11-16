@@ -2408,9 +2408,9 @@ GetContQueryForId(Oid id)
 		cq->sw_attno = row->ttl_attno;
 		cq->sw_step_factor = row->step_factor;
 		i = GetSWInterval(cq->name);
-		cq->sw_interval_ms = 1000 * (int) DatumGetFloat8(
+		cq->sw_interval_ms = 1000 * (uint64) DatumGetFloat8(
 				DirectFunctionCall2(interval_part, CStringGetTextDatum("epoch"), (Datum) i));
-		cq->sw_step_ms = (int) (cq->sw_interval_ms * cq->sw_step_factor / 100.0);
+		cq->sw_step_ms = (uint64) (cq->sw_interval_ms * cq->sw_step_factor / 100.0);
 	}
 
 	/*
