@@ -1,2 +1,2 @@
 pytest==2.6.3
-psycopg2==2.5.4
+psycopg2-binary==2.7.5
