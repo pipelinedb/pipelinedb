@@ -1,11 +1,12 @@
-LIBPQ = $(shell pg_config --includedir)
+LIBPQ_INCLUDE = $(shell pg_config --includedir)
+LIBPQ_LIB = $(shell pg_config --libdir)
 
 .PHONY: check
 
 all: extended
 
 extended:
-	$(CC) extended.c -I$(LIBPQ) -lpq -o $@
+	$(CC) extended.c -I$(LIBPQ_INCLUDE) -L$(LIBPQ_LIB) -lpq -o $@
 
 test: all
 	py.test -v
