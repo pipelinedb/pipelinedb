@@ -66,6 +66,8 @@ double sliding_window_step_factor;
 
 #define MIN_VIEW_MAX_AGE_FACTOR 0.5
 
+GetCombineTargetFunc GetCombineTargetHook = NULL;
+
 /*
  * Maps standard aggregates to their streaming variants for use within CQs.
  * There are two type of aggregates we substitute here:
@@ -1926,6 +1928,7 @@ FindTTLColumnAttrNo(char *colname, Oid matrelid)
 #define DDL_HAS_STEP_FACTOR 			0x4
 #define IS_COMBINE_TABLE   			0x8
 #define PIPELINE_IS_DEFREL				0x10
+#define PIPELINE_CONT_PLAN 			0x20
 
 static int pipeline_context_flags = 0;
 static int pipeline_context_step_factor = 0;
@@ -2005,6 +2008,28 @@ PipelineContextSetCombineTable(void)
 {
 	pipeline_context_flags |= IS_COMBINE_TABLE;
 }
+
+/*
+ * PipelineContextSetContPlan
+ */
+void
+PipelineContextSetContPlan(bool cp)
+{
+	if (cp)
+		pipeline_context_flags |= PIPELINE_CONT_PLAN;
+	else
+		pipeline_context_flags &= (~PIPELINE_CONT_PLAN);
+}
+
+/*
+ * PipelineContextIsStreamScanAllowed
+ */
+bool
+PipelineContextIsContPlan(void)
+{
+	return (pipeline_context_flags & PIPELINE_CONT_PLAN) > 0;
+}
+
 
 /*
  * PipelineContextIsDDL
@@ -3960,14 +3985,25 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 		List *args;
 		Var *result;
 		Node *arg;
+		Oid relid = InvalidOid;
 
 		if (!RelidIsMatRel(rte->relid, NULL))
 		{
-			/*
-			 * If it's not a matrel or output stream, it can't be a valid combine argument
-			 */
-			elog(ERROR, "relation is not a continuous view");
-			return NULL;
+			if (GetCombineTargetHook)
+				relid = GetCombineTargetHook(rte);
+
+			if (!OidIsValid(relid))
+			{
+				/*
+				 * If we or any extensions don't know how to combine it, it must not be a valid combine argument
+				 */
+				elog(ERROR, "relation is not a continuous view");
+				return NULL;
+			}
+		}
+		else
+		{
+			relid = rte->relid;
 		}
 
 		/*
@@ -3977,7 +4013,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 		 */
 		if (!subquery)
 		{
-			Relation rel = heap_open(rte->relid, AccessShareLock);
+			Relation rel = heap_open(relid, AccessShareLock);
 			Form_pg_attribute att = TupleDescAttr(rel->rd_att, attr - 1);
 
 			if (attrtypmod)
@@ -3986,7 +4022,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 			combine_target = makeVar(varno, att->attnum, att->atttypid, att->atttypmod, att->attcollation, 0);
 			heap_close(rel, AccessShareLock);
 
-			*matrelid = rte->relid;
+			*matrelid = relid;
 			*cvattr = combine_target->varattno;
 
 			return NULL;
@@ -4038,7 +4074,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 		result->varno = varno;
 		result->varoattno = combine_target->varattno;
 
-		*matrelid = rte->relid;
+		*matrelid = relid;
 		*cvattr = combine_target->varattno;
 
 		return result;

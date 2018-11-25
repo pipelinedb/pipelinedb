@@ -52,6 +52,9 @@ typedef struct ContAnalyzeContext
 	ContQueryProcType proc_type;
 } ContAnalyzeContext;
 
+typedef Oid (*GetCombineTargetFunc) (RangeTblEntry *rte);
+extern GetCombineTargetFunc GetCombineTargetHook;
+
 extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select, ContQueryProcType type);
 
 extern void PipelineContextSetIsDDL(void);
@@ -64,6 +67,9 @@ extern bool PipelineContextIsDDL(void);
 
 extern void PipelineContextSetCombineTable(void);
 extern bool PipelineContextIsCombineTable(void);
+
+extern void PipelineContextSetContPlan(bool allowed);
+extern bool PipelineContextIsContPlan(void);
 
 extern void PipelineContextSetCombinerLookup(void);
 extern bool PipelineContextIsCombinerLookup(void);
