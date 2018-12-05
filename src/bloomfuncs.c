@@ -49,7 +49,7 @@ bloom_print(PG_FUNCTION_ARGS)
  * bloom_create
  */
 static BloomFilter *
-bloom_create(float8 p, int8 n)
+bloom_create(float8 p, int64 n)
 {
 	if (p <= 0 || p >= 1)
 		ereport(ERROR,
@@ -67,7 +67,7 @@ bloom_create(float8 p, int8 n)
  * bloom_startup
  */
 static BloomFilter *
-bloom_startup(FunctionCallInfo fcinfo, float8 p, uint64_t n)
+bloom_startup(FunctionCallInfo fcinfo, float8 p, int64 n)
 {
 	BloomFilter *bloom;
 	Oid type = AggGetInitialArgType(fcinfo);
@@ -146,7 +146,7 @@ bloom_agg_transp(PG_FUNCTION_ARGS)
 	MemoryContext context;
 	BloomFilter *state;
 	float8 p = PG_GETARG_FLOAT8(2);
-	uint64_t n = PG_GETARG_INT64(3);
+	int64 n = PG_GETARG_INT64(3);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "bloom_agg_transp called in non-aggregate context");
