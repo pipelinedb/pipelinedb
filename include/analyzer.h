@@ -124,6 +124,7 @@ extern Query *GetContWorkerQuery(ContQuery *view);
 
 extern Oid AggGetInitialArgType(FunctionCallInfo fcinfo);
 
+extern bool OidIsCombineAgg(Oid oid);
 extern void RewriteCombineAggs(Query *q);
 
 extern void InstallAnalyzerHooks(void);

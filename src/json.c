@@ -2381,6 +2381,9 @@ json_agg_serialize(PG_FUNCTION_ARGS)
 	JsonAggState *state = (JsonAggState *) PG_GETARG_POINTER(0);
 	bytea *result;
 
+	if (state == NULL || PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
 	result = (bytea *) palloc0(state->str->len + VARHDRSZ);
 	SET_VARSIZE(result, state->str->len + VARHDRSZ);
 	memcpy(VARDATA(result), state->str->data, state->str->len);
@@ -2396,6 +2399,9 @@ json_agg_deserialize(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	bytea *bytes;
 	JsonAggState *result;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;
@@ -2449,16 +2455,20 @@ json_agg_combine(PG_FUNCTION_ARGS)
 	else
 	{
 		state = (JsonAggState *) PG_GETARG_POINTER(0);
-		appendStringInfoString(state->str, ", ");
+		if (state)
+			appendStringInfoString(state->str, ", ");
 	}
 
 	if (!PG_ARGISNULL(1))
 	{
 		incoming = (JsonAggState *) PG_GETARG_POINTER(1);
 
-		/* skip the '[' in the beginning */
-		Assert(incoming->str->data[0] == '[');
-		appendBinaryStringInfo(state->str, incoming->str->data + 1, incoming->str->len - 1);
+		if (incoming)
+		{
+			/* skip the '[' in the beginning */
+			Assert(incoming->str->data[0] == '[');
+			appendBinaryStringInfo(state->str, incoming->str->data + 1, incoming->str->len - 1);
+		}
 	}
 
 	PG_RETURN_POINTER(state);
@@ -2500,12 +2510,16 @@ json_object_agg_combine(PG_FUNCTION_ARGS)
 	else
 	{
 		state = (JsonAggState *) PG_GETARG_POINTER(0);
-		appendStringInfoString(state->str, ",");
+		if (state)
+			appendStringInfoString(state->str, ",");
 	}
 
 	if (!PG_ARGISNULL(1))
 	{
 		incoming = (JsonAggState *) PG_GETARG_POINTER(1);
+
+		if (!incoming)
+			PG_RETURN_POINTER(state);
 
 		/* skip the '{' in the beginning */
 		Assert(incoming->str->data[0] == '{');

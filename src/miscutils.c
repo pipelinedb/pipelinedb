@@ -486,8 +486,14 @@ pipeline_deserialize(PG_FUNCTION_ARGS)
 
 	deserinfo = (FunctionCallInfo) fcinfo->flinfo->fn_extra;
 	deserinfo->arg[0] = PG_GETARG_DATUM(1);
-	deserinfo->argnull[0] = false;
+	deserinfo->argnull[0] = PG_ARGISNULL(1);
 	deserinfo->argnull[1] = false;
+
+	/*
+	 * If the deserialize function is strict, be careful not to even call it with a NULL input
+	 */
+	if (deserinfo->flinfo->fn_strict && PG_ARGISNULL(1))
+		PG_RETURN_NULL();
 
 	deserialized = FunctionCallInvoke(deserinfo);
 
