@@ -138,7 +138,7 @@ GetStreamPaths(PlannerInfo *root, RelOptInfo *baserel, Oid relid)
 	Cost total_cost;
 	double rows;
 
-	if (!IsContQueryProcess())
+	if (!IsContQueryProcess() && !PipelineContextIsContPlan())
 	{
 		PlannerInfo *parent = root;
 

@@ -66,6 +66,8 @@ double sliding_window_step_factor;
 
 #define MIN_VIEW_MAX_AGE_FACTOR 0.5
 
+GetCombineTargetFunc GetCombineTargetHook = NULL;
+
 /*
  * Maps standard aggregates to their streaming variants for use within CQs.
  * There are two type of aggregates we substitute here:
@@ -1926,6 +1928,7 @@ FindTTLColumnAttrNo(char *colname, Oid matrelid)
 #define DDL_HAS_STEP_FACTOR 			0x4
 #define IS_COMBINE_TABLE   			0x8
 #define PIPELINE_IS_DEFREL				0x10
+#define PIPELINE_CONT_PLAN 			0x20
 
 static int pipeline_context_flags = 0;
 static int pipeline_context_step_factor = 0;
@@ -2005,6 +2008,28 @@ PipelineContextSetCombineTable(void)
 {
 	pipeline_context_flags |= IS_COMBINE_TABLE;
 }
+
+/*
+ * PipelineContextSetContPlan
+ */
+void
+PipelineContextSetContPlan(bool cp)
+{
+	if (cp)
+		pipeline_context_flags |= PIPELINE_CONT_PLAN;
+	else
+		pipeline_context_flags &= (~PIPELINE_CONT_PLAN);
+}
+
+/*
+ * PipelineContextIsStreamScanAllowed
+ */
+bool
+PipelineContextIsContPlan(void)
+{
+	return (pipeline_context_flags & PIPELINE_CONT_PLAN) > 0;
+}
+
 
 /*
  * PipelineContextIsDDL
@@ -3843,42 +3868,6 @@ make_deserialization_call(Node *arg, Oid deseroid)
 }
 
 /*
- * is_combine_aggref
- *
- * Given an Aggref, determine if it is a reference to our combine dummy aggregate,
- * which we use to expand into an actual combine aggregate.
- */
-static bool
-is_combine_aggref(Aggref *agg, bool *sw)
-{
-	bool isnull;
-	HeapTuple tup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(agg->aggfnoid));
-	Datum d = SysCacheGetAttr(AGGFNOID, tup, Anum_pg_aggregate_agginitval, &isnull);
-	char *magic = NULL;
-
-	if (!isnull)
-		magic = TextDatumGetCString(d);
-
-	ReleaseSysCache(tup);
-
-	if (magic == NULL)
-		return false;
-
-	Assert(sw);
-	*sw = false;
-	if (!pg_strcasecmp(magic, SW_COMBINE_AGG_DUMMY))
-	{
-		*sw = true;
-		return true;
-	}
-
-	if (!pg_strcasecmp(magic, COMBINE_AGG_DUMMY))
-		return true;
-
-	return false;
-}
-
-/*
  * search_for_partial_combine_aggregate
  */
 static Oid
@@ -3942,7 +3931,7 @@ get_partial_combine_aggfnoid(Oid aggfnoid, Oid *rettype)
  */
 static Var *
 add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
-		bool toplevel, bool subquery, Oid *matrelid, AttrNumber *cvattr, int32 *attrtypmod)
+		bool toplevel, bool subquery, bool setops, Oid *matrelid, AttrNumber *cvattr, int32 *attrtypmod)
 {
 	RangeTblEntry *rte = rt_fetch(varno, q->rtable);
 
@@ -3960,14 +3949,25 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 		List *args;
 		Var *result;
 		Node *arg;
+		Oid relid = InvalidOid;
 
 		if (!RelidIsMatRel(rte->relid, NULL))
 		{
-			/*
-			 * If it's not a matrel or output stream, it can't be a valid combine argument
-			 */
-			elog(ERROR, "relation is not a continuous view");
-			return NULL;
+			if (GetCombineTargetHook)
+				relid = GetCombineTargetHook(rte);
+
+			if (!OidIsValid(relid))
+			{
+				/*
+				 * If we or any extensions don't know how to combine it, it must not be a valid combine argument
+				 */
+				elog(ERROR, "relation is not a continuous view");
+				return NULL;
+			}
+		}
+		else
+		{
+			relid = rte->relid;
 		}
 
 		/*
@@ -3977,7 +3977,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 		 */
 		if (!subquery)
 		{
-			Relation rel = heap_open(rte->relid, AccessShareLock);
+			Relation rel = heap_open(relid, AccessShareLock);
 			Form_pg_attribute att = TupleDescAttr(rel->rd_att, attr - 1);
 
 			if (attrtypmod)
@@ -3986,7 +3986,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 			combine_target = makeVar(varno, att->attnum, att->atttypid, att->atttypmod, att->attcollation, 0);
 			heap_close(rel, AccessShareLock);
 
-			*matrelid = rte->relid;
+			*matrelid = relid;
 			*cvattr = combine_target->varattno;
 
 			return NULL;
@@ -4038,7 +4038,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 		result->varno = varno;
 		result->varoattno = combine_target->varattno;
 
-		*matrelid = rte->relid;
+		*matrelid = relid;
 		*cvattr = combine_target->varattno;
 
 		return result;
@@ -4077,7 +4077,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 			Aggref *target = (Aggref *) arg;
 			List *aggargs = pull_var_clause((Node *) target->args, 0);
 			Var *aggv;
-			int32 typmod;
+			int32 typmod = -1;
 
 			if (list_length(aggargs) != 1)
 				elog(ERROR, "combine argument must be a single aggregate column");
@@ -4088,7 +4088,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 			target->aggfnoid = get_partial_combine_aggfnoid(target->aggfnoid, &target->aggtype);
 
 			/* We just call this to pull out the matrelid and target CV attribute */
-			add_unfinalized_var(aggv->varno, aggv->varattno, rte->subquery, false, false, matrelid, cvattr, &typmod);
+			add_unfinalized_var(aggv->varno, aggv->varattno, rte->subquery, false, false, true, matrelid, cvattr, &typmod);
 
 			/* And return a Var referencing this partial combine aggregate */
 			v = makeVar(varno, te->resno, target->aggtype, typmod, target->aggcollid, 0);
@@ -4104,7 +4104,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 		 * Recurse down to the leaf node this subquery is selecting from
 		 */
 		v = (Var *) arg;
-		result = add_unfinalized_var(v->varno, v->varattno, rte->subquery, false, true, matrelid, cvattr, NULL);
+		result = add_unfinalized_var(v->varno, v->varattno, rte->subquery, false, true, true, matrelid, cvattr, NULL);
 
 		if (!result)
 			return copyObject(v);
@@ -4137,7 +4137,7 @@ add_unfinalized_var(Index varno, AttrNumber attr, Query *q,
 		 * that it ultimately belongs to.
 		 */
 		Var *jv = list_nth(rte->joinaliasvars, attr - 1);
-		Var *v = add_unfinalized_var(jv->varno, jv->varattno, q, true, false, matrelid, cvattr, NULL);
+		Var *v = add_unfinalized_var(jv->varno, jv->varattno, q, true, false, true, matrelid, cvattr, NULL);
 
 		if (v)
 		{
@@ -4195,6 +4195,86 @@ search_for_combine_aggregate(Oid combinefn, Oid finalfn, Oid serialfn, Oid deser
 	return oid;
 }
 
+static HTAB *combine_oids = NULL;
+
+/*
+ * cache_combine_oid
+ */
+static void
+cache_combine_oid(Oid oid)
+{
+	bool found;
+
+	if (combine_oids == NULL)
+	{
+		HASHCTL ctl;
+		MemSet(&ctl, 0, sizeof(ctl));
+		ctl.keysize = sizeof(Oid);
+		ctl.entrysize = sizeof(Oid);
+		ctl.hcxt = TopMemoryContext;
+		combine_oids = hash_create("CombineAggOids", 64, &ctl, HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+	}
+
+	Assert(combine_oids);
+	hash_search(combine_oids, &oid, HASH_ENTER, &found);
+}
+
+/*
+ * is_combine_aggref
+ *
+ * Given an Aggref, determine if it is a reference to our combine dummy aggregate,
+ * which we use to expand into an actual combine aggregate.
+ */
+static bool
+is_combine_aggref(Aggref *agg, bool *sw)
+{
+	bool isnull;
+	HeapTuple tup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(agg->aggfnoid));
+	Datum d = SysCacheGetAttr(AGGFNOID, tup, Anum_pg_aggregate_agginitval, &isnull);
+	char *magic = NULL;
+
+	if (!isnull)
+		magic = TextDatumGetCString(d);
+
+	ReleaseSysCache(tup);
+
+	if (magic == NULL)
+		return false;
+
+	Assert(sw);
+	*sw = false;
+	if (!pg_strcasecmp(magic, SW_COMBINE_AGG_DUMMY))
+	{
+		*sw = true;
+		cache_combine_oid(agg->aggfnoid);
+		return true;
+	}
+
+	if (!pg_strcasecmp(magic, COMBINE_AGG_DUMMY))
+	{
+		cache_combine_oid(agg->aggfnoid);
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * OidIsCombineAgg
+ */
+bool
+OidIsCombineAgg(Oid oid)
+{
+	bool found;
+
+	if (!combine_oids)
+		return false;
+
+	hash_search(combine_oids, &oid, HASH_FIND, &found);
+
+	return found;
+}
+
 /*
  * get_combine_aggfnoid
  */
@@ -4228,6 +4308,8 @@ get_combine_aggfnoid(Oid aggfnoid, Oid *rettype)
 			return aggfnoid;
 
 		pc = (Form_pipeline_combine) GETSTRUCT(tup);
+		cache_combine_oid(pc->combineaggfn);
+
 		return pc->combineaggfn;
 	}
 
@@ -4238,6 +4320,8 @@ get_combine_aggfnoid(Oid aggfnoid, Oid *rettype)
 	*rettype = procrow->prorettype;
 
 	ReleaseSysCache(tup);
+
+	cache_combine_oid(result);
 
 	return result;
 }
@@ -4458,7 +4542,7 @@ rewrite_nodes(Query *q, List *nodes)
 		}
 		else
 		{
-			v = add_unfinalized_var(combine_var->varno, combine_var->varattno, q, true, false, &matrelid, &cvattr, NULL);
+			v = add_unfinalized_var(combine_var->varno, combine_var->varattno, q, true, false, true, &matrelid, &cvattr, NULL);
 			if (v)
 				combine_var = v;
 			arg = (Node *) combine_var;
@@ -4608,7 +4692,6 @@ RewriteCombineAggs(Query *q)
 		if (rte->rtekind == RTE_SUBQUERY)
 			RewriteCombineAggs(rte->subquery);
 	}
-
 	/*
 	 * Now rewrite top-level combine aggregates in this Query's target list
 	 */

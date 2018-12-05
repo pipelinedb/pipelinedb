@@ -1931,27 +1931,30 @@ jsonb_agg_combine_common(FunctionCallInfo fcinfo, JsonbIteratorToken agg_type)
 		JsonbIteratorToken type;
 		JsonbValue v;
 
-		incoming->res->res = pushJsonbValue(&incoming->res->parseState,
-				incoming->res->parseState->contVal.type ==  jbvArray ? WJB_END_ARRAY : WJB_END_OBJECT, NULL);
-		jsonb = JsonbValueToJsonb(incoming->res->res);
-		it = JsonbIteratorInit(&jsonb->root);
-
-		while ((type = JsonbIteratorNext(&it, &v, true)) != WJB_DONE)
+		if (incoming)
 		{
-			switch (type)
+			incoming->res->res = pushJsonbValue(&incoming->res->parseState,
+					incoming->res->parseState->contVal.type ==  jbvArray ? WJB_END_ARRAY : WJB_END_OBJECT, NULL);
+			jsonb = JsonbValueToJsonb(incoming->res->res);
+			it = JsonbIteratorInit(&jsonb->root);
+
+			while ((type = JsonbIteratorNext(&it, &v, true)) != WJB_DONE)
 			{
-				case WJB_BEGIN_OBJECT:
-				case WJB_END_OBJECT:
-				case WJB_BEGIN_ARRAY:
-				case WJB_END_ARRAY:
-					break;
-				case WJB_KEY:
-				case WJB_VALUE:
-				case WJB_ELEM:
-					state->res->res = pushJsonbValue(&state->res->parseState, type, &v);
-					break;
-				default:
-					elog(ERROR, "unexpected jsonb token type: %d", type);
+				switch (type)
+				{
+					case WJB_BEGIN_OBJECT:
+					case WJB_END_OBJECT:
+					case WJB_BEGIN_ARRAY:
+					case WJB_END_ARRAY:
+						break;
+					case WJB_KEY:
+					case WJB_VALUE:
+					case WJB_ELEM:
+						state->res->res = pushJsonbValue(&state->res->parseState, type, &v);
+						break;
+					default:
+						elog(ERROR, "unexpected jsonb token type: %d", type);
+				}
 			}
 		}
 	}
@@ -1992,6 +1995,9 @@ jsonb_agg_serialize(PG_FUNCTION_ARGS)
 	JsonbAggState *state = (JsonbAggState *) PG_GETARG_POINTER(0);
 	Jsonb *result;
 
+	if (state == NULL || PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
 	jsonb = pushJsonbValue(&state->res->parseState,
 			state->res->parseState->contVal.type ==  jbvArray ? WJB_END_ARRAY : WJB_END_OBJECT, NULL);
 	result = JsonbValueToJsonb(jsonb);
@@ -2010,6 +2016,9 @@ jsonb_agg_deserialize(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	JsonbIteratorToken type;
 	JsonbValue v;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		context = CurrentMemoryContext;
