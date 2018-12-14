@@ -44,7 +44,7 @@ topk_print(PG_FUNCTION_ARGS)
 	fss = FSSFromBytes(PG_GETARG_VARLENA_P(0));
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ k = %d, m = %d, h = %d, count = %ld, size = %ldkB }", fss->k, fss->m, fss->h, fss->count, FSSSize(fss) / 1024);
+	appendStringInfo(&buf, "{ k = %d, m = %d, h = %d, count = %ld, length = %d, size = %ldkB }", fss->k, fss->m, fss->h, fss->count, FSSMonitoredLength(fss), FSSSize(fss) / 1024);
 
 	PG_RETURN_TEXT_P(CStringGetTextDatum(buf.data));
 }
@@ -56,14 +56,11 @@ PG_FUNCTION_INFO_V1(topk_agg_trans);
 Datum
 topk_agg_trans(PG_FUNCTION_ARGS)
 {
-	MemoryContext old;
 	MemoryContext context;
 	FSS *state;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "topk_agg_trans called in non-aggregate context");
-
-	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
@@ -82,8 +79,6 @@ topk_agg_trans(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(1))
 		state = FSSIncrement(state, PG_GETARG_DATUM(1), PG_ARGISNULL(1));
 
-	MemoryContextSwitchTo(old);
-
 	PG_RETURN_POINTER(state);
 }
 
@@ -91,15 +86,12 @@ PG_FUNCTION_INFO_V1(topk_agg_weighted_trans);
 Datum
 topk_agg_weighted_trans(PG_FUNCTION_ARGS)
 {
-	MemoryContext old;
 	MemoryContext context;
 	FSS *state;
 	int64 weight = PG_GETARG_INT64(3);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "topk_agg_weighted_trans called in non-aggregate context");
-
-	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
@@ -118,8 +110,6 @@ topk_agg_weighted_trans(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(1))
 		state = FSSIncrementWeighted(state, PG_GETARG_DATUM(1), PG_ARGISNULL(1), weight);
 
-	MemoryContextSwitchTo(old);
-
 	PG_RETURN_POINTER(state);
 }
 
@@ -130,14 +120,11 @@ PG_FUNCTION_INFO_V1(topk_agg_transp);
 Datum
 topk_agg_transp(PG_FUNCTION_ARGS)
 {
-	MemoryContext old;
 	MemoryContext context;
 	FSS *state;
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "topk_agg_transp called in non-aggregate context");
-
-	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
@@ -166,7 +153,190 @@ topk_agg_transp(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(1))
 		state = FSSIncrement(state, PG_GETARG_DATUM(1), PG_ARGISNULL(1));
 
+	PG_RETURN_POINTER(state);
+}
+
+typedef struct HashedTopKState
+{
+	HTAB *monitored;
+	FSS *fss;
+} HashedTopKState;
+
+typedef struct MonitoredElementEntry
+{
+	uint32_t key;
+	MonitoredElement elt;
+} MonitoredElementEntry;
+
+static HashedTopKState *
+create_hashed_topk_agg_state(MemoryContext context, int k, TypeCacheEntry *typ)
+{
+	HashedTopKState *result;
+	HASHCTL ctl;
+	MemoryContext old;
+
+	MemSet(&ctl, 0, sizeof(ctl));
+	ctl.keysize = sizeof(uint32_t);
+	ctl.entrysize = sizeof(MonitoredElementEntry);
+	ctl.hcxt = context;
+
+	old = MemoryContextSwitchTo(context);
+
+	result = palloc0(sizeof(HashedTopKState));
+	result->monitored = hash_create("HashedTopK", k * 4, &ctl, HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+	result->fss = FSSCreate(k, typ);
 	MemoryContextSwitchTo(old);
+
+	return result;
+}
+
+/*
+ * hashed_topk_agg_weighted_trans
+ */
+PG_FUNCTION_INFO_V1(hashed_topk_agg_weighted_trans);
+Datum
+hashed_topk_agg_weighted_trans(PG_FUNCTION_ARGS)
+{
+	MemoryContext context;
+	int64 weight = PG_GETARG_INT64(3);
+	MemoryContext old;
+	HashedTopKState *state;
+	uint32_t hash;
+	bool found;
+	MonitoredElementEntry *entry;
+	MonitoredElement *elt;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		elog(ERROR, "hashed_topk_agg_weighted_trans called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(CacheMemoryContext);
+
+	if (PG_ARGISNULL(0))
+	{
+		int k = PG_GETARG_INT32(2);
+		Oid type = AggGetInitialArgType(fcinfo);
+		TypeCacheEntry *typ = lookup_type_cache(type, 0);
+
+		fcinfo->flinfo->fn_extra = typ;
+		state = create_hashed_topk_agg_state(fcinfo->flinfo->fn_mcxt, k, typ);
+	}
+	else
+	{
+		state = (HashedTopKState *) PG_GETARG_POINTER(0);
+	}
+
+	if (!PG_ARGISNULL(1))
+	{
+		hash = (uint32_t ) HashDatum(state->fss, PG_GETARG_DATUM(1));
+		entry = (MonitoredElementEntry *) hash_search_with_hash_value(state->monitored, &hash, hash, HASH_ENTER, &found);
+
+		elt = &entry->elt;
+		Assert(elt);
+
+		if (!found)
+		{
+			if (!state->fss->typ.typbyval)
+				elt->value = datumCopy(PG_GETARG_DATUM(1), false, state->fss->typ.typlen);
+			else
+				elt->value = PG_GETARG_DATUM(1);
+
+			elt->flags = 0;
+			elt->frequency = 0;
+			elt->counter = 0;
+			elt->error = 0;
+
+			if (PG_ARGISNULL(1))
+				SET_NULL(elt);
+		}
+
+		elt->frequency += weight;
+	}
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
+ * unhash_fss
+ */
+static FSS *
+unhash_fss(HashedTopKState *state)
+{
+	HASH_SEQ_STATUS iter;
+	MonitoredElementEntry *entry;
+	MonitoredElement *elt;
+	MonitoredElement *monitored;
+	int count;
+	int i = 0;
+
+	count = hash_get_num_entries(state->monitored);
+	monitored = palloc0(sizeof(MonitoredElement) * count);
+
+	hash_seq_init(&iter, state->monitored);
+
+	while ((entry = (MonitoredElementEntry *) hash_seq_search(&iter)) != NULL)
+	{
+		elt = &entry->elt;
+		SET(elt);
+		monitored[i++] = *elt;
+	}
+
+	qsort(monitored, count, sizeof(MonitoredElement), MonitoredElementComparator);
+
+	for (i = 0; i < Min(count, state->fss->m); i++)
+	{
+		elt = &monitored[i];
+		state->fss = FSSIncrementWeighted(state->fss, elt->value, IS_NULL(elt), elt->frequency);
+	}
+
+	return state->fss;
+}
+
+/*
+ * hashed_topk_final
+ */
+PG_FUNCTION_INFO_V1(hashed_topk_final);
+Datum
+hashed_topk_final(PG_FUNCTION_ARGS)
+{
+	HashedTopKState *state = (HashedTopKState *) PG_GETARG_POINTER(0);
+	FSS *fss = state->fss;
+
+	if (state->monitored)
+		fss = unhash_fss(state);
+
+	PG_RETURN_POINTER(fss);
+}
+
+
+/*
+ * hashed_topk_serialize
+ */
+PG_FUNCTION_INFO_V1(hashed_topk_serialize);
+Datum
+hashed_topk_serialize(PG_FUNCTION_ARGS)
+{
+	HashedTopKState *state = (HashedTopKState *) PG_GETARG_POINTER(0);
+	FSS *fss = state->fss;
+
+	if (state->monitored)
+		fss = unhash_fss(state);
+
+	PG_RETURN_BYTEA_P(fss);
+}
+
+/*
+ * hashed_topk_deserialize
+ */
+PG_FUNCTION_INFO_V1(hashed_topk_deserialize);
+Datum
+hashed_topk_deserialize(PG_FUNCTION_ARGS)
+{
+	HashedTopKState *state = palloc0(sizeof(HashedTopKState));
+
+	state->fss = FSSFromBytes(PG_GETARG_BYTEA_PP(0));
+	state->monitored = NULL;
 
 	PG_RETURN_POINTER(state);
 }
@@ -178,7 +348,6 @@ PG_FUNCTION_INFO_V1(topk_merge_agg_trans);
 Datum
 topk_merge_agg_trans(PG_FUNCTION_ARGS)
 {
-	MemoryContext old;
 	MemoryContext context;
 	FSS *state;
 	FSS *incoming;
@@ -188,8 +357,6 @@ topk_merge_agg_trans(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
 		PG_RETURN_NULL();
-
-	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
@@ -203,6 +370,53 @@ topk_merge_agg_trans(PG_FUNCTION_ARGS)
 		state = FSSFromBytes(PG_GETARG_VARLENA_P(0));
 		incoming = FSSFromBytes(PG_GETARG_VARLENA_P(1));
 		state = FSSMerge(state, incoming);
+	}
+
+	PG_RETURN_POINTER(state);
+}
+
+
+/*
+ * hashed_topk_merge_agg_trans
+ */
+PG_FUNCTION_INFO_V1(hashed_topk_merge_agg_trans);
+Datum
+hashed_topk_merge_agg_trans(PG_FUNCTION_ARGS)
+{
+	MemoryContext context;
+	HashedTopKState *state;
+	HashedTopKState *incoming;
+	MemoryContext old;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		elog(ERROR, "hashed_topk_merge_agg_trans called in non-aggregate context");
+
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+		PG_RETURN_NULL();
+
+	old = MemoryContextSwitchTo(context);
+
+	if (PG_ARGISNULL(0))
+	{
+		incoming = (HashedTopKState *) PG_GETARG_POINTER(1);
+		state = palloc0(sizeof(HashedTopKState));
+		state->monitored = NULL;
+		state->fss = FSSCopy(incoming->fss);
+	}
+	else if (PG_ARGISNULL(1))
+	{
+		state = (HashedTopKState *) PG_GETARG_POINTER(0);
+		state->fss = FSSCopy(state->fss);
+	}
+	else
+	{
+		state = (HashedTopKState *) PG_GETARG_POINTER(0);
+
+		/* Set FSS pointers to reference itself */
+		FSSFromBytes((struct varlena *) state->fss);
+
+		incoming = (HashedTopKState *) PG_GETARG_POINTER(1);
+		state->fss = FSSMerge(state->fss, incoming->fss);
 	}
 
 	MemoryContextSwitchTo(old);

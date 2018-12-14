@@ -72,10 +72,14 @@ extern FSS *FSSCreateWithMAndH(uint16_t k, TypeCacheEntry *typ, uint16_t m, uint
 extern FSS *FSSCreate(uint64_t k, TypeCacheEntry *typ);
 extern void FSSDestroy(FSS *fss);
 
+extern uint64_t HashDatum(FSS* fss, Datum d);
+extern int MonitoredElementComparator(const void *a, const void *b);
+
 extern FSS *FSSCopy(FSS *fss);
 extern FSS *FSSIncrement(FSS *fss, Datum datum, bool isnull);
 extern FSS *FSSIncrementWeighted(FSS *fss, Datum datum, bool isnull, uint64_t weight);
 extern FSS *FSSMerge(FSS *fss, FSS *incoming);
+extern int FSSMonitoredLength(FSS *fss);
 extern Datum *FSSTopK(FSS *fss, uint16_t k, bool **nulls, uint16_t *found);
 extern uint64_t *FSSTopKCounts(FSS *fss, uint16_t k, uint16_t *found);
 extern uint64_t FSSTotal(FSS *fss);
