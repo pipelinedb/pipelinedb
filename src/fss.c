@@ -344,8 +344,6 @@ FSSIncrementWeighted(FSS *fss, Datum incoming, bool incoming_null, uint64_t weig
 		int i;
 
 		/* Find the first free slot */
-
-		// we should be doing a binary search here
 		for (i = 0; i < fss->m; i++)
 		{
 			if (!IS_SET(&fss->monitored_elements[i]))
