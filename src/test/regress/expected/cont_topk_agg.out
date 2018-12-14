@@ -322,3 +322,5 @@ SELECT x % 2 AS g, topk(combine(hashed_topk_agg)) FROM test_hashed_topk_agg0 GRO
  1 | (53,1)
 (40 rows)
 
+DROP FOREIGN TABLE hashed_s CASCADE;
+NOTICE:  drop cascades to view test_hashed_topk_agg0

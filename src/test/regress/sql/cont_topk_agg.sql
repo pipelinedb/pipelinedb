@@ -101,3 +101,5 @@ INSERT INTO hashed_s (x, y) SELECT 3, 44 AS y FROM generate_series(1, 1000) x;
 SELECT x, topk(hashed_topk_agg) FROM test_hashed_topk_agg0 ORDER BY x;
 SELECT topk(combine(hashed_topk_agg)) FROM test_hashed_topk_agg0;
 SELECT x % 2 AS g, topk(combine(hashed_topk_agg)) FROM test_hashed_topk_agg0 GROUP BY g ORDER BY g;
+
+DROP FOREIGN TABLE hashed_s CASCADE;
