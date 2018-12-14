@@ -1845,7 +1845,6 @@ RETURNS topk
 AS 'MODULE_PATHNAME', 'topk_increment_weighted'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
--- topk_agg_weighted_trans
 CREATE FUNCTION topk_agg_weighted_trans(topk, anyelement, integer, int8)
 RETURNS topk
 AS 'MODULE_PATHNAME', 'topk_agg_weighted_trans'
@@ -1857,6 +1856,31 @@ CREATE AGGREGATE topk_agg(anyelement, integer, int8) (
   combinefunc = topk_merge_agg_trans,
   parallel = safe
 );
+
+CREATE FUNCTION hashed_topk_final(internal)
+RETURNS topk
+AS 'MODULE_PATHNAME', 'hashed_topk_final'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION hashed_topk_merge_agg_trans(internal, internal)
+RETURNS internal
+AS 'MODULE_PATHNAME', 'hashed_topk_merge_agg_trans'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION hashed_topk_agg_weighted_trans(internal, anyelement, integer, int8)
+RETURNS internal
+AS 'MODULE_PATHNAME', 'hashed_topk_agg_weighted_trans'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION hashed_topk_serialize(internal)
+RETURNS bytea
+AS 'MODULE_PATHNAME', 'hashed_topk_serialize'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION hashed_topk_deserialize(bytea, internal)
+RETURNS internal
+AS 'MODULE_PATHNAME', 'hashed_topk_deserialize'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE FUNCTION topk(topk)
 RETURNS setof record

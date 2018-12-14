@@ -15,6 +15,7 @@ INSERT INTO test_topk_agg_stream (k, x) VALUES ('b', 5.0);
 INSERT INTO test_topk_agg_stream (k, x) VALUES ('b', 3.0);
 INSERT INTO test_topk_agg_stream (k, x) VALUES ('b', 3.0);
 INSERT INTO test_topk_agg_stream (k, x) VALUES ('b', 4.0);
+INSERT INTO test_topk_agg_stream (k, x) VALUES ('b', 4.0);
 INSERT INTO test_topk_agg_stream (k, x) VALUES ('b', 3.0);
 
 SELECT k, topk(topk_agg) FROM test_topk_agg0 ORDER BY k;

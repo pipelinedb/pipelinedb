@@ -202,18 +202,19 @@ FSSCopy(FSS *fss)
 }
 
 /*
- * element_cmp
+ * MonitoredElementComparator
  */
-static int
-element_cmp(const void *a, const void *b)
+int
+MonitoredElementComparator(const void *a, const void *b)
 {
 	MonitoredElement *m1 = (MonitoredElement *) a;
 	MonitoredElement *m2 = (MonitoredElement *) b;
 
-	if (!IS_SET(m1))
-		return 1;
-	if (!IS_SET(m2))
-		return -1;
+	/*
+	 * We should never be sorting any unset elements
+	 */
+	Assert(IS_SET(m1));
+	Assert(IS_SET(m2));
 
 	/* We sort by (-frequency, error) */
 	if (m1->frequency > m2->frequency)
@@ -263,12 +264,12 @@ set_varlena(FSS *fss, MonitoredElement *element, Datum value, bool isnull)
 }
 
 /*
- * hash_datum
+ * HashDatum
  *
  * Hash a datum using the given FSS's type information
  */
-static uint64_t
-hash_datum(FSS* fss, Datum d)
+uint64_t
+HashDatum(FSS* fss, Datum d)
 {
 	uint64_t h;
 	StringInfoData buf;
@@ -297,12 +298,13 @@ FSSIncrementWeighted(FSS *fss, Datum incoming, bool incoming_null, uint64_t weig
 	Counter *counter;
 	int free_slot = -1;
 	MonitoredElement *m_elt;
-	int slot;
+	int slot = -1;
 	bool needs_sort = true;
 	int counter_idx;
 	Datum store_value;
+	int i;
 
-	incoming_hash = hash_datum(fss, incoming_null ? 0 : incoming);
+	incoming_hash = HashDatum(fss, incoming_null ? 0 : incoming);
 	counter_idx = incoming_hash % fss->h;
 	counter = &fss->bitmap_counter[counter_idx];
 
@@ -310,7 +312,6 @@ FSSIncrementWeighted(FSS *fss, Datum incoming, bool incoming_null, uint64_t weig
 
 	if (counter->count > 0)
 	{
-		int i;
 		bool found = false;
 
 		for (i = 0; i < fss->m; i++)
@@ -394,6 +395,10 @@ FSSIncrementWeighted(FSS *fss, Datum incoming, bool incoming_null, uint64_t weig
 	}
 	else
 	{
+		/*
+		 * This element's frequency isn't high enough to include in the top-k,
+		 * so just increment the appropriate error
+		 */
 		counter->alpha += weight;
 		needs_sort = false;
 	}
@@ -415,12 +420,12 @@ done:
 			 * ever increase the frequency or swap the last element on the monitored element array
 			 * when a new frequency is entered
 			 */
-			if (element_cmp((void *) tmp, (void *) m_elt) <= 0)
+			if (MonitoredElementComparator((void *) tmp, (void *) m_elt) <= 0)
 				needs_sort = false;
 		}
 
 		if (needs_sort)
-			qsort(fss->monitored_elements, fss->m, sizeof(MonitoredElement), element_cmp);
+			qsort(fss->monitored_elements, FSSMonitoredLength(fss), sizeof(MonitoredElement), MonitoredElementComparator);
 	}
 
 	fss->count++;
@@ -428,6 +433,33 @@ done:
 	SET_VARSIZE(fss, FSSSize(fss));
 
 	return fss;
+}
+
+/*
+ * FSSMonitoredLength
+ *
+ * Determine the number of monitored elements actually present in the FSS's monitored array
+ */
+int
+FSSMonitoredLength(FSS *fss)
+{
+	int i;
+
+	/*
+	 * If the last slot is set, we know that the entire array is full
+	 */
+	if (IS_SET(&fss->monitored_elements[fss->m - 1]))
+		return fss->m;
+
+	for (i = 0; i < fss->m; i++)
+	{
+		if (!IS_SET(&fss->monitored_elements[i]))
+			break;
+	}
+
+	Assert(i <= fss->m - 1);
+
+	return i;
 }
 
 /*
@@ -439,15 +471,22 @@ done:
 FSS *
 FSSMerge(FSS *fss, FSS *incoming)
 {
-	int i, j, k;
+	int i;
+	int j;
+	int k;
+	int flen;
+	int ilen;
 	MonitoredElement *tmp;
 	ArrayType *top_k;
 
 	Assert(fss->h == incoming->h);
 	Assert(fss->m == incoming->m);
 
-	tmp = palloc0(sizeof(MonitoredElement) * 2 * fss->m);
-	memcpy(tmp, fss->monitored_elements, sizeof(MonitoredElement) * fss->m);
+	flen = FSSMonitoredLength(fss);
+	ilen = FSSMonitoredLength(incoming);
+
+	tmp = palloc0(sizeof(MonitoredElement) * (flen + ilen));
+	memcpy(tmp, fss->monitored_elements, sizeof(MonitoredElement) * flen);
 
 	for (i = 0; i < fss->h; i++)
 	{
@@ -456,21 +495,19 @@ FSSMerge(FSS *fss, FSS *incoming)
 		fss->bitmap_counter[i].count = 0;
 	}
 
-	k = fss->m;
-	for (i = 0; i < fss->m; i++)
+	k = flen;
+	for (i = 0; i < ilen; i++)
 	{
 		bool found = false;
 		MonitoredElement *incoming_elt = &incoming->monitored_elements[i];
 
-		if (!IS_SET(incoming_elt))
-			break;
+		Assert(IS_SET(incoming_elt));
 
-		for (j = 0; j < fss->m; j++)
+		for (j = 0; j < flen; j++)
 		{
 			MonitoredElement *elt = &tmp[j];
 
-			if (!IS_SET(elt))
-				break;
+			Assert(IS_SET(elt));
 
 			if (incoming_elt->value == elt->value && (IS_NULL(incoming_elt) == IS_NULL(elt)))
 			{
@@ -489,10 +526,12 @@ FSSMerge(FSS *fss, FSS *incoming)
 		}
 	}
 
-	qsort(tmp, k, sizeof(MonitoredElement), element_cmp);
+	Assert(k <= flen + ilen);
+
+	qsort(tmp, k, sizeof(MonitoredElement), MonitoredElementComparator);
 
 	/* If we added any new byref elements, we need to rebuild the varlena array */
-	if (k - fss->m > 0 && !fss->typ.typbyval)
+	if (k - flen > 0 && !fss->typ.typbyval)
 	{
 		top_k = construct_empty_array(fss->typ.typoid);
 
@@ -500,11 +539,12 @@ FSSMerge(FSS *fss, FSS *incoming)
 		 * For each monitored element in the sorted array, point its value to the
 		 * varlena array attached to the output FSS
 		 */
-		for (i = 0; i < fss->m; i++)
+		for (i = 0; i < k; i++)
 		{
 			MonitoredElement *elt = &tmp[i];
 			Datum value;
 			bool isnull;
+			ArrayType *prev;
 
 			if (!IS_SET(elt))
 				break;
@@ -517,8 +557,12 @@ FSSMerge(FSS *fss, FSS *incoming)
 			else
 				value = get_monitored_value(fss, elt, &isnull);
 
+			prev = top_k;
 			top_k = array_set(top_k, 1, &i, value,
 					isnull, -1, fss->typ.typlen, fss->typ.typbyval, fss->typ.typalign);
+
+			Assert(prev != top_k);
+			pfree(prev);
 
 			elt->varlen_index = (Datum ) i;
 		}
@@ -526,7 +570,7 @@ FSSMerge(FSS *fss, FSS *incoming)
 		fss = fss_resize_topk(fss, top_k);
 	}
 
-	memcpy(fss->monitored_elements, tmp, sizeof(MonitoredElement) * fss->m);
+	memcpy(fss->monitored_elements, tmp, sizeof(MonitoredElement) * Min(k, fss->m));
 	pfree(tmp);
 
 	for (i = 0; i < fss->m; i++)
