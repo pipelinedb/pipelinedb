@@ -1882,36 +1882,6 @@ RETURNS internal
 AS 'MODULE_PATHNAME', 'hashed_topk_deserialize'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
-CREATE AGGREGATE hashed_topk_agg(anyelement, integer, int8) (
-  sfunc = hashed_topk_agg_weighted_trans,
-  stype = internal,
-  finalfunc = hashed_topk_final,
-  serialfunc = hashed_topk_serialize,
-  deserialfunc = hashed_topk_deserialize,
-  combinefunc = hashed_topk_merge_agg_trans,
-  parallel = safe
-);
-
-CREATE AGGREGATE combine_hashed_topk_agg(internal) (
-  sfunc = hashed_topk_merge_agg_trans,
-  stype = internal,
-  finalfunc = hashed_topk_final,
-  serialfunc = hashed_topk_serialize,
-  deserialfunc = hashed_topk_deserialize,
-  combinefunc = hashed_topk_merge_agg_trans,
-  parallel = safe
-);
-
-CREATE AGGREGATE partial_combine_hashed_topk_agg(internal) (
-  sfunc = hashed_topk_merge_agg_trans,
-  stype = internal,
-  finalfunc = hashed_topk_serialize,
-  serialfunc = hashed_topk_serialize,
-  deserialfunc = hashed_topk_deserialize,
-  combinefunc = hashed_topk_merge_agg_trans,
-  parallel = safe
-);
-
 CREATE FUNCTION topk(topk)
 RETURNS setof record
 AS 'MODULE_PATHNAME', 'topk'
