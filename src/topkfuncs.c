@@ -209,7 +209,7 @@ hashed_topk_agg_weighted_trans(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "hashed_topk_agg_weighted_trans called in non-aggregate context");
 
-	old = MemoryContextSwitchTo(CacheMemoryContext);
+	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
