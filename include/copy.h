@@ -18,6 +18,8 @@
 #include "parser/parse_node.h"
 #include "tcop/dest.h"
 
+extern copy_data_source_cb stream_copy_hook;
+
 extern void DoStreamCopy(ParseState *state, const CopyStmt *stmt,
 	   int stmt_location, int stmt_len,
 	   uint64 *processed);

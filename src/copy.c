@@ -57,6 +57,8 @@
 #define ISOCTAL(c) (((c) >= '0') && ((c) <= '7'))
 #define OCTVALUE(c) ((c) - '0')
 
+copy_data_source_cb stream_copy_hook = NULL;
+
 /*
  * Represents the different source/dest cases we need to worry about at
  * the bottom level
@@ -783,9 +785,8 @@ DoStreamCopy(ParseState *pstate, const CopyStmt *stmt,
 		if (XactReadOnly && !rel->rd_islocaltemp)
 			PreventCommandIfReadOnly("COPY FROM");
 		PreventCommandIfParallelMode("COPY FROM");
-
 		cstate = BeginCopyStreamFrom(pstate, rel, stmt->filename, stmt->is_program,
-							   NULL, stmt->attlist, stmt->options);
+				stream_copy_hook, stmt->attlist, stmt->options);
 		*processed = CopyStreamFrom(cstate);	/* copy from file to database */
 		EndCopyFrom(cstate);
 	}
