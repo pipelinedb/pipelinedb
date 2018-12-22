@@ -271,11 +271,13 @@ get_query_state(ContExecutor *exec)
 
 	if (state != NULL)
 	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
 		/*
-		 * Was the continuous view modified? In our case this means remove the old view and add a new one.
-		 * Don't purge the query since the ID is still valid. We just have a stale state.
+		 * Check if the catalog row still has the same relid as when we cached it with this query ID.
+		 * Since query IDs are kept as small as possible, they'll be reused when dropping and creating
+		 * new CQs. But the relid is just a regular OID so if it changed, the cache is stale.
 		 */
-		if (HeapTupleGetOid(tup) != state->query->oid)
+		if (row->relid != state->query->relid)
 		{
 			MemoryContextDelete(state->state_cxt);
 			exec->states[exec->curr_query_id] = NULL;
@@ -284,7 +286,6 @@ get_query_state(ContExecutor *exec)
 		}
 		else
 		{
-			Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
 			state->query->active = row->active;
 		}
 	}

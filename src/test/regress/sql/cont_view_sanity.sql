@@ -1,3 +1,5 @@
+\d+ pipelinedb.cont_query
+
 DROP SERVER pipelinedb;
 DROP FOREIGN DATA WRAPPER stream_fdw;
 

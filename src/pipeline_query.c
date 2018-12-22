@@ -2365,7 +2365,6 @@ GetContQueryForId(Oid id)
 
 	cq = palloc0(sizeof(ContQuery));
 	cq->id = id;
-	cq->oid = HeapTupleGetOid(tup);
 
 	Assert(row->type == PIPELINE_QUERY_TRANSFORM || row->type == PIPELINE_QUERY_VIEW);
 	cq->type = row->type == PIPELINE_QUERY_TRANSFORM ? CONT_TRANSFORM : CONT_VIEW;

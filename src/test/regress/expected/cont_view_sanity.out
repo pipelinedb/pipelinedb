@@ -1,3 +1,33 @@
+\d+ pipelinedb.cont_query
+                                  Table "pipelinedb.cont_query"
+   Column    |   Type   | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------+----------+-----------+----------+---------+----------+--------------+-------------
+ id          | integer  |           | not null |         | plain    |              | 
+ type        | "char"   |           |          |         | plain    |              | 
+ relid       | oid      |           | not null |         | plain    |              | 
+ defrelid    | oid      |           | not null |         | plain    |              | 
+ active      | boolean  |           |          |         | plain    |              | 
+ osrelid     | oid      |           |          |         | plain    |              | 
+ streamrelid | oid      |           |          |         | plain    |              | 
+ matrelid    | oid      |           | not null |         | plain    |              | 
+ seqrelid    | oid      |           |          |         | plain    |              | 
+ pkidxid     | oid      |           |          |         | plain    |              | 
+ lookupidxid | oid      |           |          |         | plain    |              | 
+ step_factor | smallint |           |          |         | plain    |              | 
+ ttl         | integer  |           |          |         | plain    |              | 
+ ttl_attno   | smallint |           |          |         | plain    |              | 
+ tgnargs     | smallint |           |          |         | plain    |              | 
+ tgargs      | bytea    |           |          |         | extended |              | 
+Indexes:
+    "pipeline_cont_query_defrelid_index" UNIQUE, btree (defrelid)
+    "pipeline_cont_query_id_index" UNIQUE, btree (id)
+    "pipeline_cont_query_matrelid_index" UNIQUE, btree (matrelid)
+    "pipeline_cont_query_osrelid_index" UNIQUE, btree (osrelid)
+    "pipeline_cont_query_relid_index" UNIQUE, btree (relid)
+    "pipeline_cont_query_lookupidxid_index" btree (lookupidxid)
+    "pipeline_cont_query_pkidxid_index" btree (pkidxid)
+    "pipeline_cont_query_seqrelid_index" btree (seqrelid)
+
 DROP SERVER pipelinedb;
 ERROR:  cannot drop server pipelinedb because extension pipelinedb requires it
 HINT:  You can drop extension pipelinedb instead.
