@@ -132,7 +132,6 @@ typedef struct ContQuery
 {
 	Oid id;
 	RangeVar *name;
-	Oid oid; /* OID in pipeline_query table */
 	bool active;
 	ContQueryType type;
 
