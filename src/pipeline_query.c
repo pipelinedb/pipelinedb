@@ -950,6 +950,7 @@ DefineContView(Relation pipeline_query, Oid relid, Oid streamrelid, Oid matrelid
 
 	Assert(OidIsValid(id));
 
+	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, 0, sizeof(nulls));
 
 	values[Anum_pipeline_query_type - 1] = CharGetDatum(PIPELINE_QUERY_VIEW);
@@ -1000,6 +1001,7 @@ DefineContTransform(Oid relid, Oid defrelid, Oid streamrelid, Oid typoid, Oid os
 
 	Assert(OidIsValid(id));
 
+	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, 0, sizeof(nulls));
 
 	values[Anum_pipeline_query_type - 1] = Int8GetDatum(PIPELINE_QUERY_TRANSFORM);
