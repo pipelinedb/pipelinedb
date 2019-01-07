@@ -440,8 +440,11 @@ pipeline_finalize(PG_FUNCTION_ARGS)
 	fns = (List *) fcinfo->flinfo->fn_extra;
 	deserinfo = (FunctionCallInfo) linitial(fns);
 	deserinfo->arg[0] = PG_GETARG_DATUM(2);
-	deserinfo->argnull[0] = false;
+	deserinfo->argnull[0] = PG_ARGISNULL(2);
 	deserinfo->argnull[1] = false;
+
+	if (deserinfo->argnull[0] && deserinfo->flinfo->fn_strict)
+		PG_RETURN_NULL();
 
 	deserialized = FunctionCallInvoke(deserinfo);
 

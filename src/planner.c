@@ -176,6 +176,7 @@ make_aggs_combinable(Plan *combiner_plan, Plan *worker_plan)
 		/* Mark the combiner aggregate as partial */
 		type = cagg->aggtype;
 		cagg = copyObject(wagg);
+		cagg->aggfilter = NULL;
 		cagg->aggtype = type;
 		cagg->aggsplit = 0;
 		cagg->args = list_make1((Node *) ctle_arg);
