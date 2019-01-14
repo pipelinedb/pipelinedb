@@ -282,3 +282,64 @@ SELECT * FROM test_stj_cross ORDER BY x;
 
 DROP FOREIGN TABLE test_stj_stream CASCADE;
 DROP TABLE test_stj_t;
+
+CREATE TABLE partitioned_t (
+  key integer,
+  value text
+) PARTITION BY LIST (key);
+
+CREATE TABLE partitioned_t_0 PARTITION OF partitioned_t
+ FOR VALUES IN (0);
+
+CREATE TABLE partitioned_t_1 PARTITION OF partitioned_t
+ FOR VALUES IN (1);
+
+CREATE TABLE partitioned_t_2 PARTITION OF partitioned_t
+ FOR VALUES IN (2);
+
+CREATE TABLE partitioned_t_3 PARTITION OF partitioned_t
+ FOR VALUES IN (3);
+
+CREATE TABLE partitioned_t_4 PARTITION OF partitioned_t
+ FOR VALUES IN (4);
+
+CREATE TABLE partitioned_t_5 PARTITION OF partitioned_t
+ FOR VALUES IN (5);
+
+CREATE TABLE partitioned_t_6 PARTITION OF partitioned_t
+ FOR VALUES IN (6);
+
+CREATE TABLE partitioned_t_7 PARTITION OF partitioned_t
+ FOR VALUES IN (7);
+
+CREATE TABLE partitioned_t_8 PARTITION OF partitioned_t
+ FOR VALUES IN (8);
+
+CREATE TABLE partitioned_t_9 PARTITION OF partitioned_t
+ FOR VALUES IN (9);
+
+INSERT INTO partitioned_t SELECT x, 'key' || x AS key FROM generate_series(0, 9) x;
+
+CREATE FOREIGN TABLE partitioned_s (
+  key integer
+) SERVER pipelinedb;
+
+CREATE VIEW partitioned_stj WITH (action=materialize) AS
+ SELECT t.key, t.value, count(*) FROM partitioned_t t
+  JOIN partitioned_s s ON t.key = s.key
+ GROUP BY t.key, t.value;
+
+INSERT INTO partitioned_s SELECT x FROM generate_series(0, 9) x;
+
+SELECT * FROM partitioned_stj ORDER BY key, value;
+
+INSERT INTO partitioned_s SELECT x FROM generate_series(0, 5) x;
+
+SELECT * FROM partitioned_stj ORDER BY key, value;
+
+INSERT INTO partitioned_s SELECT x FROM generate_series(0, 3) x;
+
+SELECT * FROM partitioned_stj ORDER BY key, value;
+
+DROP FOREIGN TABLE partitioned_s CASCADE;
+DROP TABLE partitioned_t;

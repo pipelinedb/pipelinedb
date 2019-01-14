@@ -615,3 +615,87 @@ drop cascades to view test_stj_anti
 drop cascades to view test_stj_semi
 drop cascades to view test_stj_cross
 DROP TABLE test_stj_t;
+CREATE TABLE partitioned_t (
+  key integer,
+  value text
+) PARTITION BY LIST (key);
+CREATE TABLE partitioned_t_0 PARTITION OF partitioned_t
+ FOR VALUES IN (0);
+CREATE TABLE partitioned_t_1 PARTITION OF partitioned_t
+ FOR VALUES IN (1);
+CREATE TABLE partitioned_t_2 PARTITION OF partitioned_t
+ FOR VALUES IN (2);
+CREATE TABLE partitioned_t_3 PARTITION OF partitioned_t
+ FOR VALUES IN (3);
+CREATE TABLE partitioned_t_4 PARTITION OF partitioned_t
+ FOR VALUES IN (4);
+CREATE TABLE partitioned_t_5 PARTITION OF partitioned_t
+ FOR VALUES IN (5);
+CREATE TABLE partitioned_t_6 PARTITION OF partitioned_t
+ FOR VALUES IN (6);
+CREATE TABLE partitioned_t_7 PARTITION OF partitioned_t
+ FOR VALUES IN (7);
+CREATE TABLE partitioned_t_8 PARTITION OF partitioned_t
+ FOR VALUES IN (8);
+CREATE TABLE partitioned_t_9 PARTITION OF partitioned_t
+ FOR VALUES IN (9);
+INSERT INTO partitioned_t SELECT x, 'key' || x AS key FROM generate_series(0, 9) x;
+CREATE FOREIGN TABLE partitioned_s (
+  key integer
+) SERVER pipelinedb;
+CREATE VIEW partitioned_stj WITH (action=materialize) AS
+ SELECT t.key, t.value, count(*) FROM partitioned_t t
+  JOIN partitioned_s s ON t.key = s.key
+ GROUP BY t.key, t.value;
+NOTICE:  consider creating an index on t.key for improved stream-table join performance
+INSERT INTO partitioned_s SELECT x FROM generate_series(0, 9) x;
+SELECT * FROM partitioned_stj ORDER BY key, value;
+ key | value | count 
+-----+-------+-------
+   0 | key0  |     1
+   1 | key1  |     1
+   2 | key2  |     1
+   3 | key3  |     1
+   4 | key4  |     1
+   5 | key5  |     1
+   6 | key6  |     1
+   7 | key7  |     1
+   8 | key8  |     1
+   9 | key9  |     1
+(10 rows)
+
+INSERT INTO partitioned_s SELECT x FROM generate_series(0, 5) x;
+SELECT * FROM partitioned_stj ORDER BY key, value;
+ key | value | count 
+-----+-------+-------
+   0 | key0  |     2
+   1 | key1  |     2
+   2 | key2  |     2
+   3 | key3  |     2
+   4 | key4  |     2
+   5 | key5  |     2
+   6 | key6  |     1
+   7 | key7  |     1
+   8 | key8  |     1
+   9 | key9  |     1
+(10 rows)
+
+INSERT INTO partitioned_s SELECT x FROM generate_series(0, 3) x;
+SELECT * FROM partitioned_stj ORDER BY key, value;
+ key | value | count 
+-----+-------+-------
+   0 | key0  |     3
+   1 | key1  |     3
+   2 | key2  |     3
+   3 | key3  |     3
+   4 | key4  |     2
+   5 | key5  |     2
+   6 | key6  |     1
+   7 | key7  |     1
+   8 | key8  |     1
+   9 | key9  |     1
+(10 rows)
+
+DROP FOREIGN TABLE partitioned_s CASCADE;
+NOTICE:  drop cascades to view partitioned_stj
+DROP TABLE partitioned_t;
