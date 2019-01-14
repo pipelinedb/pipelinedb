@@ -200,6 +200,8 @@ init_plan(ContQueryWorkerState *state)
 	Plan *plan = query_desc->plannedstmt->planTree;
 	ListCell *lc;
 
+	query_desc->estate->es_plannedstmt = query_desc->plannedstmt;
+
 	foreach(lc, query_desc->plannedstmt->subplans)
 	{
 		Plan *subplan = (Plan *) lfirst(lc);
