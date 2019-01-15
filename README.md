@@ -15,7 +15,7 @@ Continuous queries produce their own [output streams](http://docs.pipelinedb.com
 
 ## PostgreSQL compatibility
 
-PipelineDB currently supports the following PostgreSQL versions:
+PipelineDB runs on 64-bit architectures and currently supports the following PostgreSQL versions:
 
 * **PostgreSQL 10**: 10.1, 10.2, 10.3, 10.4, 10.5
 * **PostgreSQL 11**: 11.0
