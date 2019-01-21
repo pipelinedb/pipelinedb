@@ -30,7 +30,7 @@ If you'd like to build PipelineDB from source, keep reading!
 
 Since PipelineDB is a PostgreSQL extension, you'll need to have the [PostgreSQL development packages](https://www.postgresql.org/download/) installed to build PipelineDB.
 
-Next you'll have to install [ZeroMQ](http://zeromq.org/) which PipelineDB uses for inter-process communication. [Here's](https://gist.github.com/usmanm/32a54a6b0f1f29d7737f86e29f837afa) a gist with instructions to build and install ZeroMQ from source.
+Next you'll have to install [ZeroMQ](http://zeromq.org/) which PipelineDB uses for inter-process communication. [Here's](https://gist.github.com/derekjn/14f95b7ceb8029cd95f5488fb04c500a) a gist with instructions to build and install ZeroMQ from source.
 You'll also need to install some Python dependencies if you'd like to run PipelineDB's Python test suite:
 
 ```
