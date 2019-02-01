@@ -2828,7 +2828,12 @@ Datum
 json_object_int_sum_finalfn(PG_FUNCTION_ARGS)
 {
 	JsonObjectIntSumState *state = PG_ARGISNULL(0) ? NULL : (JsonObjectIntSumState *) PG_GETARG_POINTER(0);
-	Datum d = DirectFunctionCall1(json_object_int_sum_serialize, (Datum) state);
+	Datum d;
+
+	if (!state)
+		PG_RETURN_NULL();
+
+	d = DirectFunctionCall1(json_object_int_sum_serialize, (Datum) state);
 
 	PG_RETURN_TEXT_P(d);
 }

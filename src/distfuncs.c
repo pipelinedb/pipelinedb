@@ -318,7 +318,10 @@ PG_FUNCTION_INFO_V1(dist_agg_final);
 Datum
 dist_agg_final(PG_FUNCTION_ARGS)
 {
-	TDigest *t = (TDigest *) PG_GETARG_VARLENA_P(0);
+	TDigest *t = PG_ARGISNULL(0) ? NULL : (TDigest *) PG_GETARG_VARLENA_P(0);
+
+	if (!t)
+		PG_RETURN_NULL();
 
 	PG_RETURN_POINTER(t);
 }

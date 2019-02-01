@@ -487,8 +487,11 @@ PG_FUNCTION_INFO_V1(bucket_agg_state_serialize);
 Datum
 bucket_agg_state_serialize(PG_FUNCTION_ARGS)
 {
-	BucketAggTransState *state = (BucketAggTransState *) PG_GETARG_POINTER(0);
+	BucketAggTransState *state = PG_ARGISNULL(0) ? NULL : (BucketAggTransState *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
+
+	if (!state)
+		PG_RETURN_NULL();
 
 	Assert(state);
 
@@ -816,7 +819,7 @@ PG_FUNCTION_INFO_V1(bucket_agg_final);
 Datum
 bucket_agg_final(PG_FUNCTION_ARGS)
 {
-	BucketAggTransState *state = (BucketAggTransState *) PG_GETARG_POINTER(0);
+	BucketAggTransState *state = PG_ARGISNULL(0) ? NULL : (BucketAggTransState *) PG_GETARG_POINTER(0);
 	bytea *bytes;
 
 	if (!state)
@@ -1012,10 +1015,13 @@ PG_FUNCTION_INFO_V1(string_agg_serialize);
 Datum
 string_agg_serialize(PG_FUNCTION_ARGS)
 {
-	StringAggState *state = (StringAggState *) PG_GETARG_POINTER(0);
+	StringAggState *state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
 	bytea *result;
 	int nbytes;
+
+	if (!state)
+		PG_RETURN_NULL();
 
 	initStringInfo(&buf);
 
