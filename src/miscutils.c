@@ -196,8 +196,10 @@ DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf)
 
 		if (typ->typbyval)
 			appendBinaryStringInfo(buf, (char *) &d, size);
-		else
+		else if (typ->typlen == -1)
 			appendBinaryStringInfo(buf, VARDATA_ANY(d), size);
+		else
+			appendBinaryStringInfo(buf, (char *) DatumGetPointer(d), size);
 	}
 	else
 	{

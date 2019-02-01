@@ -24,3 +24,17 @@ SELECT hll_cardinality(
     hll_union(
       'not an hll',
       (SELECT hll_agg(x) FROM generate_series(100, 1100) AS x)));
+
+-- Byref but not varlena types
+CREATE TABLE byref (uuid uuid, name name);
+INSERT INTO byref (uuid, name) VALUES ('fe636e28-db82-43af-ac48-df26a4cda1f3', 'alice');
+INSERT INTO byref (uuid, name) VALUES ('fe636e28-db82-43af-ac48-df26a4cda1f3', 'alice');
+
+SELECT hll_cardinality(hll_agg(uuid)) FROM byref;
+SELECT hll_cardinality(hll_agg(name)) FROM byref;
+
+INSERT INTO byref (uuid, name) VALUES ('fff36e28-db82-43af-ac48-df26a4cda1f3', 'bob');
+INSERT INTO byref (uuid, name) VALUES ('fff36e28-db82-43af-ac48-df26a4cda1f3', 'bob');
+
+SELECT hll_cardinality(hll_agg(uuid)) FROM byref;
+SELECT hll_cardinality(hll_agg(name)) FROM byref;
