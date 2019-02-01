@@ -249,7 +249,16 @@ SELECT g, dist_quantile(dist_agg, 0.99) FROM test_dist_agg1 ORDER BY g;
  9 |          4954
 (10 rows)
 
+CREATE VIEW empty_regress WITH (sw = '1 day') AS
+ SELECT dist_agg(x) FILTER (WHERE x > 30) FROM cont_dist_agg_stream;
+SELECT * FROM empty_regress;
+ dist_agg 
+----------
+ 
+(1 row)
+
 DROP FOREIGN TABLE cont_dist_agg_stream CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to view test_dist_agg0
 drop cascades to view test_dist_agg1
+drop cascades to view empty_regress
