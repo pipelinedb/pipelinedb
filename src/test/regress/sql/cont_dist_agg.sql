@@ -34,4 +34,9 @@ SELECT g, dist_quantile(dist_agg, 0.25) FROM test_dist_agg0 ORDER BY g;
 SELECT g, dist_quantile(dist_agg, 0.50) FROM test_dist_agg1 ORDER BY g;
 SELECT g, dist_quantile(dist_agg, 0.99) FROM test_dist_agg1 ORDER BY g;
 
+CREATE VIEW empty_regress WITH (sw = '1 day') AS
+ SELECT dist_agg(x) FILTER (WHERE x > 30) FROM cont_dist_agg_stream;
+
+SELECT * FROM empty_regress;
+
 DROP FOREIGN TABLE cont_dist_agg_stream CASCADE;
