@@ -456,6 +456,9 @@ pipeline_finalize(PG_FUNCTION_ARGS)
 
 	finalized = FunctionCallInvoke(finalinfo);
 
+	if (finalinfo->isnull)
+		PG_RETURN_NULL();
+
 	PG_RETURN_DATUM(finalized);
 }
 
@@ -501,6 +504,9 @@ pipeline_deserialize(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 
 	deserialized = FunctionCallInvoke(deserinfo);
+
+	if (deserinfo->isnull)
+		PG_RETURN_NULL();
 
 	PG_RETURN_POINTER(DatumGetPointer(deserialized));
 }

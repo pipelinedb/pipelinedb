@@ -77,6 +77,17 @@ INSERT INTO numeric_cqsum_stream (k, v) VALUES ('y', '-0000000000000000000000000
 
 SELECT * FROM test_numeric_sum ORDER BY k;
 
+CREATE VIEW test_nan_sum AS SELECT SUM(v) FROM numeric_cqsum_stream;
+INSERT INTO numeric_cqsum_stream (k, v) VALUES ('k', null);
+INSERT INTO numeric_cqsum_stream (k, v) VALUES ('k', null);
+
+SELECT * FROM test_nan_sum;
+
+INSERT INTO numeric_cqsum_stream (k, v) VALUES ('k', 21);
+INSERT INTO numeric_cqsum_stream (k, v) VALUES ('k', 21);
+
+SELECT * FROM test_nan_sum;
+
 DROP FOREIGN TABLE numeric_cqsum_stream CASCADE;
 
 -------------------------------------------------------------------------------

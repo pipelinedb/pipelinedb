@@ -145,8 +145,27 @@ SELECT * FROM test_numeric_sum ORDER BY k;
  y |                 100400.39999999999999999999999999999999999
 (2 rows)
 
+CREATE VIEW test_nan_sum AS SELECT SUM(v) FROM numeric_cqsum_stream;
+INSERT INTO numeric_cqsum_stream (k, v) VALUES ('k', null);
+INSERT INTO numeric_cqsum_stream (k, v) VALUES ('k', null);
+SELECT * FROM test_nan_sum;
+ sum 
+-----
+    
+(1 row)
+
+INSERT INTO numeric_cqsum_stream (k, v) VALUES ('k', 21);
+INSERT INTO numeric_cqsum_stream (k, v) VALUES ('k', 21);
+SELECT * FROM test_nan_sum;
+ sum 
+-----
+  42
+(1 row)
+
 DROP FOREIGN TABLE numeric_cqsum_stream CASCADE;
-NOTICE:  drop cascades to view test_numeric_sum
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view test_nan_sum
+drop cascades to view test_numeric_sum
 -------------------------------------------------------------------------------
 -- Interval sum
 CREATE FOREIGN TABLE interval_cqsum_stream (k text, ts0 timestamp, ts1 timestamp) SERVER pipelinedb;
