@@ -231,9 +231,9 @@ bloom_operation(FunctionCallInfo fcinfo, bool intersection)
 		if (result)
 		{
 			if (bf->m != result->m)
-				elog(ERROR, "bloom filters must have the same p");
+				elog(ERROR, "bloom_%s operands must all have the same p and n", intersection ? "intersection" : "union");
 			else if (bf->k != result->k)
-				elog(ERROR, "bloom filters must have the same n");
+				elog(ERROR, "bloom_%s operands must all have the same p and n", intersection ? "intersection" : "union");
 		}
 		if (result == NULL)
 			result = bf;
