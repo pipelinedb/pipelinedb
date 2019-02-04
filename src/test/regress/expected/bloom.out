@@ -348,7 +348,7 @@ SELECT bloom_cardinality(
     bloom_union(
       (SELECT bloom_agg(x, 0.5, 1000) FROM generate_series(1, 1000) AS x),
       (SELECT bloom_agg(x) FROM generate_series(100, 1100) AS x)));
-ERROR:  bloom filters must have identical dimensions
+ERROR:  bloom_union operands must all have the same p and n
 -- Wrong type
 SELECT bloom_cardinality(
     bloom_union(
@@ -370,7 +370,7 @@ SELECT bloom_cardinality(
     bloom_intersection(
       (SELECT bloom_agg(x, 0.5, 1000) FROM generate_series(1, 1000) AS x),
       (SELECT bloom_agg(x) FROM generate_series(100, 1100) AS x)));
-ERROR:  bloom filters must have identical dimensions
+ERROR:  bloom_intersection operands must all have the same p and n
 -- Wrong type
 SELECT bloom_cardinality(
     bloom_intersection(
