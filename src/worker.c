@@ -188,6 +188,12 @@ static void
 flush_tuples(ContQueryWorkerState *state)
 {
 	state->receiver->flush(state->receiver, state->result_slot);
+	/*
+	 * If our output store did not spill anything to disk, all allocated memory will be properly free'd
+	 * at end-of-transaction. But if it did spill to disk we must explicitly clear it here in order
+	 * to clean up its associated temporary files.
+	 */
+	tuplestore_clear(state->plan_output);
 }
 
 /*
