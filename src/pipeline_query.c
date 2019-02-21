@@ -2515,8 +2515,12 @@ GetContQueryForId(Oid id)
 	cq->ttl_attno = row->ttl_attno;
 	cq->ttl = row->ttl;
 	cq->partition_attno = row->partition_attno;
-	cq->partition_duration = palloc0(sizeof(Interval));
-	cq->partition_duration->time = row->partition_duration * USECS_PER_SEC;
+
+	if (AttributeNumberIsValid(cq->partition_attno))
+	{
+		cq->partition_duration = palloc0(sizeof(Interval));
+		cq->partition_duration->time = row->partition_duration * USECS_PER_SEC;
+	}
 
 	if (cq->type == CONT_VIEW)
 	{
@@ -2553,6 +2557,8 @@ GetContQueryForId(Oid id)
 	if (cq->type == CONT_TRANSFORM)
 		tgfnid = GetTriggerFnOid(cq->defrelid);
 
+	// we're getting 0 args here for some reason
+	elog(LOG, "[%s] tgfnid=%u, tgnargs=%d", cq->name->relname, tgfnid, row->tgnargs);
 	if (OidIsValid(tgfnid))
 	{
 		cq->tgfn = tgfnid;

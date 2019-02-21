@@ -38,11 +38,11 @@ typedef struct FormData_pipeline_query
 	int32		ttl;
 	int16		ttl_attno;
 
-	/* valid for transforms only */
-	int16		tgnargs;
-
 	int32 partition_duration;
 	int16 partition_attno;
+
+	/* valid for transforms only */
+	int16		tgnargs;
 
 #ifdef CATALOG_VARLEN
 	bytea       tgargs;

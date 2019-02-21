@@ -103,7 +103,7 @@ DefineMatRelPartition(RangeVar *matrel, Oid matrelid, TimestampTz lower_bound, I
 	upper->value = (Node *) endc;
 
 	spec = makeNode(PartitionBoundSpec);
-	spec->strategy = 'r';
+	spec->strategy = PARTITION_STRATEGY_RANGE;
 
 	spec->lowerdatums = list_make1(lower);
 	spec->upperdatums = list_make1(upper);

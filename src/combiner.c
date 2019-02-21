@@ -2305,7 +2305,7 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 		ExecStoreTuple(heap_copytuple(itup->tup), state->slot, InvalidBuffer, false);
 
 		/*
-		 * If this is a partitioned matrel, extract the lower bound of the partition this tuple belongs to.
+		 * If we have a partitioned matrel, extract the lower bound of the partition this tuple belongs to.
 		 * We use this for two things:
 		 *
 		 * 1) Create any nonexistent partitions before proceeding.
