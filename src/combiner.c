@@ -13,11 +13,12 @@
 #include "analyzer.h"
 #include "catalog.h"
 #include "catalog/namespace.h"
+#include "catalog/partition.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "combiner_receiver.h"
-#include "commands/sequence.h"
 #include "commands/lockcmds.h"
+#include "commands/sequence.h"
 #include "compat.h"
 #include "executor/execdesc.h"
 #include "executor/executor.h"
@@ -35,6 +36,8 @@
 #include "parser/parse_expr.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_type.h"
+#include "partitioning/partbounds.h"
+#include "partitioning/partdefs.h"
 #include "pgstat.h"
 #include "physical_group_lookup.h"
 #include "pipeline_query.h"
@@ -44,6 +47,7 @@
 #include "stats.h"
 #include "stream_fdw.h"
 #include "storage/ipc.h"
+#include "storage/lmgr.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
@@ -53,6 +57,7 @@
 #include "utils/hsearch.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/partcache.h"
 #include "utils/resowner.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
@@ -60,10 +65,12 @@
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
 
+
 #define GROUPS_PLAN_LIFESPAN (10 * 1000)
 #define MURMUR_SEED 0x155517D2
 
 #define SHOULD_UPDATE(state) ((state)->base.query->cvdef->distinctClause == NIL)
+#define IS_PARTITIONED_MATREL(state) (AttributeNumberIsValid((state)->base.query->partition_attno))
 
 /*
  * Flag that indicates whether or not an on-disk tuple has already been added to
@@ -143,11 +150,20 @@ typedef struct
 	Node *lookup_query;
 	RangeTblEntry *lookup_rte;
 
+	HTAB *partitions;
+
 	/* Sliding-window state */
 	SWOutputState *sw;
 
 	List *acks;
 } ContQueryCombinerState;
+
+typedef struct MatRelPartitionEntry
+{
+	Oid relid;
+	ResultRelInfo *ri;
+	Relation rel;
+} MatRelPartitionEntry;
 
 /*
  * prepare_combine_plan
@@ -388,6 +404,279 @@ hash_groups(ContQueryCombinerState *state)
 	tuplestore_rescan(state->batch);
 
 	return groups;
+}
+
+/*
+ * reset_groups_plan
+ *
+ * Purge cached groups lookup plan from cache
+ */
+static void
+reset_groups_plan(ContQueryCombinerState *state)
+{
+	if (state->groups_plan)
+	{
+		pfree(state->groups_plan);
+		state->groups_plan = NULL;
+	}
+}
+
+/*
+ * timestamptz_round
+ */
+static TimestampTz
+timestamptz_round(TimestampTz timestamp, Interval *i)
+{
+	TimestampTz interval_ts;
+
+	/*
+	 * Add the interval to a 0-valued timestamp (TIMESTAMP '2000-01-01 00:00:00')
+	 * to an int64 value of just the interval.
+	 */
+	interval_ts = DatumGetTimestampTz(
+			DirectFunctionCall2(timestamp_pl_interval, (Datum) 0, (Datum) i));
+	timestamp = timestamp - (timestamp % interval_ts);
+
+	return timestamp;
+}
+
+/*
+ * get_partition_lower_bound
+ *
+ * Given a timestamp, get the lower bound of the partition it belongs to
+ */
+static Datum
+get_partition_lower_bound(TimestampTz ts, Interval *i)
+{
+	static Interval year = {.time = 0, .day = 0, .month = 12};
+	static Interval month = {.time = 0, .day = 0, .month = 1};
+	static Interval week = {.time = 0, .day = 7, .month = 0};
+	static Interval day = {.time = 0, .day = 1, .month = 0};
+	static Interval hour = {.time = 3600000000, .day = 0, .month = 0};
+	static Interval minute = {.time = 60000000, .day = 0, .month = 0};
+	static Interval second = {.time = 1000000, .day = 0, .month = 0};
+	TimestampTz floor;
+
+	/*
+	 * We perform some special casing for common partition intervals so that users get predictable and sane partition
+	 * boundaries when we know what they expect.
+	 *
+	 * For example, with a 1 week partition interval users will generally expect each weekly partition to start/end at
+	 * the beginning/end of each calendar week. This also provides sane performance expectations, as users will generally
+	 * want one calendar week to span at most one partition.
+	 */
+	if (DatumGetBool(DirectFunctionCall2(interval_eq, (Datum) &year, (Datum) i)))
+		floor = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_trunc, (Datum) CStringGetTextDatum("year"), (Datum) ts));
+	else if (DatumGetBool(DirectFunctionCall2(interval_eq, (Datum) &month, (Datum) i)))
+		floor = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_trunc, (Datum) CStringGetTextDatum("month"), (Datum) ts));
+	else if (DatumGetBool(DirectFunctionCall2(interval_eq, (Datum) &week, (Datum) i)))
+		floor = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_trunc, (Datum) CStringGetTextDatum("week"), (Datum) ts));
+	else if (DatumGetBool(DirectFunctionCall2(interval_eq, (Datum) &day, (Datum) i)))
+		floor = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_trunc, (Datum) CStringGetTextDatum("day"), (Datum) ts));
+	else if (DatumGetBool(DirectFunctionCall2(interval_eq, (Datum) &hour, (Datum) i)))
+		floor = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_trunc, (Datum) CStringGetTextDatum("hour"), (Datum) ts));
+	else if (DatumGetBool(DirectFunctionCall2(interval_eq, (Datum) &minute, (Datum) i)))
+		floor = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_trunc, (Datum) CStringGetTextDatum("minute"), (Datum) ts));
+	else if (DatumGetBool(DirectFunctionCall2(interval_eq, (Datum) &second, (Datum) i)))
+		floor = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_trunc, (Datum) CStringGetTextDatum("second"), (Datum) ts));
+	else
+		floor = timestamptz_round(ts, i);
+
+	return TimestampTzGetDatum(floor);
+}
+
+/*
+ * get_matrel_partition_for_tuple
+ *
+ * Trimmed down version of execPartition.c:get_partition_for_tuple for use with range-partitioned matrels
+ */
+static int
+get_matrel_partition_for_key(Relation matrel, Datum *values)
+{
+	PartitionKey key;
+	PartitionDesc partdesc;
+	PartitionBoundInfo boundinfo;
+	int bound_offset;
+	int part_index = -1;
+	bool equal = false;
+	bool range_partkey_has_null = false;
+
+	key = RelationGetPartitionKey(matrel);
+	partdesc = RelationGetPartitionDesc(matrel);
+	boundinfo = partdesc->boundinfo;
+
+	if (!boundinfo)
+		return -1;
+
+	if (!range_partkey_has_null)
+	{
+		bound_offset = partition_range_datum_bsearch(key->partsupfunc,
+													 key->partcollation,
+													 boundinfo,
+													 key->partnatts,
+													 values,
+													 &equal);
+
+		/*
+		 * The bound at bound_offset is less than or equal to the
+		 * tuple value, so the bound at offset+1 is the upper
+		 * bound of the partition we're looking for, if there
+		 * actually exists one.
+		 */
+		part_index = boundinfo->indexes[bound_offset + 1];
+	}
+
+	return part_index;
+}
+
+/*
+ * create_matrel_partition
+ */
+static int
+create_matrel_partition(ContQueryCombinerState *state, TimestampTz lower_bound)
+{
+	int part_index = -1;
+	Datum values[1];
+	Relation matrel;
+
+	LockRelationOid(state->base.query->relid, ShareUpdateExclusiveLock);
+	matrel = heap_open(state->base.query->matrelid, NoLock);
+
+	values[0] = TimestampTzGetDatum(lower_bound);
+
+	part_index = get_matrel_partition_for_key(matrel, values);
+
+	if (part_index >= 0)
+	{
+		UnlockRelationOid(state->base.query->relid, ShareUpdateExclusiveLock);
+		reset_groups_plan(state);
+		heap_close(matrel, NoLock);
+
+		return part_index;
+	}
+
+	DefineMatRelPartition(state->base.query->matrel, state->base.query->matrelid,
+			lower_bound, state->base.query->partition_duration);
+
+	part_index = get_matrel_partition_for_key(matrel, values);
+
+	/* We just created a partition for this tuple so we should have found one this time */
+	Assert(part_index >= 0);
+
+	/*
+	 * Since we've just created a new matrel partition, the groups lookup plan must be evicted
+	 * from the cache so a new plan is generated that is aware of the new partition.
+	 */
+	reset_groups_plan(state);
+	heap_close(matrel, NoLock);
+
+	return part_index;
+}
+
+/*
+ * get_matrel_partition_for_tuple
+ */
+static int
+get_matrel_partition_for_tuple(ContQueryCombinerState *state, Relation matrel, TupleTableSlot *slot, TimestampTz *ts)
+{
+	int part_index = -1;
+	PartitionKey key;
+	PartitionDesc partdesc;
+	Datum values[1];
+	AttrNumber partition_attr = state->base.query->partition_attno;
+	bool isnull = false;
+
+	key = RelationGetPartitionKey(matrel);
+
+	if (key->strategy != PARTITION_STRATEGY_RANGE)
+		elog(ERROR, "unexpected matrel partition strategy: %d", (int) key->strategy);
+
+	/* Currently we only support partitioning by a single timestamp column */
+	values[0] = slot_getattr(slot, partition_attr, &isnull);
+
+	if (isnull)
+	{
+		heap_close(matrel, NoLock);
+		elog(ERROR, "null value received for partition column \"%s\"",
+				NameStr(TupleDescAttr(state->desc, state->base.query->partition_attno - 1)->attname));
+	}
+
+	partdesc = RelationGetPartitionDesc(matrel);
+
+	if (partdesc->nparts > 0)
+		part_index = get_matrel_partition_for_key(matrel, values);
+
+	if (ts)
+		*ts = DatumGetTimestampTz(values[0]);
+
+	return part_index;
+}
+
+/*
+ * close_matrel_partitions
+ */
+static void
+close_matrel_partitions(ContQueryCombinerState *state)
+{
+	HASH_SEQ_STATUS iter;
+	MatRelPartitionEntry *entry;
+
+	Assert(state->partitions);
+
+	hash_seq_init(&iter, state->partitions);
+	while ((entry = (MatRelPartitionEntry *) hash_seq_search(&iter)))
+	{
+		CQMatRelClose(entry->ri);
+		heap_close(entry->rel, RowExclusiveLock);
+	}
+
+	hash_destroy(state->partitions);
+	state->partitions = NULL;
+}
+
+/*
+ * open_target_matrel_partition
+ */
+static ResultRelInfo *
+open_target_matrel_partition(ContQueryCombinerState *state, Relation matrel, TupleTableSlot *slot)
+{
+	int part;
+	PartitionDescData *pd;
+	bool found;
+	MatRelPartitionEntry *entry;
+	MemoryContext old;
+
+	part = get_matrel_partition_for_tuple(state, matrel, slot, NULL);
+
+	if (part < 0)
+		return NULL;
+
+	pd = RelationGetPartitionDesc(matrel);
+	old = MemoryContextSwitchTo(ContQueryBatchContext);
+
+	if (!state->partitions)
+	{
+		HASHCTL ctl;
+
+		MemSet(&ctl, 0, sizeof(ctl));
+		ctl.keysize = sizeof(Oid);
+		ctl.entrysize = sizeof(MatRelPartitionEntry);
+		ctl.hash = oid_hash;
+		state->partitions = hash_create("MatRelPartitions", 8, &ctl, HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
+	}
+
+	Assert(state->partitions);
+	entry = (MatRelPartitionEntry *) hash_search(state->partitions, &pd->oids[part], HASH_ENTER, &found);
+
+	if (!found)
+	{
+		entry->rel = heap_open(pd->oids[part], RowExclusiveLock);
+		entry->ri = CQMatRelOpen(entry->rel);
+	}
+
+	MemoryContextSwitchTo(old);
+
+	return entry->ri;
 }
 
 /*
@@ -1504,6 +1793,7 @@ sync_combine(ContQueryCombinerState *state)
 		bool os_nulls[4];
 		int replaces = 0;
 		ExprContext *econtext = estate->es_per_tuple_exprcontext;
+		ResultRelInfo *leaf_ri = ri;
 
 		MemSet(os_nulls, false, sizeof(os_nulls));
 
@@ -1545,7 +1835,14 @@ sync_combine(ContQueryCombinerState *state)
 			tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
-			ExecCQMatRelUpdate(ri, slot, estate);
+
+			/*
+			 * If this is a partitioned matrel, get the partition that this write belongs to
+			 */
+			if (IS_PARTITIONED_MATREL(state))
+				leaf_ri = open_target_matrel_partition(state, ri->ri_RelationDesc, slot);
+
+			ExecCQMatRelUpdate(leaf_ri, slot, estate);
 
 			if (os_targets)
 				os_values[NEW_TUPLE] = project_overlay(state, econtext, tup, &os_nulls[NEW_TUPLE]);
@@ -1561,7 +1858,14 @@ sync_combine(ContQueryCombinerState *state)
 			slot->tts_isnull[state->pk - 1] = false;
 			tup = heap_form_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
-			ExecCQMatRelInsert(ri, slot, estate);
+
+			/*
+			 * If this is a partitioned matrel, get the partition that this write belongs to
+			 */
+			if (IS_PARTITIONED_MATREL(state))
+				leaf_ri = open_target_matrel_partition(state, ri->ri_RelationDesc, slot);
+
+			ExecCQMatRelInsert(leaf_ri, slot, estate);
 
 			if (os_targets)
 			{
@@ -1625,6 +1929,9 @@ sync_combine(ContQueryCombinerState *state)
 
 	StatsIncrementCQUpdate(ntups_updated, nbytes_updated);
 	StatsIncrementCQWrite(ntups_inserted, nbytes_inserted);
+
+	if (IS_PARTITIONED_MATREL(state))
+		close_matrel_partitions(state);
 
 	CQMatRelClose(ri);
 	heap_close(matrel, RowExclusiveLock);
@@ -1933,7 +2240,7 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 		form = (Form_pg_index) GETSTRUCT(tup);
 		if (form->indisprimary)
 		{
-			Assert(form->indnatts == 1);
+			Assert(form->indnatts >= 1);
 			state->pk = form->indkey.values[0];
 		}
 		ReleaseSysCache(tup);
@@ -1951,6 +2258,27 @@ init_query_state(ContExecutor *cont_exec, ContQueryState *base)
 }
 
 /*
+ * append_unique_lower_bound
+ */
+static List *
+append_unique_lower_bound(List *l, TimestampTz *ts)
+{
+	ListCell *lc;
+	List *result = l;
+
+	foreach(lc, l)
+	{
+		TimestampTz *lts = (TimestampTz *) lfirst(lc);
+
+		if (DatumGetBool(DirectFunctionCall2(timestamp_eq, DatumGetTimestampTz(*lts), DatumGetTimestampTz(*ts))))
+				return result;
+	}
+	result = lappend(result, ts);
+
+	return result;
+}
+
+/*
  * read_batch
  */
 static int
@@ -1959,17 +2287,59 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 	ipc_tuple *itup;
 	Size nbytes = 0;
 	int ntups = 0;
+	Relation matrel = NULL;
+	List *partitions = NIL;
+	ListCell *lc;
 
 	if (!exec->batch)
 		return 0;
+
+	if (IS_PARTITIONED_MATREL(state))
+		matrel = heap_open(state->base.query->matrelid, NoLock);
 
 	while ((itup = ipc_tuple_reader_next(query_id)) != NULL)
 	{
 		if (!TupIsNull(state->slot))
 			ExecClearTuple(state->slot);
-		ExecStoreTuple(heap_copytuple(itup->tup), state->slot, InvalidBuffer, false);
-		tuplestore_puttupleslot(state->batch, state->slot);
 
+		ExecStoreTuple(heap_copytuple(itup->tup), state->slot, InvalidBuffer, false);
+
+		/*
+		 * If this is a partitioned matrel, extract the lower bound of the partition this tuple belongs to.
+		 * We use this for two things:
+		 *
+		 * 1) Create any nonexistent partitions before proceeding.
+		 * 2) Prune out any irrelevant partitions in the groups lookup plan.
+		 */
+		if (IS_PARTITIONED_MATREL(state))
+		{
+			TimestampTz ts;
+			TimestampTz *lower_bound = palloc0(sizeof(TimestampTz));
+
+			/*
+			 * Determine if a partition already exists for this tuple. If its partition doesn't exist,
+			 * get the lower bound of the partition it belongs to so that we can create it.
+			 */
+			if (get_matrel_partition_for_tuple(state, matrel, state->slot, &ts) < 0)
+			{
+				/*
+				 * No partition exists, so compute the lower bound of this tuple's partition so that
+				 * we can define it. Note that we don't want to keep the tuple's timestamp key, as many
+				 * tuples may have different timestamp keys belonging to the same partition.
+				 */
+				*lower_bound = get_partition_lower_bound(ts, state->base.query->partition_duration);
+
+				/*
+				 * Note that we use a unique list of timestamps here rather than a hashtable. A hashtable
+				 * becomes more efficient here after about ~10 unique values, but the common case is for a batch
+				 * of tuples to belong to a relatively small number of partitions (<10) so we optimize for that
+				 * since we're on a relatively hot path.
+				 */
+				partitions = append_unique_lower_bound(partitions, lower_bound);
+			}
+		}
+
+		tuplestore_puttupleslot(state->batch, state->slot);
 		set_group_hash(state, ntups, itup->hash);
 
 		nbytes += itup->tup->t_len + HEAPTUPLESIZE;
@@ -1981,6 +2351,32 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 
 	if (!TupIsNull(state->slot))
 		ExecClearTuple(state->slot);
+
+	if (matrel)
+		heap_close(matrel, NoLock);
+
+	/*
+	 * Create any nonexistent partitions
+	 */
+	if (partitions)
+	{
+		/*
+		 * We may already hold a lock on the matrel from a previous batch execution, so we must release all locks
+		 * by committing before proceeding with creating a partition, which requires an AccessExclusiveLock on the
+		 * matrel.
+		 *
+		 * While not ideal, we can safely execute a combiner batch across multiple transactions because all rows that
+		 * this combiner must update will come through this specific combiner, so we won't miss any.
+		 */
+		ContExecutorCommit(exec);
+		ContExecutorBegin(exec);
+
+		foreach(lc, partitions)
+		{
+			TimestampTz *lb = (TimestampTz *) lfirst(lc);
+			create_matrel_partition(state, *lb);
+		}
+	}
 
 	StatsIncrementCQRead(ntups, nbytes);
 
@@ -2204,35 +2600,35 @@ GetCombinerLookupPlan(ContQuery *view)
 		Oid *eq_funcs;
 #endif
 		FmgrInfo *hash_funcs;
-		Relation rel;
+//		Relation rel;
 
 		CompatExecTuplesHashPrepare(state->ngroupatts, state->groupops, &eq_funcs, &hash_funcs);
 		existing = CompatBuildTupleHashTable(state->desc, state->ngroupatts, state->groupatts, eq_funcs, hash_funcs, 1000,
 				sizeof(PhysicalTupleData), CurrentMemoryContext, CurrentMemoryContext, false);
 
-		rel = heap_openrv_extended(view->matrel, AccessShareLock, true);
-
-		if (rel)
-		{
-			HeapTuple tuple;
-			HeapScanDesc scan = heap_beginscan(rel, GetActiveSnapshot(), 0, NULL);
-
-			while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
-			{
-				if (!TupIsNull(state->slot))
-					ExecClearTuple(state->slot);
-
-				ExecStoreTuple(heap_copytuple(tuple), state->slot, InvalidBuffer, false);
-				tuplestore_puttupleslot(state->batch, state->slot);
-				break;
-			}
-
-			heap_endscan(scan);
-			heap_close(rel, AccessShareLock);
-		}
+//		rel = heap_openrv_extended(view->matrel, AccessShareLock, true);
+//
+//		if (rel)
+//		{
+//			HeapTuple tuple;
+//			HeapScanDesc scan = heap_beginscan(rel, GetActiveSnapshot(), 0, NULL);
+//
+//			while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+//			{
+//				if (!TupIsNull(state->slot))
+//					ExecClearTuple(state->slot);
+//
+//				ExecStoreTuple(heap_copytuple(tuple), state->slot, InvalidBuffer, false);
+//				tuplestore_puttupleslot(state->batch, state->slot);
+//				break;
+//			}
+//
+//			heap_endscan(scan);
+//			heap_close(rel, AccessShareLock);
+//		}
 
 		state->existing = existing;
-		values = get_values(state);
+//		values = get_values(state);
 	}
 
 	am_cont_combiner = true;

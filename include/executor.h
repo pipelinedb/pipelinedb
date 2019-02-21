@@ -67,6 +67,8 @@ struct ContExecutor
 extern ContExecutionLock AcquireContExecutionLock(LOCKMODE mode);
 extern void ReleaseContExecutionLock(ContExecutionLock lock);
 
+extern void ContExecutorCommit(ContExecutor *exec);
+extern void ContExecutorBegin(ContExecutor *exec);
 extern ContExecutor *ContExecutorNew(ContQueryStateInit initfn);
 extern void ContExecutorDestroy(ContExecutor *exec);
 extern void ContExecutorStartBatch(ContExecutor *exec, int timeout);

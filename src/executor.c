@@ -53,20 +53,20 @@ ReleaseContExecutionLock(ContExecutionLock lock)
 }
 
 /*
- * exec_begin
+ * ContExecutorBegin
  */
-static void
-exec_begin(ContExecutor *exec)
+void
+ContExecutorBegin(ContExecutor *exec)
 {
 	StartTransactionCommand();
 	exec->lock = AcquireContExecutionLock(AccessShareLock);
 }
 
 /*
- * exec_commit
+ * ContExecutorCommit
  */
-static void
-exec_commit(ContExecutor *exec)
+void
+ContExecutorCommit(ContExecutor *exec)
 {
 	/*
 	 * We can end up here without having acquired the lock when it's the first execution of
@@ -161,7 +161,7 @@ ContExecutorStartBatch(ContExecutor *exec, int timeout)
 	success = ipc_tuple_reader_poll(timeout);
 
 	if (!IsTransactionState())
-		exec_begin(exec);
+		ContExecutorBegin(exec);
 
 	if (success)
 	{
@@ -252,8 +252,8 @@ get_query_state(ContExecutor *exec)
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
 	{
-		exec_commit(exec);
-		exec_begin(exec);
+		ContExecutorCommit(exec);
+		ContExecutorBegin(exec);
 		commit = true;
 	}
 
@@ -313,8 +313,8 @@ get_query_state(ContExecutor *exec)
 
 	if (commit)
 	{
-		exec_commit(exec);
-		exec_begin(exec);
+		ContExecutorCommit(exec);
+		ContExecutorBegin(exec);
 	}
 
 	Assert(exec->states[exec->curr_query_id] == state);
@@ -449,7 +449,7 @@ ContExecutorEndBatch(ContExecutor *exec, bool commit)
 
 	if (commit)
 	{
-		exec_commit(exec);
+		ContExecutorCommit(exec);
 		MemoryContextReset(ContQueryTransactionContext);
 		exec->lock = NULL;
 	}

@@ -13,6 +13,7 @@
 #include "nodes/execnodes.h"
 
 extern bool matrels_writable;
+extern bool log_partitions;
 
 #define CQ_OSREL_SUFFIX "_osrel"
 #define CQ_MATREL_SUFFIX "_mrel"
@@ -28,6 +29,7 @@ extern void CQMatRelClose(ResultRelInfo *rinfo);
 extern void ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot, EState *estate);
 extern void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
 extern void ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
+extern void DefineMatRelPartition(RangeVar *matrel, Oid matrelid, TimestampTz ts, Interval *duration);
 
 extern char *CVNameToOSRelName(char *cv_name);
 extern char *CVNameToMatRelName(char *cv_name);

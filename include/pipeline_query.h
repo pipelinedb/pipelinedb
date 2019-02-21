@@ -41,6 +41,9 @@ typedef struct FormData_pipeline_query
 	/* valid for transforms only */
 	int16		tgnargs;
 
+	int32 partition_duration;
+	int16 partition_attno;
+
 #ifdef CATALOG_VARLEN
 	bytea       tgargs;
 #endif
@@ -48,23 +51,25 @@ typedef struct FormData_pipeline_query
 
 typedef FormData_pipeline_query *Form_pipeline_query;
 
-#define Natts_pipeline_query             16
-#define Anum_pipeline_query_id           1
-#define Anum_pipeline_query_type         2
-#define Anum_pipeline_query_relid  	    3
-#define Anum_pipeline_query_defrelid  	  4
-#define Anum_pipeline_query_active       5
-#define Anum_pipeline_query_osrelid      6
-#define Anum_pipeline_query_streamrelid  7
-#define Anum_pipeline_query_matrelid     8
-#define Anum_pipeline_query_seqrelid     9
-#define Anum_pipeline_query_pkidxid      10
-#define Anum_pipeline_query_lookupidxid  11
-#define Anum_pipeline_query_step_factor  12
-#define Anum_pipeline_query_ttl  		    13
-#define Anum_pipeline_query_ttl_attno    14
-#define Anum_pipeline_query_tgnargs	    15
-#define Anum_pipeline_query_tgargs       16
+#define Natts_pipeline_query             18
+#define Anum_pipeline_query_id            1
+#define Anum_pipeline_query_type          2
+#define Anum_pipeline_query_relid  	     3
+#define Anum_pipeline_query_defrelid  	   4
+#define Anum_pipeline_query_active        5
+#define Anum_pipeline_query_osrelid       6
+#define Anum_pipeline_query_streamrelid   7
+#define Anum_pipeline_query_matrelid      8
+#define Anum_pipeline_query_seqrelid      9
+#define Anum_pipeline_query_pkidxid       10
+#define Anum_pipeline_query_lookupidxid   11
+#define Anum_pipeline_query_step_factor   12
+#define Anum_pipeline_query_ttl  		     13
+#define Anum_pipeline_query_ttl_attno     14
+#define Anum_pipeline_query_part_duration 15
+#define Anum_pipeline_query_part_attno    16
+#define Anum_pipeline_query_tgnargs	   	 17
+#define Anum_pipeline_query_tgargs        18
 
 #define PIPELINE_QUERY_VIEW 		    'v'
 #define PIPELINE_QUERY_TRANSFORM 	't'
@@ -77,6 +82,9 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define OPTION_TTL "ttl"
 #define OPTION_TTL_COLUMN "ttl_column"
 #define OPTION_TTL_ATTNO "ttl_attno"
+
+#define OPTION_PARTITION_BY "partition_by"
+#define OPTION_PARTITION_DURATION "partition_duration"
 
 #define OPTION_CV "cv"
 #define OPTION_TRANSFORM "transform"
@@ -100,20 +108,6 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define OPTION_TGNARGS "tgnargs"
 #define OPTION_TGARGS "tgargs"
 
-#define OPTION_VIEWRELID "viewrelid"
-#define OPTION_VIEWTYPE "viewtype"
-#define OPTION_VIEWATYPE "viewatype"
-#define OPTION_MATRELID "matrelid"
-#define OPTION_MATRELTYPE "matreltype"
-#define OPTION_MATRELATYPE "matrelatype"
-#define OPTION_MATRELTOASTRELID "matreltoastrelid"
-#define OPTION_MATRELTOASTTYPE "matreltoasttype"
-#define OPTION_MATRELTOASTINDID "matreltoastindid"
-
-#define OPTION_SEQRELID "seqrelid"
-#define OPTION_SEQRELTYPE "seqreltype"
-
-#define OPTION_PKINDID "pkindid"
 #define OPTION_LOOKUPINDID "lookupindid"
 
 #define ACTION_TRANSFORM "transform"
@@ -156,6 +150,8 @@ typedef struct ContQuery
 	AttrNumber ttl_attno;
 	AttrNumber sw_attno;
 	int ttl;
+	Interval *partition_duration;
+	AttrNumber partition_attno;
 
 	/* for transform */
 	Oid tgfn;
@@ -185,7 +181,7 @@ extern void SyncAllContQueryDefRels(void);
 extern void SyncStreamReaderDefRels(Oid streamrelid);
 extern void SyncContQuerySchema(Oid cqrelid, char *schema);
 
-extern Oid DefineContView(Relation pipeline_query, Oid relid, Oid streamrelid, Oid matrel, Oid seqrel, int ttl, AttrNumber ttl_attno, double step_factor, Oid *pq_id);
+extern Oid DefineContView(Relation pipeline_query, Oid relid, Oid streamrelid, Oid matrel, Oid seqrel, int ttl, AttrNumber ttl_attno, double step_factor, int partition_duration, AttrNumber partition_attno, Oid *pq_id);
 extern Oid DefineContTransform(Oid relid, Oid defrelid, Oid streamrelid, Oid typoid, Oid osrelid, List **optionsp, Oid *ptgfnid);
 extern void UpdateContViewRelIds(Relation pipeline_query, Oid cvid, Oid cvrelid, Oid defrelid, Oid osrelid, List *options);
 extern void UpdateContViewIndexIds(Relation pipeline_query, Oid cvid, Oid pkindid, Oid lookupindid, Oid seqrelid);

@@ -478,6 +478,93 @@ extract_ttl_params(List **options, List *coldefs, bool has_sw, int *ttl, char **
 }
 
 /*
+ * extract_partitioning_params
+ */
+static void
+extract_partitioning_params(List **options, List *coldefs, char **partition_by, AttrNumber *partition_attno, int *partition_duration)
+{
+	ListCell *lc;
+	DefElem *opt_pb = NULL;
+	DefElem *opt_pd = NULL;
+
+	Assert(partition_by);
+	Assert(partition_duration);
+	Assert(partition_attno);
+
+	*partition_by = NULL;
+	*partition_duration = -1;
+	*partition_attno = InvalidAttrNumber;
+
+	foreach(lc, *options)
+	{
+		DefElem *e = (DefElem *) lfirst(lc);
+		if (!pg_strcasecmp(e->defname, OPTION_PARTITION_BY))
+		{
+			ListCell *clc;
+			Oid type;
+			AttrNumber attno = 1;
+
+			if (!IsA(e->arg, String) && !IsA(e->arg, TypeName))
+				elog(ERROR, "partition_by must be expressed as a column name");
+
+			foreach(clc, coldefs)
+			{
+				ColumnDef *def = (ColumnDef *) lfirst(clc);
+				char *name;
+
+				type = typenameTypeId(NULL, def->typeName);
+
+				if (IsA(e->arg, TypeName))
+				{
+					TypeName *t = (TypeName *) e->arg;
+					name = NameListToString(t->names);
+				}
+				else
+				{
+					name = strVal(e->arg);
+				}
+
+				if (pg_strcasecmp(def->colname, name) == 0 &&
+						(type == TIMESTAMPOID || type == TIMESTAMPTZOID))
+				{
+					*partition_by = name;
+					*partition_attno = attno;
+					break;
+				}
+				attno++;
+			}
+
+			if (!*partition_by)
+				elog(ERROR, "partition_by must refer to a timestamp or timestamptz column");
+
+			opt_pb = e;
+		}
+		else if (!pg_strcasecmp(e->defname, OPTION_PARTITION_DURATION))
+		{
+			Interval *pbi;
+
+			if (!IsA(e->arg, String))
+				elog(ERROR, "partition_duration must be expressed as an interval");
+
+			pbi = (Interval *) DirectFunctionCall3(interval_in,
+					(Datum) strVal(e->arg), 0, (Datum) -1);
+
+			*partition_duration = IntervalToEpoch(pbi);
+			if (*partition_duration == 0)
+				elog(ERROR, "partition_duration must be a minimum of 1 second");
+
+			opt_pd = e;
+		}
+	}
+
+	if (!opt_pb && !opt_pd)
+		return;
+
+	*options = list_delete(*options, opt_pb);
+	*options = list_delete(*options, opt_pd);
+}
+
+/*
  * RelidIsMatRel
  *
  * Returns true if the given oid represents a materialization table
@@ -900,7 +987,7 @@ create_lookup_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, SelectStmt *se
  * create_pkey_index
  */
 static Oid
-create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
+create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname, char *partition_by)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
@@ -920,6 +1007,19 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
 	index->unique = true;
 	index->isconstraint = true;
 
+	/*
+	 * If this is a partitioned matrel, the primary key must also include the partition key
+	 */
+	if (partition_by)
+	{
+		IndexElem *pb = makeNode(IndexElem);
+
+		pb->name = partition_by;
+		pb->ordering = SORTBY_DEFAULT;
+		pb->nulls_ordering = SORTBY_NULLS_DEFAULT;
+		index->indexParams = lappend(index->indexParams, pb);
+	}
+
 #if (PG_VERSION_NUM < 110000)
 	address = DefineIndex(matrelid, index, InvalidOid, false, false, false, false, false);
 #else
@@ -938,7 +1038,7 @@ create_pkey_index(RangeVar *cv, Oid matrelid, RangeVar *matrel, char *colname)
  */
 Oid
 DefineContView(Relation pipeline_query, Oid relid, Oid streamrelid, Oid matrelid, Oid seqrelid, int ttl,
-		AttrNumber ttl_attno, double step_factor, Oid *pq_id)
+		AttrNumber ttl_attno, double step_factor, int partition_duration, AttrNumber partition_attno, Oid *pq_id)
 {
 	HeapTuple tup;
 	bool nulls[Natts_pipeline_query];
@@ -964,6 +1064,9 @@ DefineContView(Relation pipeline_query, Oid relid, Oid streamrelid, Oid matrelid
 	values[Anum_pipeline_query_ttl - 1] = Int32GetDatum(ttl);
 	values[Anum_pipeline_query_ttl_attno - 1] = Int16GetDatum(ttl_attno);
 	values[Anum_pipeline_query_step_factor - 1] = Int16GetDatum((int16) step_factor);
+
+	values[Anum_pipeline_query_part_duration - 1] = Int32GetDatum(partition_duration);
+	values[Anum_pipeline_query_part_attno - 1] = Int16GetDatum(partition_attno);
 
 	/* unused */
 	values[Anum_pipeline_query_tgnargs - 1] = Int16GetDatum(0);
@@ -1253,7 +1356,7 @@ create_cv_row_from_dump(Relation pq, RangeVar *name, Query *query, List *options
 			QuerySetSWStepFactor(query, sf);
 	}
 
-	DefineContView(pq, overlayrelid, streamrelid, matrelid, seqrelid, ttl, ttl_attno, sf, &pqid);
+	DefineContView(pq, overlayrelid, streamrelid, matrelid, seqrelid, ttl, ttl_attno, sf, 0, 0, &pqid);
 	CommandCounterIncrement();
 
 	UpdateContViewRelIds(pq, pqid, overlayrelid, defrelid, osrelid, options);
@@ -1650,6 +1753,9 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	RawStmt *def;
 	SelectStmt *defstmt;
 	char *given_ttl_column = NULL;
+	char *partition_by;
+	int partition_duration = -1;
+	AttrNumber partition_attno = InvalidAttrNumber;
 
 	check_relation_already_exists(view);
 
@@ -1769,15 +1875,23 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	pkey->contype = CONSTR_PRIMARY;
 	pk_coldef->constraints = list_make1(pkey);
 
-	ff = GetContQueryOption(options, OPTION_FILLFACTOR);
-	if (ff)
+	extract_partitioning_params(&options, tableElts, &partition_by, &partition_attno, &partition_duration);
+
+	/*
+	 * fillfactor can only be assigned to non-partitioned tables and partitions themselves
+	 */
+	if (!partition_by)
 	{
-		options = list_delete(options, ff);
-		matrel_options = lappend(matrel_options, ff);
-	}
-	else
-	{
-		matrel_options = add_default_fillfactor(matrel_options);
+		ff = GetContQueryOption(options, OPTION_FILLFACTOR);
+		if (ff)
+		{
+			options = list_delete(options, ff);
+			matrel_options = lappend(matrel_options, ff);
+		}
+		else
+		{
+			matrel_options = add_default_fillfactor(matrel_options);
+		}
 	}
 
 	/*
@@ -1790,6 +1904,23 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 
 	if (GetOptionAsString(options, OPTION_TABLESPACE, &tsname))
 		create_stmt->tablespacename = tsname;
+
+	if (partition_by && partition_duration > 0)
+	{
+		PartitionSpec *ps = makeNode(PartitionSpec);
+		PartitionElem *pe = makeNode(PartitionElem);
+
+		pe->name = partition_by;
+		ps->strategy = "range";
+		ps->partParams = list_make1(pe);
+		create_stmt->partspec = ps;
+
+		/*
+		 * NB: we use this exact RangeVar in the overlay view definition's FROM list, so modifying
+		 * it slightly here works but only because we don't use a copy of it.
+		 */
+		matrel_name->inh = true;
+	}
 
 	address = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid, &typaddr, NULL);
 
@@ -1876,7 +2007,7 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	DefineContView(pipeline_query, InvalidOid, streamrelid, matrelid, seqrelid, ttl, ttl_attno, sf, &cvid);
+	DefineContView(pipeline_query, InvalidOid, streamrelid, matrelid, seqrelid, ttl, ttl_attno, sf, partition_duration, partition_attno, &cvid);
 	CommandCounterIncrement();
 
 	SyncPipelineStreamReaders();
@@ -1968,7 +2099,7 @@ ExecCreateContViewStmt(RangeVar *view, Node *sel, List *options, const char *que
 	lookup_idx_oid = create_lookup_index(view, matrelid, matrel_name, select, has_sw);
 	CommandCounterIncrement();
 
-	pkey_idx_oid = create_pkey_index(view, matrelid, matrel_name, pk ? strVal(pk->arg) : CQ_MATREL_PKEY);
+	pkey_idx_oid = create_pkey_index(view, matrelid, matrel_name, pk ? strVal(pk->arg) : CQ_MATREL_PKEY, partition_by);
 	CommandCounterIncrement();
 
 	UpdateContViewIndexIds(pipeline_query, cvid, pkey_idx_oid, lookup_idx_oid, seqrelid);
@@ -2383,12 +2514,14 @@ GetContQueryForId(Oid id)
 	cq->lookupidxid = row->lookupidxid;
 	cq->ttl_attno = row->ttl_attno;
 	cq->ttl = row->ttl;
+	cq->partition_attno = row->partition_attno;
+	cq->partition_duration = palloc0(sizeof(Interval));
+	cq->partition_duration->time = row->partition_duration * USECS_PER_SEC;
 
 	if (cq->type == CONT_VIEW)
 	{
 		cq->matrel = makeRangeVar(get_namespace_name(get_rel_namespace(row->matrelid)), get_rel_name(row->matrelid), -1);
-		/* Ignore inherited tables when working with the matrel */
-		cq->matrel->inh = false;
+		cq->matrel->inh = AttributeNumberIsValid(cq->partition_attno);
 	}
 	else
 		cq->matrel = NULL;

@@ -513,7 +513,6 @@ pipeline_get_stream_readers(PG_FUNCTION_ARGS)
 	SRF_RETURN_DONE(funcctx);
 }
 
-
 /*
  * pipeline_version
  *

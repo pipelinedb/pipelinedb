@@ -244,7 +244,22 @@ lnext:
 	tup = inner->tts_tuple;
 	Assert(inner->tts_tuple);
 
-	scan = (ScanState *) outer->js.ps.righttree;
+	/*
+	 * If we're working with a partitioned matrel, the underlying scan will be an Append
+	 * of each partition we're scanning. We prune out any partition scans that won't be
+	 * needed since we know which partitions exist within a given batch.
+	 */
+	if (IsA(outer->js.ps.righttree, AppendState))
+	{
+		AppendState *as = (AppendState *) outer->js.ps.righttree;
+		PlanState *ss = as->appendplans[as->as_whichplan];
+		scan = (ScanState *) ss;
+	}
+	else
+	{
+		scan = (ScanState *) outer->js.ps.righttree;
+	}
+
 	rel = scan->ss_currentRelation;
 
 	/* lock the physical tuple for update */
