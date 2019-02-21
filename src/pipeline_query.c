@@ -2557,8 +2557,6 @@ GetContQueryForId(Oid id)
 	if (cq->type == CONT_TRANSFORM)
 		tgfnid = GetTriggerFnOid(cq->defrelid);
 
-	// we're getting 0 args here for some reason
-	elog(LOG, "[%s] tgfnid=%u, tgnargs=%d", cq->name->relname, tgfnid, row->tgnargs);
 	if (OidIsValid(tgfnid))
 	{
 		cq->tgfn = tgfnid;
