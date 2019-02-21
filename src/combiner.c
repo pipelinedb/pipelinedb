@@ -555,7 +555,7 @@ create_matrel_partition(ContQueryCombinerState *state, TimestampTz lower_bound)
 		return part_index;
 	}
 
-	DefineMatRelPartition(state->base.query->matrel, state->base.query->matrelid,
+	DefineMatRelPartition(state->base.query->matrel,
 			lower_bound, state->base.query->partition_duration);
 
 	part_index = get_matrel_partition_for_key(matrel, values);

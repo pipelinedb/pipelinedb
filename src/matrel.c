@@ -12,6 +12,7 @@
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/index.h"
+#include "catalog/namespace.h"
 #include "commands/tablecmds.h"
 #include "executor/executor.h"
 #include "matrel.h"
@@ -71,7 +72,7 @@ get_partition_upper_bound(TimestampTz lower_bound, Interval *i)
  * Given a matrel and a partition lower bound, create a partition for [lower_bound, upper_bound)
  */
 void
-DefineMatRelPartition(RangeVar *matrel, Oid matrelid, TimestampTz lower_bound, Interval *duration)
+DefineMatRelPartition(RangeVar *matrel, TimestampTz lower_bound, Interval *duration)
 {
 	CreateStmt *cstmt;
 	PartitionBoundSpec *spec;
@@ -82,6 +83,7 @@ DefineMatRelPartition(RangeVar *matrel, Oid matrelid, TimestampTz lower_bound, I
 	char *starts;
 	char *ends;
 	TimestampTz upper_bound;
+	Oid matrelid = RangeVarGetRelid(matrel, NoLock, false);
 
 	upper_bound = get_partition_upper_bound(lower_bound, duration);
 
