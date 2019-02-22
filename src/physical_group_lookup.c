@@ -14,6 +14,7 @@
 #include "nodes/makefuncs.h"
 #include "nodes/extensible.h"
 #include "optimizer/planmain.h"
+#include "parser/parsetree.h"
 #include "physical_group_lookup.h"
 #include "scheduler.h"
 #include "storage/bufmgr.h"
@@ -72,6 +73,7 @@ static CustomExecMethods seqscan_exec_methods = {
 };
 
 static TupleHashTable lookup_result = NULL;
+static List *partitions = NIL;
 
 /*
  * create_lookup_plan
@@ -110,6 +112,16 @@ SetPhysicalGroupLookupOutput(TupleHashTable output)
 {
 	Assert(lookup_result == NULL);
 	lookup_result = output;
+}
+
+/*
+ * SetPhysicalGroupLookupPartitions
+ */
+void
+SetPhysicalGroupLookupPartitions(List *parts)
+{
+	Assert(partitions == NIL);
+	partitions = parts;
 }
 
 /*
@@ -164,6 +176,32 @@ begin_lookup_scan(CustomScanState *cscan, EState *estate, int eflags)
 	{
 		nl = (NestLoop *) outer;
 		nl->join.jointype = JOIN_INNER;
+
+		/*
+		 * If the outer node is an Append, then we are working with a partitioned matrel.
+		 * Since the combiner keeps track of all partitions targeted by a given batch of
+		 * events, we can remove any partition scans that we won't need.
+		 */
+		if (IsA(innerPlan(outer), Append))
+		{
+			Append *a = (Append *) innerPlan(outer);
+			ListCell *lc;
+			List *np = NIL;
+
+			Assert(partitions);
+
+			foreach(lc, a->appendplans)
+			{
+				Scan *s = (Scan *) lfirst(lc);
+				Oid relid = getrelid(s->scanrelid, estate->es_range_table);
+
+				if (list_member_oid(partitions, relid))
+					np = lappend(np, s);
+			}
+
+			a->appendplans = np;
+		}
+
 	}
 	else if (!IsA(outer, SeqScan))
 	{
@@ -246,13 +284,14 @@ lnext:
 
 	/*
 	 * If we're working with a partitioned matrel, the underlying scan will be an Append
-	 * of each partition we're scanning. We prune out any partition scans that won't be
-	 * needed since we know which partitions exist within a given batch.
+	 * of each partition we're scanning. We've already pruned out any partition scans that
+	 * won't be needed since we know which partitions are targeted by a given batch.
 	 */
 	if (IsA(outer->js.ps.righttree, AppendState))
 	{
 		AppendState *as = (AppendState *) outer->js.ps.righttree;
 		PlanState *ss = as->appendplans[as->as_whichplan];
+
 		scan = (ScanState *) ss;
 	}
 	else
@@ -260,6 +299,7 @@ lnext:
 		scan = (ScanState *) outer->js.ps.righttree;
 	}
 
+	Assert(scan);
 	rel = scan->ss_currentRelation;
 
 	/* lock the physical tuple for update */
@@ -314,6 +354,7 @@ static void
 end_lookup_scan(struct CustomScanState *node)
 {
 	lookup_result = NULL;
+	partitions = NIL;
 	ExecEndNode(outerPlanState(node));
 }
 

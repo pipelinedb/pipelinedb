@@ -151,6 +151,7 @@ typedef struct
 	RangeTblEntry *lookup_rte;
 
 	HTAB *partitions;
+	List *scan_partitions;
 
 	/* Sliding-window state */
 	SWOutputState *sw;
@@ -632,6 +633,7 @@ close_matrel_partitions(ContQueryCombinerState *state)
 
 	hash_destroy(state->partitions);
 	state->partitions = NULL;
+	state->scan_partitions = NIL;
 }
 
 /*
@@ -733,6 +735,9 @@ select_existing_groups(ContQueryCombinerState *state)
 	 */
 	Assert(IsA(plan->planTree, CustomScan));
 	SetPhysicalGroupLookupOutput(existing);
+
+	if (IS_PARTITIONED_MATREL(state))
+		SetPhysicalGroupLookupPartitions(state->scan_partitions);
 
 	/*
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
@@ -2290,6 +2295,7 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 	Relation matrel = NULL;
 	List *partitions = NIL;
 	ListCell *lc;
+	Bitmapset *parts = NULL;
 
 	if (!exec->batch)
 		return 0;
@@ -2314,14 +2320,16 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 		if (IS_PARTITIONED_MATREL(state))
 		{
 			TimestampTz ts;
-			TimestampTz *lower_bound = palloc0(sizeof(TimestampTz));
+			int part_index = -1;
 
 			/*
 			 * Determine if a partition already exists for this tuple. If its partition doesn't exist,
 			 * get the lower bound of the partition it belongs to so that we can create it.
 			 */
-			if (get_matrel_partition_for_tuple(state, matrel, state->slot, &ts) < 0)
+			part_index = get_matrel_partition_for_tuple(state, matrel, state->slot, &ts);
+			if (part_index < 0)
 			{
+				TimestampTz *lower_bound = palloc0(sizeof(TimestampTz));
 				/*
 				 * No partition exists, so compute the lower bound of this tuple's partition so that
 				 * we can define it. Note that we don't want to keep the tuple's timestamp key, as many
@@ -2336,6 +2344,10 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 				 * since we're on a relatively hot path.
 				 */
 				partitions = append_unique_lower_bound(partitions, lower_bound);
+			}
+			else
+			{
+				parts = bms_add_member(parts, part_index);
 			}
 		}
 
@@ -2352,9 +2364,6 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 	if (!TupIsNull(state->slot))
 		ExecClearTuple(state->slot);
 
-	if (matrel)
-		heap_close(matrel, NoLock);
-
 	/*
 	 * Create any nonexistent partitions
 	 */
@@ -2368,15 +2377,43 @@ read_batch(ContExecutor *exec, ContQueryCombinerState *state, Oid query_id)
 		 * While not ideal, we can safely execute a combiner batch across multiple transactions because all rows that
 		 * this combiner must update will come through this specific combiner, so we won't miss any.
 		 */
+		heap_close(matrel, NoLock);
 		ContExecutorCommit(exec);
 		ContExecutorBegin(exec);
 
 		foreach(lc, partitions)
 		{
 			TimestampTz *lb = (TimestampTz *) lfirst(lc);
-			create_matrel_partition(state, *lb);
+			int p = -1;
+
+			p = create_matrel_partition(state, *lb);
+			parts = bms_add_member(parts, p);
 		}
+
+		matrel = heap_open(state->base.query->matrelid, NoLock);
 	}
+
+	/*
+	 * Determine which partitions should be scanned during the lookup phase of this batch execution.
+	 * This allows us to eliminate extraneous partition scans during the lookup plan execution.
+	 */
+	if (IS_PARTITIONED_MATREL(state))
+	{
+		MemoryContext old;
+		PartitionDescData *pd;
+		int p;
+
+		pd = RelationGetPartitionDesc(matrel);
+		old = MemoryContextSwitchTo(state->combine_cxt);
+
+		while ((p = bms_first_member(parts)) >= 0)
+			state->scan_partitions = list_append_unique_oid(state->scan_partitions, pd->oids[p]);
+
+		MemoryContextSwitchTo(old);
+	}
+
+	if (matrel)
+		heap_close(matrel, NoLock);
 
 	StatsIncrementCQRead(ntups, nbytes);
 
