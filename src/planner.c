@@ -440,8 +440,18 @@ try_physical_group_lookup_path(PlannerInfo *root,
 static void
 add_physical_group_lookup_path(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
-	Path *scanpath = (Path *) linitial(rel->pathlist);
-	Path *path = (Path *) CreatePhysicalGroupLookupPath(rel, scanpath);
+	Path *scanpath;
+	Path *path;
+
+	/*
+	 * For partitioned matrels, we'll get the individual partitions here but we only want to plan
+	 * a physical group lookup for the root matrel.
+	 */
+	if (!RelidIsMatRel(rte->relid, NULL))
+		return;
+
+	scanpath = (Path *) linitial(rel->pathlist);
+	path = (Path *) CreatePhysicalGroupLookupPath(rel, scanpath);
 
 	/* If we end up going with a JOIN plan, this will be reverted by remove_custom_paths */
 	rel->pathlist = list_make1(path);

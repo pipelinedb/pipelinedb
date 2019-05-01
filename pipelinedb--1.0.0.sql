@@ -31,6 +31,9 @@ CREATE TABLE pipelinedb.cont_query (
   ttl int4,
   ttl_attno int2,
 
+  partition_duration int4,
+  partition_attno int2,
+
   -- Valid for transforms only
   tgnargs int2,
   tgargs bytea

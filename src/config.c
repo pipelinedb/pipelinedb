@@ -450,6 +450,14 @@ _PG_init(void)
 		   PGC_USERSET, 0,
 		   NULL, NULL, NULL);
 
+	DefineCustomBoolVariable("pipelinedb.log_partitions",
+		   gettext_noop("If true, log partitions created by the combiner."),
+		   NULL,
+		   &log_partitions,
+		   false,
+		   PGC_USERSET, 0,
+		   NULL, NULL, NULL);
+
 	splash();
 
 	create_ipc_directory();

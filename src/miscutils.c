@@ -319,8 +319,8 @@ timestamptz_round(PG_FUNCTION_ARGS)
 	 * Add the interval to a 0-valued timestamp (TIMESTAMP '2000-01-01 00:00:00')
 	 * to an int64 value of just the interval.
 	 */
-	interval_ts = DatumGetTimestamp(
-			DirectFunctionCall2(timestamp_pl_interval, TimestampGetDatum(0), PG_GETARG_DATUM(1)));
+	interval_ts = DatumGetTimestampTz(
+			DirectFunctionCall2(timestamp_pl_interval, TimestampTzGetDatum(0), PG_GETARG_DATUM(1)));
 	timestamp = round_down(timestamp, interval_ts);
 
 	PG_RETURN_TIMESTAMPTZ(timestamp);
@@ -549,8 +549,14 @@ print_tupledesc(TupleDesc desc)
 static Datum
 timestamptz_truncate_by(const char *units, PG_FUNCTION_ARGS)
 {
-	Datum arg = PG_GETARG_TIMESTAMPTZ(0);
-	Datum result = DirectFunctionCall2(timestamptz_trunc,
+	Datum arg;
+	Datum result;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	arg = PG_GETARG_TIMESTAMPTZ(0);
+	result = DirectFunctionCall2(timestamptz_trunc,
 			(Datum) CStringGetTextDatum(units), arg);
 
 	PG_RETURN_TIMESTAMPTZ(result);
