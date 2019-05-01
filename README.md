@@ -1,3 +1,7 @@
+PipelineDB [has joined Confluent](https://www.confluent.io/blog/pipelinedb-team-joins-confluent), read the blog post [here](https://www.pipelinedb.com/blog/pipelinedb-is-joining-confluent).
+
+PipelineDB will not have new releases beyond `1.0.0`, although critical bugs will still be fixed.
+
 # PipelineDB
 
 [![Gitter chat](https://img.shields.io/badge/gitter-join%20chat-brightgreen.svg?style=flat-square)](https://gitter.im/pipelinedb/pipelinedb)
