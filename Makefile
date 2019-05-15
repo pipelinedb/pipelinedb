@@ -9,7 +9,7 @@ REGRESS = $(EXTENSION)
 
 DATA = $(shell find . -type f -name 'pipelinedb--*.sql')
 EXTRA_CLEAN = src/test/regress/expected/$(REGRESS).out src/test/regress/sql/$(REGRESS).sql
-SHLIB_LINK += /usr/lib/libzmq.a -lstdc++
+SHLIB_LINK += -lzmq -lstdc++
 
 ifdef USE_PGXS
 PG_CPPFLAGS += -I./include -I$(shell $(PG_CONFIG) --includedir)

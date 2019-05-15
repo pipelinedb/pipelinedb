@@ -6,7 +6,9 @@
  *
  *-------------------------------------------------------------------------
  */
+#ifdef GLIBC
 #include <execinfo.h>
+#endif
 #include <math.h>
 #include <sys/resource.h>
 #include <time.h>
@@ -126,6 +128,7 @@ ContQueryDatabaseMetadataSize(void)
 void
 debug_segfault(SIGNAL_ARGS)
 {
+#ifdef GLIBC
 	void *array[32];
 	size_t size = backtrace(array, 32);
 	fprintf(stderr, "Segmentation fault (PID %d)\n", MyProcPid);
@@ -134,6 +137,7 @@ debug_segfault(SIGNAL_ARGS)
 	fprintf(stderr, "query: %s\n", debug_query_string);
 	fprintf(stderr, "backtrace:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
+#endif
 
 #ifdef SLEEP_ON_ASSERT
 
