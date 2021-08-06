@@ -18,7 +18,7 @@ def test_concurrent_vacuum_full(pipeline, clean_db):
 
   def insert():
     while not stop:
-      values = [(random.randint(0, 1000000),) for _ in xrange(1000)]
+      values = [(random.randint(0, 1000000),) for _ in range(1000)]
       pipeline.insert('test_vacuum_stream', ('x',), values)
       time.sleep(0.01)
 

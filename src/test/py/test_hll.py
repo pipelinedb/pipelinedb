@@ -75,7 +75,7 @@ def test_hll_type(pipeline, clean_db):
   pipeline.execute('INSERT INTO test_hll_type (x, y) VALUES '
            '(1, hll_empty()), (2, hll_empty())')
 
-  for i in xrange(1000):
+  for i in range(1000):
     pipeline.execute('UPDATE test_hll_type SET y = hll_add(y, %d / x)' % i)
 
   result = pipeline.execute('SELECT hll_cardinality(y) FROM test_hll_type ORDER BY x')

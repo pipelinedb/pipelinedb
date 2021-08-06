@@ -44,11 +44,11 @@ def test_tdigest_type(pipeline, clean_db):
   pipeline.execute('INSERT INTO test_tdigest_type (x, y) VALUES '
        '(1, tdigest_empty()), (2, tdigest_empty())')
 
-  for i in xrange(1000):
+  for i in range(1000):
     pipeline.execute('UPDATE test_tdigest_type SET y = dist_add(y, %d %% (x * 500))' % i)
 
   result = list(pipeline.execute('SELECT dist_cdf(y, 400), '
            'dist_quantile(y, 0.9)'
            'FROM test_tdigest_type ORDER BY x'))
-  assert map(lambda x: round(x, 1), (result[0]['dist_cdf'], result[0]['dist_quantile'])) == [0.8, 449.5]
-  assert map(lambda x: round(x, 1), (result[1]['dist_cdf'], result[1]['dist_quantile'])) == [0.4, 899.5]
+  assert list(map(lambda x: round(x, 1), (result[0]['dist_cdf'], result[0]['dist_quantile']))) == [0.8, 449.5]
+  assert list(map(lambda x: round(x, 1), (result[1]['dist_cdf'], result[1]['dist_quantile']))) == [0.4, 899.5]

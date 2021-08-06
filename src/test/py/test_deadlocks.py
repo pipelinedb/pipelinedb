@@ -16,7 +16,7 @@ def test_concurrent_add_drop(pipeline, clean_db):
   pipeline.create_cv('cv', q)
 
   stop = False
-  values = map(lambda x: (x,), xrange(10000))
+  values = map(lambda x: (x,), range(10000))
   num_inserted = [0]
 
   def insert():

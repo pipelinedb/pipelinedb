@@ -12,8 +12,8 @@ import time
 from functools import wraps
 
 
-BOOTSTRAPPED_BASE = './.pdbbase'
-INSTALL_FORMAT = './.pdb-%d'
+BOOTSTRAPPED_BASE = b'./.pdbbase'
+INSTALL_FORMAT = b'./.pdb-%d'
 
 
 class NamedRow(dict):
@@ -31,7 +31,7 @@ class PipelineDB(object):
     if data_dir:
       self._data_dir = data_dir
       return
-      
+    self.conn=''  
     # To keep tests fast, we only initdb once and then we just copy that fresh data directory whenever we want a new DB
     do_initdb = False
 
@@ -44,7 +44,7 @@ class PipelineDB(object):
       bootstrap_version = int(float(bootstrap_version))
       install_version = 0
 
-      with open(os.path.join(BOOTSTRAPPED_BASE, 'PG_VERSION')) as v:
+      with open(os.path.join(BOOTSTRAPPED_BASE, b'PG_VERSION')) as v:
         install_version = int(v.read().strip())
 
       if install_version != bootstrap_version:
@@ -93,11 +93,11 @@ class PipelineDB(object):
       'pipelinedb.max_wait': 5,
     }
 
-    server = os.path.join(self.bin_dir, 'postgres')
+    server = os.path.join(self.bin_dir, b'postgres')
     cmd = [server, '-D', self.data_dir, '-p', str(self.port)]
 
     default_params.update(params or {})
-    for key, value in default_params.iteritems():
+    for key, value in default_params.items():
       cmd.extend(['-c', '%s=%s' % (key, value)])
 
     self.proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
@@ -106,10 +106,10 @@ class PipelineDB(object):
     while True:
       line = self.proc.stderr.readline()
       sys.stderr.write(line)
-      if ('database system is ready to accept connections' in line or
-        'pipelinedb process "worker0 [postgres]" running with pid' in line):
+      if (b'database system is ready to accept connections' in line or
+        b'pipelinedb process "worker0 [postgres]" running with pid' in line):
         break
-      elif ('database system is shut down' in line or
+      elif (b'database system is shut down' in line or
         (line == '' and self.proc.poll() != None)):
         raise Exception('Failed to start up PipelineDB')
 
@@ -121,11 +121,11 @@ class PipelineDB(object):
         line = self.proc.stderr.readline()
         if line == '' and self.proc and self.proc.poll() != None:
           return
-        sys.stderr.write(line)
+        sys.stderr.write(line.decode("utf-8"))
     threading.Thread(target=run).start()
 
     # Wait to connect to PipelineDB
-    for i in xrange(10):
+    for i in range(10):
       try:
         self.conn = psycopg2.connect('host=localhost dbname=postgres user=%s port=%d' % (getpass.getuser(), self.port))
         self.conn.autocommit = True
@@ -145,10 +145,10 @@ class PipelineDB(object):
       raise Exception('Failed to connect to PipelineDB')
 
     # Wait for bgworkers to start
-    for i in xrange(30):
+    for i in range(30):
       try:
         out = subprocess.check_output('ps aux | grep "\[postgres\]" | grep -e "worker[0-9]" -e "combiner[0-9]"',
-                shell=True).split('\n')
+                shell=True).splitlines()
       except subprocess.CalledProcessError:
         out = []
       # Pick out PIDs that are greater than the PID of the postmaster we fired above.
@@ -156,8 +156,8 @@ class PipelineDB(object):
       out = filter(lambda s: s.strip(), out)
       out = map(lambda s: int(s.split()[1]), out)
       out = filter(lambda p: p > self.proc.pid, out)
-
-      if len(out) == (default_params['pipelinedb.num_workers'] +
+      l = list(out)
+      if len(l) == (default_params['pipelinedb.num_workers'] +
           default_params['pipelinedb.num_combiners']):
         break
       time.sleep(1)
@@ -238,7 +238,7 @@ class PipelineDB(object):
     """
     Create a table
     """
-    cols = ', '.join(['%s %s' % (k, v) for k, v in cols.iteritems()])
+    cols = ', '.join(['%s %s' % (k, v) for k, v in cols.items()])
     self.execute('CREATE TABLE %s (%s)' % (name, cols))
 
   def create_stream(self, name, order=None, **cols):
@@ -248,7 +248,7 @@ class PipelineDB(object):
     if order:
       cols = ', '.join(['%s %s' % (k, cols[k]) for k in order])
     else:
-      cols = ', '.join(['%s %s' % (k, v) for k, v in cols.iteritems()])
+      cols = ', '.join(['%s %s' % (k, v) for k, v in cols.items()])
     self.execute(
       'CREATE FOREIGN TABLE %s (%s) SERVER pipelinedb' % (name, cols))
 

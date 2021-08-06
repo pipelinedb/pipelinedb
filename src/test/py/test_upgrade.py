@@ -131,7 +131,7 @@ def test_binary_upgrade(pipeline, clean_db):
   pipeline.stop()
 
   p = subprocess.Popen([
-    os.path.join(pipeline.bin_dir, 'initdb'), '-D', new_data_dir0])
+    os.path.join(pipeline.bin_dir, b'initdb'), '-D', new_data_dir0])
   stdout, stderr = p.communicate()
 
   with open(os.path.join(new_data_dir0, 'postgresql.conf'), 'a') as f:
@@ -140,7 +140,7 @@ def test_binary_upgrade(pipeline, clean_db):
     f.write('pipelinedb.stream_insert_level=sync_commit\n')
 
   result = subprocess.check_call([
-    os.path.join(pipeline.bin_dir, 'pg_upgrade'),
+    os.path.join(pipeline.bin_dir, b'pg_upgrade'),
     '-b', old_bin_dir, '-B', new_bin_dir,
     '-d', old_data_dir, '-D', new_data_dir0])
   
@@ -290,7 +290,7 @@ def test_binary_upgrade(pipeline, clean_db):
     shutil.rmtree(new_data_dir1)
 
   p = subprocess.Popen([
-  os.path.join(pipeline.bin_dir, 'initdb'), '-D', new_data_dir1])
+  os.path.join(pipeline.bin_dir, b'initdb'), '-D', new_data_dir1])
   stdout, stderr = p.communicate()
 
   with open(os.path.join(new_data_dir1, 'postgresql.conf'), 'a') as f:
@@ -300,7 +300,7 @@ def test_binary_upgrade(pipeline, clean_db):
 
   # Now upgrade the upgraded DB to verify that restored DBs can be updated properly
   result = subprocess.check_call([
-    os.path.join(pipeline.bin_dir, 'pg_upgrade'),
+    os.path.join(pipeline.bin_dir, b'pg_upgrade'),
     '-b', old_bin_dir, '-B', new_bin_dir,
     '-d', new_data_dir0, '-D', new_data_dir1])
   

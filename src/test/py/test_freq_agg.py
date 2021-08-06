@@ -35,7 +35,7 @@ def test_cmsketch_type(pipeline, clean_db):
   pipeline.execute('INSERT INTO test_cmsketch_type (x, y) VALUES '
            '(1, cmsketch_empty()), (2, cmsketch_empty())')
 
-  for i in xrange(1000):
+  for i in range(1000):
     pipeline.execute('UPDATE test_cmsketch_type SET y = freq_add(y, %d %% x)' % i)
 
   result = list(pipeline.execute('SELECT freq(y, 0), '

@@ -4,7 +4,7 @@ import random
 
 
 def _generate_csv(path, rows, desc=None, delimiter=','):
-  csv = open(path, 'wa')
+  csv = open(path, 'w')
   if desc:
     rows = [desc] + rows
   for row in rows:
@@ -21,7 +21,7 @@ def test_copy_to_stream(pipeline, clean_db):
   pipeline.create_cv('test_copy_to_stream', q)
   pipeline.create_table('test_copy_to_stream_t', x='integer', y='float8', z='numeric')
 
-  path = os.path.abspath(os.path.join(pipeline.data_dir, 'test_copy.csv'))
+  path = os.path.abspath(os.path.join(pipeline.data_dir, b'test_copy.csv')).decode("utf-8")
 
   rows = []
   for n in range(10000):
@@ -30,7 +30,7 @@ def test_copy_to_stream(pipeline, clean_db):
 
   _generate_csv(path, rows, desc=('x', 'y', 'z'))
 
-  pipeline.execute('COPY test_copy_to_stream_t (x, y, z) FROM \'%s\' HEADER CSV' % path)
+  pipeline.execute('COPY test_copy_to_stream_t (x, y, z) FROM \'%s\' HEADER CSV' % path) 
 
   pipeline.execute('COPY stream0 (x, y, z) FROM \'%s\' HEADER CSV' % path)
 
@@ -56,7 +56,7 @@ def test_colums_subset(pipeline, clean_db):
   pipeline.create_cv('test_copy_subset', q)
   pipeline.create_table('test_copy_subset_t', x='integer', y='float8', z='numeric')
 
-  path = os.path.abspath(os.path.join(pipeline.data_dir, 'test_copy.csv'))
+  path = os.path.abspath(os.path.join(pipeline.data_dir, b'test_copy.csv')).decode("utf-8") 
 
   rows = []
   for n in range(10000):
@@ -90,7 +90,7 @@ def test_column_ordering(pipeline, clean_db):
   q = 'SELECT x, y, z, count(*) FROM test_copy_s GROUP BY x, y, z'
   pipeline.create_cv('test_ordering', q)
 
-  path = os.path.abspath(os.path.join(pipeline.data_dir, 'test_ordering.csv'))
+  path = os.path.abspath(os.path.join(pipeline.data_dir, b'test_ordering.csv')).decode("utf-8")
   q = "SELECT x::text || '!' AS z, x AS y, -x AS x FROM generate_series(1, 10000) x"
   pipeline.execute("COPY (%s) TO '%s'" % (q, path))
 
@@ -114,7 +114,7 @@ def test_arrival_timestamp(pipeline, clean_db):
   q = 'SELECT arrival_timestamp, x, y, z, count(*) FROM test_ats_s GROUP BY arrival_timestamp, x, y, z'
   pipeline.create_cv('test_ats', q)
 
-  path = os.path.abspath(os.path.join(pipeline.data_dir, 'test_ats.csv'))
+  path = os.path.abspath(os.path.join(pipeline.data_dir, b'test_ats.csv')).decode("utf-8")
   q = "SELECT -x, x::float8, x::text || '!', '2018-09-12 00:00:00' AS arrival_timestamp FROM generate_series(1, 10000) x"
   pipeline.execute("COPY (%s) TO '%s'" % (q, path))
 
@@ -131,7 +131,7 @@ def test_arrival_timestamp(pipeline, clean_db):
 
 
 def test_regression(pipeline, clean_db):
-  path = os.path.abspath(os.path.join(pipeline.data_dir, 'test_copy.csv'))
+  path = os.path.abspath(os.path.join(pipeline.data_dir, b'test_copy.csv')).decode("utf-8")
   _generate_csv(path, [['2015-06-01 00:00:00', 'De', 'Adam_Babareka', '1', '37433']], desc=('day', 'project', 'title', 'count', 'size'))
 
   pipeline.create_stream('copy_regression_stream', count='int', day='timestamp', project='text', title='text', size='int')

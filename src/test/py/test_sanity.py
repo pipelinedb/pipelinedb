@@ -121,7 +121,7 @@ def test_uniqueness(pipeline, clean_db):
              'SELECT x::int, count(*) FROM stream0 GROUP BY x')
 
   for i in range(10):
-    rows = [((10000 * i) + j,) for j in xrange(10000)]
+    rows = [((10000 * i) + j,) for j in range(10000)]
     pipeline.insert('stream0', ('x',), rows)
 
   count = pipeline.execute('SELECT count(*) FROM uniqueness')[0][0]

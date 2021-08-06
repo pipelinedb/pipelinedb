@@ -151,7 +151,7 @@ def test_bloom_type(pipeline, clean_db):
   pipeline.execute('INSERT INTO test_bloom_type (x, y) VALUES '
            '(1, bloom_empty()), (2, bloom_empty())')
 
-  for i in xrange(1000):
+  for i in range(1000):
     pipeline.execute('UPDATE test_bloom_type SET y = bloom_add(y, %d / x)' % i)
 
   result = pipeline.execute('SELECT bloom_cardinality(y) FROM test_bloom_type ORDER BY x')
