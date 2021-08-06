@@ -8,8 +8,8 @@ def test_percentile_cont_agg(pipeline, clean_db):
   batches = []
   min_seen = range_top
   max_seen = 0
-  for _ in xrange(10):
-    b = [(random.randint(0, range_top),) for _ in xrange(5000)]
+  for _ in range(10):
+    b = [(random.randint(0, range_top),) for _ in range(5000)]
     min_seen = min(min_seen, min(b)[0])
     max_seen = max(max_seen, max(b)[0])
     batches.append(b)
@@ -35,7 +35,7 @@ def test_percentile_cont_agg(pipeline, clean_db):
 
   assert len(actual) == len(result)
   assert result == sorted(result)
-  diff = [abs(actual[i] - result[i]) for i in xrange(len(actual))]
+  diff = [abs(actual[i] - result[i]) for i in range(len(actual))]
 
   # 0th and 100th percentile should be accurate.
   assert result[0] == min_seen

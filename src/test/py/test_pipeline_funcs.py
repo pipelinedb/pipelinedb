@@ -10,7 +10,7 @@ def test_combine_table(pipeline, clean_db):
   pipeline.create_cv('combine_table',
                      'SELECT x::int, COUNT(*) FROM s GROUP BY x')
 
-  values = [(i,) for i in xrange(1000)]
+  values = [(i,) for i in range(1000)]
   pipeline.insert('s', ('x',), values)
 
   pipeline.execute('SELECT * INTO tmprel FROM combine_table_mrel')
@@ -52,7 +52,7 @@ def test_combine_table(pipeline, clean_db):
 def test_combine_table_no_groups(pipeline, clean_db):
   pipeline.create_stream('s', x='int')
   pipeline.create_cv('no_groups', 'SELECT COUNT(*) FROM s')
-  values = [(i,) for i in xrange(1000)]
+  values = [(i,) for i in range(1000)]
   pipeline.insert('s', ('x',), values)
 
   pipeline.execute('SELECT * INTO tmprel FROM no_groups_mrel')
@@ -70,7 +70,7 @@ def test_pipeline_flush(pipeline, clean_db):
 
   pipeline.create_cv('flush', 'SELECT x, cq_sleep(0.01) FROM s')
 
-  values = [(i,) for i in xrange(1000)]
+  values = [(i,) for i in range(1000)]
   start = time.time()
 
   # This will take 0.01 * 1000 = 10s to process but return immediately since

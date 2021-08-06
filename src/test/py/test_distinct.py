@@ -14,7 +14,7 @@ def test_distinct(pipeline, clean_db):
 
   uniques = defaultdict(set)
   values = []
-  for _ in xrange(2000):
+  for _ in range(2000):
     x, y, z = random.randint(0, 20), random.randint(0, 20), random.randint(0, 20)
     values.append((x, y, z))
     uniques[(x, y - z)].add(y)
@@ -38,7 +38,7 @@ def test_distinct(pipeline, clean_db):
   result = pipeline.execute('SELECT * FROM test_distinct')
   reverse_uniques = defaultdict(set)
 
-  for (x, _), ys in uniques.iteritems():
+  for (x, _), ys in uniques.items():
     for y in ys:
       reverse_uniques[y].add(x)
 

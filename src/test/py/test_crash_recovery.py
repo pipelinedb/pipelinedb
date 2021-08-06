@@ -10,7 +10,7 @@ import time
 def _get_pids(grep_str):
   try:
     out = check_output('ps aux | grep "postgres" | grep "%s"' % grep_str,
-               shell=True).split('\n')
+               shell=True).split(b'\n')
   except CalledProcessError:
     return []
   out = filter(lambda s: len(s), out)
@@ -111,7 +111,7 @@ def test_concurrent_crash(pipeline, clean_db):
         break
 
   def kill():
-    for _ in xrange(30):
+    for _ in range(30):
       r = random.random()
       if r > 0.85:
         desc[0] += kill_combiner()

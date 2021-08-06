@@ -6,7 +6,7 @@ import time
 
 def _dump(pipeline, out_filename, tables=[], data_only=False, schema_only=False):
   out = open(out_filename, 'w')
-  cmd = [os.path.join(pipeline.bin_dir, 'pg_dump'), '-p', str(pipeline.port), '-d', 'postgres']
+  cmd = [os.path.join(pipeline.bin_dir, b'pg_dump'), '-p', str(pipeline.port), '-d', 'postgres']
   for table in tables:
     cmd += ['-t', table]
   if data_only:
@@ -17,7 +17,7 @@ def _dump(pipeline, out_filename, tables=[], data_only=False, schema_only=False)
   out.close()
 
 def _restore(pipeline, in_filename):
-  cmd = [os.path.join(pipeline.bin_dir, 'psql'), '-p', str(pipeline.port), '-d', 'postgres', '-f', in_filename]
+  cmd = [os.path.join(pipeline.bin_dir, b'psql'), '-p', str(pipeline.port), '-d', 'postgres', '-f', in_filename]
   subprocess.Popen(cmd).communicate()
   os.remove(in_filename)
 
@@ -87,6 +87,8 @@ def test_sliding_windows(pipeline, clean_db):
   while result['count'] > 0:
     time.sleep(1)
     result = pipeline.execute('SELECT count FROM sw_v')[0]
+    if result['count'] is None:
+      break
 
   result = pipeline.execute('SELECT count FROM sw_v')[0]
     # Disabled until #157 (currently combine doesn't return 0 on NULL input for this aggregate)

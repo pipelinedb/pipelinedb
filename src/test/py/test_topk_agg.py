@@ -18,13 +18,15 @@ def test_topk_agg(pipeline, clean_db):
   desc = ('k', 'x')
   pipeline.create_cv('test_fss_agg', q)
 
-  items = range(14)
+#  items = range(14)
+#allocations = list(range(len(people)))
+  items = list(range(14))
   random.shuffle(items)
   a_items = items
   b_items = list(reversed(items))
 
-  values = map(lambda i: ('a', i), get_geometric_dist(a_items))
-  values.extend(map(lambda i: ('b', i), get_geometric_dist(b_items)))
+  values = list(map(lambda i: ('a', i), get_geometric_dist(a_items)))
+  values.extend(list(map(lambda i: ('b', i), get_geometric_dist(b_items))))
   random.shuffle(values)
 
   pipeline.insert('test_fss_stream', desc, values)

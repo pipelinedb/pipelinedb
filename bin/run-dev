@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 import argparse
 import os
@@ -39,17 +39,17 @@ def main(args):
     p = subprocess.Popen(['pg_config', '--bindir'], stdout=subprocess.PIPE)
     out, _ = p.communicate()
     if p.returncode == 0:
-      args.root = os.path.abspath(os.path.join(out.strip(), '..'))
+      args.root = os.path.abspath(os.path.join(out.strip(), b'..'))
 
   if args.root is None:
-    print 'Could not find root PipelineDB installation directory. Specify it with the --root option.'
+    print('Could not find root PipelineDB installation directory. Specify it with the --root option.')
     sys.exit(1)
 
   root = os.path.expandvars(args.root)
   root = os.path.expanduser(root)
 
   # Make sure we've already bootstrapped
-  if not os.path.exists(os.path.join(root, 'data')):
+  if not os.path.exists(os.path.join(root, b'data')):
     print ('Root directory %s not bootstrapped. Did you run `make bootstrap`?'
            % root)
     sys.exit(1)
@@ -58,18 +58,19 @@ def main(args):
   out, err = subprocess.Popen(['ps', 'x'],
                               stdout=subprocess.PIPE).communicate()
   errprocs = []
-  for line in out.split('\n'):
+  for line in out.splitlines():
+    line=line.decode("utf-8")
     if __file__ not in line and 'pipelinedb:' in line:
       errprocs.append(line)
 
   if errprocs:
-    print 'The following processes must be terminated before running PipelineDB:'
+    print('The following processes must be terminated before running PipelineDB:')
     for p in errprocs:
-      print p
+      print( p)
     sys.exit(1)
 
-  server = os.path.join(args.root, 'bin', 'postgres')
-  cmd = [server, '-D' , os.path.join(root, DATA_DIR), '-p', args.port,
+  server = os.path.join(args.root, b'bin', b'postgres')
+  cmd = [server, '-D' , os.path.join(root.decode("utf-8"), DATA_DIR), '-p', args.port,
         '-c', 'pipelinedb.stream_insert_level=sync_commit',
         '-c', 'pipelinedb.anonymous_update_checks=off',
         '-c', 'shared_preload_libraries=pipelinedb',
@@ -79,7 +80,7 @@ def main(args):
 
   for guc in args.gucs or []:
     if len(guc.split('=')) != 2:
-      print 'Invalid GUC parameter: %s' % guc
+      print( 'Invalid GUC parameter: %s' % guc)
       sys.exit(1)
     cmd.extend(['-c', guc])
 
@@ -88,7 +89,7 @@ def main(args):
     time.sleep(0.5)
     for stmt in args.stmts:
       p = subprocess.Popen(['psql', '-c', stmt], stdout=subprocess.PIPE)
-      print stmt.upper()
+      print( stmt.upper())
 
   postmaster.wait()
 

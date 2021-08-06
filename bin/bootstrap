@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 import argparse
 import os
@@ -15,22 +15,22 @@ def main(args):
       p = subprocess.Popen(['pg_config', '--bindir'], stdout=subprocess.PIPE)
       out, _ = p.communicate()
       if p.returncode == 0:
-        args.root = os.path.abspath(os.path.join(out.strip(), '..'))
+        args.root = os.path.abspath(os.path.join(out.strip(), b'..'))
 
     root = os.path.expandvars(args.root)
     if not os.path.exists(root):
-        print 'Root directory %s does not exist. Did you run `make install`?' % root
+        print('Root directory %s does not exist. Did you run `make install`?' % root)
         sys.exit(1)
-
     root = os.path.expanduser(root)
-    data_dir = os.path.join(root, 'data')
+    print(os.path.join(root, b'data'))
+    data_dir = os.path.join(root, b'data')
 
     os.path.exists(data_dir) and shutil.rmtree(data_dir)
     try:
         subprocess.call(['initdb', '-D', data_dir])
     except OSError:
-        print 'Looks like you forgot to add your PATH? Run the next line and `make bootstrap` again'
-        print '    export PATH=%s/bin:$PATH' % root
+        print('Looks like you forgot to add your PATH? Run the next line and `make bootstrap` again')
+        print('    export PATH=%s/bin:$PATH' % root)
         sys.exit(1)
 
     proc = subprocess.Popen(['postgres', '-D', data_dir, '-c', 'log_line_prefix='])
@@ -41,7 +41,7 @@ def main(args):
       subprocess.check_call(['psql', 'postgres', '-c',
                              'CREATE DATABASE %s' % user])
     except subprocess.CalledProcessError:
-      print 'It seems like PostgreSQL failed to start up. Make sure nothing else is running on port 5432, maybe you have an instance of PostgreSQL already running?'
+      print('It seems like PostgreSQL failed to start up. Make sure nothing else is running on port 5432, maybe you have an instance of PostgreSQL already running?')
       sys.exit(1)
 
     subprocess.call(['psql', user, '-c', 'DROP DATABASE postgres'])
@@ -52,8 +52,8 @@ def main(args):
     os.kill(proc.pid, signal.SIGINT)
     time.sleep(0.1)
 
-    print """\nPipelineDB successfully bootstrapped.
-Run with `make run`.'"""
+    print("""\nPipelineDB successfully bootstrapped.
+Run with `make run`.'""")
 
 
 if __name__ == '__main__':
