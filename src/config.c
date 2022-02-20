@@ -321,6 +321,14 @@ _PG_init(void)
 			PGC_POSTMASTER, 0,
 			NULL, NULL, NULL);
 
+	DefineCustomIntVariable("pipelinedb.reaper_restart_time",
+			gettext_noop("Sets the time of reaper between restarts in seconds. "),
+			NULL,
+			&reaper_restart_time,
+			0, 0, 1024,
+			PGC_POSTMASTER, 0,
+			NULL, NULL, NULL);
+
 	DefineCustomEnumVariable("pipelinedb.stream_insert_level",
 			gettext_noop("Sets the current transaction's stream write synchronization level."),
 			NULL,

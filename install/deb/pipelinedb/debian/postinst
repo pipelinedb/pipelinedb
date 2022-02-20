@@ -1,0 +1,35 @@
+#! /bin/sh
+
+chmod 0644 -R /usr/include/postgresql/11/pipelinedb
+chown root.root -R /usr/include/postgresql/11/pipelinedb
+chmod 0644 /usr/share/postgresql/11/extension/pipelinedb*
+chown root.root /usr/share/postgresql/11/extension/pipelinedb*
+chmod 755 /usr/lib/postgresql/11/lib/pipelinedb.so
+chown root.root /usr/lib/postgresql/11/lib/pipelinedb.so
+
+set -e
+
+echo "
+    ____  _            ___            ____  ____
+   / __ \\(_)___  ___  / (_)___  ___  / __ \\/ __ )
+  / /_/ / / __ \\/ _ \\/ / / __ \\/ _ \\/ / / / __  |
+ / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ /
+/_/   /_/ .___/\\___/_/_/_/ /_/\\___/_____/_____/
+       /_/
+
+PipelineDB successfully installed. To get started, initialize a
+PostgreSQL database directory:
+
+  initdb -D <data directory>
+
+where <data directory> is a nonexistent directory where you'd
+like all of your database files to live.
+
+Next, edit <data directory>/postgresql.conf and set:
+
+  shared_preload_libraries = 'pipelinedb'
+  max_worker_processes = 128
+
+Once your database is running, create the pipelinedb extension:
+
+  psql -c 'CREATE EXTENSION pipelinedb'"

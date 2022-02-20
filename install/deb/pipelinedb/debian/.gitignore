@@ -1,0 +1,5 @@
+changelog
+pipelinedb/**
+debhelper-build-stamp
+pipelinedb.substvars
+files

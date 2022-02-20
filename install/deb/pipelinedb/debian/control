@@ -1,0 +1,14 @@
+Source:         pipelinedb
+Section:        custom
+Priority:       optional
+Maintainer:     AWIDE
+Standards-Version: 1.0
+
+Package:        pipelinedb
+Architecture:   amd64
+Section:        database
+Priority:       optional
+Depends:        libc6 (>= 2.7), postgresql-11
+Description:    High-performance time-series aggregation for PostgreSQL
+ A PostgreSQL extension for high-performance time-series aggregation
+ via continuous SQL queries (https://www.pipelinedb.com/).

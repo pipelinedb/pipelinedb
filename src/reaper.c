@@ -32,6 +32,7 @@
 #include "utils/hsearch.h"
 #include "utils/int8.h"
 #include "utils/lsyscache.h"
+#include "utils/memdebug.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/ruleutils.h"
@@ -45,6 +46,7 @@
 
 int ttl_expiration_batch_size;
 int ttl_expiration_threshold;
+int reaper_restart_time;
 
 typedef struct ReaperEntry
 {
@@ -227,6 +229,7 @@ get_ttl_rels(int *min_ttl)
 void
 ContinuousQueryReaperMain(void)
 {
+	int total_sleep = 0;
 	HASHCTL hctl;
 	MemoryContext cxt = AllocSetContextCreate(TopMemoryContext, "Reaper Context",
 				ALLOCSET_DEFAULT_MINSIZE,
@@ -314,13 +317,12 @@ ContinuousQueryReaperMain(void)
 						 * We need to acquire a pipeline_query lock first to ensure proper lock ordering
 						 * of all remaining lock acquisitions to avoid deadlocks.
 						 */
+						old = MemoryContextSwitchTo(cxt);
 						rel = OpenPipelineQuery(RowExclusiveLock);
-
 						deleted = DeleteTTLExpiredRows(cv, matrel);
 						set_last_expiration(relid, deleted);
-
 						ClosePipelineQuery(rel, NoLock);
-
+						MemoryContextSwitchTo(old);
 						CommitTransactionCommand();
 					}
 				}
@@ -348,5 +350,11 @@ ContinuousQueryReaperMain(void)
 
 		reset_entries();
 		pg_usleep(min_sleep * 1000 * 1000);
+		total_sleep += min_sleep;
+		if (reaper_restart_time !=0 && total_sleep >= reaper_restart_time)
+		{
+			elog(LOG, "Reaper process \"%s\" with pid %d exiting for restart", GetContQueryProcName(MyContQueryProc), MyProcPid);
+			break;
+		}
 	}
 }

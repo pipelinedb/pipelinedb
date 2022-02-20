@@ -1,0 +1,7 @@
+*.rpm
+packages
+*BUILD
+*BUILDROOT
+*RPMS
+*SOURCES
+*SPRPMS

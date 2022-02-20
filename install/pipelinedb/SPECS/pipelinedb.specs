@@ -1,0 +1,105 @@
+BuildArch:     x86_64
+Name:          pipelinedb
+Version:       1.0.0
+Release:       15
+License:       ASL 2.0 
+Group:         Applications/Databases
+Summary:       PipelineDB
+
+
+Prefix:        /usr/pgsql-11
+Requires:      postgresql11-server
+AutoReqProv:   no
+
+%description
+High-performance time-series aggregation for PostgreSQL
+ A PostgreSQL extension for high-performance time-series aggregation
+ via continuous SQL queries (https://www.pipelinedb.com/).
+
+%post -p /bin/sh
+echo "
+    ____  _            ___            ____  ____
+   / __ \\(_)___  ___  / (_)___  ___  / __ \\/ __ )
+  / /_/ / / __ \\/ _ \\/ / / __ \\/ _ \\/ / / / __  |
+ / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ /
+/_/   /_/ .___/\\___/_/_/_/ /_/\\___/_____/_____/
+       /_/
+
+PipelineDB successfully installed. To get started, initialize a
+PostgreSQL database directory:
+
+  initdb -D <data directory>
+
+where <data directory> is a nonexistent directory where you'd
+like all of your database files to live.
+
+Next, edit <data directory>/postgresql.conf and set:
+
+  shared_preload_libraries = 'pipelinedb'
+  max_worker_processes = 128
+
+Once your database is running, create the pipelinedb extension:
+
+  psql -c 'CREATE EXTENSION pipelinedb'
+"
+%postun -p /bin/sh
+rm -rf /usr/pgsql-11/include/server/../pipelinedb
+
+%install
+mkdir -p %{buildroot}/usr/pgsql-11/include/pipelinedb
+mkdir -p %{buildroot}/usr/pgsql-11/lib/
+mkdir -p %{buildroot}/usr/pgsql-11/share/extension/
+
+cp -r %{_topdir}/../../include/* %{buildroot}/usr/pgsql-11/include/pipelinedb
+cp -r %{_topdir}/../../pipelinedb.so %{buildroot}/usr/pgsql-11/lib/
+cp -r %{_topdir}/../../pipelinedb.control %{buildroot}/usr/pgsql-11/share/extension/
+cp -r %{_topdir}/../../pipelinedb*.sql %{buildroot}/usr/pgsql-11/share/extension/
+
+%files
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/aggfuncs.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/analyzer.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/bloom.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/bloomfuncs.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/catalog.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/cmsketch.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/combiner_receiver.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/commands.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/compat.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/config.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/copy.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/distfuncs.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/executor.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/firstvalues.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/freqfuncs.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/fss.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/hashfuncs.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/hll.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/hllfuncs.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/json.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/jsonb.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/kv.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/matrel.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/microbatch.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/miscutils.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/mutator.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/physical_group_lookup.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/pipeline_combine.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/pipeline_query.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/pipeline_stream.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/planner.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/pzmq.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/reader.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/reaper.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/ruleutils.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/scheduler.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/stats.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/stream_fdw.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/tdigest.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/topkfuncs.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/transform_receiver.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/tuplestore_scan.h"
+%attr(0644, root, root) "/usr/pgsql-11/include/pipelinedb/update.h"
+%attr(0755, root, root) "/usr/pgsql-11/lib/pipelinedb.so"
+%attr(0644, root, root) "/usr/pgsql-11/share/extension/pipelinedb--1.0.0.sql"
+%attr(0644, root, root) "/usr/pgsql-11/share/extension/pipelinedb--1.0.0--1.1.0.sql"
+%attr(0644, root, root) "/usr/pgsql-11/share/extension/pipelinedb.control"
