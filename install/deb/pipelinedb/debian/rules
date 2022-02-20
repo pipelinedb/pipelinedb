@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+# See debhelper(7) (uncomment to enable)
+# output every command that modifies files on the build system.
+#DH_VERBOSE = 1
+
+# see FEATURE AREAS in dpkg-buildflags(1)
+#export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# see ENVIRONMENT in dpkg-buildflags(1)
+# package maintainers to append CFLAGS
+#export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
+# package maintainers to append LDFLAGS
+#export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+
+
+%:
+	dh $@
+install:
+	mkdir -p $(PWD)/debian/pipelinedb/usr/include/postgresql/11/pipelinedb/
+	mkdir -p $(PWD)/debian/pipelinedb/usr/lib/postgresql/11/lib/
+	mkdir -p $(PWD)/debian/pipelinedb/usr/share/postgresql/11/extension/
+	mv include/* $(PWD)/debian/pipelinedb/usr/include/postgresql/11/pipelinedb/
+	mv lib/* $(PWD)/debian/pipelinedb/usr/lib/postgresql/11/lib/
+	mv share/* $(PWD)/debian/pipelinedb/usr/share/postgresql/11/extension/

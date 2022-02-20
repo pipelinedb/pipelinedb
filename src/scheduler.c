@@ -482,7 +482,7 @@ cont_bgworker_main(Datum arg)
 	pzmq_destroy();
 
 	/* If this isn't a clean termination, exit with a non-zero status code */
-	if (!proc->db_meta->terminate)
+	if (proc->type != Reaper && !proc->db_meta->terminate)
 	{
 #if (PG_VERSION_NUM < 110000)
 		elog(LOG, "pipelinedb process \"%s\" was killed", GetContQueryProcName(proc));

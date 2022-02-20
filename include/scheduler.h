@@ -83,6 +83,7 @@ extern int num_workers;
 extern int num_combiners;
 extern int num_queues;
 extern int num_reapers;
+extern int reaper_restart_time;
 
 extern bool continuous_queries_enabled;
 extern int  continuous_query_queue_mem;

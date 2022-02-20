@@ -2069,6 +2069,8 @@ ContinuousQueryCombinerMain(void)
 			ContQueryCombinerState *state = (ContQueryCombinerState *) cont_exec->curr_query;
 			volatile bool error = false;
 
+			PushActiveSnapshot(GetTransactionSnapshot());
+
 			PG_TRY();
 			{
 				TimestampTz start_time;
@@ -2110,9 +2112,6 @@ ContinuousQueryCombinerMain(void)
 				EmitErrorReport();
 				FlushErrorState();
 
-				if (ActiveSnapshotSet())
-					PopActiveSnapshot();
-
 				/*
 				 * Modifying anything within a PG_CATCH block can have unpredictable behavior
 				 * when optimization is enabled, so we do the remaining error handling later.
@@ -2121,9 +2120,11 @@ ContinuousQueryCombinerMain(void)
 			}
 			PG_END_TRY();
 
+			if (ActiveSnapshotSet())
+				PopActiveSnapshot();
+
 			if (error)
 				StatsIncrementCQError(1);
-
 next:
 			ContExecutorEndQuery(cont_exec);
 

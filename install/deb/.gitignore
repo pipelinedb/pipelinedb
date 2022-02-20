@@ -1,0 +1,8 @@
+*/include
+*/lib
+*/share
+*.deb
+*.dsc
+*.changes
+*.buildinfo
+*.tar.gz
